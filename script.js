@@ -1879,24 +1879,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let baseSnapshots = globalInventorySnapshots;
 
-            if (locFilter === 'Bandeja') {
+            if (locFilter.startsWith('Bandeja')) {
                 try {
-                    const snap = await getDocs(query(collection(db, 'Bandejas_Turno'), where('estado', '==', 'CREADA')));
+                    const snap = await getDocs(query(collection(db, 'Bandejas_Turno'), where('estado', '!=', 'FINALIZADA')));
                     let virtualItemsMap = new Map();
                     snap.forEach(docSnap => {
-                        const meds = docSnap.data().medicamentos || [];
+                        const bData = docSnap.data();
+                        const bName = bData.numeroBandeja || bData.id || 'Bandeja';
+                        
+                        // Si el filtro es para una bandeja en específico y esta no es, omitir
+                        if (locFilter !== 'Bandeja' && bName !== locFilter) return;
+
+                        const meds = bData.medicamentos || [];
                         meds.forEach(m => {
                             const name = m.nombreInsumo || m.nombre;
-                            if (virtualItemsMap.has(name)) {
-                                virtualItemsMap.get(name).cantidad += Number(m.cantidadAsignada || 0);
+                            const key = name + '_' + bName; // Separar ítems si están en distintas bandejas
+                            
+                            if (virtualItemsMap.has(key)) {
+                                virtualItemsMap.get(key).cantidad += Number(m.cantidadAsignada || 0);
                             } else {
-                                virtualItemsMap.set(name, {
+                                virtualItemsMap.set(key, {
                                     name: name,
                                     category: m.categoria || 'General',
                                     code: m.code || 'N/A',
                                     unitPrice: Number(m.unitPrice || m.costo_unitario || 0),
                                     cantidad: Number(m.cantidadAsignada || 0),
-                                    location: 'Bandeja',
+                                    location: bName, // Nombre explícito (ej: Bandeja 1)
                                     batch: m.lote || 'N/A',
                                     expirationDate: m.vencimiento || 'N/A',
                                     criticalLimit: 0 
@@ -2376,94 +2384,152 @@ document.addEventListener('DOMContentLoaded', () => {
             clearListener('dashboard');
             clearListener('expirations');
 
-            if (locationFilter === 'all') {
-                activeListeners.dashboard = onSnapshot(doc(db, 'Metadata', 'GlobalStats'), async (docSnap) => {
-                    let capitalTotal = 0;
-                    let stockCritico = 0;
-                    
-                    if (docSnap.exists()) {
-                        const data = docSnap.data();
-                        capitalTotal = data.totalCapital || 0;
-                        stockCritico = data.criticalCount || 0;
-                    }
+            // 1. GLOBAL STATS (Para las tarjetas superiores principales)
+            activeListeners.dashboardGlobal = onSnapshot(doc(db, 'Metadata', 'GlobalStats'), async (docSnap) => {
+                let capitalTotal = 0;
+                let stockCritico = 0;
+                
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    capitalTotal = data.totalCapital || 0;
+                    stockCritico = data.criticalCount || 0;
+                }
 
-                    if (criticalEl) criticalEl.textContent = stockCritico;
-                    
-                    if (totalInsEl && totalInsEl.textContent === '0') {
-                        try {
-                            const countSnap = await getDocs(query(collection(db, 'Insumos'), limit(1))); // Just a placeholder, full count needs getCountFromServer which isn't imported, so let's just show 'Global'
-                            totalInsEl.textContent = 'Global';
-                        } catch(e) {}
+                if (criticalEl) criticalEl.textContent = stockCritico;
+                // El totalInsEl ahora se actualiza al final de renderDashboardLocations
+                
+                if (capitalEl) {
+                    const formattedCapital = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(capitalTotal);
+                    if (capitalEl.innerText !== formattedCapital) {
+                        capitalEl.innerText = formattedCapital;
+                        capitalEl.classList.remove('animate-pulse');
+                        void capitalEl.offsetWidth;
+                        capitalEl.classList.add('animate-pulse');
                     }
+                }
+            }, (error) => {
+                console.error("Error leyendo GlobalStats para Dashboard:", error);
+            });
+
+            // 2. ESTADO POR UBICACIÓN (Bodegas)
+            activeListeners.dashboardBodegas = onSnapshot(collection(db, 'Insumos'), (snap) => {
+                const locationsStats = {};
+                
+                snap.forEach(docSnap => {
+                    const data = docSnap.data();
+                    const loc = data.location || 'Bodega Central';
+                    const qty = data.physicalCount || data.quantity || data.cantidad || 0;
+                    const price = data.unitPrice || data.costo_unitario || 0;
+                    const critLimit = data.criticalLimit || data.stock_minimo || 10;
                     
-                    if (capitalEl) {
-                        const formattedCapital = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(capitalTotal);
-                        if (capitalEl.innerText !== formattedCapital) {
-                            capitalEl.innerText = formattedCapital;
-                            capitalEl.classList.remove('animate-pulse');
-                            void capitalEl.offsetWidth;
-                            capitalEl.classList.add('animate-pulse');
-                        }
+                    if (!locationsStats[loc]) {
+                        locationsStats[loc] = { insumos: 0, criticos: 0, capital: 0 };
                     }
-                }, (error) => {
-                    console.error("Error leyendo GlobalStats para Dashboard:", error);
+                    locationsStats[loc].insumos += 1;
+                    locationsStats[loc].capital += (qty * price);
+                    if (qty <= critLimit) locationsStats[loc].criticos += 1;
                 });
-            } else {
-                activeListeners.dashboard = onSnapshot(query(collection(db, 'Insumos'), where('location', '==', locationFilter)), (snap) => {
-                    let capitalTotal = 0;
-                    let stockCritico = 0;
+
+                window._lastBodegasStats = locationsStats;
+                renderDashboardLocations();
+            });
+
+            // 3. ESTADO POR BANDEJAS ACTIVAS
+            activeListeners.dashboardBandejas = onSnapshot(query(collection(db, 'Bandejas_Turno'), where('estado', '!=', 'FINALIZADA')), (snap) => {
+                const bandejasStats = {};
+                
+                snap.forEach(docSnap => {
+                    const data = docSnap.data();
+                    const numBandeja = data.numeroBandeja || data.id || 'Bandeja';
+                    const meds = data.medicamentos || [];
                     
-                    snap.forEach(docSnap => {
-                        const data = docSnap.data();
-                        capitalTotal += (data.physicalCount || 0) * (data.unitPrice || 0);
-                        if ((data.physicalCount || 0) <= (data.criticalStock || 0)) stockCritico++;
+                    let cap = 0;
+                    meds.forEach(m => {
+                        const q = Number(m.cantidadAsignada || 0);
+                        const p = Number(m.unitPrice || m.costo_unitario || 0);
+                        cap += (q * p);
                     });
 
-                    if (criticalEl) criticalEl.textContent = stockCritico;
-                    if (totalInsEl) totalInsEl.textContent = snap.size;
-                    
-                    if (capitalEl) {
-                        const formattedCapital = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(capitalTotal);
-                        if (capitalEl.innerText !== formattedCapital) {
-                            capitalEl.innerText = formattedCapital;
-                            capitalEl.classList.remove('animate-pulse');
-                            void capitalEl.offsetWidth;
-                            capitalEl.classList.add('animate-pulse');
-                        }
-                    }
-                }, (error) => {
-                    console.error("Error leyendo Insumos para Dashboard:", error);
+                    bandejasStats[numBandeja] = {
+                        insumos: meds.length,
+                        criticos: 0, // Las bandejas usualmente no manejan 'stock crítico' interno en esta vista
+                        capital: cap,
+                        estado: data.estado,
+                        enfermero: data.asignadoA || 'Sin Asignar'
+                    };
                 });
-            } else if (locationFilter === 'Bandeja') {
-                activeListeners.dashboard = onSnapshot(query(collection(db, 'Bandejas_Turno'), where('estado', '==', 'CREADA')), (snap) => {
-                    let capitalTotal = 0;
-                    let itemsMap = new Set();
-                    
-                    snap.forEach(docSnap => {
-                        const meds = docSnap.data().medicamentos || [];
-                        meds.forEach(m => {
-                            const qty = Number(m.cantidadAsignada || 0);
-                            const price = Number(m.unitPrice || m.costo_unitario || 0); // Need unitPrice attached or fallback
-                            capitalTotal += qty * price;
-                            itemsMap.add(m.nombreInsumo || m.nombre);
-                        });
-                    });
 
-                    if (criticalEl) criticalEl.textContent = '-';
-                    if (totalInsEl) totalInsEl.textContent = itemsMap.size;
+                window._lastBandejasStats = bandejasStats;
+                renderDashboardLocations();
+            });
+
+            // Función auxiliar para renderizar el grid unificado
+            function renderDashboardLocations() {
+                const grid = document.getElementById('dashboard-locations-grid');
+                if (!grid) return;
+                
+                let html = '';
+                const formatCLP = val => new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(val);
+
+                let totalUnique = 0;
+
+                // Bodegas
+                const bodegas = window._lastBodegasStats || {};
+                for (const [loc, stats] of Object.entries(bodegas)) {
+                    totalUnique += stats.insumos;
+                    let icon = 'ph-buildings';
+                    if (loc.toLowerCase().includes('transitoria')) icon = 'ph-package';
                     
-                    if (capitalEl) {
-                        const formattedCapital = new Intl.NumberFormat('es-CL', { style: 'currency', currency: 'CLP' }).format(capitalTotal);
-                        if (capitalEl.innerText !== formattedCapital) {
-                            capitalEl.innerText = formattedCapital;
-                            capitalEl.classList.remove('animate-pulse');
-                            void capitalEl.offsetWidth;
-                            capitalEl.classList.add('animate-pulse');
-                        }
-                    }
-                }, (error) => {
-                    console.error("Error leyendo Bandejas para Dashboard:", error);
-                });
+                    html += `
+                        <div class="card" style="padding: 15px; border-top: 4px solid var(--primary); cursor: pointer;" onclick="window.filterInventoryByLocation('${window.escapeHTML(loc)}')">
+                            <h4 style="margin: 0 0 15px 0; color: var(--text-main); display: flex; align-items: center; gap: 8px; font-size: 1.1rem;">
+                                <i class="ph-fill ${icon}" style="color: var(--primary);"></i> ${window.escapeHTML(loc)}
+                            </h4>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 8px; color: var(--text-muted);">
+                                <span>Insumos Únicos:</span> <strong style="color: var(--text-main);">${stats.insumos}</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 8px; color: var(--text-muted);">
+                                <span>Stock Crítico:</span> <strong class="${stats.criticos > 0 ? 'text-danger' : 'text-success'}">${stats.criticos}</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.9em; color: var(--text-muted);">
+                                <span>Capital:</span> <strong style="color: var(--text-main);">${formatCLP(stats.capital)}</strong>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                // Bandejas
+                const bandejas = window._lastBandejasStats || {};
+                for (const [bName, stats] of Object.entries(bandejas)) {
+                    totalUnique += stats.insumos;
+                    html += `
+                        <div class="card" style="padding: 15px; border-top: 4px solid var(--warning); cursor: pointer;" onclick="window.filterInventoryByLocation('${window.escapeHTML(bName)}')">
+                            <h4 style="margin: 0 0 15px 0; color: var(--text-main); display: flex; align-items: center; gap: 8px; font-size: 1.1rem;">
+                                <i class="ph-fill ph-briefcase-medical" style="color: var(--warning);"></i> ${window.escapeHTML(bName)}
+                            </h4>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 8px; color: var(--text-muted);">
+                                <span>Estado:</span> <span class="badge-orange" style="font-size: 0.75rem;">${window.escapeHTML(stats.estado)}</span>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 8px; color: var(--text-muted);">
+                                <span>Asignado a:</span> <strong style="color: var(--text-main);">${window.escapeHTML(stats.enfermero)}</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.9em; margin-bottom: 8px; color: var(--text-muted);">
+                                <span>Items en Bandeja:</span> <strong style="color: var(--text-main);">${stats.insumos}</strong>
+                            </div>
+                            <div style="display: flex; justify-content: space-between; font-size: 0.9em; color: var(--text-muted);">
+                                <span>Capital:</span> <strong style="color: var(--text-main);">${formatCLP(stats.capital)}</strong>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                grid.innerHTML = html;
+
+                // Actualizar Insumos Totales Globales
+                const totalInsEl = document.getElementById('dash-total-insumos');
+                if (totalInsEl) {
+                    totalInsEl.textContent = totalUnique;
+                }
             }
             
             // Cargar Vencimientos Asíncronamente en bloque pequeño (Evita Snapshot Masivo)
@@ -2554,14 +2620,32 @@ document.addEventListener('DOMContentLoaded', () => {
             };
             fetchExpirations();
 
-            // Bind Location Filter Listener
-            const dashLocationFilter = document.getElementById('dash-location-filter');
-            if (dashLocationFilter && !dashLocationFilter.dataset.listenerBound) {
-                dashLocationFilter.dataset.listenerBound = 'true';
-                dashLocationFilter.addEventListener('change', (e) => {
-                    window.startRealTimeDashboard(e.target.value);
-                });
+            // Removemos el listener de dashLocationFilter ya que ya no existe
+        };
+
+        // Función Global para filtrar el inventario desde los clicks en Dashboard
+        window.filterInventoryByLocation = function(loc) {
+            if (window.router && window.router.navigate) {
+                window.router.navigate('view-inventario');
             }
+            
+            setTimeout(() => {
+                const selectLoc = document.getElementById('inv-filter-location');
+                if (selectLoc) {
+                    // Check if option exists
+                    let exists = Array.from(selectLoc.options).some(o => o.value === loc);
+                    if (!exists) {
+                        const opt = document.createElement('option');
+                        opt.value = loc;
+                        opt.textContent = `📌 ${loc}`;
+                        selectLoc.appendChild(opt);
+                    }
+                    selectLoc.value = loc;
+                    if (window.applyInventoryFilters) {
+                        window.applyInventoryFilters();
+                    }
+                }
+            }, 150); // Pequeño delay para asegurar que la vista cargó
         };
 
         // ============================================================
@@ -5358,6 +5442,36 @@ document.addEventListener('DOMContentLoaded', () => {
         const panelMis = document.getElementById('panel-mis-bandejas');
         const panelHistorial = document.getElementById('panel-historial-bandejas');
         const panelPacks = document.getElementById('panel-gestionar-packs');
+
+        // [NEW] Lógica de Bloqueo de Bandejas en Uso
+        if (window._bandejasActivasListener) {
+            window._bandejasActivasListener();
+        }
+        window._bandejasActivasListener = onSnapshot(query(collection(db, 'Bandejas_Turno'), where('estado', '!=', 'FINALIZADA')), (snap) => {
+            const bandejasEnUso = new Map();
+            snap.forEach(docSnap => {
+                const data = docSnap.data();
+                if (data.numeroBandeja) bandejasEnUso.set(data.numeroBandeja, data.asignadoA || 'Sistema');
+            });
+            
+            const selectBandeja = document.getElementById('select-numero-bandeja');
+            if (selectBandeja) {
+                Array.from(selectBandeja.options).forEach(opt => {
+                    if (opt.value === "") return;
+                    
+                    const isEditing = window._editingBandejaId && selectBandeja.value === opt.value;
+                    const asignadoA = bandejasEnUso.get(opt.value);
+                    
+                    if (asignadoA && !isEditing) {
+                        opt.disabled = true;
+                        if (!opt.text.includes('(EN USO')) opt.text = opt.value + ` (EN USO por ${asignadoA})`;
+                    } else {
+                        opt.disabled = false;
+                        opt.text = opt.value; // Restore original
+                    }
+                });
+            }
+        });
 
         if (tabCrear && tabMis && panelCrear && panelMis && tabHistorial && panelHistorial && tabPacks && panelPacks) {
             // Limpiar listeners anteriores clonando

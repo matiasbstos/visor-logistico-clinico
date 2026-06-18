@@ -169,30 +169,23 @@
                     </div>
                 </div>
             </header>
-
-            <div class="dashboard-container">
-
                 <!-- VIEW 1: Panel de Control -->
                 <section id="view-panel" class="view-section active">
-                    <div class="page-header">
+                    <div class="dashboard-container">
+                        <div class="page-header">
                         <div class="page-title">
                             <h1>Panel de Control</h1>
                             <p>Resumen ejecutivo del inventario clínico y alertas críticas.</p>
                         </div>
                         <div style="display:flex; gap:12px; align-items:center;">
-                            <select id="dash-location-filter" class="form-control" style="width:auto; font-weight: 500;">
-                                <option value="all">📍 Todas las Ubicaciones</option>
-                                <option value="Bodega Central">🏢 Bodega Central</option>
-                                <option value="Bodega Transitoria">📦 Bodegas Transitorias</option>
-                                <option value="Bandeja">🚑 Bandejas en Turno</option>
-                            </select>
                             <button class="btn btn-primary" id="btn-ia-analisis">
                                 <i class="ph-fill ph-sparkle"></i>Análisis IA
                             </button>
                         </div>
                     </div>
 
-                    <div class="cards-grid">
+                    <h3 style="margin: 20px 0 15px 0; color: var(--text-main); font-size: 1.2rem;">Resumen Global</h3>
+                    <div class="cards-grid" id="global-cards-grid">
                         <div class="card">
                             <div class="card-header">
                                 <div class="card-icon blue"><i class="ph ph-clipboard-text"></i></div>
@@ -278,6 +271,12 @@
                             </div>
                         </div>
                     </div>
+
+                    <h3 style="margin: 30px 0 15px 0; color: var(--text-main); font-size: 1.2rem;">Estado por Ubicación</h3>
+                    <div id="dashboard-locations-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 20px;">
+                        <!-- Mini-cards por ubicación inyectadas vía JS -->
+                    </div>
+
                 </div> <!-- END dashboard-container -->
                 </section>
 
@@ -285,7 +284,8 @@
 
                 <!-- VIEW: Inventario -->
                 <section id="view-inventario" class="view-section">
-                    <div class="page-header mb-16">
+                    <div class="dashboard-container">
+                        <div class="page-header mb-16">
                         <div class="page-title">
                             <h1>Inventario</h1>
                             <p>Control de existencias y búsqueda de suministros.</p>

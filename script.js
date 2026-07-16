@@ -6616,6 +6616,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     if (data.medicamentos && data.medicamentos.length > 0) {
                         const isEnUsoGeneral = data.estado === 'EN_USO';
+                        const canArqueo = isEnUsoGeneral && ['enfermero', 'superadmin', 'logistica', 'bodega'].includes(currentRole);
                         html += `
                             <div class="table-responsive" style="border: 1px solid #dee2e6; border-radius: 8px; overflow: hidden; margin-bottom: 20px;">
                                 <table class="table table-hover table-sm mb-0">
@@ -6625,7 +6626,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                             <th style="text-align: center;">Stock Asignado</th>
                                             <th style="text-align: center;">Salidas Acum.</th>
                                             <th style="text-align: center;">Stock Restante</th>
-                                            ${isEnUsoGeneral && currentRole === 'enfermero' ? '<th style="text-align: center;">Acción</th>' : ''}
+                                            ${canArqueo ? '<th style="text-align: center;">Acción</th>' : ''}
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -6641,11 +6642,12 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <td>
                                         ${med.nombreInsumo || med.nombre}
                                         ${med.observacionAdicional ? `<br><small class="text-muted">${med.observacionAdicional}</small>` : ''}
+                                        ${med.rutPaciente ? `<br><small class="text-primary font-bold" style="display: inline-flex; align-items: center; gap: 4px; margin-top: 4px;"><i class="ph-fill ph-user-circle"></i> Paciente RUT: ${window.escapeHTML(med.rutPaciente)}</small>` : ''}
                                     </td>
                                     <td style="text-align: center; font-weight: bold;">${maxVal}</td>
                                     <td style="text-align: center; color: #dc3545; font-weight: bold;">${consumidoVal > 0 ? '-' + consumidoVal : '0'}</td>
                                     <td style="text-align: center; color: #198754; font-weight: bold;">${restante}</td>
-                                    ${isEnUsoGeneral && currentRole === 'enfermero' ? `
+                                    ${canArqueo ? `
                                     <td style="text-align: center;">
                                         <button type="button" class="btn btn-sm btn-outline-primary" style="padding: 2px 8px; font-size: 0.85em;" onclick="window.abrirModalArqueoParcial('${docSnap.id}', ${idx}, '${med.nombreInsumo || med.nombre}', ${maxVal})">
                                             <i class="ph ph-plus-circle"></i> Arqueo
@@ -6854,6 +6856,50 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
     // LOGICA DE TURNO (CONSUMO Y MERMA)
     // ==========================================
+    // ==========================================
+    // VALIDACION Y FORMATO DE RUT CHILENO
+    // ==========================================
+    function validarRut(rut) {
+        if (!rut || typeof rut !== 'string') return false;
+        const cleaned = rut.replace(/[^0-9kK]/g, '');
+        if (cleaned.length < 2) return false;
+        const dv = cleaned.slice(-1).toUpperCase();
+        const body = cleaned.slice(0, -1);
+        if (!/^\d+$/.test(body)) return false;
+        let sum = 0;
+        let multiplier = 2;
+        for (let i = body.length - 1; i >= 0; i--) {
+            sum += Number(body[i]) * multiplier;
+            multiplier = multiplier === 7 ? 2 : multiplier + 1;
+        }
+        const remainder = sum % 11;
+        const computedDv = 11 - remainder;
+        let expectedDv;
+        if (computedDv === 11) expectedDv = '0';
+        else if (computedDv === 10) expectedDv = 'K';
+        else expectedDv = String(computedDv);
+        return dv === expectedDv;
+    }
+
+    function formatearRut(rut) {
+        if (!rut) return '';
+        const cleaned = rut.replace(/[^0-9kK]/g, '').toUpperCase();
+        if (cleaned.length < 2) return cleaned;
+        const dv = cleaned.slice(-1);
+        const body = cleaned.slice(0, -1);
+        let formattedBody = '';
+        let count = 0;
+        for (let i = body.length - 1; i >= 0; i--) {
+            formattedBody = body[i] + formattedBody;
+            count++;
+            if (count === 3 && i > 0) {
+                formattedBody = '.' + formattedBody;
+                count = 0;
+            }
+        }
+        return `${formattedBody}-${dv}`;
+    }
+
     window._mermaActiva = { docId: null, idx: null };
     window._arqueoParcialActivo = { docId: null, idx: null, maxVal: 0 };
 
@@ -6861,20 +6907,62 @@ document.addEventListener('DOMContentLoaded', () => {
         window._arqueoParcialActivo = { docId, idx, maxVal };
         document.getElementById('arqueo-farmaco-nombre').textContent = nombreInsumo;
         document.getElementById('arqueo-popup-cantidad').value = 1;
-        document.getElementById('arqueo-popup-cantidad').max = maxVal;
-        document.getElementById('arqueo-popup-motivo').value = 'Consumido al paciente';
+        
+        // Reset/limpiar campos nuevos
+        document.getElementById('arqueo-popup-rut').value = '';
+        
+        const tieneIncidenciaSelect = document.getElementById('arqueo-popup-tiene-incidencia');
+        tieneIncidenciaSelect.value = 'no';
+        
+        const motivoContainer = document.getElementById('arqueo-popup-motivo-container');
+        motivoContainer.style.display = 'none';
+        
+        const motivoSelect = document.getElementById('arqueo-popup-motivo');
+        motivoSelect.value = ''; // Reset select a la opción por defecto
+        
+        // Escuchar el cambio en el selector de incidencia para mostrar/ocultar el dropdown
+        if (!tieneIncidenciaSelect.dataset.listenerBound) {
+            tieneIncidenciaSelect.dataset.listenerBound = 'true';
+            tieneIncidenciaSelect.addEventListener('change', (e) => {
+                if (e.target.value === 'si') {
+                    motivoContainer.style.display = 'block';
+                } else {
+                    motivoContainer.style.display = 'none';
+                    motivoSelect.value = ''; // Limpiar selección
+                }
+            });
+        }
+        
         document.getElementById('modal-arqueo-parcial-popup').classList.add('active');
     };
 
     window.confirmarArqueoParcialPopup = async function () {
         const cant = Number(document.getElementById('arqueo-popup-cantidad').value) || 0;
+        const tieneIncidencia = document.getElementById('arqueo-popup-tiene-incidencia').value;
         const motivo = document.getElementById('arqueo-popup-motivo').value;
+        const rutVal = document.getElementById('arqueo-popup-rut').value.trim();
 
-        if (cant <= 0) {
-            window.showToast('Error', 'La cantidad a registrar debe ser mayor a 0', 'error');
+        if (cant === 0) {
+            window.showToast('Error', 'La cantidad a registrar no puede ser 0', 'error');
             return;
         }
 
+        if (!rutVal) {
+            window.showToast('Error', 'El RUT del paciente es obligatorio.', 'error');
+            return;
+        }
+
+        if (!validarRut(rutVal)) {
+            window.showToast('Error', 'El RUT ingresado no es válido. Formato esperado: 12345678-9', 'error');
+            return;
+        }
+
+        if (tieneIncidencia === 'si' && !motivo) {
+            window.showToast('Error', 'Debe seleccionar una incidencia de la lista.', 'error');
+            return;
+        }
+
+        const rutFormatted = formatearRut(rutVal);
         const { docId, idx, maxVal } = window._arqueoParcialActivo;
         if (!docId) return;
 
@@ -6889,19 +6977,28 @@ document.addEventListener('DOMContentLoaded', () => {
             const consumidoPrevio = med.cantidadConsumida || 0;
             const nuevoConsumido = consumidoPrevio + cant;
 
+            if (nuevoConsumido < 0) {
+                window.showToast('Error', 'La cantidad consumida acumulada no puede quedar por debajo de 0.', 'error');
+                return;
+            }
+
             if (nuevoConsumido > maxVal) {
                 window.showToast('Atención', 'La cantidad acumulada supera el stock asignado originalmente.', 'warning');
             }
 
+            // Construir motivo a guardar
+            const detalleMotivo = tieneIncidencia === 'si' ? motivo : 'Consumo';
+            const logSign = cant > 0 ? `+${cant}` : `${cant}`;
             const nuevaObs = med.observacionAdicional 
-                ? `${med.observacionAdicional} | (+${cant}) ${motivo}` 
-                : `(+${cant}) ${motivo}`;
+                ? `${med.observacionAdicional} | (${logSign}) ${detalleMotivo} (RUT: ${rutFormatted})` 
+                : `(${logSign}) ${detalleMotivo} (RUT: ${rutFormatted})`;
 
             const medicamentosActualizados = [...data.medicamentos];
             medicamentosActualizados[idx] = {
                 ...med,
                 cantidadConsumida: nuevoConsumido,
-                observacionAdicional: nuevaObs
+                observacionAdicional: nuevaObs,
+                rutPaciente: med.rutPaciente ? `${med.rutPaciente}, ${rutFormatted}` : rutFormatted
             };
 
             // Guardar en Firestore la bandeja
@@ -6914,12 +7011,19 @@ document.addEventListener('DOMContentLoaded', () => {
             const histRef = window.firebaseFirestore.doc(window.firebaseFirestore.collection(db, 'Historial_Movimientos'));
             await window.firebaseFirestore.setDoc(histRef, {
                 tipoAccion: 'ARQUEO_PARCIAL',
+                type: 'salida',
+                date: window.firebaseFirestore.serverTimestamp(),
                 fechaHora: window.firebaseFirestore.serverTimestamp(),
                 usuario: auth.currentUser ? auth.currentUser.email : 'desconocido',
+                user: auth.currentUser ? auth.currentUser.email : 'desconocido',
                 idBandeja: docId,
                 nombreInsumo: med.nombreInsumo || med.nombre,
+                insumoName: med.nombreInsumo || med.nombre,
                 cantidadMermada: cant,
-                motivoMerma: motivo
+                quantity: cant,
+                motivoMerma: detalleMotivo,
+                document: `Arqueo: ${detalleMotivo}`,
+                rutPaciente: rutFormatted
             });
 
             document.getElementById('modal-arqueo-parcial-popup').classList.remove('active');

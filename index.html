@@ -2513,16 +2513,30 @@
             <div style="padding: 24px;">
                 <h4 id="arqueo-farmaco-nombre" style="margin-bottom: 16px; color: var(--text);">Fármaco</h4>
                 <div class="form-group mb-16">
-                    <label class="form-label font-bold">Cantidad a registrar</label>
-                    <input type="number" class="form-control" id="arqueo-popup-cantidad" min="1" value="1">
+                    <label class="form-label font-bold">Cantidad a registrar (Use signo menos para restar)</label>
+                    <input type="number" class="form-control" id="arqueo-popup-cantidad" value="1">
                 </div>
-                <div class="form-group mb-24">
-                    <label class="form-label font-bold">Motivo (Obligatorio)</label>
+                <div class="form-group mb-16">
+                    <label class="form-label font-bold">RUT Paciente (Obligatorio)</label>
+                    <input type="text" class="form-control" id="arqueo-popup-rut" placeholder="Ej: 12.345.678-9" required>
+                </div>
+                <div class="form-group mb-16">
+                    <label class="form-label font-bold">¿Presenta incidencia con el medicamento?</label>
+                    <select class="form-control" id="arqueo-popup-tiene-incidencia">
+                        <option value="no">No (Consumo normal)</option>
+                        <option value="si">Sí (Reportar incidencia)</option>
+                    </select>
+                </div>
+                <div class="form-group mb-24" id="arqueo-popup-motivo-container" style="display: none;">
+                    <label class="form-label font-bold">Incidencia (Obligatorio)</label>
                     <select class="form-control" id="arqueo-popup-motivo">
-                        <option value="Consumido al paciente">Consumido al paciente</option>
-                        <option value="Ampolla quebrada">Ampolla quebrada</option>
+                        <option value="" disabled selected>Seleccione incidencia...</option>
                         <option value="Precipitado">Precipitado</option>
-                        <option value="Perdido">Perdido</option>
+                        <option value="Quiebre por conteo">Quiebre por conteo</option>
+                        <option value="Quiebre por preparación">Quiebre por preparación</option>
+                        <option value="Rechazo de tratamiento">Rechazo de tratamiento</option>
+                        <option value="Contaminación de tratamiento">Contaminación de tratamiento</option>
+                        <option value="Imposible de aplicar">Imposible de aplicar</option>
                     </select>
                 </div>
                 <div style="display: flex; gap: 15px; justify-content: flex-end;">

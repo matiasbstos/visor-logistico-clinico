@@ -11830,16 +11830,24 @@ function doGet(e) {
    MÓDULO: INVENTARIO SEMANAL POR RACKS Y CONECTOR GOOGLE SHEETS DEDICADO
    ========================================================================= */
 const GOOGLE_APPS_SCRIPT_SEMANAL_TEMPLATE = `/**
+ * =========================================================================
  * GOOGLE APPS SCRIPT - CONECTOR OFICIAL INVENTARIO SEMANAL Y RACKS SAR
- * Organiza los registros por pestañas semanales (ej. 2026-08_SEMANA_1) y consolidado de auditorías.
+ * OPCIÓN A: Pestañas Semanales por Racks + Hoja Maestra CONSOLIDADO_GENERAL
+ * =========================================================================
  */
+
 function doPost(e) {
   var lock = LockService.getScriptLock();
   try {
     lock.waitLock(30000);
+    if (!e || !e.postData || !e.postData.contents) {
+      return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: 'No payload' })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
     var payload = JSON.parse(e.postData.contents);
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     
+    // 1. PING DE VALIDACIÓN
     if (payload.action === 'ping') {
       return ContentService.createTextOutput(JSON.stringify({
         status: 'success',
@@ -11849,17 +11857,18 @@ function doPost(e) {
       })).setMimeType(ContentService.MimeType.JSON);
     }
     
+    // 2. INSERCIÓN DE SEMANA + ACTUALIZACIÓN DE CONSOLIDADO GENERAL
     if (payload.action === 'batch_insert_semanal' || payload.action === 'insert_semanal') {
       var items = payload.items || [payload.item];
       var weekTabName = payload.weekTabName || (payload.year + '-' + String(Number(payload.month) + 1).padStart(2, '0') + '_SEMANA_' + payload.week);
       
-      // 1. Obtener o crear hoja para la semana específica
+      // A) Obtener o crear hoja para la semana específica
       var sheet = ss.getSheetByName(weekTabName);
       if (!sheet) {
         sheet = ss.insertSheet(weekTabName);
         var headers = [
           "Marca Temporal", "Semana", "Periodo Mes/Año", "Grupo / Rack",
-          "Código", "Medicamento", "Dosis / Forma", "Stock Sistema",
+          "Código", "Medicamento", "Dosis / Categoría", "Stock Sistema",
           "Conteo Semanal (Físico)", "Variación (Diff)", "Lote", "Vencimiento",
           "Responsable", "Estado Ciclo", "Observaciones / Auditoría"
         ];
@@ -11872,26 +11881,45 @@ function doPost(e) {
         sheet.setFrozenRows(1);
       }
       
-      // Limpiar datos anteriores si es un reenvío/cierre completo de la semana
       if (payload.replaceWeekData && sheet.getLastRow() > 1) {
         sheet.getRange(2, 1, sheet.getLastRow() - 1, sheet.getLastColumn()).clearContent();
       }
       
       var rows = [];
       var now = new Date();
+      var totalSys = 0;
+      var totalPhy = 0;
+      var totalDiff = 0;
+      
+      // Ordenar items por Rack y luego por Nombre de Medicamento
+      items.sort(function(a, b) {
+        var rackA = (a.rackName || a.rack || 'Sin Asignar').toLowerCase();
+        var rackB = (b.rackName || b.rack || 'Sin Asignar').toLowerCase();
+        if (rackA < rackB) return -1;
+        if (rackA > rackB) return 1;
+        return (a.name || '').localeCompare(b.name || '');
+      });
       
       items.forEach(function(it) {
+        var sys = Number(it.systemStock !== undefined ? it.systemStock : (it.stockSistema || 0));
+        var phy = Number(it.physicalCount !== undefined ? it.physicalCount : (it.conteoSemanal || 0));
+        var diff = Number(phy - sys);
+        
+        totalSys += sys;
+        totalPhy += phy;
+        totalDiff += diff;
+
         rows.push([
-          it.timestamp || now.toISOString(),
+          it.timestamp || Utilities.formatDate(now, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss"),
           "Semana " + (payload.week || it.semana || "1"),
           (payload.monthName || "") + " " + (payload.year || "2026"),
           it.rackName || it.rack || "Sin Asignar",
           it.code || it.codigo || "N/A",
           it.name || it.nombre || "Desconocido",
-          it.dosage || it.dosis || "",
-          Number(it.systemStock !== undefined ? it.systemStock : (it.stockSistema || 0)),
-          Number(it.physicalCount !== undefined ? it.physicalCount : (it.conteoSemanal || 0)),
-          Number(Number(it.physicalCount || 0) - Number(it.systemStock || 0)),
+          it.dosage || it.dosis || it.category || "",
+          sys,
+          phy,
+          diff,
           it.batch || it.lote || "S/L",
           it.expirationDate || it.vencimiento || "",
           it.responsible || payload.user || "Operador SAR",
@@ -11905,9 +11933,24 @@ function doPost(e) {
         sheet.autoResizeColumns(1, rows[0].length);
       }
       
+      // B) ACTUALIZAR O CREAR LA HOJA MAESTRA "CONSOLIDADO_GENERAL"
+      updateConsolidadoGeneral(ss, {
+        weekTabName: weekTabName,
+        year: payload.year || "2026",
+        monthName: payload.monthName || "Mes",
+        week: payload.week || "1",
+        totalItems: items.length,
+        totalSys: totalSys,
+        totalPhy: totalPhy,
+        totalDiff: totalDiff,
+        cycleStatus: payload.cycleStatus || "BORRADOR",
+        user: payload.user || "Operador SAR",
+        now: now
+      });
+      
       return ContentService.createTextOutput(JSON.stringify({
         status: 'success',
-        message: 'Registros de la semana guardados correctamente en la hoja ' + weekTabName,
+        message: 'Semana guardada en ' + weekTabName + ' y Consolidado General actualizado.',
         insertedCount: rows.length
       })).setMimeType(ContentService.MimeType.JSON);
     }
@@ -11920,10 +11963,64 @@ function doPost(e) {
   }
 }
 
+/**
+ * Mantiene la hoja fija CONSOLIDADO_GENERAL como resumen maestro
+ */
+function updateConsolidadoGeneral(ss, data) {
+  var consSheet = ss.getSheetByName("CONSOLIDADO_GENERAL");
+  var headers = [
+    "Periodo Mes/Año", "Semana", "Pestaña de Detalle", "Total Fármacos",
+    "Stock Sistema (Total)", "Conteo Físico (Total)", "Variación Neta",
+    "Estado del Ciclo", "Responsable", "Última Actualización"
+  ];
+  
+  if (!consSheet) {
+    consSheet = ss.insertSheet("CONSOLIDADO_GENERAL", 0); // Primera posición
+    consSheet.appendRow(headers);
+    var hRange = consSheet.getRange(1, 1, 1, headers.length);
+    hRange.setBackground("#0f172a");
+    hRange.setFontColor("#ffffff");
+    hRange.setFontWeight("bold");
+    hRange.setHorizontalAlignment("center");
+    consSheet.setFrozenRows(1);
+  }
+  
+  // Buscar si ya existe una fila para esta semana específica
+  var values = consSheet.getDataRange().getValues();
+  var rowIndex = -1;
+  for (var i = 1; i < values.length; i++) {
+    if (values[i][2] === data.weekTabName) {
+      rowIndex = i + 1;
+      break;
+    }
+  }
+  
+  var rowData = [
+    data.monthName + " " + data.year,
+    "Semana " + data.week,
+    data.weekTabName,
+    data.totalItems,
+    data.totalSys,
+    data.totalPhy,
+    data.totalDiff,
+    data.cycleStatus,
+    data.user,
+    Utilities.formatDate(data.now, Session.getScriptTimeZone(), "yyyy-MM-dd HH:mm:ss")
+  ];
+  
+  if (rowIndex > 0) {
+    consSheet.getRange(rowIndex, 1, 1, rowData.length).setValues([rowData]);
+  } else {
+    consSheet.appendRow(rowData);
+  }
+  
+  consSheet.autoResizeColumns(1, headers.length);
+}
+
 function doGet(e) {
   try {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var action = e.parameter.action;
+    var action = e && e.parameter ? e.parameter.action : null;
     
     if (action === 'pull_semanal') {
       var weekTabName = e.parameter.weekTabName;
@@ -11962,10 +12059,11 @@ function doGet(e) {
       message: 'Conector de Inventario Semanal SAR Activo',
       sheets: ss.getSheets().map(function(s) { return s.getName(); })
     })).setMimeType(ContentService.MimeType.JSON);
+
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.toString() })).setMimeType(ContentService.MimeType.JSON);
   }
-}`;
+};
 
 (function initInventarioSemanalScope() {
     const STORAGE_KEY_SEMANAL_SHEETS = 'visor_sheets_semanal_url';

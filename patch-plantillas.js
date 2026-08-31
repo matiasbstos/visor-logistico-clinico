@@ -1,4 +1,4 @@
-import { db, auth } from './script.js?v=14.2';
+import { db, auth } from './script.js';
 import { collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, serverTimestamp, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 import { onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 

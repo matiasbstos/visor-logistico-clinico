@@ -1,16 +1,16 @@
-const CACHE_NAME = 'visor-logistico-v13';
+const CACHE_NAME = 'visor-logistico-v16.2';
 const urlsToCache = [
   './',
   './index.html',
   './style.css',
-  './script.js?v=14.2',
-  './patch-plantillas.js?v=14.2',
+  './script.js?v=16.2',
+  './patch-plantillas.js?v=16.2',
   './excelUtils.js',
   'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap',
   'https://unpkg.com/@phosphor-icons/web',
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js'
+  'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js'
 ];
 
 // Instalar el Service Worker y almacenar en caché los recursos estáticos

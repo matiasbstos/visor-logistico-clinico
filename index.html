@@ -3,7 +3,7 @@
 
 <head>
     <script>
-        const APP_VERSION = '16.1';
+        const APP_VERSION = '16.2';
         if (localStorage.getItem('APP_VERSION') !== APP_VERSION) {
             localStorage.setItem('APP_VERSION', APP_VERSION);
             if ('serviceWorker' in navigator) {
@@ -3026,22 +3026,6 @@
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
-    <!-- Módulos de la Aplicación -->
-    <script type="module" src="script.js?v=14.2"></script>
-    <script type="module" src="patch-plantillas.js?v=14.2"></script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(registration => {
-                        console.log('ServiceWorker registrado con alcance:', registration.scope);
-                    })
-                    .catch(error => {
-                        console.log('Fallo en el registro del ServiceWorker:', error);
-                    });
-            });
-        }
-    </script>
     <!-- MODAL CREAR REEMPLAZO -->
     <div id="modal-crear-reemplazo" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.8); z-index: 999999; justify-content: center; align-items: center;">
         <div class="modal-content" style="background: white; padding: 35px; border-radius: 12px; width: 400px; max-width: 90%;">
@@ -3425,6 +3409,7 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=16.0"></script>
+    <script type="module" src="script.js?v=16.2"></script>
+    <script type="module" src="patch-plantillas.js?v=16.2"></script>
 </body>
 </html>

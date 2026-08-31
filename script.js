@@ -9643,8 +9643,9 @@ function onOpen() {
 }
 
 /**
- * 🔄 Reconstruye y sincroniza la hoja CONSOLIDADO_GENERAL tomando todos los medicamentos
- * existentes en todas las pestañas de categorías.
+ * 🔄 FUNCIÓN DE RECONSTRUCCIÓN Y SINCRONIZACIÓN TOTAL:
+ * Lee todas las pestañas de categorías y pasa automáticamente
+ * todos los medicamentos que falten hacia CONSOLIDADO_GENERAL.
  */
 function reconstruirConsolidadoDesdeCategorias() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -9662,67 +9663,111 @@ function reconstruirConsolidadoDesdeCategorias() {
     consSheet = ss.insertSheet("CONSOLIDADO_GENERAL", 0);
   }
   
-  consSheet.clear();
-  consSheet.appendRow(headers);
-  var r = consSheet.getRange(1, 1, 1, headers.length);
-  r.setBackground("#0f172a");
-  r.setFontColor("#ffffff");
-  r.setFontWeight("bold");
-  r.setHorizontalAlignment("center");
-  consSheet.setFrozenRows(1);
-  try { consSheet.setTabColor("#0f172a"); } catch(e) {}
+  // 1. Leer datos que ya están en el Consolidado
+  var existingConsData = [];
+  if (consSheet.getLastRow() > 1) {
+    existingConsData = consSheet.getRange(2, 1, consSheet.getLastRow() - 1, headers.length).getValues();
+  }
 
-  var totalSincronizados = 0;
+  var allRows = [];
   var seenKeys = {};
 
+  for (var c = 0; c < existingConsData.length; c++) {
+    var cRow = existingConsData[c];
+    var cMed = (cRow[3] || "").toString().trim();
+    if (cMed && cMed !== "Descripción / Medicamento") {
+      var cFase = (cRow[1] || "1ra Toma (Inicial)").toString().trim();
+      var cCode = (cRow[2] || "S/I").toString().trim();
+      var cLote = (cRow[7] || "N/A").toString().trim();
+      var cKey = (cCode && cCode !== "S/I" ? cCode : (cMed.toLowerCase() + "_" + cFase.toLowerCase() + "_" + cLote.toLowerCase()));
+      
+      seenKeys[cKey] = true;
+      allRows.push(cRow);
+    }
+  }
+
+  // 2. Extraer medicamentos de CADA pestaña de categoría que no estén en el consolidado
   for (var s = 0; s < sheets.length; s++) {
     var sheet = sheets[s];
     var sheetName = sheet.getName();
-    if (sheetName === "CONSOLIDADO_GENERAL" || sheetName === "INCIDENCIAS_Y_MERMAS" || sheetName === "INSTRUCCIONES") continue;
+    if (sheetName === "CONSOLIDADO_GENERAL" || sheetName === "INCIDENCIAS_Y_MERMAS" || sheetName === "INSTRUCCIONES" || sheetName === "PRUEBA_SISTEMA") continue;
 
     if (sheet.getLastRow() > 1) {
       var data = sheet.getDataRange().getValues();
       for (var i = 1; i < data.length; i++) {
         var row = data[i];
-        var medName = (row[3] || row[0] || "").toString().trim();
-        if (!medName || medName === "Descripción / Medicamento") continue;
+        
+        var medName = "";
+        var fase = "1ra Toma (Inicial)";
+        var code = "S/I";
+        var cat = sheetName;
+        var cant = 0;
+        var totalAcum = 0;
+        var lote = "N/A";
+        var vto = "N/A";
+        var ubic = "Bodega Central";
+        var precio = 0;
+        var min = 50;
+        var user = "Visor Logístico";
+        var obs = "";
+        var timestamp = Utilities.formatDate(new Date(), "GMT-3", "yyyy-MM-dd HH:mm:ss");
 
-        var fase = (row[1] || "1ra Toma (Inicial)").toString().trim();
-        var code = (row[2] || "S/I").toString().trim();
-        var lote = (row[7] || row[3] || "N/A").toString().trim();
+        if (row.length >= 10) {
+          timestamp = row[0] || timestamp;
+          fase = row[1] || fase;
+          code = row[2] || code;
+          medName = (row[3] || "").toString().trim();
+          cat = row[4] || sheetName;
+          cant = Number(row[5]) || 0;
+          totalAcum = Number(row[6]) || cant;
+          lote = row[7] || lote;
+          vto = row[8] || vto;
+          ubic = row[9] || ubic;
+          precio = Number(row[10]) || 0;
+          min = Number(row[11]) || 50;
+          user = row[12] || user;
+          obs = row[13] || obs;
+        } else {
+          medName = (row[0] || "").toString().trim();
+          cant = Number(row[1]) || 0;
+          totalAcum = cant;
+          vto = row[2] || vto;
+          lote = row[3] || lote;
+        }
+
+        if (!medName || medName === "Descripción / Medicamento" || medName === "Nombre" || medName === "Fármaco") continue;
+
         var key = (code && code !== "S/I" ? code : (medName.toLowerCase() + "_" + fase.toLowerCase() + "_" + lote.toLowerCase()));
 
         if (!seenKeys[key]) {
           seenKeys[key] = true;
-          
-          var newRow = [
-            row[0] || Utilities.formatDate(new Date(), "GMT-3", "yyyy-MM-dd HH:mm:ss"),
-            fase,
-            code,
-            medName,
-            row[4] || sheetName,
-            Number(row[5]) || Number(row[1]) || 0,
-            Number(row[6]) || Number(row[5]) || 0,
-            lote,
-            row[8] || row[2] || "N/A",
-            row[9] || "Bodega Central",
-            Number(row[10]) || 0,
-            Number(row[11]) || 50,
-            row[12] || "Visor Logístico",
-            row[13] || ""
-          ];
-          
-          consSheet.appendRow(newRow);
-          totalSincronizados++;
+          allRows.push([
+            timestamp, fase, code, medName, cat, cant, totalAcum, lote, vto, ubic, precio, min, user, obs
+          ]);
         }
       }
     }
   }
 
+  // 3. Escribir limpiamente en CONSOLIDADO_GENERAL
+  consSheet.clear();
+  consSheet.appendRow(headers);
+  var headerRange = consSheet.getRange(1, 1, 1, headers.length);
+  headerRange.setBackground("#0f172a");
+  headerRange.setFontColor("#ffffff");
+  headerRange.setFontWeight("bold");
+  headerRange.setHorizontalAlignment("center");
+  consSheet.setFrozenRows(1);
+  try { consSheet.setTabColor("#0f172a"); } catch(e) {}
+
+  if (allRows.length > 0) {
+    consSheet.getRange(2, 1, allRows.length, headers.length).setValues(allRows);
+  }
+
   try {
-    SpreadsheetApp.getUi().alert('✅ Consolidado General Sincronizado', 'Se sincronizaron ' + totalSincronizados + ' medicamentos desde todas las categorías hacia CONSOLIDADO_GENERAL.', SpreadsheetApp.getUi().ButtonSet.OK);
+    SpreadsheetApp.getUi().alert('✅ Consolidado General Actualizado', 'Total de medicamentos en CONSOLIDADO_GENERAL: ' + allRows.length + ' filas sincronizadas desde todas las categorías.', SpreadsheetApp.getUi().ButtonSet.OK);
   } catch(eAlert) {
-    Logger.log('Consolidado sincronizado: ' + totalSincronizados);
+    Logger.log('Consolidado actualizado. Total: ' + allRows.length);
   }
 }
 

@@ -3,7 +3,7 @@
 
 <head>
     <script>
-        const APP_VERSION = '15.8';
+        const APP_VERSION = '15.9';
         if (localStorage.getItem('APP_VERSION') !== APP_VERSION) {
             localStorage.setItem('APP_VERSION', APP_VERSION);
             if ('serviceWorker' in navigator) {
@@ -634,12 +634,36 @@
                                         </div>
                                     </div>
 
-                                    <!-- Nombre del Medicamento / Insumo -->
-                                    <div class="form-group mb-12">
-                                        <label class="form-label" for="toma-medicamento" style="font-weight:700;">NOMBRE DEL MEDICAMENTO / INSUMO <span style="color:var(--danger)">*</span></label>
-                                        <div style="position:relative;">
-                                            <input type="text" id="toma-medicamento" list="toma-datalist-insumos" class="form-control font-bold" placeholder="Ej: Paracetamol Jarabe 120mg/5ml o Amoxicilina Comprimidos" autocomplete="off" required>
-                                            <datalist id="toma-datalist-insumos"></datalist>
+                                    <!-- Nombre del Medicamento y Dosis / Concentración -->
+                                    <div class="grid-2-col-even mb-12" style="grid-template-columns: 1.5fr 1fr; gap:10px;">
+                                        <div class="form-group">
+                                            <label class="form-label" for="toma-medicamento" style="font-weight:700;">FÁRMACO / MEDICAMENTO <span style="color:var(--danger)">*</span></label>
+                                            <div style="position:relative;">
+                                                <input type="text" id="toma-medicamento" list="toma-datalist-insumos" class="form-control font-bold" placeholder="Ej: Azitromicina, Paracetamol" autocomplete="off" required>
+                                                <datalist id="toma-datalist-insumos"></datalist>
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label" for="toma-dosis" style="font-weight:700;">DOSIS / UNIDAD</label>
+                                            <input type="text" id="toma-dosis" list="toma-datalist-dosis" class="form-control font-bold" placeholder="Ej: 200mg/5ml, 500mg, 5ml" autocomplete="off">
+                                            <datalist id="toma-datalist-dosis">
+                                                <option value="200 mg / 5 ml">
+                                                <option value="250 mg / 5 ml">
+                                                <option value="500 mg / 5 ml">
+                                                <option value="120 mg / 5 ml">
+                                                <option value="5 mg / 5 ml">
+                                                <option value="2.5 mg / 5 ml">
+                                                <option value="20 mg / 5 ml">
+                                                <option value="12 mg / ml">
+                                                <option value="400 mg / 57 mg">
+                                                <option value="500 mg">
+                                                <option value="850 mg">
+                                                <option value="1 g">
+                                                <option value="10 mg">
+                                                <option value="20 mg">
+                                                <option value="100 mcg / dosis">
+                                                <option value="250 mcg / dosis">
+                                            </datalist>
                                         </div>
                                     </div>
 
@@ -3188,11 +3212,18 @@
                 <input type="hidden" id="edit-toma-old-cat">
                 <input type="hidden" id="edit-toma-old-cant">
 
-                <div class="grid-2-col-even mb-12" style="gap: 10px;">
+                <div class="grid-2-col-even mb-12" style="grid-template-columns: 1.5fr 1fr; gap: 10px;">
                     <div class="form-group">
-                        <label class="form-label" style="font-weight: 700;">MEDICAMENTO / INSUMO</label>
+                        <label class="form-label" style="font-weight: 700;">MEDICAMENTO / FÁRMACO</label>
                         <input type="text" id="edit-toma-med" class="form-control font-bold" required>
                     </div>
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">DOSIS / CONCENTRACIÓN</label>
+                        <input type="text" id="edit-toma-dosis" class="form-control font-bold" placeholder="Ej: 200mg/5ml">
+                    </div>
+                </div>
+
+                <div class="grid-2-col-even mb-12" style="gap: 10px;">
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">FASE DE CONTEO / TOMA</label>
                         <select id="edit-toma-fase" class="form-control font-bold" style="color:var(--primary);">
@@ -3201,9 +3232,6 @@
                             <option value="Reconteo / Ajuste">Reconteo / Ajuste</option>
                         </select>
                     </div>
-                </div>
-
-                <div class="grid-2-col-even mb-12" style="gap: 10px;">
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">CATEGORÍA (PESTAÑA GOOGLE SHEETS)</label>
                         <select id="edit-toma-cat" class="form-control font-bold" required>
@@ -3240,6 +3268,7 @@
                             </optgroup>
                         </select>
                     </div>
+                </div>
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">CANTIDAD DE ESTA TOMA (UNIDADES)</label>
                         <input type="number" id="edit-toma-cant" class="form-control font-bold" min="0" step="1" required>

@@ -9713,7 +9713,7 @@ function doPost(e) {
       if (oldSheet) {
         var oldData = oldSheet.getDataRange().getValues();
         for (var i = oldData.length - 1; i >= 1; i--) {
-          var rowMed = (oldData[i][3] || "").toString().trim().toLowerCase();
+          var rowMed = (oldData[i][0] || oldData[i][3] || "").toString().trim().toLowerCase();
           var targetMed = (data.name || "").toString().trim().toLowerCase();
           if (rowMed === targetMed) {
             oldSheet.deleteRow(i + 1);
@@ -9741,15 +9741,66 @@ function doPost(e) {
       data.observations || ""
     ];
 
-    // Escribir en la hoja de la categoría correspondiente
-    targetSheet.appendRow(rowData);
-    // Escribir en la hoja CONSOLIDADO_GENERAL
+    // Detectar inteligentemente si la hoja tiene plantilla pre-existente de 4 columnas [NOMBRE, CANTIDAD, FECHA VTO, LOTE]
+    var targetValues = targetSheet.getDataRange().getValues();
+    var isFourColTemplate = false;
+    var headerRowIndex = 0;
+
+    if (targetValues.length > 0) {
+      for (var rIdx = 0; rIdx < Math.min(3, targetValues.length); rIdx++) {
+        var col0 = (targetValues[rIdx][0] || "").toString().toUpperCase().trim();
+        var col1 = (targetValues[rIdx][1] || "").toString().toUpperCase().trim();
+        if (col0.indexOf("NOMBRE") !== -1 && col1.indexOf("CANTIDAD") !== -1) {
+          isFourColTemplate = true;
+          headerRowIndex = rIdx;
+          break;
+        }
+      }
+    }
+
+    if (isFourColTemplate) {
+      function normalizeStr(s) {
+        return (s || "").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+      }
+      var targetNormalized = normalizeStr(data.name);
+      var matchedRow = -1;
+
+      for (var r = headerRowIndex + 1; r < targetValues.length; r++) {
+        var rowName = (targetValues[r][0] || "").toString();
+        var normRow = normalizeStr(rowName);
+        if (normRow && (normRow === targetNormalized || targetNormalized.indexOf(normRow) !== -1 || normRow.indexOf(targetNormalized) !== -1)) {
+          matchedRow = r + 1; // 1-indexed para getRange
+          break;
+        }
+      }
+
+      if (matchedRow !== -1) {
+        // Actualizar directamente la fila del medicamento pre-listado
+        targetSheet.getRange(matchedRow, 2).setValue(Number(data.quantity) || 0); // CANTIDAD
+        targetSheet.getRange(matchedRow, 3).setValue(data.expirationDate || "N/A"); // FECHA DE VENCIMIENTO
+        targetSheet.getRange(matchedRow, 4).setValue(data.batch || "N/A"); // LOTE
+      } else {
+        // Si no estaba en la lista previa, agregar fila con la estructura de 4 columnas
+        targetSheet.appendRow([
+          data.name || "Sin descripción",
+          Number(data.quantity) || 0,
+          data.expirationDate || "N/A",
+          data.batch || "N/A"
+        ]);
+      }
+    } else {
+      // Estructura Estándar Oficial (14 Columnas)
+      targetSheet.appendRow(rowData);
+    }
+
+    // Escribir en la hoja CONSOLIDADO_GENERAL siempre el registro completo
     consolidadoSheet.appendRow(rowData);
 
     return ContentService.createTextOutput(JSON.stringify({
       status: "success",
       message: "Medicamento registrado en hoja: " + newCat + " y en CONSOLIDADO_GENERAL",
-      sheetName: newCat
+      sheetName: newCat,
+      mode: isFourColTemplate ? "template_4col" : "standard_14col"
     })).setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
@@ -9896,6 +9947,19 @@ function doGet(e) {
         if (!year || !month || month < 1 || month > 12) return null;
         const endOfMonth = new Date(year, month, 0, 23, 59, 59);
         return Math.ceil((endOfMonth - new Date()) / (1000 * 60 * 60 * 24));
+    }
+
+    // Helper: Extraer y separar automáticamente Dosis / Concentración / Unidad de Medida del Nombre
+    function extraerDosisDeNombre(str) {
+        if (!str || typeof str !== 'string') return { nombre: str || '', dosis: '' };
+        const regex = /\b(\d+(?:[.,]\d+)?\s*(?:mg|g|mcg|ml|ui|%|ug)(?:\s*\/\s*\d+(?:[.,]\d+)?\s*(?:ml|mg|g|dosis|puff|act))?)\b/i;
+        const match = str.match(regex);
+        if (match) {
+            const dosis = match[0].trim();
+            const nombre = str.replace(match[0], '').replace(/\s{2,}/g, ' ').replace(/\/+$/, '').trim();
+            return { nombre: nombre, dosis: dosis };
+        }
+        return { nombre: str.trim(), dosis: '' };
     }
 
     // Generador Estándar de Códigos Clínicos Normalizados por Familia Farmacéutica
@@ -10464,7 +10528,12 @@ function doGet(e) {
             document.getElementById('edit-toma-id').value = item.id;
             document.getElementById('edit-toma-old-cat').value = item.category || 'General';
             document.getElementById('edit-toma-old-cant').value = item.quantity || 0;
-            document.getElementById('edit-toma-med').value = item.name || '';
+            
+            const ext = extraerDosisDeNombre(item.name || '');
+            document.getElementById('edit-toma-med').value = ext.nombre || item.name || '';
+            const editDosis = document.getElementById('edit-toma-dosis');
+            if (editDosis) editDosis.value = item.dosis || ext.dosis || '';
+
             const editFase = document.getElementById('edit-toma-fase');
             if (editFase) editFase.value = item.fase || '1ra Toma (Inicial)';
             document.getElementById('edit-toma-cat').value = item.category || 'General';
@@ -10561,6 +10630,7 @@ function doGet(e) {
         const form = document.getElementById('form-toma-inventario');
         const inputFase = document.getElementById('toma-fase');
         const inputMed = document.getElementById('toma-medicamento');
+        const inputDosis = document.getElementById('toma-dosis');
         const inputVto = document.getElementById('toma-vencimiento');
         const inputCant = document.getElementById('toma-cantidad');
         const selectCat = document.getElementById('toma-categoria');
@@ -10579,15 +10649,17 @@ function doGet(e) {
         // Cálculo de stock acumulado en vivo
         function updateLiveAccumulatedCalc() {
             if (!inputMed || !acumuladoAlert || !acumuladoText) return;
-            const medName = inputMed.value.trim().toLowerCase();
+            const medBase = inputMed.value.trim();
+            const dosisVal = inputDosis ? inputDosis.value.trim() : '';
+            const fullMed = (dosisVal ? `${medBase} ${dosisVal}` : medBase).toLowerCase();
             const currentAdd = Number(inputCant?.value) || 1;
 
-            if (!medName) {
+            if (!medBase) {
                 acumuladoAlert.style.display = 'none';
                 return;
             }
 
-            const match = tomaCatalogCache.find(it => it.name.toLowerCase() === medName);
+            const match = tomaCatalogCache.find(it => it.name.toLowerCase() === fullMed || it.name.toLowerCase() === medBase.toLowerCase());
             if (match) {
                 const prevQty = Number(match.quantity) || 0;
                 const finalQty = prevQty + currentAdd;
@@ -10605,7 +10677,7 @@ function doGet(e) {
             }
         }
 
-        // Auto-detección de categoría
+        // Auto-detección de categoría y separación de dosis
         if (inputMed) {
             inputMed.addEventListener('input', () => {
                 const rawName = inputMed.value.trim();
@@ -10613,6 +10685,15 @@ function doGet(e) {
                     if (autoCatBadge) autoCatBadge.style.display = 'none';
                     if (acumuladoAlert) acumuladoAlert.style.display = 'none';
                     return;
+                }
+
+                // Si el usuario escribió la dosis dentro del nombre, auto-separarla en el campo Dosis
+                if (inputDosis && !inputDosis.value) {
+                    const ext = extraerDosisDeNombre(rawName);
+                    if (ext.dosis) {
+                        inputMed.value = ext.nombre;
+                        inputDosis.value = ext.dosis;
+                    }
                 }
 
                 // 1. Auto-detectar categoría por forma farmacéutica y palabras clave
@@ -10641,8 +10722,8 @@ function doGet(e) {
                 // 2. Auto-detectar Fase / Toma (1ra Toma vs 2da Toma vs Reconteo de Ajuste)
                 if (inputFase) {
                     const sessionList = getSessionItems();
-                    const countInSession = sessionList.filter(it => it.name.toLowerCase() === rawName.toLowerCase()).length;
-                    const matchCatalog = tomaCatalogCache.find(it => it.name.toLowerCase() === rawName.toLowerCase());
+                    const countInSession = sessionList.filter(it => it.name.toLowerCase().includes(rawName.toLowerCase())).length;
+                    const matchCatalog = tomaCatalogCache.find(it => it.name.toLowerCase().includes(rawName.toLowerCase()));
                     const autoFaseBadge = document.getElementById('toma-auto-fase-badge');
 
                     if (countInSession === 0 && (!matchCatalog || Number(matchCatalog.quantity) === 0)) {
@@ -10669,14 +10750,14 @@ function doGet(e) {
                 // 3. Si coincide con catálogo existente, auto-completar campos complementarios
                 const match = tomaCatalogCache.find(it => it.name.toLowerCase() === rawName.toLowerCase());
                 if (match) {
-                    if (match.category && selectCat && !detectedCategory) {
-                        selectCat.value = match.category;
-                    }
                     if (match.code && inputCod && !inputCod.value) inputCod.value = match.code;
-                    if (match.batch && inputLote && !inputLote.value) inputLote.value = match.batch;
-                    if (match.expirationDate && inputVto && !inputVto.value) {
-                        inputVto.value = match.expirationDate;
-                        inputVto.dispatchEvent(new Event('change'));
+                    if (match.category && selectCat) {
+                        for (let opt of selectCat.options) {
+                            if (opt.value.toUpperCase() === match.category.toUpperCase()) {
+                                selectCat.value = opt.value;
+                                break;
+                            }
+                        }
                     }
                     if (match.unitPrice && inputPrecio && !inputPrecio.value) inputPrecio.value = match.unitPrice;
                     if (match.criticalLimit && inputMin && (!inputMin.value || inputMin.value === '50')) inputMin.value = match.criticalLimit;
@@ -10684,6 +10765,10 @@ function doGet(e) {
 
                 updateLiveAccumulatedCalc();
             });
+        }
+
+        if (inputDosis) {
+            inputDosis.addEventListener('input', updateLiveAccumulatedCalc);
         }
 
         if (inputCant) {
@@ -10773,7 +10858,9 @@ function doGet(e) {
                     );
 
                     if (match) {
-                        inputMed.value = match.name;
+                        const ext = extraerDosisDeNombre(match.name);
+                        inputMed.value = ext.nombre || match.name;
+                        if (inputDosis) inputDosis.value = ext.dosis || '';
                         inputMed.dispatchEvent(new Event('input'));
                         if (match.code && inputCod) inputCod.value = match.code;
                         if (match.unitPrice && inputPrecio) inputPrecio.value = match.unitPrice;
@@ -10798,7 +10885,9 @@ function doGet(e) {
 
                 const faseVal = inputFase ? inputFase.value : '1ra Toma (Inicial)';
                 const cat = selectCat.value;
-                const med = inputMed.value.trim();
+                const medBase = inputMed.value.trim();
+                const dosisVal = inputDosis ? inputDosis.value.trim() : '';
+                const med = (dosisVal ? `${medBase} ${dosisVal}` : medBase).toUpperCase();
                 const cant = Number(inputCant.value) || 0;
                 let vto = inputVto.value ? inputVto.value.trim() : '';
                 let lote = inputLote.value.trim();
@@ -10813,7 +10902,7 @@ function doGet(e) {
                     selectCat.focus();
                     return;
                 }
-                if (!med) {
+                if (!medBase) {
                     window.showToast("Validación", "Por favor ingrese el nombre del medicamento.", "warning");
                     inputMed.focus();
                     return;
@@ -10855,6 +10944,7 @@ function doGet(e) {
                     hora: horaStr,
                     code: cod,
                     name: med,
+                    dosis: dosisVal,
                     category: cat,
                     quantity: cant,
                     totalAcumulado: totalAcumulado,
@@ -10901,6 +10991,7 @@ function doGet(e) {
                 syncToFirestore(newRecord);
 
                 inputMed.value = '';
+                if (inputDosis) inputDosis.value = '';
                 inputCant.value = '1';
                 inputLote.value = '';
                 inputVto.value = '';
@@ -10946,7 +11037,9 @@ function doGet(e) {
                 const id = document.getElementById('edit-toma-id').value;
                 const oldCat = document.getElementById('edit-toma-old-cat').value;
                 const oldCant = Number(document.getElementById('edit-toma-old-cant').value) || 0;
-                const newMed = document.getElementById('edit-toma-med').value.trim();
+                const newMedBase = document.getElementById('edit-toma-med').value.trim();
+                const newDosis = document.getElementById('edit-toma-dosis') ? document.getElementById('edit-toma-dosis').value.trim() : '';
+                const newMed = (newDosis ? `${newMedBase} ${newDosis}` : newMedBase).toUpperCase();
                 const newFase = document.getElementById('edit-toma-fase').value;
                 const newCat = document.getElementById('edit-toma-cat').value;
                 const newCant = Number(document.getElementById('edit-toma-cant').value) || 0;
@@ -11020,6 +11113,7 @@ function doGet(e) {
 
                 // 2. Actualizar objeto local en la sesión
                 target.name = newMed;
+                target.dosis = newDosis;
                 target.fase = newFase;
                 target.category = newCat;
                 target.quantity = newCant;
@@ -11061,11 +11155,6 @@ function doGet(e) {
                     }
                 });
             });
-        }
-
-        // =========================================================================
-        // FORMULARIO: REGISTRAR INCIDENCIA / MERMA / QUIEBRE
-        // =========================================================================
         const formInc = document.getElementById('form-incidencia-toma');
         if (formInc) {
             formInc.addEventListener('submit', async (e) => {

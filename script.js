@@ -11997,7 +11997,7 @@ function doGet(e) {
         activeTab: 'conteo', // 'conteo' | 'racks' | 'historial'
         racks: [],
         insumosCatalog: [],
-        semanalVault: {}, // { [weekKey]: { status: 'borrador' | 'cerrado', fechaCierre, user, items: { [insumoId]: { count, batch, vto, note, diff } } } }
+        semanalVault: {}, // { [weekKey]: { status: 'borrador' | 'pendiente' | 'cerrado', fechaCierre, user, items: { [insumoId]: { count, batch, vto, note, diff } } } }
         isSyncing: false
     };
 
@@ -12017,25 +12017,25 @@ function doGet(e) {
      * Clave única para identificar la semana en curso (ej: "2026-08-W1")
      */
     function getWeekKey(year, month, week) {
-        return `${year}-${String(month + 1).padStart(2, '0')}-W${week}`;
+        return `${year}-${String(Number(month) + 1).padStart(2, '0')}-W${week}`;
     }
 
     /**
      * Nombre legible de la pestaña para Google Sheets (ej: "2026-08_SEMANA_1")
      */
     function getWeekTabName(year, month, week) {
-        return `${year}-${String(month + 1).padStart(2, '0')}_SEMANA_${week}`;
+        return `${year}-${String(Number(month) + 1).padStart(2, '0')}_SEMANA_${week}`;
     }
 
     // ==========================================
     // PERSISTENCIA Y CARGA DE DATOS
     // ==========================================
     function getSheetsSemanalUrl() {
-        return localStorage.getItem(STORAGE_KEY_SEMANAL_SHEETS) || '';
+        return (localStorage.getItem(STORAGE_KEY_SEMANAL_SHEETS) || '').trim();
     }
 
     function setSheetsSemanalUrl(url) {
-        localStorage.setItem(STORAGE_KEY_SEMANAL_SHEETS, url.trim());
+        localStorage.setItem(STORAGE_KEY_SEMANAL_SHEETS, (url || '').trim());
         updateSheetsStatusBadge();
     }
 
@@ -12060,7 +12060,7 @@ function doGet(e) {
     function loadLocalRacks() {
         try {
             const raw = localStorage.getItem(STORAGE_KEY_RACKS);
-            state.racks = raw ? JSON.parse(raw) : DEFAULT_RACKS;
+            state.racks = (raw && JSON.parse(raw).length > 0) ? JSON.parse(raw) : DEFAULT_RACKS;
         } catch (e) {
             console.error("[Semanal] Error leyendo racks locales:", e);
             state.racks = DEFAULT_RACKS;
@@ -12080,8 +12080,9 @@ function doGet(e) {
     // ==========================================
     async function loadInsumosCatalog() {
         try {
+            const dbInstance = window.firebaseFirestore.db || window.db || db;
             const snap = await window.firebaseFirestore.getDocs(
-                window.firebaseFirestore.collection(window.firebaseFirestore.db || window.db || db, 'Insumos')
+                window.firebaseFirestore.collection(dbInstance, 'Insumos')
             );
             const items = [];
             snap.forEach(d => {
@@ -12091,13 +12092,38 @@ function doGet(e) {
                     code: data.code || data.codigo || 'N/A',
                     name: data.name || data.nombre || 'Desconocido',
                     category: data.category || data.categoria || 'General',
-                    quantity: Number(data.quantity || data.cantidad || 0),
+                    quantity: Number(data.quantity !== undefined ? data.quantity : (data.cantidad !== undefined ? data.cantidad : (data.stockActual || 0))),
                     unitPrice: Number(data.unitPrice || data.costo_unitario || 0),
                     batch: data.batch || data.lote || 'S/L',
                     expirationDate: data.expirationDate || data.vencimiento || data.fechaVencimiento || '',
                     location: data.location || data.ubicacion || 'Sin Asignar'
                 });
             });
+
+            // Fallback a localStorage si Firestore está vacío
+            if (items.length === 0) {
+                const localVaultRaw = localStorage.getItem('visor_toma_backup_vault') || localStorage.getItem('visor_toma_items');
+                if (localVaultRaw) {
+                    try {
+                        const parsedLocal = JSON.parse(localVaultRaw);
+                        if (Array.isArray(parsedLocal)) {
+                            parsedLocal.forEach(it => {
+                                items.push({
+                                    id: it.id || ('LOCAL-' + Math.random().toString(36).substring(2, 8)),
+                                    code: it.code || 'S/C',
+                                    name: it.name || it.medicamento || 'Insumo',
+                                    category: it.category || it.categoria || 'General',
+                                    quantity: Number(it.quantity || it.cantidad || 0),
+                                    unitPrice: Number(it.unitPrice || 0),
+                                    batch: it.batch || it.lote || 'S/L',
+                                    expirationDate: it.expirationDate || it.vencimiento || '',
+                                    location: it.location || 'Bodega Central'
+                                });
+                            });
+                        }
+                    } catch (e) {}
+                }
+            }
 
             // Orden alfabético
             items.sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
@@ -12107,7 +12133,6 @@ function doGet(e) {
             autoDistributeMedsIfEmpty();
         } catch (err) {
             console.error("[Semanal] Error cargando catálogo de insumos:", err);
-            window.showToast("Catálogo", "Usando catálogo en memoria local.", "info");
         }
     }
 
@@ -12121,11 +12146,11 @@ function doGet(e) {
                 const name = (item.name || '').toLowerCase();
 
                 let targetRackId = 'rack-1'; // fallback
-                if (cat.includes('comprimido') || name.includes('comprimido') || name.includes('mg') || name.includes('tableta')) targetRackId = 'rack-2';
+                if (cat.includes('comprimido') || name.includes('comprimido') || name.includes('mg') || name.includes('tableta') || name.includes('capsula')) targetRackId = 'rack-2';
                 else if (cat.includes('ampolla') || name.includes('ampolla') || name.includes('inyectable') || name.includes('fco amp')) targetRackId = 'rack-3';
-                else if (cat.includes('suero') || cat.includes('solucion') || name.includes('suero') || name.includes('solución') || name.includes('cloruro') || name.includes('ringer')) targetRackId = 'rack-4';
-                else if (cat.includes('jarabe') || name.includes('jarabe') || name.includes('gotas') || name.includes('suspension') || name.includes('suspensión')) targetRackId = 'rack-5';
-                else if (cat.includes('material') || cat.includes('insumo') || cat.includes('dispositivo') || name.includes('jeringa') || name.includes('aguja') || name.includes('guante')) targetRackId = 'rack-6';
+                else if (cat.includes('suero') || cat.includes('solucion') || name.includes('suero') || name.includes('solución') || name.includes('cloruro') || name.includes('ringer') || name.includes('glucosa') || name.includes('matraz')) targetRackId = 'rack-4';
+                else if (cat.includes('jarabe') || name.includes('jarabe') || name.includes('gotas') || name.includes('suspension') || name.includes('suspensión') || name.includes('gotero')) targetRackId = 'rack-5';
+                else if (cat.includes('material') || cat.includes('insumo') || cat.includes('dispositivo') || name.includes('jeringa') || name.includes('aguja') || name.includes('guante') || name.includes('gasa')) targetRackId = 'rack-6';
 
                 const targetRack = state.racks.find(r => r.id === targetRackId);
                 if (targetRack) {
@@ -12139,8 +12164,9 @@ function doGet(e) {
 
     async function loadCloudRacks() {
         try {
+            const dbInstance = window.firebaseFirestore.db || window.db || db;
             const snap = await window.firebaseFirestore.getDocs(
-                window.firebaseFirestore.collection(window.firebaseFirestore.db || window.db || db, 'Grupos_Racks')
+                window.firebaseFirestore.collection(dbInstance, 'Grupos_Racks')
             );
             if (!snap.empty) {
                 const cloudRacks = [];
@@ -12157,7 +12183,8 @@ function doGet(e) {
 
     async function saveRackToCloud(rack) {
         try {
-            const ref = window.firebaseFirestore.doc(window.firebaseFirestore.collection(window.firebaseFirestore.db || window.db || db, 'Grupos_Racks'), rack.id);
+            const dbInstance = window.firebaseFirestore.db || window.db || db;
+            const ref = window.firebaseFirestore.doc(window.firebaseFirestore.collection(dbInstance, 'Grupos_Racks'), rack.id);
             await window.firebaseFirestore.setDoc(ref, {
                 nombre: rack.nombre,
                 color: rack.color,
@@ -12170,10 +12197,21 @@ function doGet(e) {
         }
     }
 
+    async function deleteRackFromCloud(rackId) {
+        try {
+            const dbInstance = window.firebaseFirestore.db || window.db || db;
+            const ref = window.firebaseFirestore.doc(window.firebaseFirestore.collection(dbInstance, 'Grupos_Racks'), rackId);
+            await window.firebaseFirestore.deleteDoc(ref);
+        } catch (e) {
+            console.error("[Semanal] Error eliminando rack en la nube:", e);
+        }
+    }
+
     async function loadCloudWeeklyVault() {
         try {
+            const dbInstance = window.firebaseFirestore.db || window.db || db;
             const snap = await window.firebaseFirestore.getDocs(
-                window.firebaseFirestore.collection(window.firebaseFirestore.db || window.db || db, 'Inventarios_Semanales')
+                window.firebaseFirestore.collection(dbInstance, 'Inventarios_Semanales')
             );
             snap.forEach(d => {
                 state.semanalVault[d.id] = d.data();
@@ -12189,7 +12227,8 @@ function doGet(e) {
         if (!weekData) return;
 
         try {
-            const ref = window.firebaseFirestore.doc(window.firebaseFirestore.collection(window.firebaseFirestore.db || window.db || db, 'Inventarios_Semanales'), weekKey);
+            const dbInstance = window.firebaseFirestore.db || window.db || db;
+            const ref = window.firebaseFirestore.doc(window.firebaseFirestore.collection(dbInstance, 'Inventarios_Semanales'), weekKey);
             await window.firebaseFirestore.setDoc(ref, {
                 ...weekData,
                 lastUpdated: window.firebaseFirestore.serverTimestamp()
@@ -12205,8 +12244,14 @@ function doGet(e) {
     function getActiveWeekData() {
         const weekKey = getWeekKey(state.year, state.month, state.week);
         if (!state.semanalVault[weekKey]) {
+            const now = new Date();
+            const currentYear = now.getFullYear();
+            const currentMonth = now.getMonth();
+            const currentWeekOfMonth = getWeekOfMonth(now);
+            const isCurrent = (state.year === currentYear && state.month === currentMonth && state.week === currentWeekOfMonth);
+
             state.semanalVault[weekKey] = {
-                status: 'borrador', // 'borrador' | 'cerrado'
+                status: isCurrent ? 'borrador' : 'pendiente',
                 fechaCreacion: new Date().toISOString(),
                 fechaCierre: null,
                 cerradoPor: null,
@@ -12229,27 +12274,33 @@ function doGet(e) {
         for (let w = 1; w <= 5; w++) {
             const wKey = getWeekKey(state.year, state.month, w);
             const wData = state.semanalVault[wKey];
-            const isClosed = wData && wData.status === 'cerrado';
             const isActive = state.week === w;
             const isCurrentDateWeek = (state.year === currentYear && state.month === currentMonth && currentWeekOfMonth === w);
 
+            let statusLabel = 'Pendiente';
+            let badgeHtml = '<i class="ph-bold ph-clock" style="color:#94a3b8;"></i>';
             let classes = ['week-pill-btn'];
-            if (isActive) classes.push('active');
-            if (isClosed) classes.push('closed');
-            if (isCurrentDateWeek) classes.push('is-current');
 
-            let badgeHtml = '';
-            if (isClosed) {
+            if (wData && wData.status === 'cerrado') {
+                statusLabel = 'Cerrada';
                 badgeHtml = '<i class="ph-fill ph-check-circle" style="color:#34d399;"></i>';
+                classes.push('closed');
+            } else if (wData && (wData.status === 'borrador' || (wData.items && Object.keys(wData.items).length > 0))) {
+                statusLabel = 'En Conteo';
+                badgeHtml = '<i class="ph-bold ph-pencil-simple" style="color:#38bdf8;"></i>';
             } else if (isCurrentDateWeek) {
-                badgeHtml = '<i class="ph-bold ph-lightning" style="color:#38bdf8;" title="Semana Actual"></i>';
+                statusLabel = 'En Curso (Hoy)';
+                badgeHtml = '<i class="ph-bold ph-lightning" style="color:#38bdf8;"></i>';
+                classes.push('is-current');
             }
+
+            if (isActive) classes.push('active');
 
             html += `
                 <button type="button" class="${classes.join(' ')}" data-week="${w}">
                     ${badgeHtml}
                     <span>Semana ${w}</span>
-                    <small style="font-size:10px; opacity:0.8;">(${isClosed ? 'Cerrada' : 'En Curso'})</small>
+                    <small style="font-size:10px; opacity:0.85;">(${statusLabel})</small>
                 </button>
             `;
         }
@@ -12265,7 +12316,7 @@ function doGet(e) {
             });
         });
 
-        // Actualizar badges de estado
+        // Actualizar badges de estado y selector de estado interactivo
         const autoDateBadge = document.getElementById('semanal-auto-date-badge');
         if (autoDateBadge) {
             const isNow = (state.year === currentYear && state.month === currentMonth && currentWeekOfMonth === state.week);
@@ -12277,25 +12328,21 @@ function doGet(e) {
         }
 
         const activeWeekData = getActiveWeekData();
-        const estadoTag = document.getElementById('semanal-estado-ciclo-tag');
+        const selectEstado = document.getElementById('semanal-select-estado-ciclo');
         const btnCerrarText = document.getElementById('btn-cerrar-semana-text');
         const btnCerrar = document.getElementById('btn-cerrar-semana-actual');
 
+        if (selectEstado) {
+            selectEstado.value = activeWeekData.status || 'borrador';
+        }
+
         if (activeWeekData.status === 'cerrado') {
-            if (estadoTag) {
-                estadoTag.textContent = '🔒 SEMANA CERRADA Y CONSOLIDADA';
-                estadoTag.style.background = '#059669';
-            }
             if (btnCerrarText) btnCerrarText.textContent = '✏️ Reabrir / Aplicar Ajuste Posterior';
             if (btnCerrar) {
                 btnCerrar.style.background = 'linear-gradient(135deg, #d97706, #b45309)';
                 btnCerrar.title = 'Haga clic para reabrir esta semana cerrada y registrar correcciones con trazabilidad.';
             }
         } else {
-            if (estadoTag) {
-                estadoTag.textContent = '📝 BORRADOR ACTIVO EN CURSO';
-                estadoTag.style.background = '#0284c7';
-            }
             if (btnCerrarText) btnCerrarText.textContent = '🔒 Cerrar Inventario Semanal';
             if (btnCerrar) {
                 btnCerrar.style.background = 'linear-gradient(135deg, #0284c7, #0369a1)';
@@ -12306,6 +12353,7 @@ function doGet(e) {
 
     function renderRackChips() {
         const container = document.getElementById('semanal-rack-chips');
+        const actionsBar = document.getElementById('semanal-rack-actions-bar');
         if (!container) return;
 
         let html = `
@@ -12322,20 +12370,60 @@ function doGet(e) {
                     <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${r.color};"></span>
                     <span>${window.escapeHTML(r.nombre)}</span>
                     <span style="opacity:0.8; font-size:10.5px;">(${countInRack})</span>
+                    <span class="btn-chip-delete" data-delete-rack-id="${r.id}" title="Eliminar este rack">&times;</span>
                 </div>
             `;
         });
 
         container.innerHTML = html;
 
+        // Listeners en chips
         container.querySelectorAll('.rack-chip').forEach(chip => {
-            chip.addEventListener('click', () => {
+            chip.addEventListener('click', (e) => {
+                if (e.target.closest('.btn-chip-delete')) return;
                 state.activeRackId = chip.getAttribute('data-rack-id');
                 renderRackChips();
                 renderWeeklyTable();
                 updateWeeklyMetrics();
             });
         });
+
+        // Listener en botón delete de chip
+        container.querySelectorAll('.btn-chip-delete').forEach(delBtn => {
+            delBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const id = delBtn.getAttribute('data-delete-rack-id');
+                deleteRack(id);
+            });
+        });
+
+        // Actualizar barra de acciones laterales
+        if (actionsBar) {
+            let actionsHtml = '';
+            if (state.activeRackId !== 'all') {
+                const activeRack = state.racks.find(r => r.id === state.activeRackId);
+                if (activeRack) {
+                    actionsHtml += `
+                        <button type="button" class="btn btn-outline" id="btn-edit-active-rack" style="font-size:11px; padding:5px 10px; font-weight:700; color:#0284c7; border-color:#0284c7;">
+                            <i class="ph ph-note-pencil"></i> Editar / Asignar
+                        </button>
+                        <button type="button" class="btn btn-outline" id="btn-delete-active-rack" style="font-size:11px; padding:5px 10px; font-weight:700; color:#ef4444; border-color:#ef4444;">
+                            <i class="ph ph-trash"></i> Eliminar Rack
+                        </button>
+                    `;
+                }
+            }
+            actionsHtml += `
+                <button type="button" class="btn btn-outline" id="btn-nuevo-rack-inline" style="font-size:11.5px; padding:5px 12px; font-weight:700; color:var(--primary); border-color:var(--primary);">
+                    <i class="ph-bold ph-plus"></i> + Nuevo Rack
+                </button>
+            `;
+            actionsBar.innerHTML = actionsHtml;
+
+            document.getElementById('btn-edit-active-rack')?.addEventListener('click', () => openEditRackModal(state.activeRackId));
+            document.getElementById('btn-delete-active-rack')?.addEventListener('click', () => deleteRack(state.activeRackId));
+            document.getElementById('btn-nuevo-rack-inline')?.addEventListener('click', () => openEditRackModal());
+        }
     }
 
     function getDrugsForActiveFilter() {
@@ -12374,18 +12462,34 @@ function doGet(e) {
         const weekItems = activeWeekData.items || {};
 
         if (drugs.length === 0) {
+            const isSpecificRack = state.activeRackId !== 'all';
+            const curRack = isSpecificRack ? state.racks.find(r => r.id === state.activeRackId) : null;
+
             tbody.innerHTML = `
                 <tr>
-                    <td colspan="10" style="text-align:center; padding:30px; color:var(--text-muted);">
-                        <i class="ph ph-package" style="font-size:32px; color:#94a3b8; display:block; margin-bottom:8px;"></i>
-                        No se encontraron medicamentos para este rack o búsqueda.<br>
-                        <small>Utilice la pestaña <strong>"Gestor de Racks"</strong> para asignar medicamentos a este rack.</small>
+                    <td colspan="10" style="text-align:center; padding:35px 20px; color:var(--text-muted);">
+                        <i class="ph ph-package" style="font-size:36px; color:#94a3b8; display:block; margin-bottom:10px;"></i>
+                        ${isSpecificRack ? `El <strong>"${window.escapeHTML(curRack ? curRack.nombre : 'Rack Seleccionado')}"</strong> no tiene medicamentos asignados todavía.` : `No se encontraron medicamentos en el catálogo.`}<br>
+                        ${isSpecificRack ? `
+                            <button type="button" class="btn btn-primary btn-sm" id="btn-asignar-este-rack-empty" style="margin-top:14px; font-weight:700; font-size:12px;">
+                                <i class="ph ph-plus-circle"></i> Asignar Medicamentos a este Rack
+                            </button>
+                        ` : ''}
                     </td>
                 </tr>
             `;
+
+            document.getElementById('btn-asignar-este-rack-empty')?.addEventListener('click', () => {
+                openEditRackModal(state.activeRackId);
+            });
+
             if (summary) summary.textContent = `0 medicamentos mostrados`;
             return;
         }
+
+        let totalSysStock = 0;
+        let totalPhyStock = 0;
+        let totalNetDiff = 0;
 
         let html = '';
         drugs.forEach(item => {
@@ -12397,6 +12501,12 @@ function doGet(e) {
             const hasCounted = recorded !== null && recorded.count !== undefined && recorded.count !== null && recorded.count !== '';
             const physicalCount = hasCounted ? Number(recorded.count) : '';
             const systemStock = Number(item.quantity || 0);
+
+            totalSysStock += systemStock;
+            if (hasCounted) {
+                totalPhyStock += physicalCount;
+                totalNetDiff += (physicalCount - systemStock);
+            }
 
             let diffBadge = '<span class="text-muted" style="font-size:11px;">Pendiente</span>';
             if (hasCounted) {
@@ -12468,11 +12578,18 @@ function doGet(e) {
         });
 
         tbody.innerHTML = html;
-        if (summary) summary.textContent = `Mostrando ${drugs.length} medicamentos de ${state.insumosCatalog.length} en catálogo`;
+
+        if (summary) {
+            const diffSign = totalNetDiff > 0 ? '+' : '';
+            const diffColor = totalNetDiff === 0 ? '#10b981' : (totalNetDiff < 0 ? '#ef4444' : '#0284c7');
+            summary.innerHTML = `
+                <strong>${drugs.length}</strong> fármacos | Stock Sistema Total: <strong>${totalSysStock}</strong> un. | Conteo Semanal: <strong>${totalPhyStock}</strong> un. | Variación Neta: <strong style="color:${diffColor};">${diffSign}${totalNetDiff} un.</strong>
+            `;
+        }
 
         // Listeners en la tabla de conteo
         tbody.querySelectorAll('.semanal-input-count').forEach(input => {
-            input.addEventListener('change', (e) => {
+            input.addEventListener('change', () => {
                 const id = input.getAttribute('data-id');
                 const val = input.value.trim();
                 handleCountChange(id, val === '' ? null : Number(val));
@@ -12481,7 +12598,6 @@ function doGet(e) {
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     input.blur();
-                    // Saltar al siguiente input
                     const inputs = Array.from(tbody.querySelectorAll('.semanal-input-count'));
                     const curIdx = inputs.indexOf(input);
                     if (curIdx >= 0 && curIdx < inputs.length - 1) {
@@ -12546,13 +12662,16 @@ function doGet(e) {
                 lastUpdated: new Date().toISOString(),
                 user: (auth.currentUser ? auth.currentUser.email : 'Operador SAR')
             };
+            if (activeWeekData.status === 'pendiente') {
+                activeWeekData.status = 'borrador';
+            }
         }
 
         saveLocalVault();
         updateWeeklyMetrics();
         renderWeeklyTable();
+        renderWeekPills();
 
-        // Respaldo en la nube sin bloquear
         const weekKey = getWeekKey(state.year, state.month, state.week);
         saveWeeklyStateToCloud(weekKey);
     }
@@ -12643,7 +12762,7 @@ function doGet(e) {
         });
     }
 
-    function openEditRackModal(rackId = null) {
+    window.openEditRackModal = function(rackId = null) {
         const modal = document.getElementById('modal-crear-rack');
         const form = document.getElementById('form-crear-rack');
         const title = document.getElementById('modal-rack-titulo');
@@ -12651,18 +12770,17 @@ function doGet(e) {
         const nombreInput = document.getElementById('rack-nombre-input');
         const colorInput = document.getElementById('rack-color-input');
         const descInput = document.getElementById('rack-descripcion-input');
-        const checklist = document.getElementById('rack-medicamentos-checklist');
 
         if (!modal || !form) return;
 
         let currentRack = null;
-        if (rackId) {
+        if (rackId && rackId !== 'all') {
             currentRack = state.racks.find(r => r.id === rackId);
             if (title) title.textContent = 'Editar Rack y Asignación de Insumos';
             if (editIdInput) editIdInput.value = rackId;
-            if (nombreInput) nombreInput.value = currentRack.nombre;
-            if (colorInput) colorInput.value = currentRack.color || '#0284c7';
-            if (descInput) descInput.value = currentRack.descripcion || '';
+            if (nombreInput && currentRack) nombreInput.value = currentRack.nombre;
+            if (colorInput && currentRack) colorInput.value = currentRack.color || '#0284c7';
+            if (descInput && currentRack) descInput.value = currentRack.descripcion || '';
         } else {
             if (title) title.textContent = 'Crear Nuevo Rack / Estantería';
             if (editIdInput) editIdInput.value = '';
@@ -12672,12 +12790,10 @@ function doGet(e) {
         }
 
         const assignedSet = new Set(currentRack ? (currentRack.insumosIds || []) : []);
-
-        // Poblamos checklist
         renderRackChecklist(assignedSet);
 
         modal.style.display = 'flex';
-    }
+    };
 
     function renderRackChecklist(assignedSet, filterTerm = '') {
         const checklist = document.getElementById('rack-medicamentos-checklist');
@@ -12693,7 +12809,7 @@ function doGet(e) {
         if (counter) counter.textContent = assignedSet.size;
 
         if (filtered.length === 0) {
-            checklist.innerHTML = '<div style="font-size:12px; color:var(--text-muted); padding:8px;">No se encontraron insumos.</div>';
+            checklist.innerHTML = '<div style="font-size:12px; color:var(--text-muted); padding:8px;">No se encontraron insumos en el catálogo.</div>';
             return;
         }
 
@@ -12723,17 +12839,24 @@ function doGet(e) {
         });
     }
 
-    function deleteRack(rackId) {
+    async function deleteRack(rackId) {
+        if (!rackId || rackId === 'all') return;
         const rack = state.racks.find(r => r.id === rackId);
         if (!rack) return;
 
-        if (confirm(`¿Está seguro de eliminar el "${rack.nombre}"? Los medicamentos no se borrarán del catálogo pero quedarán sin rack asignado.`)) {
+        if (confirm(`¿Confirma que desea eliminar el "${rack.nombre}"?\n\nLos medicamentos no se eliminarán del catálogo, pero quedarán sin rack asignado.`)) {
             state.racks = state.racks.filter(r => r.id !== rackId);
+            if (state.activeRackId === rackId) {
+                state.activeRackId = 'all';
+            }
             saveLocalRacks();
+            await deleteRackFromCloud(rackId);
+
             renderRacksManagementGrid();
             renderRackChips();
             renderWeeklyTable();
-            window.showToast("Rack Eliminado", "El grupo fue removido correctamente.", "success");
+            updateWeeklyMetrics();
+            window.showToast("Rack Eliminado", `"${rack.nombre}" fue eliminado correctamente.`, "success");
         }
     }
 
@@ -12750,7 +12873,6 @@ function doGet(e) {
             return;
         }
 
-        // Orden descendente por clave de semana
         keys.sort().reverse();
 
         let html = '';
@@ -12801,14 +12923,17 @@ function doGet(e) {
         tbody.querySelectorAll('.btn-cargar-semana-historial').forEach(btn => {
             btn.addEventListener('click', () => {
                 const key = btn.getAttribute('data-key');
-                // Formato: "YYYY-MM-Ww"
                 const parts = key.split('-');
                 if (parts.length === 3) {
                     state.year = Number(parts[0]);
                     state.month = Number(parts[1]) - 1;
                     state.week = Number(parts[2].replace('W', ''));
 
-                    // Cambiar a pestaña 1
+                    const selectAno = document.getElementById('semanal-select-ano');
+                    const selectMes = document.getElementById('semanal-select-mes');
+                    if (selectAno) selectAno.value = state.year;
+                    if (selectMes) selectMes.value = state.month;
+
                     switchTab('conteo');
                     renderModuleUI();
                 }
@@ -12888,7 +13013,6 @@ function doGet(e) {
     async function cerrarOReabrirSemana() {
         const activeWeekData = getActiveWeekData();
         const weekKey = getWeekKey(state.year, state.month, state.week);
-        const weekTabName = getWeekTabName(state.year, state.month, state.week);
 
         // Si ya está cerrada, permitimos reabrirla para ajustes
         if (activeWeekData.status === 'cerrado') {
@@ -12918,6 +13042,7 @@ function doGet(e) {
 
         try {
             const userEmail = auth.currentUser ? auth.currentUser.email : 'Admin';
+            const dbInstance = window.firebaseFirestore.db || window.db || db;
 
             // 1. Aplicar variaciones a Insumos en Firestore
             for (const insumoId of countedKeys) {
@@ -12929,10 +13054,9 @@ function doGet(e) {
                 const physicalCount = Number(itemRecord.count);
                 const delta = physicalCount - previousStock;
 
-                // Actualizar stock de Insumos si hay diferencia
                 if (delta !== 0) {
                     const insumoRef = window.firebaseFirestore.doc(
-                        window.firebaseFirestore.collection(window.firebaseFirestore.db || window.db || db, 'Insumos'),
+                        window.firebaseFirestore.collection(dbInstance, 'Insumos'),
                         insumoId
                     );
 
@@ -12948,7 +13072,7 @@ function doGet(e) {
 
                     // Auditoría en Historial_Movimientos
                     const histRef = window.firebaseFirestore.doc(
-                        window.firebaseFirestore.collection(window.firebaseFirestore.db || window.db || db, 'Historial_Movimientos')
+                        window.firebaseFirestore.collection(dbInstance, 'Historial_Movimientos')
                     );
                     await window.firebaseFirestore.setDoc(histRef, {
                         date: window.firebaseFirestore.serverTimestamp(),
@@ -13206,6 +13330,7 @@ function doGet(e) {
         // Selector de Año y Mes
         const selectAno = document.getElementById('semanal-select-ano');
         const selectMes = document.getElementById('semanal-select-mes');
+        const selectEstado = document.getElementById('semanal-select-estado-ciclo');
 
         if (selectAno) {
             selectAno.value = state.year;
@@ -13223,6 +13348,24 @@ function doGet(e) {
             });
         }
 
+        if (selectEstado) {
+            selectEstado.addEventListener('change', async () => {
+                const activeWeekData = getActiveWeekData();
+                const newStatus = selectEstado.value;
+                activeWeekData.status = newStatus;
+                if (newStatus === 'cerrado') {
+                    activeWeekData.fechaCierre = new Date().toISOString();
+                    activeWeekData.cerradoPor = auth.currentUser ? auth.currentUser.email : 'Operador';
+                }
+                saveLocalVault();
+                const weekKey = getWeekKey(state.year, state.month, state.week);
+                await saveWeeklyStateToCloud(weekKey);
+                renderWeekPills();
+                renderWeeklyTable();
+                window.showToast("Estado Actualizado", `Semana marcada como: ${newStatus.toUpperCase()}`, "info");
+            });
+        }
+
         // Pestañas
         document.getElementById('tab-btn-conteo-semanal')?.addEventListener('click', () => switchTab('conteo'));
         document.getElementById('tab-btn-racks-semanal')?.addEventListener('click', () => switchTab('racks'));
@@ -13234,31 +13377,45 @@ function doGet(e) {
             renderWeeklyTable();
         });
 
-        // Autocompletar teórico
-        document.getElementById('btn-autocompletar-teorico')?.addEventListener('click', () => {
+        // Botón "Igualar al Stock Teórico" (Rellena conteo físico = stock del sistema)
+        document.getElementById('btn-autocompletar-teorico')?.addEventListener('click', async () => {
             const activeWeekData = getActiveWeekData();
             if (!activeWeekData.items) activeWeekData.items = {};
 
+            const drugsInView = getDrugsForActiveFilter();
+            if (drugsInView.length === 0) {
+                window.showAlertCenter("Notificación", "No hay medicamentos visibles para igualar conteo.");
+                return;
+            }
+
             let countFilled = 0;
-            state.insumosCatalog.forEach(insumo => {
-                if (!activeWeekData.items[insumo.id]) {
-                    activeWeekData.items[insumo.id] = {
-                        count: insumo.quantity,
-                        systemStock: insumo.quantity,
-                        diff: 0,
-                        batch: insumo.batch || 'S/L',
-                        vto: insumo.expirationDate || '',
-                        lastUpdated: new Date().toISOString(),
-                        user: (auth.currentUser ? auth.currentUser.email : 'Operador SAR')
-                    };
-                    countFilled++;
-                }
+            drugsInView.forEach(insumo => {
+                const sysStock = Number(insumo.quantity || 0);
+                activeWeekData.items[insumo.id] = {
+                    count: sysStock,
+                    systemStock: sysStock,
+                    diff: 0,
+                    batch: insumo.batch || 'S/L',
+                    vto: insumo.expirationDate || '',
+                    lastUpdated: new Date().toISOString(),
+                    user: (auth.currentUser ? auth.currentUser.email : 'Operador SAR')
+                };
+                countFilled++;
             });
 
+            if (activeWeekData.status === 'pendiente') {
+                activeWeekData.status = 'borrador';
+            }
+
             saveLocalVault();
+            const weekKey = getWeekKey(state.year, state.month, state.week);
+            await saveWeeklyStateToCloud(weekKey);
+
             renderWeeklyTable();
             updateWeeklyMetrics();
-            window.showToast("Conteo Autocompletado", `Se rellenaron ${countFilled} medicamentos con su stock actual.`, "success");
+            renderWeekPills();
+
+            window.showToast("Conteo Igualado", `Se completó el conteo físico de ${countFilled} medicamentos igual al stock del sistema.`, "success");
         });
 
         // Guardar borrador en vivo
@@ -13322,7 +13479,6 @@ function doGet(e) {
 
         // Modal Crear Rack
         document.getElementById('btn-crear-rack-principal')?.addEventListener('click', () => openEditRackModal());
-        document.getElementById('btn-nuevo-rack-inline')?.addEventListener('click', () => openEditRackModal());
 
         document.getElementById('rack-buscar-medicamento')?.addEventListener('input', (e) => {
             const editId = document.getElementById('rack-edit-id')?.value;
@@ -13378,7 +13534,7 @@ function doGet(e) {
             updateWeeklyMetrics();
 
             document.getElementById('modal-crear-rack').style.display = 'none';
-            window.showToast("Rack Guardado", `"${nombre}" fue guardado exitosamente.`, "success");
+            window.showToast("Rack Guardado", `"${nombre}" fue guardado exitosamente con ${checkedMeds.length} fármacos.`, "success");
         });
 
         // Formulario Ajuste Item
@@ -13420,8 +13576,9 @@ function doGet(e) {
             if (activeWeekData.status === 'cerrado') {
                 const weekKey = getWeekKey(state.year, state.month, state.week);
                 try {
+                    const dbInstance = window.firebaseFirestore.db || window.db || db;
                     const insumoRef = window.firebaseFirestore.doc(
-                        window.firebaseFirestore.collection(window.firebaseFirestore.db || window.db || db, 'Insumos'),
+                        window.firebaseFirestore.collection(dbInstance, 'Insumos'),
                         id
                     );
                     await window.firebaseFirestore.updateDoc(insumoRef, {
@@ -13434,7 +13591,7 @@ function doGet(e) {
 
                     // Log auditoría
                     const histRef = window.firebaseFirestore.doc(
-                        window.firebaseFirestore.collection(window.firebaseFirestore.db || window.db || db, 'Historial_Movimientos')
+                        window.firebaseFirestore.collection(dbInstance, 'Historial_Movimientos')
                     );
                     await window.firebaseFirestore.setDoc(histRef, {
                         date: window.firebaseFirestore.serverTimestamp(),
@@ -13493,9 +13650,7 @@ function doGet(e) {
             window._semanalListenersInitialized = true;
         }
 
-        renderModuleUI();
-
-        // Carga asíncrona de Firestore
+        // Carga asíncrona de Firestore y catálogos
         await loadInsumosCatalog();
         await loadCloudRacks();
         await loadCloudWeeklyVault();
@@ -13509,6 +13664,23 @@ function doGet(e) {
    MÓDULO: BARRA LATERAL COLAPSABLE (MINI-SIDEBAR) Y RESPONSIVIDAD MÓVIL
    ========================================================================= */
 (function initSidebarAndResponsiveNavigation() {
+    window.toggleSidebar = function() {
+        const sidebar = document.getElementById('app-sidebar');
+        const backdrop = document.getElementById('sidebar-backdrop');
+        const STORAGE_KEY = 'visor_sidebar_collapsed';
+
+        if (!sidebar) return;
+
+        if (window.innerWidth <= 1024) {
+            sidebar.classList.toggle('mobile-open');
+            if (backdrop) backdrop.classList.toggle('active', sidebar.classList.contains('mobile-open'));
+        } else {
+            sidebar.classList.toggle('collapsed');
+            const isCollapsed = sidebar.classList.contains('collapsed');
+            localStorage.setItem(STORAGE_KEY, isCollapsed ? 'true' : 'false');
+        }
+    };
+
     function setupSidebarControls() {
         const sidebar = document.getElementById('app-sidebar');
         const toggleBtn = document.getElementById('sidebar-toggle-btn');
@@ -13519,73 +13691,63 @@ function doGet(e) {
 
         if (!sidebar) return;
 
-        // 1. Restaurar preferencia de barra lateral (o colapsar por defecto en escritorio para máximo espacio central)
+        // 1. Restaurar preferencia de barra lateral
         const savedState = localStorage.getItem(STORAGE_KEY);
         if (savedState === 'true' || (savedState === null && window.innerWidth > 1024)) {
             sidebar.classList.add('collapsed');
+        } else {
+            sidebar.classList.remove('collapsed');
         }
 
-        function toggleDesktopCollapse() {
-            sidebar.classList.toggle('collapsed');
-            const isCollapsed = sidebar.classList.contains('collapsed');
-            localStorage.setItem(STORAGE_KEY, isCollapsed ? 'true' : 'false');
-        }
-
-        function openMobileSidebar() {
-            sidebar.classList.add('mobile-open');
-            if (backdrop) backdrop.classList.add('active');
-        }
-
-        function closeMobileSidebar() {
-            sidebar.classList.remove('mobile-open');
-            if (backdrop) backdrop.classList.remove('active');
-        }
-
+        // 2. Click handlers directos
         if (toggleBtn) {
-            toggleBtn.addEventListener('click', (e) => {
+            toggleBtn.onclick = (e) => {
+                e.preventDefault();
                 e.stopPropagation();
-                if (window.innerWidth <= 1024) {
-                    closeMobileSidebar();
-                } else {
-                    toggleDesktopCollapse();
-                }
-            });
+                window.toggleSidebar();
+            };
         }
 
         if (desktopToggleBtn) {
-            desktopToggleBtn.addEventListener('click', (e) => {
+            desktopToggleBtn.onclick = (e) => {
+                e.preventDefault();
                 e.stopPropagation();
-                toggleDesktopCollapse();
-            });
+                window.toggleSidebar();
+            };
         }
 
         if (mobileToggleBtn) {
-            mobileToggleBtn.addEventListener('click', (e) => {
+            mobileToggleBtn.onclick = (e) => {
+                e.preventDefault();
                 e.stopPropagation();
-                openMobileSidebar();
-            });
+                window.toggleSidebar();
+            };
         }
 
         if (backdrop) {
-            backdrop.addEventListener('click', closeMobileSidebar);
+            backdrop.onclick = () => {
+                sidebar.classList.remove('mobile-open');
+                backdrop.classList.remove('active');
+            };
         }
 
-        // Al hacer clic en cualquier item del menú en móvil/tablet, cerrar el drawer
+        // Click en header de la barra cuando está colapsada en desktop
+        sidebar.addEventListener('click', (e) => {
+            if (sidebar.classList.contains('collapsed') && window.innerWidth > 1024) {
+                if (e.target.closest('.sidebar-header') || e.target.closest('.sidebar-logo') || e.target.closest('.sidebar-logo-badge')) {
+                    window.toggleSidebar();
+                }
+            }
+        });
+
+        // Cerrar menú móvil al hacer click en un item
         document.querySelectorAll('.sidebar .menu-item').forEach(item => {
             item.addEventListener('click', () => {
                 if (window.innerWidth <= 1024) {
-                    closeMobileSidebar();
+                    sidebar.classList.remove('mobile-open');
+                    if (backdrop) backdrop.classList.remove('active');
                 }
             });
-        });
-
-        // Al hacer clic en el encabezado de la barra colapsada en desktop, expandirla suavemente
-        sidebar.addEventListener('click', (e) => {
-            if (sidebar.classList.contains('collapsed') && window.innerWidth > 1024) {
-                if (e.target.closest('.sidebar-header') || e.target.closest('.sidebar-logo') || e.target === sidebar) {
-                    toggleDesktopCollapse();
-                }
-            }
         });
     }
 

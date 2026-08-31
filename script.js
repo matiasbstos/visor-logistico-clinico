@@ -12063,7 +12063,7 @@ function doGet(e) {
   } catch (err) {
     return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: err.toString() })).setMimeType(ContentService.MimeType.JSON);
   }
-};
+}`;
 
 (function initInventarioSemanalScope() {
     const STORAGE_KEY_SEMANAL_SHEETS = 'visor_sheets_semanal_url';

@@ -9626,12 +9626,110 @@ window.guardarProgresoBandeja = async function(docId) {
    ========================================================================= */
 const GOOGLE_APPS_SCRIPT_TEMPLATE = `/**
  * =========================================================================
- * GOOGLE APPS SCRIPT - CONECTOR OFICIAL TOMA DE INVENTARIO SAR
- * Organiza automáticamente cada medicamento en su propia hoja según su categoría,
- * actualiza en su lugar cualquier modificación o corrección sin duplicar registros,
- * y mantiene la hoja 'CONSOLIDADO_GENERAL' 100% limpia y sincronizada.
+ * GOOGLE APPS SCRIPT - CONECTOR OFICIAL TOMA DE INVENTARIO SAR (v17.7)
+ * - Mantiene sincronizado CADA medicamento en su hoja de categoría Y en CONSOLIDADO_GENERAL.
+ * - Nuevos ingresos se agregan en ambos lugares.
+ * - Modificaciones/Ediciones se actualizan en el lugar exacto sin duplicar.
+ * - Incluye menú para Reconstruir / Sincronizar CONSOLIDADO_GENERAL con 1 clic.
  * =========================================================================
  */
+
+function onOpen() {
+  var ui = SpreadsheetApp.getUi();
+  ui.createMenu('🏥 SAR Inventario')
+    .addItem('🔄 Reconstruir / Sincronizar CONSOLIDADO_GENERAL', 'reconstruirConsolidadoDesdeCategorias')
+    .addItem('🧹 Limpiar Filas Duplicadas Antiguas', 'limpiarYDepurarDuplicados')
+    .addToUi();
+}
+
+/**
+ * 🔄 Reconstruye y sincroniza la hoja CONSOLIDADO_GENERAL tomando todos los medicamentos
+ * existentes en todas las pestañas de categorías.
+ */
+function reconstruirConsolidadoDesdeCategorias() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = ss.getSheets();
+  
+  var headers = [
+    "Marca Temporal", "Fase / Toma", "Código Insumo", "Descripción / Medicamento",
+    "Categoría", "Cant. Esta Toma (Un.)", "Stock Total Acumulado", "Lote",
+    "Fecha Vencimiento", "Ubicación / Bodega", "Costo Unitario ($)", "Stock Mínimo",
+    "Responsable", "Observaciones"
+  ];
+  
+  var consSheet = ss.getSheetByName("CONSOLIDADO_GENERAL");
+  if (!consSheet) {
+    consSheet = ss.insertSheet("CONSOLIDADO_GENERAL", 0);
+  }
+  
+  consSheet.clear();
+  consSheet.appendRow(headers);
+  var r = consSheet.getRange(1, 1, 1, headers.length);
+  r.setBackground("#0f172a");
+  r.setFontColor("#ffffff");
+  r.setFontWeight("bold");
+  r.setHorizontalAlignment("center");
+  consSheet.setFrozenRows(1);
+  try { consSheet.setTabColor("#0f172a"); } catch(e) {}
+
+  var totalSincronizados = 0;
+  var seenKeys = {};
+
+  for (var s = 0; s < sheets.length; s++) {
+    var sheet = sheets[s];
+    var sheetName = sheet.getName();
+    if (sheetName === "CONSOLIDADO_GENERAL" || sheetName === "INCIDENCIAS_Y_MERMAS" || sheetName === "INSTRUCCIONES") continue;
+
+    if (sheet.getLastRow() > 1) {
+      var data = sheet.getDataRange().getValues();
+      for (var i = 1; i < data.length; i++) {
+        var row = data[i];
+        var medName = (row[3] || row[0] || "").toString().trim();
+        if (!medName || medName === "Descripción / Medicamento") continue;
+
+        var fase = (row[1] || "1ra Toma (Inicial)").toString().trim();
+        var code = (row[2] || "S/I").toString().trim();
+        var lote = (row[7] || row[3] || "N/A").toString().trim();
+        var key = (code && code !== "S/I" ? code : (medName.toLowerCase() + "_" + fase.toLowerCase() + "_" + lote.toLowerCase()));
+
+        if (!seenKeys[key]) {
+          seenKeys[key] = true;
+          
+          var newRow = [
+            row[0] || Utilities.formatDate(new Date(), "GMT-3", "yyyy-MM-dd HH:mm:ss"),
+            fase,
+            code,
+            medName,
+            row[4] || sheetName,
+            Number(row[5]) || Number(row[1]) || 0,
+            Number(row[6]) || Number(row[5]) || 0,
+            lote,
+            row[8] || row[2] || "N/A",
+            row[9] || "Bodega Central",
+            Number(row[10]) || 0,
+            Number(row[11]) || 50,
+            row[12] || "Visor Logístico",
+            row[13] || ""
+          ];
+          
+          consSheet.appendRow(newRow);
+          totalSincronizados++;
+        }
+      }
+    }
+  }
+
+  try {
+    SpreadsheetApp.getUi().alert('✅ Consolidado General Sincronizado', 'Se sincronizaron ' + totalSincronizados + ' medicamentos desde todas las categorías hacia CONSOLIDADO_GENERAL.', SpreadsheetApp.getUi().ButtonSet.OK);
+  } catch(eAlert) {
+    Logger.log('Consolidado sincronizado: ' + totalSincronizados);
+  }
+}
+
+function limpiarYDepurarDuplicados() {
+  reconstruirConsolidadoDesdeCategorias();
+}
+
 function doPost(e) {
   var lock = LockService.getScriptLock();
   try {
@@ -9644,6 +9742,11 @@ function doPost(e) {
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var action = (data.action || "insert").toLowerCase();
     
+    if (action === "rebuild_consolidated" || action === "sync_consolidated") {
+      reconstruirConsolidadoDesdeCategorias();
+      return ContentService.createTextOutput(JSON.stringify({ status: 'success', message: 'CONSOLIDADO_GENERAL reconstruido con éxito' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     // Encabezados Oficiales
     var headers = [
       "Marca Temporal", "Fase / Toma", "Código Insumo", "Descripción / Medicamento",
@@ -9718,7 +9821,7 @@ function doPost(e) {
 
         var nameMatches = (targetOldNameNorm && rowMedNorm === targetOldNameNorm) || (targetNameNorm && rowMedNorm === targetNameNorm);
         if (nameMatches) {
-          if (!targetFase || !rowFase || rowFase === targetFase || targetFase.indexOf(rowFase) !== -1 || rowFase.indexOf(targetFase) !== -1) {
+          if (targetFase && rowFase && targetFase === rowFase) {
             return j + 1;
           }
           if (targetLote && rowLote && targetLote === rowLote) {
@@ -9803,7 +9906,7 @@ function doPost(e) {
     // 3. CASO: INSERCIÓN O ACTUALIZACIÓN INDIVIDUAL
     var newCat = (data.category || data.categoria || "General").toString().trim().toUpperCase();
     var oldCat = (data.oldCategory || "").toString().trim().toUpperCase();
-    var isEditMode = (action === "update" || action === "edit" || data.isEdit || (data.observations && data.observations.indexOf("[Modificación") !== -1));
+    var isEditMode = (action === "update" || action === "edit" || data.isEdit === true || (data.observations && data.observations.indexOf("[Modificación") !== -1));
     var sheetColor = categoryColors[newCat] || "#1e293b";
     var targetSheet = getOrCreateSheet(newCat, headers, sheetColor);
 
@@ -9825,38 +9928,41 @@ function doPost(e) {
       data.observations || ""
     ];
 
-    // Si hubo cambio de categoría, remover de la hoja anterior
-    if (oldCat && oldCat !== newCat) {
-      var oldSheet = ss.getSheetByName(oldCat.substring(0, 30));
-      if (oldSheet) {
-        var oldRowIdx = findRowInSheet(oldSheet, data);
-        if (oldRowIdx > 0) {
-          oldSheet.deleteRow(oldRowIdx);
+    if (isEditMode) {
+      // MODO EDICIÓN / CORRECCIÓN: Actualiza en sitio sin duplicar
+      if (oldCat && oldCat !== newCat) {
+        var oldSheet = ss.getSheetByName(oldCat.substring(0, 30));
+        if (oldSheet) {
+          var oldRowIdx = findRowInSheet(oldSheet, data);
+          if (oldRowIdx > 0) {
+            oldSheet.deleteRow(oldRowIdx);
+          }
         }
       }
-    }
 
-    // Actualizar o Insertar en la hoja de categoría destino
-    var matchInTarget = findRowInSheet(targetSheet, data);
-    if (matchInTarget > 0) {
-      targetSheet.getRange(matchInTarget, 1, 1, rowData.length).setValues([rowData]);
+      var matchInTarget = findRowInSheet(targetSheet, data);
+      if (matchInTarget > 0) {
+        targetSheet.getRange(matchInTarget, 1, 1, rowData.length).setValues([rowData]);
+      } else {
+        targetSheet.appendRow(rowData);
+      }
+
+      var matchInConsolidado = findRowInSheet(consolidadoSheet, data);
+      if (matchInConsolidado > 0) {
+        consolidadoSheet.getRange(matchInConsolidado, 1, 1, rowData.length).setValues([rowData]);
+      } else {
+        consolidadoSheet.appendRow(rowData);
+      }
     } else {
+      // MODO INSERCIÓN REGULAR: Agrega SIEMPRE en su pestaña de categoría Y en CONSOLIDADO_GENERAL
       targetSheet.appendRow(rowData);
-    }
-
-    // Actualizar o Insertar en CONSOLIDADO_GENERAL (¡Nunca duplicar!)
-    var matchInConsolidado = findRowInSheet(consolidadoSheet, data);
-    if (matchInConsolidado > 0) {
-      consolidadoSheet.getRange(matchInConsolidado, 1, 1, rowData.length).setValues([rowData]);
-    } else {
       consolidadoSheet.appendRow(rowData);
     }
 
     return ContentService.createTextOutput(JSON.stringify({
       status: "success",
-      message: isEditMode ? "Registro actualizado en hoja " + newCat + " y en CONSOLIDADO_GENERAL." : "Medicamento registrado con éxito.",
-      sheetName: newCat,
-      isUpdated: (matchInConsolidado > 0 || matchInTarget > 0)
+      message: isEditMode ? "Registro actualizado en hoja " + newCat + " y en CONSOLIDADO_GENERAL." : "Medicamento registrado con éxito en " + newCat + " y CONSOLIDADO_GENERAL.",
+      sheetName: newCat
     })).setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {

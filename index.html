@@ -3,7 +3,7 @@
 
 <head>
     <script>
-        const APP_VERSION = '15.9';
+        const APP_VERSION = '16.0';
         if (localStorage.getItem('APP_VERSION') !== APP_VERSION) {
             localStorage.setItem('APP_VERSION', APP_VERSION);
             if ('serviceWorker' in navigator) {
@@ -101,65 +101,72 @@
 
     <!-- MAIN APP WRAPPER -->
     <div class="app-container" id="main-app">
+        <!-- Backdrop para móvil -->
+        <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
         <!-- Sidebar -->
-        <aside class="sidebar">
+        <aside class="sidebar" id="app-sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-logo">
-                    <div class="sidebar-logo-text">Visor</div>
-                    <div class="sidebar-subtitle">LOGÍSTICO CLÍNICO</div>
+                    <div class="sidebar-logo-badge"><i class="ph-fill ph-first-aid-kit"></i></div>
+                    <div class="sidebar-logo-text-wrap">
+                        <div class="sidebar-logo-text">Visor</div>
+                        <div class="sidebar-subtitle">LOGÍSTICO CLÍNICO</div>
+                    </div>
                 </div>
+                <button type="button" id="sidebar-toggle-btn" class="sidebar-toggle-btn" title="Expandir / Contraer Barra Lateral">
+                    <i class="ph ph-caret-left"></i>
+                </button>
             </div>
 
             <div class="sidebar-menu-wrapper">
                 <div class="sidebar-box">
-                    <a href="#" class="menu-item active" data-target="view-panel">
-                        <i class="ph ph-squares-four"></i>Panel de Control
+                    <a href="#" class="menu-item active" data-target="view-panel" data-title="Panel de Control">
+                        <i class="ph ph-squares-four"></i><span class="menu-label">Panel de Control</span>
                     </a>
-                    <a href="#" class="menu-item normal" data-target="view-inventario">
-                        <i class="ph ph-package"></i>Inventario
+                    <a href="#" class="menu-item normal" data-target="view-inventario" data-title="Inventario">
+                        <i class="ph ph-package"></i><span class="menu-label">Inventario</span>
                     </a>
-                    <a href="#" class="menu-item normal" data-target="view-toma-inventario">
-                        <i class="ph ph-clipboard-text"></i>Toma de Inventario
+                    <a href="#" class="menu-item normal" data-target="view-toma-inventario" data-title="Toma de Inventario">
+                        <i class="ph ph-clipboard-text"></i><span class="menu-label">Toma de Inventario</span>
                     </a>
-                    <a href="#" class="menu-item normal" data-target="view-movimientos">
-                        <i class="ph ph-arrows-left-right"></i>Ingresos
+                    <a href="#" class="menu-item normal" data-target="view-movimientos" data-title="Ingresos">
+                        <i class="ph ph-arrows-left-right"></i><span class="menu-label">Ingresos</span>
                     </a>
-                    <a href="#" class="menu-item normal" data-target="view-historial">
-                        <i class="ph ph-clock-counter-clockwise"></i>Historial
+                    <a href="#" class="menu-item normal" data-target="view-historial" data-title="Historial">
+                        <i class="ph ph-clock-counter-clockwise"></i><span class="menu-label">Historial</span>
                     </a>
-                    <a href="#" class="menu-item normal" data-target="view-ajustes">
-                        <i class="ph ph-sliders"></i>Ajustes de Stock
+                    <a href="#" class="menu-item normal" data-target="view-ajustes" data-title="Ajustes de Stock">
+                        <i class="ph ph-sliders"></i><span class="menu-label">Ajustes de Stock</span>
                     </a>
-                    <a href="#" class="menu-item normal" data-target="view-transferencias">
-                        <i class="ph ph-truck"></i>Transferencias
+                    <a href="#" class="menu-item normal" data-target="view-transferencias" data-title="Transferencias">
+                        <i class="ph ph-truck"></i><span class="menu-label">Transferencias</span>
                     </a>
-                    <a href="#" class="menu-item normal" data-target="view-bandejas">
-                        <i class="ph ph-briefcase-medical"></i>Bandejas de Turno
+                    <a href="#" class="menu-item normal" data-target="view-bandejas" data-title="Bandejas de Turno">
+                        <i class="ph ph-briefcase-medical"></i><span class="menu-label">Bandejas de Turno</span>
                     </a>
                 </div>
                 <div class="sidebar-box">
-                    <a href="#" class="menu-item normal" data-target="view-compras">
-                        <i class="ph ph-shopping-cart"></i>Gestión de Compras
+                    <a href="#" class="menu-item normal" data-target="view-compras" data-title="Gestión de Compras">
+                        <i class="ph ph-shopping-cart"></i><span class="menu-label">Gestión de Compras</span>
                     </a>
-                    <a href="#" class="menu-item normal admin-only" data-target="view-informes">
-                        <i class="ph ph-chart-bar"></i>Informes
+                    <a href="#" class="menu-item normal admin-only" data-target="view-informes" data-title="Informes">
+                        <i class="ph ph-chart-bar"></i><span class="menu-label">Informes</span>
                     </a>
-                    <a href="#" class="menu-item normal admin-only" data-target="view-bodegas">
-                        <i class="ph ph-buildings"></i>Bodegas
+                    <a href="#" class="menu-item normal admin-only" data-target="view-bodegas" data-title="Bodegas">
+                        <i class="ph ph-buildings"></i><span class="menu-label">Bodegas</span>
                     </a>
-                    <a href="#" class="menu-item normal admin-only" data-target="view-usuarios">
-                        <i class="ph ph-users"></i>Usuarios
+                    <a href="#" class="menu-item normal admin-only" data-target="view-usuarios" data-title="Usuarios">
+                        <i class="ph ph-users"></i><span class="menu-label">Usuarios</span>
                     </a>
                 </div>
-
-
             </div>
 
             <div class="sidebar-footer">
-                <a href="#" class="menu-item normal admin-only" data-target="view-configuracion" id="menu-config">
-                    <i class="ph ph-gear"></i>Configuración
+                <a href="#" class="menu-item normal admin-only" data-target="view-configuracion" id="menu-config" data-title="Configuración">
+                    <i class="ph ph-gear"></i><span class="menu-label">Configuración</span>
                 </a>
-                <a href="#" class="menu-item normal danger"><i class="ph ph-sign-out"></i>Salir</a>
+                <a href="#" class="menu-item normal danger" data-title="Cerrar Sesión"><i class="ph ph-sign-out"></i><span class="menu-label">Salir</span></a>
             </div>
         </aside>
 
@@ -167,6 +174,12 @@
         <main class="main-content">
             <header class="topbar">
                 <div class="topbar-left">
+                    <button type="button" id="btn-mobile-menu-toggle" class="btn-icon mobile-menu-btn" title="Abrir Menú">
+                        <i class="ph ph-list" style="font-size:22px;"></i>
+                    </button>
+                    <button type="button" id="btn-desktop-sidebar-toggle" class="btn-icon desktop-toggle-btn" title="Expandir / Contraer Menú">
+                        <i class="ph ph-sidebar-simple" style="font-size:20px;"></i>
+                    </button>
                     <div class="topbar-title">Visor Logístico</div>
                 </div>
 
@@ -3402,5 +3415,6 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
+    <script type="module" src="script.js?v=16.0"></script>
 </body>
 </html>

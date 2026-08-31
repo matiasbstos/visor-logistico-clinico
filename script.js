@@ -11540,4 +11540,95 @@ function doGet(e) {
 
 })();
 
+/* =========================================================================
+   MÓDULO: BARRA LATERAL COLAPSABLE (MINI-SIDEBAR) Y RESPONSIVIDAD MÓVIL
+   ========================================================================= */
+(function initSidebarAndResponsiveNavigation() {
+    function setupSidebarControls() {
+        const sidebar = document.getElementById('app-sidebar');
+        const toggleBtn = document.getElementById('sidebar-toggle-btn');
+        const desktopToggleBtn = document.getElementById('btn-desktop-sidebar-toggle');
+        const mobileToggleBtn = document.getElementById('btn-mobile-menu-toggle');
+        const backdrop = document.getElementById('sidebar-backdrop');
+        const STORAGE_KEY = 'visor_sidebar_collapsed';
+
+        if (!sidebar) return;
+
+        // 1. Restaurar preferencia de barra lateral (o colapsar por defecto en escritorio para máximo espacio central)
+        const savedState = localStorage.getItem(STORAGE_KEY);
+        if (savedState === 'true' || (savedState === null && window.innerWidth > 1024)) {
+            sidebar.classList.add('collapsed');
+        }
+
+        function toggleDesktopCollapse() {
+            sidebar.classList.toggle('collapsed');
+            const isCollapsed = sidebar.classList.contains('collapsed');
+            localStorage.setItem(STORAGE_KEY, isCollapsed ? 'true' : 'false');
+        }
+
+        function openMobileSidebar() {
+            sidebar.classList.add('mobile-open');
+            if (backdrop) backdrop.classList.add('active');
+        }
+
+        function closeMobileSidebar() {
+            sidebar.classList.remove('mobile-open');
+            if (backdrop) backdrop.classList.remove('active');
+        }
+
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (window.innerWidth <= 1024) {
+                    closeMobileSidebar();
+                } else {
+                    toggleDesktopCollapse();
+                }
+            });
+        }
+
+        if (desktopToggleBtn) {
+            desktopToggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleDesktopCollapse();
+            });
+        }
+
+        if (mobileToggleBtn) {
+            mobileToggleBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                openMobileSidebar();
+            });
+        }
+
+        if (backdrop) {
+            backdrop.addEventListener('click', closeMobileSidebar);
+        }
+
+        // Al hacer clic en cualquier item del menú en móvil/tablet, cerrar el drawer
+        document.querySelectorAll('.sidebar .menu-item').forEach(item => {
+            item.addEventListener('click', () => {
+                if (window.innerWidth <= 1024) {
+                    closeMobileSidebar();
+                }
+            });
+        });
+
+        // Al hacer clic en el encabezado de la barra colapsada en desktop, expandirla suavemente
+        sidebar.addEventListener('click', (e) => {
+            if (sidebar.classList.contains('collapsed') && window.innerWidth > 1024) {
+                if (e.target.closest('.sidebar-header') || e.target.closest('.sidebar-logo') || e.target === sidebar) {
+                    toggleDesktopCollapse();
+                }
+            }
+        });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', setupSidebarControls);
+    } else {
+        setupSidebarControls();
+    }
+})();
+
 

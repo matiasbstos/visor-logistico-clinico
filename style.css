@@ -232,12 +232,12 @@ body { background-color: var(--bg-main); color: var(--text-main); }
 }
 
 /* VIEWS & LAYOUT */
-.dashboard-container { padding: 30px 40px; max-width: 1400px; margin: 0 auto; width: 100%; }
+.dashboard-container { padding: 20px 28px; max-width: 100%; margin: 0; width: 100%; }
 .view-section { display: none; }
 .view-section.active { display: block; animation: fadeIn 0.3s ease; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 
-.page-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 32px; }
+.page-header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 24px; }
 .page-title h1 { font-size: 28px; font-weight: 700; margin-bottom: 4px; }
 .page-title p { color: var(--text-muted); font-size: 14px; }
 
@@ -837,8 +837,8 @@ gemini-analysis {
 
 .toma-layout-grid {
     display: grid;
-    grid-template-columns: 460px 1fr;
-    gap: 20px;
+    grid-template-columns: 410px 1fr;
+    gap: 18px;
     align-items: start;
 }
 

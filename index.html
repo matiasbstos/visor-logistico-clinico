@@ -3463,7 +3463,7 @@
 
     <!-- MODAL EDITAR / CORREGIR REGISTRO DE TOMA DE INVENTARIO -->
     <div id="modal-editar-toma" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.75); z-index: 999999; justify-content: center; align-items: center; backdrop-filter: blur(4px);">
-        <div class="modal-content" style="background: white; padding: 28px; border-radius: 16px; width: 560px; max-width: 95%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0,0,0,0.25);">
+        <div class="modal-content" style="background: white; padding: 28px; border-radius: 16px; width: 620px; max-width: 95%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0,0,0,0.25);">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 14px; margin-bottom: 18px;">
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(14, 165, 233, 0.1); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 20px;">
@@ -3471,7 +3471,7 @@
                     </div>
                     <div>
                         <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--text-main);">Editar Registro de Inventario</h3>
-                        <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Corrección de stock, cambio de categoría y reubicación en Google Sheets</p>
+                        <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Corrección de stock, cambio de categoría y actualización sin duplicar en Google Sheets</p>
                     </div>
                 </div>
                 <button type="button" class="btn btn-icon" onclick="document.getElementById('modal-editar-toma').style.display='none'"><i class="ph ph-x" style="font-size: 20px;"></i></button>
@@ -3482,28 +3482,18 @@
                 <input type="hidden" id="edit-toma-old-cat">
                 <input type="hidden" id="edit-toma-old-cant">
 
-                <div class="grid-2-col-even mb-12" style="grid-template-columns: 1.5fr 1fr; gap: 10px;">
-                    <div class="form-group">
-                        <label class="form-label" style="font-weight: 700;">MEDICAMENTO / FÁRMACO</label>
-                        <input type="text" id="edit-toma-med" class="form-control font-bold" required>
-                    </div>
+                <div class="form-group mb-12">
+                    <label class="form-label" style="font-weight: 700;">MEDICAMENTO / FÁRMACO <span style="color:var(--danger)">*</span></label>
+                    <input type="text" id="edit-toma-med" class="form-control font-bold" required placeholder="Nombre del fármaco">
+                </div>
+
+                <div class="grid-2-col-even mb-12" style="gap: 12px;">
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">DOSIS / CONCENTRACIÓN</label>
                         <input type="text" id="edit-toma-dosis" class="form-control font-bold" placeholder="Ej: 200mg/5ml">
                     </div>
-                </div>
-
-                <div class="grid-2-col-even mb-12" style="gap: 10px;">
                     <div class="form-group">
-                        <label class="form-label" style="font-weight: 700;">FASE DE CONTEO / TOMA</label>
-                        <select id="edit-toma-fase" class="form-control font-bold" style="color:var(--primary);">
-                            <option value="1ra Toma (Inicial)">1ra Toma (Inicial)</option>
-                            <option value="2da Toma (2da Bodega / Suma)">2da Toma (2da Bodega / Suma)</option>
-                            <option value="Reconteo / Ajuste">Reconteo / Ajuste</option>
-                        </select>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label" style="font-weight: 700;">CATEGORÍA (PESTAÑA GOOGLE SHEETS)</label>
+                        <label class="form-label" style="font-weight: 700;">CATEGORÍA (PESTAÑA EN SHEETS) <span style="color:var(--danger)">*</span></label>
                         <select id="edit-toma-cat" class="form-control font-bold" required>
                             <optgroup label="⭐ Formas Farmacéuticas Principales">
                                 <option value="JARABES">JARABES</option>
@@ -3539,21 +3529,31 @@
                         </select>
                     </div>
                 </div>
+
+                <div class="grid-2-col-even mb-12" style="gap: 12px;">
                     <div class="form-group">
-                        <label class="form-label" style="font-weight: 700;">CANTIDAD DE ESTA TOMA (UNIDADES)</label>
+                        <label class="form-label" style="font-weight: 700;">FASE DE CONTEO / TOMA</label>
+                        <select id="edit-toma-fase" class="form-control font-bold" style="color:var(--primary);">
+                            <option value="1ra Toma (Inicial)">1ra Toma (Inicial)</option>
+                            <option value="2da Toma (2da Bodega / Suma)">2da Toma (2da Bodega / Suma)</option>
+                            <option value="Reconteo / Ajuste">Reconteo / Ajuste</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">CANTIDAD DE ESTA TOMA (UNIDADES) <span style="color:var(--danger)">*</span></label>
                         <input type="number" id="edit-toma-cant" class="form-control font-bold" min="0" step="1" required>
                         <div id="edit-toma-delta" style="font-size: 11px; margin-top: 3px; font-weight: 700;"></div>
                     </div>
                 </div>
 
-                <div class="grid-2-col-even mb-12" style="gap: 10px;">
+                <div class="grid-2-col-even mb-12" style="gap: 12px;">
                     <div class="form-group">
-                        <label class="form-label" style="font-weight: 700;">LOTE</label>
-                        <input type="text" id="edit-toma-lote" class="form-control" required>
+                        <label class="form-label" style="font-weight: 700;">LOTE FABRICANTE</label>
+                        <input type="text" id="edit-toma-lote" class="form-control font-bold" placeholder="Ej: L-2024-X o S/L">
                     </div>
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">VENCIMIENTO (MES / AÑO)</label>
-                        <input type="month" id="edit-toma-vto" class="form-control" placeholder="AAAA-MM" required>
+                        <input type="month" id="edit-toma-vto" class="form-control font-bold" placeholder="AAAA-MM">
                     </div>
                 </div>
 
@@ -3570,13 +3570,13 @@
 
                 <div class="form-group mb-16">
                     <label class="form-label" style="font-weight: 700;">MOTIVO DE LA MODIFICACIÓN (AUDITORÍA) <span style="color:var(--danger)">*</span></label>
-                    <input type="text" id="edit-toma-motivo" class="form-control" placeholder="Ej: Error en conteo visual inicial / Reclasificación de categoría..." required>
+                    <input type="text" id="edit-toma-motivo" class="form-control" placeholder="Ej: Error en nombre / Reclasificación de categoría / Corrección de conteo..." required>
                 </div>
 
                 <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #f1f5f9; padding-top: 14px;">
                     <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('modal-editar-toma').style.display='none'">Cancelar</button>
-                    <button type="submit" class="btn btn-primary font-bold" style="padding: 9px 20px;">
-                        <i class="ph ph-check-circle"></i> Guardar Cambios y Reubicar
+                    <button type="submit" class="btn btn-primary font-bold" style="padding: 9px 20px; background:linear-gradient(135deg, #0284c7, #0369a1); border:none;">
+                        <i class="ph ph-check-circle"></i> Guardar Cambios y Actualizar
                     </button>
                 </div>
             </form>
@@ -3852,7 +3852,7 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=17.3"></script>
-    <script type="module" src="patch-plantillas.js?v=17.3"></script>
+    <script type="module" src="script.js?v=17.5"></script>
+    <script type="module" src="patch-plantillas.js?v=17.5"></script>
 </body>
 </html>

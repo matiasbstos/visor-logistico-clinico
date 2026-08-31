@@ -9625,14 +9625,22 @@ window.guardarProgresoBandeja = async function(docId) {
    MÓDULO: TOMA DE INVENTARIO Y CONECTOR GOOGLE SHEETS POR CATEGORÍAS
    ========================================================================= */
 const GOOGLE_APPS_SCRIPT_TEMPLATE = `/**
+ * =========================================================================
  * GOOGLE APPS SCRIPT - CONECTOR OFICIAL TOMA DE INVENTARIO SAR
- * Organiza automáticamente cada medicamento en su propia hoja según su categoría
- * y mantiene la hoja 'CONSOLIDADO_GENERAL' con el total de inventario.
+ * Organiza automáticamente cada medicamento en su propia hoja según su categoría,
+ * actualiza en su lugar cualquier modificación o corrección sin duplicar registros,
+ * y mantiene la hoja 'CONSOLIDADO_GENERAL' 100% limpia y sincronizada.
+ * =========================================================================
  */
 function doPost(e) {
+  var lock = LockService.getScriptLock();
   try {
-    var rawData = e.postData.contents;
-    var data = JSON.parse(rawData);
+    lock.waitLock(30000);
+    if (!e || !e.postData || !e.postData.contents) {
+      return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: 'No payload' })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    var data = JSON.parse(e.postData.contents);
     var ss = SpreadsheetApp.getActiveSpreadsheet();
     var action = (data.action || "insert").toLowerCase();
     
@@ -9644,7 +9652,7 @@ function doPost(e) {
       "Responsable", "Observaciones"
     ];
 
-    // Paleta de Colores por Categoría para fácil identificación visual
+    // Paleta de Colores por Categoría
     var categoryColors = {
       "CONSOLIDADO_GENERAL": "#0f172a",
       "COMPRIMIDOS ANTIBIOTICOS": "#c2410c",
@@ -9660,6 +9668,11 @@ function doPost(e) {
       "INCIDENCIAS_Y_MERMAS": "#b91c1c"
     };
 
+    function normalizeStr(str) {
+      if (!str) return "";
+      return str.toString().toLowerCase().trim().normalize("NFD").replace(/[\\u0300-\\u036f]/g, "").replace(/[^a-z0-9]/g, "");
+    }
+
     function getOrCreateSheet(name, hdrs, tabColor) {
       var cleanName = name.toString().trim().toUpperCase().substring(0, 30);
       if (!cleanName) cleanName = "GENERAL";
@@ -9673,17 +9686,53 @@ function doPost(e) {
         r.setFontWeight("bold");
         r.setHorizontalAlignment("center");
         s.setFrozenRows(1);
-        try {
-          s.setTabColor(tabColor || "#1e293b");
-        } catch(eTab) {}
+        try { s.setTabColor(tabColor || "#1e293b"); } catch(eTab) {}
       }
       return s;
     }
 
-    // 1. Asegurar la pestaña CONSOLIDADO_GENERAL como primera hoja
+    function findRowInSheet(sheet, item) {
+      if (!sheet || sheet.getLastRow() <= 1) return -1;
+      var values = sheet.getDataRange().getValues();
+      var targetCode = (item.code || "").toString().trim().toUpperCase();
+      var targetOldNameNorm = normalizeStr(item.oldName || "");
+      var targetNameNorm = normalizeStr(item.name || item.medicamento || "");
+      var targetFase = (item.fase || item.oldFase || "").toString().trim().toLowerCase();
+      var targetLote = (item.batch || item.lote || item.oldLote || "").toString().trim().toLowerCase();
+
+      // 1. Coincidencia por Código si existe
+      if (targetCode && targetCode !== "S/I" && targetCode !== "N/A" && targetCode !== "S/N") {
+        for (var i = 1; i < values.length; i++) {
+          var rowCode = (values[i][2] || "").toString().trim().toUpperCase();
+          if (rowCode === targetCode) {
+            return i + 1;
+          }
+        }
+      }
+
+      // 2. Coincidencia por Nombre (antiguo o actual) + Fase / Lote
+      for (var j = 1; j < values.length; j++) {
+        var rowFase = (values[j][1] || "").toString().trim().toLowerCase();
+        var rowMedNorm = normalizeStr(values[j][3] || values[j][0] || "");
+        var rowLote = (values[j][7] || values[j][3] || "").toString().trim().toLowerCase();
+
+        var nameMatches = (targetOldNameNorm && rowMedNorm === targetOldNameNorm) || (targetNameNorm && rowMedNorm === targetNameNorm);
+        if (nameMatches) {
+          if (!targetFase || !rowFase || rowFase === targetFase || targetFase.indexOf(rowFase) !== -1 || rowFase.indexOf(targetFase) !== -1) {
+            return j + 1;
+          }
+          if (targetLote && rowLote && targetLote === rowLote) {
+            return j + 1;
+          }
+        }
+      }
+
+      return -1;
+    }
+
     var consolidadoSheet = getOrCreateSheet("CONSOLIDADO_GENERAL", headers, categoryColors["CONSOLIDADO_GENERAL"]);
 
-    // 2. CASO: TRANSFERENCIA / EXPORTACIÓN MASIVA (BATCH INSERT)
+    // 1. CASO: TRANSFERENCIA / EXPORTACIÓN MASIVA (BATCH INSERT)
     if (action === "batch_insert" && Array.isArray(data.items)) {
       var countInserted = 0;
       for (var b = 0; b < data.items.length; b++) {
@@ -9706,18 +9755,30 @@ function doPost(e) {
           it.user || it.responsable || "Visor Logístico",
           it.observations || ""
         ];
-        itSheet.appendRow(itRow);
-        consolidadoSheet.appendRow(itRow);
+        
+        var exCons = findRowInSheet(consolidadoSheet, it);
+        if (exCons > 0) {
+          consolidadoSheet.getRange(exCons, 1, 1, itRow.length).setValues([itRow]);
+        } else {
+          consolidadoSheet.appendRow(itRow);
+        }
+
+        var exCat = findRowInSheet(itSheet, it);
+        if (exCat > 0) {
+          itSheet.getRange(exCat, 1, 1, itRow.length).setValues([itRow]);
+        } else {
+          itSheet.appendRow(itRow);
+        }
         countInserted++;
       }
       return ContentService.createTextOutput(JSON.stringify({
         status: "success",
-        message: "Transferidos " + countInserted + " registros exitosamente a las pestañas oficiales.",
+        message: "Procesados " + countInserted + " registros exitosamente.",
         count: countInserted
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 3. CASO: REGISTRO DE INCIDENCIA / MERMA / QUIEBRE
+    // 2. CASO: REGISTRO DE INCIDENCIA / MERMA / QUIEBRE
     if (action === "incidencia" || action === "merma") {
       var incHeaders = [
         "Marca Temporal", "Medicamento", "Categoría", "Lote", "Ubicación", 
@@ -9739,27 +9800,12 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Incidencia registrada en hoja INCIDENCIAS_Y_MERMAS" })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 4. CASO: CLASIFICACIÓN Y DIVISIÓN AUTOMÁTICA POR HOJAS DE CATEGORÍA
+    // 3. CASO: INSERCIÓN O ACTUALIZACIÓN INDIVIDUAL
     var newCat = (data.category || data.categoria || "General").toString().trim().toUpperCase();
     var oldCat = (data.oldCategory || "").toString().trim().toUpperCase();
+    var isEditMode = (action === "update" || action === "edit" || data.isEdit || (data.observations && data.observations.indexOf("[Modificación") !== -1));
     var sheetColor = categoryColors[newCat] || "#1e293b";
     var targetSheet = getOrCreateSheet(newCat, headers, sheetColor);
-
-    // Si hubo cambio de categoría a posteriori, remover de la hoja anterior
-    if (oldCat && oldCat !== newCat) {
-      var oldSheet = ss.getSheetByName(oldCat.substring(0, 30));
-      if (oldSheet) {
-        var oldData = oldSheet.getDataRange().getValues();
-        for (var i = oldData.length - 1; i >= 1; i--) {
-          var rowMed = (oldData[i][0] || oldData[i][3] || "").toString().trim().toLowerCase();
-          var targetMed = (data.name || "").toString().trim().toLowerCase();
-          if (rowMed === targetMed) {
-            oldSheet.deleteRow(i + 1);
-            break;
-          }
-        }
-      }
-    }
 
     var fechaRegistro = data.timestamp || Utilities.formatDate(new Date(), "GMT-3", "yyyy-MM-dd HH:mm:ss");
     var rowData = [
@@ -9779,73 +9825,44 @@ function doPost(e) {
       data.observations || ""
     ];
 
-    // Detectar inteligentemente si la hoja tiene plantilla pre-existente de 4 columnas [NOMBRE, CANTIDAD, FECHA VTO, LOTE]
-    var targetValues = targetSheet.getDataRange().getValues();
-    var isFourColTemplate = false;
-    var headerRowIndex = 0;
-
-    if (targetValues.length > 0) {
-      for (var rIdx = 0; rIdx < Math.min(3, targetValues.length); rIdx++) {
-        var col0 = (targetValues[rIdx][0] || "").toString().toUpperCase().trim();
-        var col1 = (targetValues[rIdx][1] || "").toString().toUpperCase().trim();
-        if (col0.indexOf("NOMBRE") !== -1 && col1.indexOf("CANTIDAD") !== -1) {
-          isFourColTemplate = true;
-          headerRowIndex = rIdx;
-          break;
+    // Si hubo cambio de categoría, remover de la hoja anterior
+    if (oldCat && oldCat !== newCat) {
+      var oldSheet = ss.getSheetByName(oldCat.substring(0, 30));
+      if (oldSheet) {
+        var oldRowIdx = findRowInSheet(oldSheet, data);
+        if (oldRowIdx > 0) {
+          oldSheet.deleteRow(oldRowIdx);
         }
       }
     }
 
-    if (isFourColTemplate) {
-      function normalizeStr(s) {
-        return (s || "").toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]/g, "");
-      }
-      var targetNormalized = normalizeStr(data.name);
-      var matchedRow = -1;
-
-      for (var r = headerRowIndex + 1; r < targetValues.length; r++) {
-        var rowName = (targetValues[r][0] || "").toString();
-        var normRow = normalizeStr(rowName);
-        if (normRow && (normRow === targetNormalized || targetNormalized.indexOf(normRow) !== -1 || normRow.indexOf(targetNormalized) !== -1)) {
-          matchedRow = r + 1; // 1-indexed para getRange
-          break;
-        }
-      }
-
-      if (matchedRow !== -1) {
-        // Actualizar directamente la fila del medicamento pre-listado
-        targetSheet.getRange(matchedRow, 2).setValue(Number(data.quantity) || 0); // CANTIDAD
-        targetSheet.getRange(matchedRow, 3).setValue(data.expirationDate || "N/A"); // FECHA DE VENCIMIENTO
-        targetSheet.getRange(matchedRow, 4).setValue(data.batch || "N/A"); // LOTE
-      } else {
-        // Si no estaba en la lista previa, agregar fila con la estructura de 4 columnas
-        targetSheet.appendRow([
-          data.name || "Sin descripción",
-          Number(data.quantity) || 0,
-          data.expirationDate || "N/A",
-          data.batch || "N/A"
-        ]);
-      }
+    // Actualizar o Insertar en la hoja de categoría destino
+    var matchInTarget = findRowInSheet(targetSheet, data);
+    if (matchInTarget > 0) {
+      targetSheet.getRange(matchInTarget, 1, 1, rowData.length).setValues([rowData]);
     } else {
-      // Estructura Estándar Oficial (14 Columnas)
       targetSheet.appendRow(rowData);
     }
 
-    // Escribir en la hoja CONSOLIDADO_GENERAL siempre el registro completo
-    consolidadoSheet.appendRow(rowData);
+    // Actualizar o Insertar en CONSOLIDADO_GENERAL (¡Nunca duplicar!)
+    var matchInConsolidado = findRowInSheet(consolidadoSheet, data);
+    if (matchInConsolidado > 0) {
+      consolidadoSheet.getRange(matchInConsolidado, 1, 1, rowData.length).setValues([rowData]);
+    } else {
+      consolidadoSheet.appendRow(rowData);
+    }
 
     return ContentService.createTextOutput(JSON.stringify({
       status: "success",
-      message: "Medicamento registrado en hoja: " + newCat + " y en CONSOLIDADO_GENERAL",
+      message: isEditMode ? "Registro actualizado en hoja " + newCat + " y en CONSOLIDADO_GENERAL." : "Medicamento registrado con éxito.",
       sheetName: newCat,
-      mode: isFourColTemplate ? "template_4col" : "standard_14col"
+      isUpdated: (matchInConsolidado > 0 || matchInTarget > 0)
     })).setMimeType(ContentService.MimeType.JSON);
 
   } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({ 
-      status: "error", 
-      message: err.toString() 
-    })).setMimeType(ContentService.MimeType.JSON);
+    return ContentService.createTextOutput(JSON.stringify({ status: "error", message: err.toString() })).setMimeType(ContentService.MimeType.JSON);
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -9862,19 +9879,30 @@ function doGet(e) {
       
       if (consolidadoSheet && consolidadoSheet.getLastRow() > 1) {
         var data = consolidadoSheet.getDataRange().getValues();
-        for (var i = 1; i < data.length; i++) {
+        var seenKeys = {};
+
+        // Recorrer de abajo hacia arriba para quedarnos con la última modificación si existen duplicados
+        for (var i = data.length - 1; i >= 1; i--) {
           var row = data[i];
           var medDesc = (row[3] || "").toString().trim();
+          var faseVal = (row[1] || "1ra Toma (Inicial)").toString().trim();
+          var codeVal = (row[2] || "").toString().trim();
+          var batchVal = (row[7] || "").toString().trim();
+
           if (medDesc) {
-            allRecords.push({
+            var uniqueKey = (codeVal && codeVal !== 'S/I' ? codeVal : (medDesc.toLowerCase() + '_' + faseVal.toLowerCase() + '_' + batchVal.toLowerCase()));
+            if (seenKeys[uniqueKey]) continue; // Omitir duplicados antiguos
+            seenKeys[uniqueKey] = true;
+
+            allRecords.unshift({
               timestamp: row[0] ? row[0].toString() : "",
-              fase: row[1] ? row[1].toString() : "1ra Toma (Inicial)",
-              code: row[2] ? row[2].toString() : "",
+              fase: faseVal,
+              code: codeVal,
               name: medDesc,
               category: row[4] ? row[4].toString() : "General",
               quantity: Number(row[5]) || 0,
               totalAcumulado: Number(row[6]) || Number(row[5]) || 0,
-              batch: row[7] ? row[7].toString() : "",
+              batch: batchVal,
               expirationDate: row[8] ? row[8].toString() : "",
               location: row[9] ? row[9].toString() : "Bodega Central",
               unitPrice: Number(row[10]) || 0,
@@ -9882,32 +9910,6 @@ function doGet(e) {
               user: row[12] ? row[12].toString() : "Google Sheets",
               observations: row[13] ? row[13].toString() : ""
             });
-          }
-        }
-      } else {
-        var sheets = ss.getSheets();
-        for (var s = 0; s < sheets.length; s++) {
-          var sh = sheets[s];
-          var sName = sh.getName();
-          if (sName === "INCIDENCIAS_Y_MERMAS") continue;
-          if (sh.getLastRow() > 1) {
-            var sData = sh.getDataRange().getValues();
-            for (var r = 1; r < sData.length; r++) {
-              var sRow = sData[r];
-              var mName = sRow[0] ? sRow[0].toString().trim() : "";
-              if (mName && mName.toUpperCase() !== "NOMBRE") {
-                allRecords.push({
-                  name: mName,
-                  category: sName,
-                  quantity: Number(sRow[1]) || 0,
-                  totalAcumulado: Number(sRow[1]) || 0,
-                  expirationDate: sRow[2] ? sRow[2].toString() : "",
-                  batch: sRow[3] ? sRow[3].toString() : "",
-                  location: "Bodega Central",
-                  fase: "Google Sheets"
-                });
-              }
-            }
           }
         }
       }
@@ -11227,6 +11229,10 @@ function doGet(e) {
                     console.error("Error aplicando edición en Firestore:", err);
                 }
 
+                const oldMedName = target.name;
+                const oldBatch = target.batch;
+                const oldFaseVal = target.fase;
+
                 // 2. Actualizar objeto local en la sesión
                 target.name = newMed;
                 target.dosis = newDosis;
@@ -11246,10 +11252,14 @@ function doGet(e) {
 
                 window.showToast("Modificación Guardada", `Registro actualizado y auditado con éxito.`, "success");
 
-                // 3. Sincronizar en Google Sheets (Mueve de pestaña y actualiza)
+                // 3. Sincronizar en Google Sheets (Actualiza en sitio sin duplicar filas)
                 syncToGoogleSheets({
                     action: 'update',
+                    isEdit: true,
+                    oldName: oldMedName,
                     oldCategory: oldCat,
+                    oldLote: oldBatch,
+                    oldFase: oldFaseVal,
                     category: newCat,
                     name: newMed,
                     quantity: newCant,
@@ -11260,14 +11270,14 @@ function doGet(e) {
                     fase: newFase,
                     code: target.code || 'S/I',
                     user: currentUserEmail,
-                    timestamp: new Date().toLocaleString('es-CL'),
+                    timestamp: target.timestamp || new Date().toLocaleString('es-CL'),
                     observations: `[Modificación/Auditoría] ${motivo} (${auditDetail})`
                 }).then(res => {
                     if (res.success) {
                         target.syncStatus = 'synced';
                         saveSessionItems(list);
                         renderTomaUI();
-                        window.showToast("Google Sheets", `Pestaña actualizada a [${newCat}].`, "success");
+                        window.showToast("Google Sheets", `Actualizado en [${newCat}] sin duplicar.`, "success");
                     }
                 });
             });

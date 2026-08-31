@@ -9679,7 +9679,41 @@ function doPost(e) {
     // 1. Asegurar la pestaña CONSOLIDADO_GENERAL como primera hoja
     var consolidadoSheet = getOrCreateSheet("CONSOLIDADO_GENERAL", headers, categoryColors["CONSOLIDADO_GENERAL"]);
 
-    // 2. CASO: REGISTRO DE INCIDENCIA / MERMA / QUIEBRE
+    // 2. CASO: TRANSFERENCIA / EXPORTACIÓN MASIVA (BATCH INSERT)
+    if (action === "batch_insert" && Array.isArray(data.items)) {
+      var countInserted = 0;
+      for (var b = 0; b < data.items.length; b++) {
+        var it = data.items[b];
+        var itCat = (it.category || it.categoria || "General").toString().trim().toUpperCase();
+        var itSheet = getOrCreateSheet(itCat, headers, categoryColors[itCat] || "#1e293b");
+        var itRow = [
+          it.timestamp || Utilities.formatDate(new Date(), "GMT-3", "yyyy-MM-dd HH:mm:ss"),
+          it.fase || "1ra Toma (Inicial)",
+          it.code || "S/I",
+          it.name || it.medicamento || "Sin descripción",
+          itCat,
+          Number(it.quantity) || 0,
+          Number(it.totalAcumulado) || Number(it.quantity) || 0,
+          it.batch || it.lote || "N/A",
+          it.expirationDate || it.fechaVencimiento || "N/A",
+          it.location || it.ubicacion || "Bodega Central",
+          Number(it.unitPrice) || 0,
+          Number(it.criticalLimit || it.stock_minimo) || 50,
+          it.user || it.responsable || "Visor Logístico",
+          it.observations || ""
+        ];
+        itSheet.appendRow(itRow);
+        consolidadoSheet.appendRow(itRow);
+        countInserted++;
+      }
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        message: "Transferidos " + countInserted + " registros exitosamente a las pestañas oficiales.",
+        count: countInserted
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 3. CASO: REGISTRO DE INCIDENCIA / MERMA / QUIEBRE
     if (action === "incidencia" || action === "merma") {
       var incHeaders = [
         "Marca Temporal", "Medicamento", "Categoría", "Lote", "Ubicación", 
@@ -9701,7 +9735,7 @@ function doPost(e) {
       return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Incidencia registrada en hoja INCIDENCIAS_Y_MERMAS" })).setMimeType(ContentService.MimeType.JSON);
     }
 
-    // 3. CASO: CLASIFICACIÓN Y DIVISIÓN AUTOMÁTICA POR HOJAS DE CATEGORÍA
+    // 4. CASO: CLASIFICACIÓN Y DIVISIÓN AUTOMÁTICA POR HOJAS DE CATEGORÍA
     var newCat = (data.category || data.categoria || "General").toString().trim().toUpperCase();
     var oldCat = (data.oldCategory || "").toString().trim().toUpperCase();
     var sheetColor = categoryColors[newCat] || "#1e293b";
@@ -9812,10 +9846,88 @@ function doPost(e) {
 }
 
 function doGet(e) {
-  return ContentService.createTextOutput(JSON.stringify({ 
-    status: "online", 
-    message: "Conector Google Sheets SAR Activo - Modo Multihistorial por Categorías" 
-  })).setMimeType(ContentService.MimeType.JSON);
+  try {
+    var params = e ? e.parameter : {};
+    var action = (params && params.action) ? params.action.toLowerCase() : "status";
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    // LECTURA BIDIRECCIONAL: Visor consulta todos los registros de la planilla
+    if (action === "pull" || action === "read_all" || action === "get_inventory") {
+      var allRecords = [];
+      var consolidadoSheet = ss.getSheetByName("CONSOLIDADO_GENERAL");
+      
+      if (consolidadoSheet && consolidadoSheet.getLastRow() > 1) {
+        var data = consolidadoSheet.getDataRange().getValues();
+        for (var i = 1; i < data.length; i++) {
+          var row = data[i];
+          var medDesc = (row[3] || "").toString().trim();
+          if (medDesc) {
+            allRecords.push({
+              timestamp: row[0] ? row[0].toString() : "",
+              fase: row[1] ? row[1].toString() : "1ra Toma (Inicial)",
+              code: row[2] ? row[2].toString() : "",
+              name: medDesc,
+              category: row[4] ? row[4].toString() : "General",
+              quantity: Number(row[5]) || 0,
+              totalAcumulado: Number(row[6]) || Number(row[5]) || 0,
+              batch: row[7] ? row[7].toString() : "",
+              expirationDate: row[8] ? row[8].toString() : "",
+              location: row[9] ? row[9].toString() : "Bodega Central",
+              unitPrice: Number(row[10]) || 0,
+              criticalLimit: Number(row[11]) || 50,
+              user: row[12] ? row[12].toString() : "Google Sheets",
+              observations: row[13] ? row[13].toString() : ""
+            });
+          }
+        }
+      } else {
+        var sheets = ss.getSheets();
+        for (var s = 0; s < sheets.length; s++) {
+          var sh = sheets[s];
+          var sName = sh.getName();
+          if (sName === "INCIDENCIAS_Y_MERMAS") continue;
+          if (sh.getLastRow() > 1) {
+            var sData = sh.getDataRange().getValues();
+            for (var r = 1; r < sData.length; r++) {
+              var sRow = sData[r];
+              var mName = sRow[0] ? sRow[0].toString().trim() : "";
+              if (mName && mName.toUpperCase() !== "NOMBRE") {
+                allRecords.push({
+                  name: mName,
+                  category: sName,
+                  quantity: Number(sRow[1]) || 0,
+                  totalAcumulado: Number(sRow[1]) || 0,
+                  expirationDate: sRow[2] ? sRow[2].toString() : "",
+                  batch: sRow[3] ? sRow[3].toString() : "",
+                  location: "Bodega Central",
+                  fase: "Google Sheets"
+                });
+              }
+            }
+          }
+        }
+      }
+
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        count: allRecords.length,
+        records: allRecords
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    return ContentService.createTextOutput(JSON.stringify({ 
+      status: "online", 
+      message: "Conector Google Sheets SAR Activo - Modo Multihistorial y Sincronización Bidireccional",
+      spreadsheetName: ss.getName(),
+      sheetsCount: ss.getSheets().length
+    })).setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ 
+      status: "error", 
+      message: err.toString() 
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
 }`;
 
 (function initTomaInventarioScope() {
@@ -11448,6 +11560,175 @@ function doGet(e) {
                 updateSheetsStatusBadge();
                 modalConfig.style.display = 'none';
                 window.showToast("Configuración Guardada", url ? "URL de Google Sheets activada para sincronización." : "Configuración actualizada.", "success");
+            });
+        }
+
+        // 1. Transferencia Masiva al Nuevo Google Sheets
+        const btnPushAll = document.getElementById('btn-push-all-to-sheets');
+        if (btnPushAll) {
+            btnPushAll.addEventListener('click', async () => {
+                const url = (inputSheetsUrl ? inputSheetsUrl.value.trim() : '') || getSheetsUrl();
+                if (!url) {
+                    window.showToast("URL no configurada", "Ingrese y guarde primero la URL de su nuevo Google Sheets.", "warning");
+                    return;
+                }
+
+                const sessionList = getSessionItems();
+                if (sessionList.length === 0 && tomaCatalogCache.length === 0) {
+                    window.showToast("Sin datos", "No hay medicamentos registrados en el inventario actual para transferir.", "info");
+                    return;
+                }
+
+                btnPushAll.disabled = true;
+                btnPushAll.innerHTML = '<i class="ph-spinner ph-spin"></i> Transfiriendo Inventario...';
+
+                try {
+                    // Preparar todos los items a transferir
+                    const itemsToPush = sessionList.length > 0 ? sessionList : tomaCatalogCache.map(i => ({
+                        code: i.code || i.id,
+                        name: i.nombre || i.name,
+                        category: i.categoria || i.category || 'General',
+                        quantity: Number(i.stock_total || i.stock || i.quantity) || 0,
+                        totalAcumulado: Number(i.stock_total || i.stock || i.quantity) || 0,
+                        batch: i.lote || i.batch || 'N/A',
+                        expirationDate: i.fecha_vencimiento || i.expirationDate || 'N/A',
+                        location: i.ubicacion || 'Bodega Central',
+                        user: auth.currentUser ? auth.currentUser.email : 'Visor Logístico',
+                        timestamp: new Date().toLocaleString('es-CL'),
+                        fase: '1ra Toma (Inicial)',
+                        observations: 'Transferencia automática desde Visor Logístico'
+                    }));
+
+                    await fetch(url, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: "batch_insert",
+                            items: itemsToPush
+                        })
+                    });
+
+                    // Marcar items locales como sincronizados
+                    sessionList.forEach(it => { it.synced = true; });
+                    saveSessionItems(sessionList);
+                    renderTomaUI();
+                    updateSheetsStatusBadge();
+
+                    window.showToast(
+                        "¡Transferencia Exitosa!", 
+                        `Se han transferido ${itemsToPush.length} medicamentos a tu nuevo archivo de Google Sheets.`, 
+                        "success"
+                    );
+                    if (modalConfig) modalConfig.style.display = 'none';
+                } catch (err) {
+                    console.error("Error transfering inventory:", err);
+                    window.showToast("Error en Transferencia", err.message, "error");
+                } finally {
+                    btnPushAll.disabled = false;
+                    btnPushAll.innerHTML = '<i class="ph-bold ph-cloud-arrow-up"></i> 📤 Transferir Todo el Inventario Actual a este nuevo Sheets';
+                }
+            });
+        }
+
+        // 2. Sincronización Bidireccional: Traer Modificaciones desde Google Sheets al Visor
+        const btnPullFromSheets = document.getElementById('btn-pull-from-sheets');
+        if (btnPullFromSheets) {
+            btnPullFromSheets.addEventListener('click', async () => {
+                const url = getSheetsUrl();
+                if (!url) {
+                    window.showToast("Google Sheets no conectado", "Configure primero la URL en el botón 'Configurar Google Sheets'.", "warning");
+                    return;
+                }
+
+                btnPullFromSheets.disabled = true;
+                btnPullFromSheets.innerHTML = '<i class="ph-spinner ph-spin"></i> Sincronizando...';
+
+                try {
+                    const pullUrl = url.includes('?') ? `${url}&action=pull` : `${url}?action=pull`;
+                    const resp = await fetch(pullUrl);
+                    if (!resp.ok) throw new Error(`HTTP error! status: ${resp.status}`);
+                    
+                    const data = await resp.json();
+                    if (data.status !== "success" || !Array.isArray(data.records)) {
+                        throw new Error(data.message || "Estructura de respuesta no válida.");
+                    }
+
+                    const remoteRecords = data.records;
+                    let updatedCount = 0;
+                    const currentSession = getSessionItems();
+
+                    for (const r of remoteRecords) {
+                        const rNameNorm = (r.name || '').trim().toLowerCase();
+                        if (!rNameNorm) continue;
+
+                        // Buscar en la sesión actual
+                        const matchInSession = currentSession.find(s => (s.name || '').trim().toLowerCase() === rNameNorm);
+                        if (matchInSession) {
+                            let changed = false;
+                            if (Number(r.quantity) !== Number(matchInSession.quantity)) {
+                                matchInSession.quantity = Number(r.quantity);
+                                matchInSession.totalAcumulado = Number(r.quantity);
+                                changed = true;
+                            }
+                            if (r.batch && r.batch !== 'N/A' && r.batch !== matchInSession.batch) {
+                                matchInSession.batch = r.batch;
+                                changed = true;
+                            }
+                            if (r.expirationDate && r.expirationDate !== 'N/A' && r.expirationDate !== matchInSession.expirationDate) {
+                                matchInSession.expirationDate = r.expirationDate;
+                                changed = true;
+                            }
+                            if (changed) {
+                                matchInSession.synced = true;
+                                updatedCount++;
+                            }
+                        }
+
+                        // Sincronizar también con Firestore Insumos si el insumo existe
+                        const matchCatalog = tomaCatalogCache.find(c => (c.nombre || c.name || '').trim().toLowerCase() === rNameNorm);
+                        if (matchCatalog && matchCatalog.id) {
+                            try {
+                                const insumoRef = doc(db, 'Insumos', matchCatalog.id);
+                                await updateDoc(insumoRef, {
+                                    stock_total: Number(r.quantity) || 0,
+                                    lote: r.batch || matchCatalog.lote || 'N/A',
+                                    fecha_vencimiento: r.expirationDate || matchCatalog.fecha_vencimiento || 'N/A',
+                                    ultima_actualizacion_sheets: serverTimestamp()
+                                });
+
+                                await addDoc(collection(db, 'Historial_Movimientos'), {
+                                    insumo_id: matchCatalog.id,
+                                    insumo_nombre: matchCatalog.nombre || matchCatalog.name,
+                                    tipo: 'AJUSTE_BIDIRECCIONAL_SHEETS',
+                                    cantidad: Number(r.quantity) || 0,
+                                    usuario: auth.currentUser ? auth.currentUser.email : 'Google Sheets Sync',
+                                    fecha: serverTimestamp(),
+                                    observaciones: `[Sincronización Bidireccional] Modificado remotamente en Google Sheets (Lote: ${r.batch || 'N/A'}, Vto: ${r.expirationDate || 'N/A'})`
+                                });
+                            } catch (eDoc) {
+                                console.warn("No se pudo actualizar insumo en Firestore:", eDoc);
+                            }
+                        }
+                    }
+
+                    saveSessionItems(currentSession);
+                    await loadInsumosCatalog();
+                    renderTomaUI();
+
+                    window.showToast(
+                        "Sincronización Completada",
+                        updatedCount > 0 ? `Se actualizaron ${updatedCount} elementos modificados en Google Sheets.` : `Inventario al día con Google Sheets (${remoteRecords.length} registros verificados).`,
+                        "success"
+                    );
+
+                } catch (err) {
+                    console.error("Error en sincronización bidireccional:", err);
+                    window.showToast("Aviso Sincronización", "Para habilitar la lectura directa en Google Apps Script, asegúrate de haber actualizado el código del conector e implementado como Aplicación Web.", "info");
+                } finally {
+                    btnPullFromSheets.disabled = false;
+                    btnPullFromSheets.innerHTML = '<i class="ph ph-arrows-clockwise"></i> Sincronizar desde Sheets';
+                }
             });
         }
 

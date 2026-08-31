@@ -3,7 +3,7 @@
 
 <head>
     <script>
-        const APP_VERSION = '16.0';
+        const APP_VERSION = '16.1';
         if (localStorage.getItem('APP_VERSION') !== APP_VERSION) {
             localStorage.setItem('APP_VERSION', APP_VERSION);
             if ('serviceWorker' in navigator) {
@@ -545,6 +545,9 @@
                                 <span class="status-indicator-dot"></span>
                                 <span id="toma-sheets-status-text">Google Sheets: No configurado</span>
                             </div>
+                            <button type="button" class="btn btn-outline" id="btn-pull-from-sheets" style="border-color:#8b5cf6; color:#7c3aed; font-weight:600;" title="Sincronizar cambios y ediciones realizadas directamente en Google Sheets">
+                                <i class="ph ph-arrows-clockwise"></i> Sincronizar desde Sheets
+                            </button>
                             <button type="button" class="btn btn-outline" id="btn-restore-cloud-toma" style="border-color:#16a34a; color:#15803d; font-weight:600; font-size:12px;" title="Restaurar sesión desde el último respaldo en la nube">
                                 <i class="ph ph-cloud-arrow-down"></i> Restaurar Respaldo
                             </button>
@@ -3170,6 +3173,13 @@
                     </button>
                 </div>
                 <div id="sheets-test-feedback" style="margin-top: 8px; font-size: 12px; display: none;"></div>
+
+                <!-- Botón de Transferencia Inmediata al Nuevo Archivo -->
+                <div style="margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button type="button" id="btn-push-all-to-sheets" class="btn btn-outline" style="border-color: #059669; color: #059669; font-weight: 700; font-size: 12.5px; background: #ecfdf5;" title="Transferir todos los medicamentos del inventario actual a este nuevo archivo de Google Sheets">
+                        <i class="ph-bold ph-cloud-arrow-up"></i> 📤 Transferir Todo el Inventario Actual a este nuevo Sheets
+                    </button>
+                </div>
             </div>
 
             <!-- Paso a Paso e Instrucciones -->

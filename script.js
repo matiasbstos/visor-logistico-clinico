@@ -10288,6 +10288,325 @@ function doGet(e) {
         }
     }
 
+    // =========================================================================
+    // DICCIONARIOS CLÍNICOS ESTÁNDAR Y AUTOCOMPLETADO INTELIGENTE
+    // =========================================================================
+    const STANDARD_CLINICAL_DRUGS = [
+        { name: 'PARACETAMOL', dosis: '500 mg', category: 'COMPRIMIDOS' },
+        { name: 'PARACETAMOL', dosis: '120 mg / 5 ml', category: 'JARABES' },
+        { name: 'PARACETAMOL', dosis: '100 mg / ml', category: 'GOTAS' },
+        { name: 'PARACETAMOL', dosis: '125 mg', category: 'SUPOSITORIOS' },
+        { name: 'PARACETAMOL', dosis: '250 mg', category: 'SUPOSITORIOS' },
+        { name: 'IBUPROFENO', dosis: '400 mg', category: 'COMPRIMIDOS' },
+        { name: 'IBUPROFENO', dosis: '600 mg', category: 'COMPRIMIDOS' },
+        { name: 'IBUPROFENO', dosis: '100 mg / 5 ml', category: 'JARABES' },
+        { name: 'IBUPROFENO', dosis: '200 mg / 5 ml', category: 'JARABES' },
+        { name: 'AMOXICILINA', dosis: '500 mg', category: 'COMPRIMIDOS ANTIBIOTICOS' },
+        { name: 'AMOXICILINA', dosis: '875 mg', category: 'COMPRIMIDOS ANTIBIOTICOS' },
+        { name: 'AMOXICILINA', dosis: '250 mg / 5 ml', category: 'JARABES' },
+        { name: 'AMOXICILINA', dosis: '500 mg / 5 ml', category: 'JARABES' },
+        { name: 'AMOXICILINA / ACIDO CLAVULANICO', dosis: '500 mg / 125 mg', category: 'COMPRIMIDOS ANTIBIOTICOS' },
+        { name: 'AMOXICILINA / ACIDO CLAVULANICO', dosis: '875 mg / 125 mg', category: 'COMPRIMIDOS ANTIBIOTICOS' },
+        { name: 'AMOXICILINA / ACIDO CLAVULANICO', dosis: '400 mg / 57 mg', category: 'JARABES' },
+        { name: 'AZITROMICINA', dosis: '500 mg', category: 'COMPRIMIDOS ANTIBIOTICOS' },
+        { name: 'AZITROMICINA', dosis: '200 mg / 5 ml', category: 'JARABES' },
+        { name: 'CLARITROMICINA', dosis: '500 mg', category: 'COMPRIMIDOS ANTIBIOTICOS' },
+        { name: 'CLARITROMICINA', dosis: '250 mg / 5 ml', category: 'JARABES' },
+        { name: 'CEFADROXILO', dosis: '500 mg', category: 'COMPRIMIDOS ANTIBIOTICOS' },
+        { name: 'CEFADROXILO', dosis: '250 mg / 5 ml', category: 'JARABES' },
+        { name: 'CIPROFLOXACINO', dosis: '500 mg', category: 'COMPRIMIDOS ANTIBIOTICOS' },
+        { name: 'CLINDAMICINA', dosis: '300 mg', category: 'COMPRIMIDOS ANTIBIOTICOS' },
+        { name: 'CLINDAMICINA', dosis: '600 mg / 4 ml', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'METRONIDAZOL', dosis: '500 mg', category: 'COMPRIMIDOS ANTIBIOTICOS' },
+        { name: 'NITROFURANTOINA', dosis: '100 mg', category: 'COMPRIMIDOS ANTIBIOTICOS' },
+        { name: 'CLORFENAMINA', dosis: '4 mg', category: 'COMPRIMIDOS' },
+        { name: 'CLORFENAMINA', dosis: '2 mg / 5 ml', category: 'JARABES' },
+        { name: 'CLORFENAMINA', dosis: '10 mg / ml', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'LORATADINA', dosis: '10 mg', category: 'COMPRIMIDOS' },
+        { name: 'LORATADINA', dosis: '5 mg / 5 ml', category: 'JARABES' },
+        { name: 'CETIRIZINA', dosis: '10 mg', category: 'COMPRIMIDOS' },
+        { name: 'PREDNISONA', dosis: '20 mg', category: 'COMPRIMIDOS' },
+        { name: 'PREDNISONA', dosis: '5 mg', category: 'COMPRIMIDOS' },
+        { name: 'PREDNISONA', dosis: '20 mg / 5 ml', category: 'JARABES' },
+        { name: 'BETAMETASONA', dosis: '4 mg / ml', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'BETAMETASONA', dosis: '0.05% (Crema)', category: 'CREMAS' },
+        { name: 'DEXAMETASONA', dosis: '4 mg / ml', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'HIDROCORTISONA', dosis: '100 mg (Polvo Liofilizado)', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'SALBUTAMOL', dosis: '100 mcg / dosis', category: 'INHALADORES' },
+        { name: 'BUDESONIDA', dosis: '200 mcg / dosis', category: 'INHALADORES' },
+        { name: 'BROMURO DE IPRATROPIO', dosis: '20 mcg / dosis', category: 'INHALADORES' },
+        { name: 'FLUTICASONA', dosis: '125 mcg / dosis', category: 'INHALADORES' },
+        { name: 'OMEPRAZOL', dosis: '20 mg', category: 'COMPRIMIDOS' },
+        { name: 'OMEPRAZOL', dosis: '40 mg', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'FAMOTIDINA', dosis: '20 mg', category: 'COMPRIMIDOS' },
+        { name: 'VIADIL (PARGEVERINA)', dosis: '10 mg', category: 'COMPRIMIDOS' },
+        { name: 'VIADIL (PARGEVERINA)', dosis: '5 mg / ml', category: 'GOTAS' },
+        { name: 'VIADIL COMPUESTO', dosis: 'Comprimidos', category: 'COMPRIMIDOS' },
+        { name: 'VIADIL COMPUESTO', dosis: 'Gotas 15 ml', category: 'GOTAS' },
+        { name: 'VIADIL COMPUESTO', dosis: 'Ampolla 2 ml', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'KETOROLACO', dosis: '10 mg', category: 'COMPRIMIDOS' },
+        { name: 'KETOROLACO', dosis: '30 mg / ml', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'METAMIZOL', dosis: '1 g / 2 ml', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'METAMIZOL', dosis: '300 mg', category: 'COMPRIMIDOS' },
+        { name: 'DICLOFENACO', dosis: '50 mg', category: 'COMPRIMIDOS' },
+        { name: 'DICLOFENACO', dosis: '75 mg / 3 ml', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'TRAMADOL', dosis: '50 mg', category: 'COMPRIMIDOS' },
+        { name: 'TRAMADOL', dosis: '100 mg / 2 ml', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'CLONIXINATO DE LISINA', dosis: '125 mg', category: 'COMPRIMIDOS' },
+        { name: 'CLONIXINATO DE LISINA', dosis: '100 mg / 2 ml', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'ONDANSETRON', dosis: '4 mg', category: 'COMPRIMIDOS' },
+        { name: 'ONDANSETRON', dosis: '8 mg / 4 ml', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'DOMPERIDONA', dosis: '10 mg', category: 'COMPRIMIDOS' },
+        { name: 'DOMPERIDONA', dosis: '10 mg / ml', category: 'GOTAS' },
+        { name: 'CAPTOPRIL', dosis: '25 mg', category: 'COMPRIMIDOS' },
+        { name: 'ENALAPRIL', dosis: '10 mg', category: 'COMPRIMIDOS' },
+        { name: 'ENALAPRIL', dosis: '20 mg', category: 'COMPRIMIDOS' },
+        { name: 'LOSARTAN', dosis: '50 mg', category: 'COMPRIMIDOS' },
+        { name: 'AMLODIPINO', dosis: '5 mg', category: 'COMPRIMIDOS' },
+        { name: 'AMLODIPINO', dosis: '10 mg', category: 'COMPRIMIDOS' },
+        { name: 'ATENOLOL', dosis: '50 mg', category: 'COMPRIMIDOS' },
+        { name: 'CARVEDILOL', dosis: '6.25 mg', category: 'COMPRIMIDOS' },
+        { name: 'CARVEDILOL', dosis: '12.5 mg', category: 'COMPRIMIDOS' },
+        { name: 'CARVEDILOL', dosis: '25 mg', category: 'COMPRIMIDOS' },
+        { name: 'FUROSEMIDA', dosis: '40 mg', category: 'COMPRIMIDOS' },
+        { name: 'FUROSEMIDA', dosis: '20 mg / 2 ml', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'HIDROCLOROTIAZIDA', dosis: '50 mg', category: 'COMPRIMIDOS' },
+        { name: 'METFORMINA', dosis: '850 mg', category: 'COMPRIMIDOS' },
+        { name: 'GLIBENCLAMIDA', dosis: '5 mg', category: 'COMPRIMIDOS' },
+        { name: 'ATORVASTATINA', dosis: '20 mg', category: 'COMPRIMIDOS' },
+        { name: 'LEVOTIROXINA', dosis: '100 mcg', category: 'COMPRIMIDOS' },
+        { name: 'LEVOTIROXINA', dosis: '50 mcg', category: 'COMPRIMIDOS' },
+        { name: 'SALES DE REHIDRATACION ORAL 90', dosis: 'Sobre', category: 'SALES REHIDRATACIONES' },
+        { name: 'SALES DE REHIDRATACION ORAL 75', dosis: 'Sobre', category: 'SALES REHIDRATACIONES' },
+        { name: 'SALES DE REHIDRATACION ORAL 60', dosis: 'Sobre', category: 'SALES REHIDRATACIONES' },
+        { name: 'SUERO FISIOLOGICO 0.9%', dosis: '500 ml', category: 'SOLUCIONES Y SUEROS' },
+        { name: 'SUERO FISIOLOGICO 0.9%', dosis: '1000 ml', category: 'SOLUCIONES Y SUEROS' },
+        { name: 'SUERO FISIOLOGICO 0.9%', dosis: '250 ml', category: 'SOLUCIONES Y SUEROS' },
+        { name: 'SUERO FISIOLOGICO 0.9%', dosis: '100 ml', category: 'SOLUCIONES Y SUEROS' },
+        { name: 'SUERO FISIOLOGICO 0.9%', dosis: '20 ml', category: 'SOLUCIONES Y SUEROS' },
+        { name: 'SUERO GLUCOSADO 5%', dosis: '500 ml', category: 'SOLUCIONES Y SUEROS' },
+        { name: 'SUERO GLUCOSADO 5%', dosis: '1000 ml', category: 'SOLUCIONES Y SUEROS' },
+        { name: 'SUERO GLUCOSADO 10%', dosis: '500 ml', category: 'SOLUCIONES Y SUEROS' },
+        { name: 'SUERO GLUCOSADO 30%', dosis: '20 ml', category: 'SOLUCIONES Y SUEROS' },
+        { name: 'SUERO RINGER LACTATO', dosis: '500 ml', category: 'SOLUCIONES Y SUEROS' },
+        { name: 'SUERO RINGER LACTATO', dosis: '1000 ml', category: 'SOLUCIONES Y SUEROS' },
+        { name: 'CLORURO DE POTASIO 10%', dosis: '10 ml', category: 'SOLUCIONES Y SUEROS' },
+        { name: 'SULFATO DE MAGNESIO 25%', dosis: '5 ml', category: 'SOLUCIONES Y SUEROS' },
+        { name: 'AGUA BIDESTILADA', dosis: '5 ml', category: 'SOLUCIONES Y SUEROS' },
+        { name: 'AGUA BIDESTILADA', dosis: '10 ml', category: 'SOLUCIONES Y SUEROS' },
+        { name: 'CLOTRIMAZOL 1%', dosis: 'Tubo 20 g', category: 'CREMAS' },
+        { name: 'MUPIROCINA 2%', dosis: 'Tubo 15 g', category: 'CREMAS' },
+        { name: 'SULFADIAZINA DE PLATA 1%', dosis: 'Pote 400 g', category: 'CREMAS' },
+        { name: 'SULFADIAZINA DE PLATA 1%', dosis: 'Tubo 50 g', category: 'CREMAS' },
+        { name: 'CLORANFENICOL OFTALMICO', dosis: 'Colirio 10 ml', category: 'GOTAS' },
+        { name: 'CLORANFENICOL OFTALMICO', dosis: 'Ungüento 5 g', category: 'CREMAS' },
+        { name: 'OSELTAMIVIR', dosis: '75 mg', category: 'COMPRIMIDOS' },
+        { name: 'OSELTAMIVIR', dosis: '12 mg / ml', category: 'JARABES' },
+        { name: 'CEFTRIAXONA', dosis: '1 g', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'AMPICILINA', dosis: '1 g', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'PENICILINA BENZATINA', dosis: '1.200.000 UI', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'PENICILINA SODICA', dosis: '1.000.000 UI', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'DIAZEPAM', dosis: '10 mg / 2 ml', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'DIAZEPAM', dosis: '10 mg', category: 'COMPRIMIDOS' },
+        { name: 'LORAZEPAM', dosis: '2 mg', category: 'COMPRIMIDOS' },
+        { name: 'HALOPERIDOL', dosis: '5 mg / ml', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'HALOPERIDOL', dosis: '2 mg / ml (Gotas)', category: 'GOTAS' },
+        { name: 'CLORPROMAZINA', dosis: '25 mg / 2 ml', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'MIDAZOLAM', dosis: '5 mg / ml', category: 'INYECTABLES Y AMPOLLAS' },
+        { name: 'MIDAZOLAM', dosis: '15 mg / 3 ml', category: 'INYECTABLES Y AMPOLLAS' }
+    ];
+
+    const STANDARD_DOSIS_UNIDADES = [
+        '500 mg', '850 mg', '1000 mg', '1 g', '250 mg', '125 mg', '100 mg', '50 mg', '25 mg', '20 mg', '10 mg', '5 mg', '4 mg', '2.5 mg', '2 mg', '1 mg', '0.5 mg',
+        '200 mg / 5 ml', '250 mg / 5 ml', '500 mg / 5 ml', '120 mg / 5 ml', '100 mg / 5 ml', '5 mg / 5 ml', '2 mg / 5 ml', '20 mg / 5 ml', '400 mg / 57 mg', '250 mg / 62.5 mg', '12 mg / ml', '10 mg / ml', '5 mg / ml', '2 mg / ml',
+        '100 mcg / dosis', '200 mcg / dosis', '250 mcg / dosis', '50 mcg / dosis', '125 mcg / dosis', '20 mcg / dosis',
+        '0.9% 500 ml', '0.9% 1000 ml', '0.9% 250 ml', '0.9% 100 ml', '0.9% 20 ml', '5% 500 ml', '5% 1000 ml', '5% 250 ml', '10% 500 ml', '30% 20 ml',
+        '4 mg / 2 ml', '8 mg / 4 ml', '10 mg / 2 ml', '20 mg / 2 ml', '50 mg / 2 ml', '75 mg / 3 ml', '100 mg / 2 ml', '600 mg / 4 ml', '1 g / 2 ml', '1 g / 4 ml', '1 g / 10 ml',
+        '1.200.000 UI', '1.000.000 UI', '500.000 UI', '100 UI / ml', '1000 UI / ml', '5000 UI / ml',
+        '15 ml', '20 ml', '30 ml', '60 ml', '100 ml', '120 ml', '250 ml', '500 ml', '1000 ml',
+        'Tubo 15 g', 'Tubo 20 g', 'Tubo 30 g', 'Tubo 50 g', 'Pote 400 g', 'Sobre', 'Comprimido', 'Frasco', 'Ampolla', 'Gotero', 'Inhalador', 'Sachet', 'Supositorio', 'Parche', 'Unidad'
+    ];
+
+    /**
+     * Obtiene el listado completo y único de fármacos conocidos (Catálogo + Sesión + Diccionario)
+     */
+    function getCombinedDrugsList() {
+        const map = new Map();
+
+        // 1. Catálogo de Firestore
+        tomaCatalogCache.forEach(it => {
+            const ext = extraerDosisDeNombre(it.name);
+            const baseName = (ext.nombre || it.name).toUpperCase().trim();
+            if (baseName && !map.has(baseName)) {
+                map.set(baseName, {
+                    name: baseName,
+                    dosis: ext.dosis || it.dosis || '',
+                    category: it.category || 'General',
+                    code: it.code || '',
+                    stock: it.quantity || 0,
+                    location: it.location || 'Bodega Central'
+                });
+            }
+        });
+
+        // 2. Items de la sesión actual
+        getSessionItems().forEach(it => {
+            const ext = extraerDosisDeNombre(it.name);
+            const baseName = (ext.nombre || it.name).toUpperCase().trim();
+            if (baseName && !map.has(baseName)) {
+                map.set(baseName, {
+                    name: baseName,
+                    dosis: ext.dosis || it.dosis || '',
+                    category: it.category || 'General',
+                    code: it.code || '',
+                    stock: it.quantity || 0,
+                    location: it.location || 'Bodega Central'
+                });
+            }
+        });
+
+        // 3. Diccionario Clínico Estándar
+        STANDARD_CLINICAL_DRUGS.forEach(it => {
+            const baseName = it.name.toUpperCase().trim();
+            if (baseName && !map.has(baseName)) {
+                map.set(baseName, {
+                    name: baseName,
+                    dosis: it.dosis || '',
+                    category: it.category || 'General',
+                    code: '',
+                    stock: null,
+                    location: ''
+                });
+            }
+        });
+
+        return Array.from(map.values());
+    }
+
+    /**
+     * Obtiene el listado completo y único de dosis y unidades de medida
+     */
+    function getCombinedDosesList() {
+        const dosesSet = new Set(STANDARD_DOSIS_UNIDADES);
+        
+        tomaCatalogCache.forEach(it => {
+            const ext = extraerDosisDeNombre(it.name);
+            if (ext.dosis) dosesSet.add(ext.dosis);
+        });
+
+        getSessionItems().forEach(it => {
+            const ext = extraerDosisDeNombre(it.name);
+            if (ext.dosis) dosesSet.add(ext.dosis);
+            if (it.dosis) dosesSet.add(it.dosis);
+        });
+
+        return Array.from(dosesSet);
+    }
+
+    /**
+     * Configura el componente de autocompletado flotante interactivo para cualquier input
+     */
+    function attachSmartAutocomplete(inputElem, getItemsFn, renderItemFn, onSelectFn) {
+        if (!inputElem) return;
+
+        // Asegurar contenedor wrapper
+        let parent = inputElem.parentElement;
+        if (!parent.classList.contains('smart-autocomplete-wrapper')) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'smart-autocomplete-wrapper';
+            parent.insertBefore(wrapper, inputElem);
+            wrapper.appendChild(inputElem);
+            parent = wrapper;
+        }
+
+        // Crear elemento dropdown
+        let dropdown = parent.querySelector('.smart-autocomplete-dropdown');
+        if (!dropdown) {
+            dropdown = document.createElement('div');
+            dropdown.className = 'smart-autocomplete-dropdown';
+            parent.appendChild(dropdown);
+        }
+
+        let activeIndex = -1;
+        let currentMatches = [];
+
+        function updateDropdown(query) {
+            const q = (query || '').toLowerCase().trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            const allItems = getItemsFn();
+
+            if (!q) {
+                currentMatches = allItems.slice(0, 10);
+            } else {
+                currentMatches = allItems.filter(item => {
+                    const str = (typeof item === 'string' ? item : (item.name || item.title || '')).toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                    return str.includes(q);
+                }).slice(0, 12);
+            }
+
+            if (currentMatches.length === 0) {
+                dropdown.style.display = 'none';
+                return;
+            }
+
+            dropdown.innerHTML = currentMatches.map((item, idx) => {
+                return renderItemFn(item, idx, q);
+            }).join('');
+
+            dropdown.querySelectorAll('.smart-autocomplete-item').forEach((itemEl, idx) => {
+                itemEl.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    onSelectFn(currentMatches[idx]);
+                    dropdown.style.display = 'none';
+                });
+            });
+
+            activeIndex = -1;
+            dropdown.style.display = 'block';
+        }
+
+        inputElem.addEventListener('input', () => {
+            updateDropdown(inputElem.value);
+        });
+
+        inputElem.addEventListener('focus', () => {
+            if (inputElem.value.trim().length >= 1) {
+                updateDropdown(inputElem.value);
+            }
+        });
+
+        inputElem.addEventListener('blur', () => {
+            setTimeout(() => {
+                dropdown.style.display = 'none';
+            }, 220);
+        });
+
+        inputElem.addEventListener('keydown', (e) => {
+            if (dropdown.style.display !== 'block') return;
+            const items = dropdown.querySelectorAll('.smart-autocomplete-item');
+            if (items.length === 0) return;
+
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                activeIndex = (activeIndex + 1) % items.length;
+                items.forEach((it, i) => it.classList.toggle('active-item', i === activeIndex));
+                items[activeIndex].scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                activeIndex = (activeIndex - 1 + items.length) % items.length;
+                items.forEach((it, i) => it.classList.toggle('active-item', i === activeIndex));
+                items[activeIndex].scrollIntoView({ block: 'nearest' });
+            } else if (e.key === 'Enter' || e.key === 'Tab') {
+                if (activeIndex >= 0 && activeIndex < currentMatches.length) {
+                    e.preventDefault();
+                    onSelectFn(currentMatches[activeIndex]);
+                    dropdown.style.display = 'none';
+                }
+            } else if (e.key === 'Escape') {
+                dropdown.style.display = 'none';
+            }
+        });
+    }
+
     // Cargar catálogo de Insumos desde Firestore para autocompletado inteligente
     async function loadInsumosCatalog() {
         try {
@@ -10298,8 +10617,11 @@ function doGet(e) {
             );
             const snap = await window.firebaseFirestore.getDocs(q);
             tomaCatalogCache = [];
-            const datalist = document.getElementById('toma-datalist-insumos');
-            if (datalist) datalist.innerHTML = '';
+            const datalistInsumos = document.getElementById('toma-datalist-insumos');
+            const datalistDosis = document.getElementById('toma-datalist-dosis');
+            
+            if (datalistInsumos) datalistInsumos.innerHTML = '';
+            if (datalistDosis) datalistDosis.innerHTML = '';
 
             snap.forEach(doc => {
                 const data = doc.data();
@@ -10316,14 +10638,26 @@ function doGet(e) {
                     expirationDate: data.expirationDate || ''
                 };
                 tomaCatalogCache.push(item);
-
-                if (datalist && item.name) {
-                    const opt = document.createElement('option');
-                    opt.value = item.name;
-                    opt.textContent = `[${item.category}] Stock actual: ${item.quantity} un. (${item.location})`;
-                    datalist.appendChild(opt);
-                }
             });
+
+            // Poblar datalists nativos de respaldo
+            if (datalistInsumos) {
+                getCombinedDrugsList().forEach(drug => {
+                    const opt = document.createElement('option');
+                    opt.value = drug.name;
+                    opt.textContent = `[${drug.category}] ${drug.dosis ? 'Dosis: ' + drug.dosis : ''}`;
+                    datalistInsumos.appendChild(opt);
+                });
+            }
+
+            if (datalistDosis) {
+                getCombinedDosesList().forEach(dose => {
+                    const opt = document.createElement('option');
+                    opt.value = dose;
+                    datalistDosis.appendChild(opt);
+                });
+            }
+
             console.log(`[TomaInventario] Catálogo cargado: ${tomaCatalogCache.length} insumos.`);
         } catch (e) {
             console.warn("[TomaInventario] Error cargando catálogo de insumos:", e);
@@ -10883,10 +11217,111 @@ function doGet(e) {
 
                 updateLiveAccumulatedCalc();
             });
+
+            // Conectar Autocompletado Inteligente en Fármacos
+            attachSmartAutocomplete(
+                inputMed,
+                getCombinedDrugsList,
+                (item, idx) => `
+                    <div class="smart-autocomplete-item" data-index="${idx}">
+                        <div>
+                            <div class="item-title">${window.escapeHTML(item.name)}</div>
+                            <div class="item-meta">
+                                <span class="item-badge">${window.escapeHTML(item.category)}</span>
+                                ${item.dosis ? `<span><i class="ph ph-scales"></i> ${window.escapeHTML(item.dosis)}</span>` : ''}
+                                ${item.stock !== null ? `<span><i class="ph ph-stack"></i> Stock: ${item.stock} un.</span>` : ''}
+                            </div>
+                        </div>
+                        <i class="ph ph-arrow-down-left" style="color:var(--text-muted); font-size:14px;"></i>
+                    </div>
+                `,
+                (item) => {
+                    inputMed.value = item.name;
+                    if (inputDosis && item.dosis && !inputDosis.value) {
+                        inputDosis.value = item.dosis;
+                    }
+                    if (item.category && selectCat) {
+                        selectCat.value = item.category;
+                    }
+                    if (item.code && inputCod && !inputCod.value) {
+                        inputCod.value = item.code;
+                    }
+                    inputMed.dispatchEvent(new Event('input'));
+                    if (inputDosis && !inputDosis.value) {
+                        inputDosis.focus();
+                    } else if (inputCant) {
+                        inputCant.focus();
+                        inputCant.select();
+                    }
+                }
+            );
         }
 
         if (inputDosis) {
             inputDosis.addEventListener('input', updateLiveAccumulatedCalc);
+
+            // Conectar Autocompletado Inteligente en Dosis y Unidades de Medida
+            attachSmartAutocomplete(
+                inputDosis,
+                getCombinedDosesList,
+                (dose, idx) => `
+                    <div class="smart-autocomplete-item" data-index="${idx}">
+                        <div class="item-title">${window.escapeHTML(dose)}</div>
+                        <i class="ph ph-check" style="color:var(--text-muted); font-size:12px;"></i>
+                    </div>
+                `,
+                (dose) => {
+                    inputDosis.value = dose;
+                    inputDosis.dispatchEvent(new Event('input'));
+                    if (inputCant) {
+                        inputCant.focus();
+                        inputCant.select();
+                    }
+                }
+            );
+        }
+
+        // Conectar Autocompletado en Modal de Edición
+        const editMedInput = document.getElementById('edit-toma-med');
+        const editDosisInput = document.getElementById('edit-toma-dosis');
+        const editCatSelect = document.getElementById('edit-toma-cat');
+
+        if (editMedInput) {
+            attachSmartAutocomplete(
+                editMedInput,
+                getCombinedDrugsList,
+                (item, idx) => `
+                    <div class="smart-autocomplete-item" data-index="${idx}">
+                        <div>
+                            <div class="item-title">${window.escapeHTML(item.name)}</div>
+                            <div class="item-meta">
+                                <span class="item-badge">${window.escapeHTML(item.category)}</span>
+                                ${item.dosis ? `<span>${window.escapeHTML(item.dosis)}</span>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `,
+                (item) => {
+                    editMedInput.value = item.name;
+                    if (editDosisInput && item.dosis && !editDosisInput.value) editDosisInput.value = item.dosis;
+                    if (editCatSelect && item.category) editCatSelect.value = item.category;
+                }
+            );
+        }
+
+        if (editDosisInput) {
+            attachSmartAutocomplete(
+                editDosisInput,
+                getCombinedDosesList,
+                (dose, idx) => `
+                    <div class="smart-autocomplete-item" data-index="${idx}">
+                        <div class="item-title">${window.escapeHTML(dose)}</div>
+                    </div>
+                `,
+                (dose) => {
+                    editDosisInput.value = dose;
+                }
+            );
         }
 
         if (inputCant) {

@@ -1301,4 +1301,75 @@ gemini-analysis {
     gap: 4px;
 }
 
+/* SMART AUTOCOMPLETE DROPDOWN */
+.smart-autocomplete-wrapper {
+    position: relative;
+    width: 100%;
+}
+
+.smart-autocomplete-dropdown {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+    max-height: 260px;
+    overflow-y: auto;
+    z-index: 10000;
+    display: none;
+    animation: fadeIn 0.15s ease;
+}
+
+.smart-autocomplete-item {
+    padding: 9px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 12.5px;
+    transition: background 0.12s ease;
+}
+
+.smart-autocomplete-item:last-child {
+    border-bottom: none;
+}
+
+.smart-autocomplete-item:hover,
+.smart-autocomplete-item.active-item {
+    background: #f0f9ff;
+    color: #0284c7;
+}
+
+.smart-autocomplete-item .item-title {
+    font-weight: 700;
+    color: var(--text-main);
+}
+
+.smart-autocomplete-item:hover .item-title,
+.smart-autocomplete-item.active-item .item-title {
+    color: #0284c7;
+}
+
+.smart-autocomplete-item .item-meta {
+    font-size: 11px;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.smart-autocomplete-item .item-badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #f1f5f9;
+    color: #475569;
+}
+
+
 

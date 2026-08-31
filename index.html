@@ -3,7 +3,7 @@
 
 <head>
     <script>
-        const APP_VERSION = '16.3';
+        const APP_VERSION = '17.0';
         if (localStorage.getItem('APP_VERSION') !== APP_VERSION) {
             localStorage.setItem('APP_VERSION', APP_VERSION);
             if ('serviceWorker' in navigator) {
@@ -129,6 +129,9 @@
                     </a>
                     <a href="#" class="menu-item normal" data-target="view-toma-inventario" data-title="Toma de Inventario">
                         <i class="ph ph-clipboard-text"></i><span class="menu-label">Toma de Inventario</span>
+                    </a>
+                    <a href="#" class="menu-item normal" data-target="view-inventario-semanal" data-title="Inventario Semanal">
+                        <i class="ph ph-calendar-check"></i><span class="menu-label">Inventario Semanal</span>
                     </a>
                     <a href="#" class="menu-item normal" data-target="view-movimientos" data-title="Ingresos">
                         <i class="ph ph-arrows-left-right"></i><span class="menu-label">Ingresos</span>
@@ -865,6 +868,261 @@
                                         </button>
                                     </div>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VIEW: Inventario Semanal por Racks y Control de Semanas -->
+            <section id="view-inventario-semanal" class="view-section" style="display:none;">
+                <div class="dashboard-container">
+                    <!-- Cabecera Principal -->
+                    <div class="page-header mb-16">
+                        <div class="page-title">
+                            <h1><i class="ph ph-calendar-check" style="color:var(--primary); margin-right:8px;"></i>Inventario Semanal por Racks</h1>
+                            <p>Auditoría cíclica organizada por estanterías físicas, con control de semanas auto-detectadas y sincronización independiente en Google Sheets.</p>
+                        </div>
+                        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                            <div id="semanal-sheets-badge" class="badge-sheets-status status-offline" title="Estado del conector Google Sheets para Inventario Semanal">
+                                <span class="status-indicator-dot"></span>
+                                <span id="semanal-sheets-status-text">Sheets Semanal: No configurado</span>
+                            </div>
+                            <button type="button" class="btn btn-outline" id="btn-pull-from-sheets-semanal" style="border-color:#8b5cf6; color:#7c3aed; font-weight:600;" title="Sincronizar cambios editados en el Google Sheets Semanal">
+                                <i class="ph ph-arrows-clockwise"></i> Sincronizar desde Sheets
+                            </button>
+                            <button type="button" class="btn btn-outline" id="btn-open-config-sheets-semanal" style="border-color:var(--primary); color:var(--primary); font-weight:600;" title="Configurar archivo exclusivo de Google Sheets para Inventario Semanal">
+                                <i class="ph ph-google-logo"></i> Configurar Sheets Semanal
+                            </button>
+                            <button type="button" class="btn btn-outline" id="btn-export-semanal-excel" style="border-color:var(--success); color:var(--success); font-weight:600;" title="Descargar planilla Excel de la semana activa">
+                                <i class="ph ph-file-arrow-down"></i> Exportar Resguardo
+                            </button>
+                            <button type="button" class="btn btn-primary" id="btn-cerrar-semana-actual" style="font-weight:700; background:linear-gradient(135deg, #0284c7, #0369a1); border:none; box-shadow:0 4px 12px rgba(2,132,199,0.3);">
+                                <i class="ph-bold ph-lock-key"></i> <span id="btn-cerrar-semana-text">Cerrar Inventario Semanal</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Barra de Navegación y Auto-Detección de Semanas (Mes / Año / Semana 1 a 5) -->
+                    <div class="card mb-20" style="padding:16px 20px; background:linear-gradient(135deg, #0f172a, #1e293b); color:white; border-radius:14px;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">
+                            <!-- Selector Mes y Año -->
+                            <div style="display:flex; align-items:center; gap:12px;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <i class="ph-fill ph-calendar" style="font-size:22px; color:#38bdf8;"></i>
+                                    <div>
+                                        <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:#94a3b8; font-weight:700;">PERIODO DE AUDITORÍA</div>
+                                        <div style="display:flex; gap:8px; align-items:center; margin-top:2px;">
+                                            <select id="semanal-select-mes" style="background:#334155; color:white; border:1px solid #475569; border-radius:6px; padding:4px 10px; font-weight:700; font-size:13px;">
+                                                <option value="0">Enero</option>
+                                                <option value="1">Febrero</option>
+                                                <option value="2">Marzo</option>
+                                                <option value="3">Abril</option>
+                                                <option value="4">Mayo</option>
+                                                <option value="5">Junio</option>
+                                                <option value="6">Julio</option>
+                                                <option value="7">Agosto</option>
+                                                <option value="8">Septiembre</option>
+                                                <option value="9">Octubre</option>
+                                                <option value="10">Noviembre</option>
+                                                <option value="11">Diciembre</option>
+                                            </select>
+                                            <select id="semanal-select-ano" style="background:#334155; color:white; border:1px solid #475569; border-radius:6px; padding:4px 10px; font-weight:700; font-size:13px;">
+                                                <option value="2025">2025</option>
+                                                <option value="2026" selected>2026</option>
+                                                <option value="2027">2027</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Selector de Semanas del Mes (Píldoras 1 a 5) -->
+                            <div style="display:flex; flex-direction:column; gap:4px; flex:1; max-width:620px;">
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <span style="font-size:11px; color:#cbd5e1; font-weight:600;" id="semanal-auto-date-badge">
+                                        <i class="ph-bold ph-magic-wand" style="color:#38bdf8;"></i> Fecha detectada: Hoy
+                                    </span>
+                                    <span id="semanal-estado-ciclo-tag" style="font-size:10px; padding:2px 8px; border-radius:20px; font-weight:800; background:#0284c7; color:white;">
+                                        BORRADOR EN CURSO
+                                    </span>
+                                </div>
+                                <div id="semanal-pills-container" style="display:flex; gap:8px; flex-wrap:wrap;">
+                                    <!-- Generadas dinámicamente por JS (Semana 1, Semana 2, Semana 3, Semana 4, Semana 5) -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Pestañas del Módulo Semanal -->
+                    <div style="display:flex; gap:12px; margin-bottom:20px; border-bottom:2px solid #e2e8f0; padding-bottom:10px; flex-wrap:wrap;">
+                        <button type="button" id="tab-btn-conteo-semanal" class="btn btn-primary" style="font-weight:700; padding:8px 20px; font-size:13.5px;">
+                            <i class="ph ph-clipboard-text"></i> 1. Planilla de Conteo por Racks
+                        </button>
+                        <button type="button" id="tab-btn-racks-semanal" class="btn btn-outline" style="border-color:#64748b; color:#475569; font-weight:700; padding:8px 20px; font-size:13.5px;">
+                            <i class="ph ph-squares-four"></i> 2. Gestor de Racks y Grupos
+                        </button>
+                        <button type="button" id="tab-btn-historial-semanal" class="btn btn-outline" style="border-color:#64748b; color:#475569; font-weight:700; padding:8px 20px; font-size:13.5px;">
+                            <i class="ph ph-clock-counter-clockwise"></i> 3. Historial de Semanas y Ajustes
+                        </button>
+                    </div>
+
+                    <!-- ======================================================== -->
+                    <!-- VISTA 1: PLANILLA DE CONTEO POR RACKS                    -->
+                    <!-- ======================================================== -->
+                    <div id="semanal-view-conteo">
+                        <!-- Tarjetas de Métricas de la Semana -->
+                        <div class="cards-grid mb-20" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));">
+                            <div class="card" style="padding:14px 18px;">
+                                <div class="card-header" style="margin-bottom:6px;">
+                                    <div class="card-icon blue" style="width:34px; height:34px; font-size:16px;"><i class="ph ph-squares-four"></i></div>
+                                    <span class="card-badge blue">RACKS ACTIVOS</span>
+                                </div>
+                                <div class="card-title" style="font-size:10.5px;">GRUPOS FÍSICOS</div>
+                                <div class="card-value" id="semanal-metric-racks" style="font-size:24px;">0</div>
+                            </div>
+                            <div class="card" style="padding:14px 18px;">
+                                <div class="card-header" style="margin-bottom:6px;">
+                                    <div class="card-icon purple" style="width:34px; height:34px; font-size:16px; background:rgba(139,92,246,0.1); color:#8b5cf6;"><i class="ph ph-pill"></i></div>
+                                    <span class="card-badge purple">CATÁLOGO</span>
+                                </div>
+                                <div class="card-title" style="font-size:10.5px;">MEDICAMENTOS EN RACKS</div>
+                                <div class="card-value" id="semanal-metric-total-meds" style="font-size:24px; color:#8b5cf6;">0</div>
+                            </div>
+                            <div class="card" style="padding:14px 18px;">
+                                <div class="card-header" style="margin-bottom:6px;">
+                                    <div class="card-icon green" style="width:34px; height:34px; font-size:16px;"><i class="ph ph-check-circle"></i></div>
+                                    <span class="card-badge green">PROGRESO</span>
+                                </div>
+                                <div class="card-title" style="font-size:10.5px;">FÁRMACOS CONTADOS</div>
+                                <div class="card-value" id="semanal-metric-counted" style="font-size:24px; color:#10b981;">0 / 0</div>
+                            </div>
+                            <div class="card" style="padding:14px 18px;">
+                                <div class="card-header" style="margin-bottom:6px;">
+                                    <div class="card-icon orange" style="width:34px; height:34px; font-size:16px;"><i class="ph ph-scales"></i></div>
+                                    <span class="card-badge orange">VARIACIONES</span>
+                                </div>
+                                <div class="card-title" style="font-size:10.5px;">DIFERENCIAS DETECTADAS</div>
+                                <div class="card-value" id="semanal-metric-diffs" style="font-size:24px;">0 un.</div>
+                            </div>
+                        </div>
+
+                        <!-- Barra de Selección Rápida de Rack / Estante -->
+                        <div class="card mb-16" style="padding:12px 18px; background:#f8fafc; border:1px solid #e2e8f0;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                                <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                    <span style="font-size:12px; font-weight:800; color:var(--text-main); text-transform:uppercase; margin-right:4px;">
+                                        <i class="ph ph-funnel" style="color:var(--primary);"></i> Filtrar por Rack:
+                                    </span>
+                                    <div id="semanal-rack-chips" style="display:flex; gap:6px; flex-wrap:wrap;">
+                                        <!-- Chips de Racks generados por JS -->
+                                    </div>
+                                </div>
+                                <div style="display:flex; gap:8px; align-items:center;">
+                                    <button type="button" class="btn btn-outline" id="btn-nuevo-rack-inline" style="font-size:11.5px; padding:5px 12px; font-weight:700; color:var(--primary); border-color:var(--primary);">
+                                        <i class="ph-bold ph-plus"></i> Crear Nuevo Rack
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Barra de Escaneo Rápido y Búsqueda en la Planilla Semanal -->
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:12px; flex-wrap:wrap;">
+                            <div class="search-input-wrapper" style="max-width:320px; margin:0;">
+                                <i class="ph ph-magnifying-glass"></i>
+                                <input type="text" id="semanal-table-search" class="form-control" placeholder="Buscar medicamento o código en la semana...">
+                            </div>
+                            <div style="display:flex; gap:10px; align-items:center;">
+                                <button type="button" class="btn btn-outline" id="btn-autocompletar-teorico" style="font-size:12px; font-weight:600; color:#475569;" title="Rellenar conteo de todos los no contados con su stock teórico">
+                                    <i class="ph ph-sparkle"></i> Igualar al Stock Teórico
+                                </button>
+                                <button type="button" class="btn btn-primary" id="btn-guardar-borrador-semanal" style="font-size:12.5px; font-weight:700; padding:8px 18px;">
+                                    <i class="ph-bold ph-floppy-disk"></i> Guardar y Sincronizar en Vivo
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Tabla de Conteo Físico Semanal -->
+                        <div class="data-table-card">
+                            <div class="table-wrapper" style="max-height: 600px; overflow-y:auto;">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th style="min-width:200px;">MEDICAMENTO / CONCENTRACIÓN</th>
+                                            <th>CÓDIGO</th>
+                                            <th>RACK / GRUPO</th>
+                                            <th style="text-align:center;">STOCK SISTEMA</th>
+                                            <th style="min-width:180px; text-align:center; background:rgba(14,165,233,0.08);">CONTEO FÍSICO SEMANAL</th>
+                                            <th style="text-align:center;">VARIACIÓN</th>
+                                            <th>LOTE</th>
+                                            <th>VENCIMIENTO</th>
+                                            <th>ESTADO</th>
+                                            <th style="text-align:center;">ACCIONES</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="semanal-table-body">
+                                        <!-- Poblado dinámicamente por JS -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            <div class="table-footer" style="display:flex; justify-content:space-between; align-items:center; padding:12px 20px;">
+                                <span style="font-size:12px; color:var(--text-muted);" id="semanal-table-summary">Cargando inventario semanal...</span>
+                                <div style="display:flex; gap:10px; align-items:center;">
+                                    <span style="font-size:11.5px; color:#64748b;">
+                                        <i class="ph-bold ph-shield-check" style="color:#10b981;"></i> Respaldo automático activo en Firestore y LocalStorage.
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ======================================================== -->
+                    <!-- VISTA 2: GESTOR DE RACKS Y GRUPOS DE MEDICAMENTOS        -->
+                    <!-- ======================================================== -->
+                    <div id="semanal-view-racks" style="display:none;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                            <div>
+                                <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--text-main);">Racks y Estanterías Clínicas</h3>
+                                <p style="margin:0; font-size:12.5px; color:var(--text-muted);">Organice los medicamentos según la ubicación física en bodega o farmacia para facilitar el recorrido semanal.</p>
+                            </div>
+                            <button type="button" class="btn btn-primary" id="btn-crear-rack-principal" style="font-weight:700;">
+                                <i class="ph-bold ph-plus-circle"></i> + Crear Nuevo Rack
+                            </button>
+                        </div>
+                        <div class="cards-grid" id="semanal-racks-grid" style="grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap:16px;">
+                            <!-- Tarjetas de Racks pobladas por JS -->
+                        </div>
+                    </div>
+
+                    <!-- ======================================================== -->
+                    <!-- VISTA 3: HISTORIAL DE SEMANAS Y AUDITORÍAS              -->
+                    <!-- ======================================================== -->
+                    <div id="semanal-view-historial" style="display:none;">
+                        <div class="data-table-card">
+                            <div class="data-table-header" style="padding:16px 20px;">
+                                <div class="table-header-title">
+                                    <i class="ph ph-calendar-blank" style="color:var(--primary); font-size:20px;"></i>
+                                    <span>Registro Histórico de Auditorías Semanales</span>
+                                </div>
+                            </div>
+                            <div class="table-wrapper">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>SEMANA / CICLO</th>
+                                            <th>FECHA CIERRE</th>
+                                            <th>RESPONSABLE</th>
+                                            <th>MEDICAMENTOS AUDITADOS</th>
+                                            <th>UNIDADES FÍSICAS</th>
+                                            <th>VARIACIÓN NETA</th>
+                                            <th>ESTADO</th>
+                                            <th style="text-align:center;">ACCIONES</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="semanal-historial-table-body">
+                                        <!-- Historial poblado por JS -->
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
@@ -3403,13 +3661,193 @@
         </div>
     </div>
 
+    <!-- MODAL CONFIGURACIÓN GOOGLE SHEETS PARA INVENTARIO SEMANAL -->
+    <div id="modal-config-sheets-semanal" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.75); z-index: 999999; justify-content: center; align-items: center; backdrop-filter: blur(4px);">
+        <div class="modal-content" style="background: white; padding: 32px; border-radius: 16px; width: 700px; max-width: 95%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0,0,0,0.25);">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 16px; margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(2, 132, 199, 0.1); color: #0284c7; display: flex; align-items: center; justify-content: center; font-size: 22px;">
+                        <i class="ph ph-calendar-check"></i>
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: var(--text-main);">Conector Google Sheets (Inventario Semanal)</h3>
+                        <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Sincronización de ciclos semanales, pestañas automáticas por semana y racks</p>
+                    </div>
+                </div>
+                <button class="btn btn-icon" onclick="document.getElementById('modal-config-sheets-semanal').style.display='none'"><i class="ph ph-x" style="font-size: 20px;"></i></button>
+            </div>
+
+            <!-- URL del Webhook Semanal -->
+            <div class="form-group mb-20">
+                <label class="form-label" style="font-weight: 700;">URL DEL WEB APP DE GOOGLE APPS SCRIPT (INVENTARIO SEMANAL)</label>
+                <div style="display: flex; gap: 10px;">
+                    <input type="url" id="input-sheets-semanal-url" class="form-control" placeholder="https://script.google.com/macros/s/AKfycb.../exec" style="font-family: monospace; font-size: 13px;">
+                    <button type="button" id="btn-test-sheets-semanal-conn" class="btn btn-outline" style="border-color: #0284c7; color: #0284c7; font-weight: 600; white-space: nowrap;">
+                        <i class="ph ph-plugs"></i> Probar Conexión
+                    </button>
+                </div>
+                <div id="sheets-semanal-test-feedback" style="margin-top: 8px; font-size: 12px; display: none;"></div>
+
+                <div style="margin-top: 12px; display: flex; gap: 10px; flex-wrap: wrap;">
+                    <button type="button" id="btn-push-all-semanal" class="btn btn-outline" style="border-color: #0284c7; color: #0284c7; font-weight: 700; font-size: 12.5px; background: #f0f9ff;" title="Enviar la planilla de la semana actual al archivo de Google Sheets">
+                        <i class="ph-bold ph-cloud-arrow-up"></i> 📤 Enviar Semana Actual a Google Sheets
+                    </button>
+                </div>
+            </div>
+
+            <!-- Paso a Paso e Instrucciones -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; margin-bottom: 20px;">
+                <h4 style="margin: 0 0 12px 0; font-size: 13px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 6px;">
+                    <i class="ph ph-info" style="color: #0284c7;"></i> Configuración del Archivo Google Sheets Semanal:
+                </h4>
+                <ol style="margin: 0; padding-left: 20px; font-size: 12.5px; color: #475569; line-height: 1.6;">
+                    <li>Crea un nuevo archivo en Google Sheets titulado por ejemplo: <strong>SAR - Inventario Semanal y Racks 2026</strong>.</li>
+                    <li>Ve a <code>Extensiones &gt; Apps Script</code>, pega el código de abajo y guarda con <strong>Ctrl + S</strong>.</li>
+                    <li>Haz clic en <strong>Implementar &gt; Nueva implementación</strong>, tipo <em>"Aplicación web"</em>, acceso: <strong>"Cualquier usuario"</strong>, copia la URL y pégala arriba.</li>
+                </ol>
+            </div>
+
+            <!-- Código de Google Apps Script Semanal -->
+            <div class="form-group mb-20">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <label class="form-label" style="margin: 0; font-weight: 700;">CÓDIGO GOOGLE APPS SCRIPT (AUTO-PESTAÑAS POR SEMANA Y RACKS)</label>
+                    <button type="button" id="btn-copy-gas-semanal-code" class="btn btn-outline" style="font-size: 11px; padding: 4px 10px; font-weight: 700; color: #0284c7; border-color: #0284c7;">
+                        <i class="ph ph-copy"></i> Copiar Código
+                    </button>
+                </div>
+                <pre id="code-google-apps-script-semanal" style="background: #0f172a; color: #e2e8f0; padding: 14px; border-radius: 8px; font-size: 11.5px; font-family: monospace; max-height: 200px; overflow-y: auto; line-height: 1.4; border: 1px solid #334155; user-select: all;"></pre>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid #f1f5f9; padding-top: 16px;">
+                <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('modal-config-sheets-semanal').style.display='none'">Cerrar</button>
+                <button type="button" id="btn-save-sheets-semanal-config" class="btn btn-primary" style="font-weight: 700; padding: 10px 24px; background: #0284c7; border-color: #0284c7;">
+                    <i class="ph ph-floppy-disk"></i> Guardar Configuración
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL CREAR / EDITAR RACK O GRUPO DE MEDICAMENTOS -->
+    <div id="modal-crear-rack" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.75); z-index: 999999; justify-content: center; align-items: center; backdrop-filter: blur(4px);">
+        <div class="modal-content" style="background: white; padding: 28px; border-radius: 16px; width: 620px; max-width: 95%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0,0,0,0.25);">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 14px; margin-bottom: 18px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(2, 132, 199, 0.1); color: #0284c7; display: flex; align-items: center; justify-content: center; font-size: 22px;">
+                        <i class="ph ph-squares-four"></i>
+                    </div>
+                    <div>
+                        <h3 id="modal-rack-titulo" style="margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--text-main);">Crear Nuevo Rack / Estantería</h3>
+                        <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Asigne nombre, color y los medicamentos que se auditarán en este grupo</p>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-icon" onclick="document.getElementById('modal-crear-rack').style.display='none'"><i class="ph ph-x" style="font-size: 20px;"></i></button>
+            </div>
+
+            <form id="form-crear-rack">
+                <input type="hidden" id="rack-edit-id">
+
+                <div class="grid-2-col-even mb-12" style="gap: 12px;">
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">NOMBRE DEL RACK / GRUPO <span style="color:var(--danger)">*</span></label>
+                        <input type="text" id="rack-nombre-input" class="form-control font-bold" placeholder="Ej: Rack 1 - Antibióticos / Estante Urgencias" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">COLOR DISTINTIVO</label>
+                        <div style="display:flex; gap:8px; align-items:center;">
+                            <input type="color" id="rack-color-input" value="#0284c7" style="width:45px; height:38px; border:none; border-radius:6px; cursor:pointer; padding:0;">
+                            <input type="text" id="rack-descripcion-input" class="form-control" placeholder="Ubicación (Ej: Pasillo A, Nivel 2)">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Buscador y Selector de Fármacos para el Rack -->
+                <div class="form-group mb-12">
+                    <label class="form-label" style="font-weight: 700; display:flex; justify-content:space-between; align-items:center;">
+                        <span>MEDICAMENTOS ASIGNADOS A ESTE RACK (<span id="rack-selected-count">0</span> seleccionados)</span>
+                        <span style="font-size:11px; color:var(--primary); cursor:pointer;" id="rack-btn-select-all">Seleccionar Todos</span>
+                    </label>
+                    <div class="search-input-wrapper mb-8" style="margin:0 0 8px 0;">
+                        <i class="ph ph-magnifying-glass"></i>
+                        <input type="text" id="rack-buscar-medicamento" class="form-control" placeholder="Buscar medicamento para añadir al rack...">
+                    </div>
+
+                    <div id="rack-medicamentos-checklist" style="max-height: 220px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; background: #f8fafc;">
+                        <!-- Lista de checkboxes poblada por JS -->
+                    </div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #f1f5f9; padding-top: 14px;">
+                    <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('modal-crear-rack').style.display='none'">Cancelar</button>
+                    <button type="submit" class="btn btn-primary font-bold" style="padding: 9px 22px; background: #0284c7; border-color: #0284c7;">
+                        <i class="ph ph-check-circle"></i> Guardar Rack
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL AJUSTE POSTERIOR / CORRECCIÓN EN SEMANA CERRADA O ACTIVA -->
+    <div id="modal-ajuste-semanal-item" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.75); z-index: 999999; justify-content: center; align-items: center; backdrop-filter: blur(4px);">
+        <div class="modal-content" style="background: white; padding: 28px; border-radius: 16px; width: 540px; max-width: 95%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0,0,0,0.25);">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 14px; margin-bottom: 18px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(245, 158, 11, 0.15); color: #d97706; display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                        <i class="ph ph-note-pencil"></i>
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--text-main);">Ajuste / Corrección Semanal</h3>
+                        <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Modificación con trazabilidad e impacto en inventario global</p>
+                    </div>
+                </div>
+                <button class="btn btn-icon" onclick="document.getElementById('modal-ajuste-semanal-item').style.display='none'"><i class="ph ph-x" style="font-size: 20px;"></i></button>
+            </div>
+
+            <form id="form-ajuste-semanal-item">
+                <input type="hidden" id="ajuste-semanal-item-id">
+
+                <div class="form-group mb-12" style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 10px 14px;">
+                    <div style="font-size: 13px; font-weight: 800; color: #0369a1;" id="ajuste-semanal-med-nombre">Medicamento</div>
+                    <div style="font-size: 11.5px; color: #0284c7; margin-top: 2px;" id="ajuste-semanal-rack-info">Rack: -- | Stock Sistema: 0 un.</div>
+                </div>
+
+                <div class="grid-2-col-even mb-12" style="gap: 10px;">
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">NUEVO CONTEO FÍSICO (UNIDADES) <span style="color:var(--danger)">*</span></label>
+                        <input type="number" id="ajuste-semanal-nuevo-conteo" class="form-control font-bold" min="0" step="1" required style="font-size:16px; color:#0284c7;">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">LOTE CORREGIDO</label>
+                        <input type="text" id="ajuste-semanal-lote" class="form-control" placeholder="Lote">
+                    </div>
+                </div>
+
+                <div class="form-group mb-12">
+                    <label class="form-label" style="font-weight: 700;">FECHA DE VENCIMIENTO (MES / AÑO)</label>
+                    <input type="month" id="ajuste-semanal-vto" class="form-control">
+                </div>
+
+                <div class="form-group mb-16">
+                    <label class="form-label" style="font-weight: 700;">JUSTIFICACIÓN DE LA MODIFICACIÓN (AUDITORÍA) <span style="color:var(--danger)">*</span></label>
+                    <input type="text" id="ajuste-semanal-motivo" class="form-control" placeholder="Ej: Recuento físico posterior / Error en digitación inicial..." required>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #f1f5f9; padding-top: 14px;">
+                    <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('modal-ajuste-semanal-item').style.display='none'">Cancelar</button>
+                    <button type="submit" class="btn btn-primary font-bold" style="padding: 9px 22px; background:#0284c7; border-color:#0284c7;">
+                        <i class="ph ph-check-circle"></i> Aplicar Ajuste y Sincronizar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <style>
         @keyframes scaleIn {
             from { transform: scale(0.8); opacity: 0; }
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=16.3"></script>
-    <script type="module" src="patch-plantillas.js?v=16.3"></script>
+    <script type="module" src="script.js?v=17.0"></script>
+    <script type="module" src="patch-plantillas.js?v=17.0"></script>
 </body>
 </html>

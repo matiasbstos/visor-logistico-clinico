@@ -3,7 +3,7 @@
 
 <head>
     <script>
-        const APP_VERSION = '15.6';
+        const APP_VERSION = '15.7';
         if (localStorage.getItem('APP_VERSION') !== APP_VERSION) {
             localStorage.setItem('APP_VERSION', APP_VERSION);
             if ('serviceWorker' in navigator) {
@@ -710,8 +710,8 @@
                                     <!-- Fila Doble: Vencimiento y Lote -->
                                     <div class="grid-2-col-even mb-12" style="gap:10px;">
                                         <div class="form-group">
-                                            <label class="form-label" for="toma-vencimiento" style="font-weight:700;">FECHA VENCIMIENTO <span style="color:var(--danger)">*</span></label>
-                                            <input type="date" id="toma-vencimiento" class="form-control" required>
+                                            <label class="form-label" for="toma-vencimiento" style="font-weight:700;">VENCIMIENTO (MES / AÑO) <span style="color:var(--danger)">*</span></label>
+                                            <input type="month" id="toma-vencimiento" class="form-control" placeholder="AAAA-MM" required>
                                             <div id="toma-vto-alert" style="font-size:10px; margin-top:3px; font-weight:700; display:none;"></div>
                                         </div>
                                         <div class="form-group">
@@ -3244,8 +3244,8 @@
                         <input type="text" id="edit-toma-lote" class="form-control" required>
                     </div>
                     <div class="form-group">
-                        <label class="form-label" style="font-weight: 700;">FECHA VENCIMIENTO</label>
-                        <input type="date" id="edit-toma-vto" class="form-control" required>
+                        <label class="form-label" style="font-weight: 700;">VENCIMIENTO (MES / AÑO)</label>
+                        <input type="month" id="edit-toma-vto" class="form-control" placeholder="AAAA-MM" required>
                     </div>
                 </div>
 

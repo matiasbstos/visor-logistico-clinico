@@ -9845,24 +9845,110 @@ function doGet(e) {
         return null;
     }
 
+    // =========================================================================
+    // HELPERS: VENCIMIENTO (MES/AÑO) Y GENERADOR ESTÁNDAR DE CÓDIGOS CLÍNICOS
+    // =========================================================================
+
+    // Formatear siempre a MM/AAAA para tablas y Google Sheets
+    function formatearMesAno(val) {
+        if (!val || typeof val !== 'string') return 'N/A';
+        val = val.trim();
+        if (/^\d{4}-\d{2}/.test(val)) {
+            const parts = val.split('-');
+            return `${parts[1]}/${parts[0]}`; // MM/AAAA
+        }
+        if (/^\d{1,2}\/\d{4}$/.test(val)) {
+            const parts = val.split('/');
+            return `${parts[0].padStart(2, '0')}/${parts[1]}`;
+        }
+        return val;
+    }
+
+    // Convertir a YYYY-MM para input type="month"
+    function toMonthInputValue(val) {
+        if (!val || typeof val !== 'string') return '';
+        val = val.trim();
+        if (/^\d{4}-\d{2}/.test(val)) {
+            return val.substring(0, 7);
+        }
+        if (/^\d{1,2}\/\d{4}$/.test(val)) {
+            const parts = val.split('/');
+            return `${parts[1]}-${parts[0].padStart(2, '0')}`;
+        }
+        return '';
+    }
+
+    // Calcular días restantes hasta fin del mes de vencimiento
+    function calcularDiasHastaVencimiento(val) {
+        if (!val) return null;
+        let year, month;
+        if (/^\d{4}-\d{2}/.test(val)) {
+            const parts = val.split('-');
+            year = Number(parts[0]);
+            month = Number(parts[1]);
+        } else if (/^\d{1,2}\/\d{4}$/.test(val)) {
+            const parts = val.split('/');
+            month = Number(parts[0]);
+            year = Number(parts[1]);
+        } else {
+            return null;
+        }
+        if (!year || !month || month < 1 || month > 12) return null;
+        const endOfMonth = new Date(year, month, 0, 23, 59, 59);
+        return Math.ceil((endOfMonth - new Date()) / (1000 * 60 * 60 * 24));
+    }
+
+    // Generador Estándar de Códigos Clínicos Normalizados por Familia Farmacéutica
+    function generarCodigoInsumo(categoria, nombre) {
+        const prefixMap = {
+            "COMPRIMIDOS ANTIBIOTICOS": "ATB",
+            "COMPRIMIDOS": "CMP",
+            "JARABES": "JRB",
+            "SALES REHIDRATACIONES": "SRO",
+            "GOTAS": "GTS",
+            "INHALADORES": "INH",
+            "CREMAS": "CRM",
+            "SUPOSITORIOS": "SUP",
+            "INYECTABLES Y AMPOLLAS": "AMP",
+            "SOLUCIONES Y SUEROS": "SUE"
+        };
+        const cleanCat = (categoria || "").toUpperCase().trim();
+        const pfx = prefixMap[cleanCat] || "MED";
+        
+        let hash = 0;
+        const str = (nombre || "").toLowerCase().trim();
+        for (let i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            hash |= 0;
+        }
+        const num = Math.abs(hash % 9000) + 1000;
+        return `${pfx}-${num}`;
+    }
+
     const STORAGE_VAULT_BACKUP = 'visor_toma_backup_vault';
     let lastCloudBackupTime = null;
 
     // Sanitizador y Migrador Automático de Esquema (Inmunidad contra cambios de código)
     function sanitizeAndMigrateItem(it) {
         if (!it || typeof it !== 'object') return null;
+        const medName = String(it.name || it.medicamento || 'Sin nombre').trim();
+        const cat = String(it.category || it.categoria || 'General').trim().toUpperCase();
+        const rawCode = String(it.code || '').trim();
+        const code = (rawCode && rawCode !== 'S/I' && !rawCode.startsWith('AUTO-')) ? rawCode : generarCodigoInsumo(cat, medName);
+        const rawVto = String(it.expirationDate || it.fechaVencimiento || 'N/A').trim();
+
         return {
-            id: String(it.id || ('REC-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5))),
+            id: String(it.id || ('INV-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.random().toString(36).substring(2, 6).toUpperCase())),
             fase: String(it.fase || '1ra Toma (Inicial)'),
             hora: String(it.hora || new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })),
             timestamp: String(it.timestamp || new Date().toLocaleString('es-CL')),
-            code: String(it.code || 'S/I'),
-            name: String(it.name || it.medicamento || 'Sin nombre').trim(),
-            category: String(it.category || it.categoria || 'General').trim().toUpperCase(),
+            code: code,
+            name: medName,
+            category: cat,
             quantity: Number(it.quantity) || 0,
             totalAcumulado: Number(it.totalAcumulado) || Number(it.quantity) || 0,
             batch: String(it.batch || it.lote || 'N/A').trim(),
-            expirationDate: String(it.expirationDate || it.fechaVencimiento || 'N/A').trim(),
+            expirationDate: formatearMesAno(rawVto),
             location: String(it.location || it.ubicacion || 'Bodega Central').trim(),
             unitPrice: Number(it.unitPrice) || 0,
             criticalLimit: Number(it.criticalLimit || it.stock_minimo) || 50,
@@ -10302,9 +10388,11 @@ function doGet(e) {
                 syncBadge = `<span class="badge-sync-err" title="${item.syncError || 'Error al conectar con Google Sheets'}"><i class="ph-bold ph-warning"></i> Error</span>`;
             }
 
-            let vtoBadge = window.escapeHTML(item.expirationDate || 'N/A');
-            if (item.expirationDate && item.expirationDate.includes('-')) {
-                const diffDays = Math.ceil((new Date(item.expirationDate) - new Date()) / (1000 * 60 * 60 * 24));
+            const formattedVto = formatearMesAno(item.expirationDate);
+            let vtoBadge = window.escapeHTML(formattedVto);
+            const diffDays = calcularDiasHastaVencimiento(item.expirationDate);
+
+            if (diffDays !== null) {
                 if (diffDays < 0) {
                     vtoBadge = `<span style="color:#ef4444; font-weight:700; display:inline-flex; align-items:center; gap:3px;"><i class="ph-fill ph-warning-octagon"></i> ${vtoBadge} (Vencido)</span>`;
                 } else if (diffDays <= 30) {
@@ -10372,7 +10460,7 @@ function doGet(e) {
             document.getElementById('edit-toma-cat').value = item.category || 'General';
             document.getElementById('edit-toma-cant').value = item.quantity || 0;
             document.getElementById('edit-toma-lote').value = item.batch || '';
-            document.getElementById('edit-toma-vto').value = item.expirationDate || '';
+            document.getElementById('edit-toma-vto').value = toMonthInputValue(item.expirationDate);
             document.getElementById('edit-toma-ubic').value = item.location || 'Bodega Central';
             document.getElementById('edit-toma-motivo').value = '';
             document.getElementById('edit-toma-delta').innerHTML = '<span style="color:#64748b;">Cantidad actual en esta toma: ' + item.quantity + ' un. (Total acumulado: ' + (item.totalAcumulado || item.quantity) + ' un.)</span>';
@@ -10684,7 +10772,7 @@ function doGet(e) {
                 const cant = Number(inputCant.value) || 1;
                 const vto = inputVto.value;
                 const lote = inputLote.value.trim();
-                const cod = inputCod.value.trim() || ("AUTO-" + Math.random().toString(36).substring(2, 7).toUpperCase());
+                const cod = inputCod.value.trim() || generarCodigoInsumo(cat, med);
                 const ubic = selectUbic ? selectUbic.value : 'Bodega Central';
                 const precio = Number(inputPrecio.value) || 0;
                 const minStock = Number(inputMin.value) || 50;
@@ -10701,7 +10789,7 @@ function doGet(e) {
                     return;
                 }
                 if (!vto) {
-                    window.showToast("Validación", "Por favor seleccione la fecha de vencimiento.", "warning");
+                    window.showToast("Validación", "Por favor seleccione el mes y año de vencimiento.", "warning");
                     inputVto.focus();
                     return;
                 }
@@ -10719,9 +10807,11 @@ function doGet(e) {
                 const existingMatch = tomaCatalogCache.find(it => it.name.toLowerCase() === med.toLowerCase());
                 const prevStock = existingMatch ? (Number(existingMatch.quantity) || 0) : 0;
                 const totalAcumulado = prevStock + cant;
+                const formattedVto = formatearMesAno(vto);
+                const recordId = 'INV-' + now.toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
 
                 const newRecord = {
-                    id: 'REC-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5),
+                    id: recordId,
                     fase: faseVal,
                     timestamp: fechaHoraStr,
                     hora: horaStr,
@@ -10731,7 +10821,7 @@ function doGet(e) {
                     quantity: cant,
                     totalAcumulado: totalAcumulado,
                     batch: lote,
-                    expirationDate: vto,
+                    expirationDate: formattedVto,
                     location: ubic,
                     unitPrice: precio,
                     criticalLimit: minStock,
@@ -10746,7 +10836,7 @@ function doGet(e) {
                 saveSessionItems(list);
                 renderTomaUI();
 
-                window.showToast("Registrando", `Sumando "${med}" (+${cant} un. | Total: ${totalAcumulado})...`, "info");
+                window.showToast("Registrando", `Sumando "${med}" [${cod}] (+${cant} un. | Total: ${totalAcumulado})...`, "info");
 
                 // Enviar a Google Sheets
                 syncToGoogleSheets({
@@ -10818,7 +10908,8 @@ function doGet(e) {
                 const newCat = document.getElementById('edit-toma-cat').value;
                 const newCant = Number(document.getElementById('edit-toma-cant').value) || 0;
                 const newLote = document.getElementById('edit-toma-lote').value.trim();
-                const newVto = document.getElementById('edit-toma-vto').value;
+                const newVtoRaw = document.getElementById('edit-toma-vto').value;
+                const newVto = formatearMesAno(newVtoRaw);
                 const newUbic = document.getElementById('edit-toma-ubic').value;
                 const motivo = document.getElementById('edit-toma-motivo').value.trim();
 

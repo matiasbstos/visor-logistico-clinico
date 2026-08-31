@@ -10409,6 +10409,16 @@ function doGet(e) {
                 faseTag = `<span style="background:#ede9fe; color:#6d28d9; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:700; display:inline-flex; align-items:center; gap:3px; margin-top:2px;"><i class="ph-bold ph-arrows-clockwise"></i> Reconteo</span>`;
             }
 
+            let cantCell = `<td style="font-weight:700; font-size:14px; color:var(--primary); text-align:center;">+${Number(item.quantity) || 0}</td>`;
+            if (Number(item.quantity) === 0) {
+                cantCell = `<td style="text-align:center;"><span style="background:#fee2e2; color:#b91c1c; padding:2px 8px; border-radius:4px; font-weight:800; font-size:11px; display:inline-flex; align-items:center; gap:3px;"><i class="ph-bold ph-warning-octagon"></i> 0 un. (Quiebre)</span></td>`;
+            }
+
+            let totalCell = `<td style="font-weight:800; font-size:14px; color:#059669; text-align:center; background:rgba(16,185,129,0.05);">${Number(item.totalAcumulado) || Number(item.quantity) || 0} un.</td>`;
+            if (Number(item.totalAcumulado) === 0 && Number(item.quantity) === 0) {
+                totalCell = `<td style="font-weight:800; font-size:12px; color:#dc2626; text-align:center; background:rgba(239,68,68,0.05);">0 un. (Sin Stock)</td>`;
+            }
+
             return `
                 <tr>
                     <td style="font-size:12px; color:var(--text-muted); white-space:nowrap;">
@@ -10419,8 +10429,8 @@ function doGet(e) {
                         <div style="font-size:11px; color:var(--text-muted);">Cód: ${window.escapeHTML(item.code || 'S/I')} ${item.observations ? `| ${window.escapeHTML(item.observations)}` : ''}</div>
                     </td>
                     <td><span class="badge-category-tag" style="font-weight:700;">${window.escapeHTML(item.category || 'General')}</span></td>
-                    <td style="font-weight:700; font-size:14px; color:var(--primary); text-align:center;">+${Number(item.quantity) || 0}</td>
-                    <td style="font-weight:800; font-size:14px; color:#059669; text-align:center; background:rgba(16,185,129,0.05);">${Number(item.totalAcumulado) || Number(item.quantity) || 0} un.</td>
+                    ${cantCell}
+                    ${totalCell}
                     <td><code style="font-size:11px; font-weight:700; background:#f1f5f9; padding:2px 6px; border-radius:4px;">${window.escapeHTML(item.batch || 'N/A')}</code></td>
                     <td>${vtoBadge}</td>
                     <td style="font-size:12px;">${window.escapeHTML(item.location || 'Bodega Central')}</td>
@@ -10677,7 +10687,27 @@ function doGet(e) {
         }
 
         if (inputCant) {
-            inputCant.addEventListener('input', updateLiveAccumulatedCalc);
+            inputCant.addEventListener('input', () => {
+                const notice = document.getElementById('toma-quiebre-notice');
+                if (Number(inputCant.value) === 0) {
+                    if (notice) notice.style.display = 'block';
+                    if (inputLote && !inputLote.value) inputLote.value = 'S/L (Quiebre)';
+                } else {
+                    if (notice) notice.style.display = 'none';
+                    if (inputLote && inputLote.value === 'S/L (Quiebre)') inputLote.value = '';
+                }
+                updateLiveAccumulatedCalc();
+            });
+        }
+
+        // Botón Protocolo Quiebre de Stock (0 unidades)
+        const btnQuiebre = document.getElementById('btn-toma-quiebre-zero');
+        if (btnQuiebre && inputCant) {
+            btnQuiebre.addEventListener('click', () => {
+                inputCant.value = '0';
+                inputCant.dispatchEvent(new Event('input'));
+                window.showToast("Protocolo Quiebre", "Insumo configurado con 0 unidades (Sin existencia física en esta toma).", "info");
+            });
         }
 
         // Alerta en vivo de fecha de vencimiento con Phosphor Icons
@@ -10703,14 +10733,14 @@ function doGet(e) {
         }
 
         // Botones de incremento rápido (+1, +5, +10, +50)
-        document.querySelectorAll('.btn-quick-add').forEach(btn => {
+        document.querySelectorAll('.btn-quick-add:not(#btn-toma-quiebre-zero)').forEach(btn => {
             btn.addEventListener('click', () => {
                 const addVal = Number(btn.getAttribute('data-add')) || 1;
                 const current = Number(inputCant.value) || 0;
                 inputCant.value = Math.max(1, current + addVal);
                 inputCant.classList.add('pulse');
                 setTimeout(() => inputCant.classList.remove('pulse'), 200);
-                updateLiveAccumulatedCalc();
+                inputCant.dispatchEvent(new Event('input'));
             });
         });
 
@@ -10769,14 +10799,14 @@ function doGet(e) {
                 const faseVal = inputFase ? inputFase.value : '1ra Toma (Inicial)';
                 const cat = selectCat.value;
                 const med = inputMed.value.trim();
-                const cant = Number(inputCant.value) || 1;
-                const vto = inputVto.value;
-                const lote = inputLote.value.trim();
+                const cant = Number(inputCant.value) || 0;
+                let vto = inputVto.value ? inputVto.value.trim() : '';
+                let lote = inputLote.value.trim();
                 const cod = inputCod.value.trim() || generarCodigoInsumo(cat, med);
                 const ubic = selectUbic ? selectUbic.value : 'Bodega Central';
                 const precio = Number(inputPrecio.value) || 0;
                 const minStock = Number(inputMin.value) || 50;
-                const obs = inputObs ? inputObs.value.trim() : '';
+                let obs = inputObs ? inputObs.value.trim() : '';
 
                 if (!cat) {
                     window.showToast("Validación", "Por favor seleccione una categoría.", "warning");
@@ -10788,15 +10818,23 @@ function doGet(e) {
                     inputMed.focus();
                     return;
                 }
-                if (!vto) {
-                    window.showToast("Validación", "Por favor seleccione el mes y año de vencimiento.", "warning");
-                    inputVto.focus();
-                    return;
-                }
-                if (!lote) {
-                    window.showToast("Validación", "Por favor ingrese el lote del producto.", "warning");
-                    inputLote.focus();
-                    return;
+
+                const isQuiebre = (cant === 0);
+                if (isQuiebre) {
+                    if (!lote) lote = 'S/L (Quiebre)';
+                    if (!vto) vto = 'N/A';
+                    obs = (obs ? obs + ' | ' : '') + '[Protocolo Quiebre / 0 Unidades Físicas]';
+                } else {
+                    if (!vto) {
+                        window.showToast("Validación", "Por favor seleccione el mes y año de vencimiento.", "warning");
+                        inputVto.focus();
+                        return;
+                    }
+                    if (!lote) {
+                        window.showToast("Validación", "Por favor ingrese el lote del producto.", "warning");
+                        inputLote.focus();
+                        return;
+                    }
                 }
 
                 const now = new Date();
@@ -10807,7 +10845,7 @@ function doGet(e) {
                 const existingMatch = tomaCatalogCache.find(it => it.name.toLowerCase() === med.toLowerCase());
                 const prevStock = existingMatch ? (Number(existingMatch.quantity) || 0) : 0;
                 const totalAcumulado = prevStock + cant;
-                const formattedVto = formatearMesAno(vto);
+                const formattedVto = isQuiebre && vto === 'N/A' ? 'N/A' : formatearMesAno(vto);
                 const recordId = 'INV-' + now.toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
 
                 const newRecord = {
@@ -10836,7 +10874,10 @@ function doGet(e) {
                 saveSessionItems(list);
                 renderTomaUI();
 
-                window.showToast("Registrando", `Sumando "${med}" [${cod}] (+${cant} un. | Total: ${totalAcumulado})...`, "info");
+                const msgToast = isQuiebre ? 
+                    `Catalogando "${med}" [${cod}] con 0 un. (Quiebre de Stock)...` : 
+                    `Sumando "${med}" [${cod}] (+${cant} un. | Total: ${totalAcumulado})...`;
+                window.showToast("Registrando", msgToast, "info");
 
                 // Enviar a Google Sheets
                 syncToGoogleSheets({
@@ -10847,7 +10888,7 @@ function doGet(e) {
                         newRecord.syncStatus = 'synced';
                         saveSessionItems(list);
                         renderTomaUI();
-                        window.showToast("Google Sheets", `"${med}" guardado en [${cat}]. Total: ${totalAcumulado} un.`, "success");
+                        window.showToast("Google Sheets", `"${med}" guardado en [${cat}].`, "success");
                     } else {
                         newRecord.syncStatus = 'error';
                         newRecord.syncError = res.reason;
@@ -10869,6 +10910,8 @@ function doGet(e) {
                 if (vtoAlert) vtoAlert.style.display = 'none';
                 if (autoCatBadge) autoCatBadge.style.display = 'none';
                 if (acumuladoAlert) acumuladoAlert.style.display = 'none';
+                const notice = document.getElementById('toma-quiebre-notice');
+                if (notice) notice.style.display = 'none';
 
                 inputMed.focus();
             });

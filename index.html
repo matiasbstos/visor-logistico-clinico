@@ -3,7 +3,7 @@
 
 <head>
     <script>
-        const APP_VERSION = '15.7';
+        const APP_VERSION = '15.8';
         if (localStorage.getItem('APP_VERSION') !== APP_VERSION) {
             localStorage.setItem('APP_VERSION', APP_VERSION);
             if ('serviceWorker' in navigator) {
@@ -695,28 +695,37 @@
 
                                     <!-- Fila: Cantidad y Botones Rápidos -->
                                     <div class="form-group mb-12">
-                                        <label class="form-label" for="toma-cantidad" style="font-weight:700;">CANTIDAD FÍSICA (UNIDADES DE ESTA TOMA) <span style="color:var(--danger)">*</span></label>
-                                        <div style="display:flex; gap:8px; align-items:center;">
-                                            <input type="number" id="toma-cantidad" class="form-control font-bold" min="1" step="1" value="1" required style="font-size:16px; width:120px;">
+                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                            <label class="form-label" for="toma-cantidad" style="margin-bottom:0; font-weight:700;">CANTIDAD FÍSICA (UNIDADES EN ESTA TOMA) <span style="color:var(--danger)">*</span></label>
+                                            <span style="font-size:11px; color:var(--text-muted);">0 = Sin Stock / Quiebre</span>
+                                        </div>
+                                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                                            <input type="number" id="toma-cantidad" class="form-control font-bold" min="0" step="1" value="1" required style="font-size:16px; width:110px;">
                                             <div class="toma-quick-add-group">
                                                 <button type="button" class="btn-quick-add" data-add="1">+1</button>
                                                 <button type="button" class="btn-quick-add" data-add="5">+5</button>
                                                 <button type="button" class="btn-quick-add" data-add="10">+10</button>
                                                 <button type="button" class="btn-quick-add" data-add="50">+50</button>
+                                                <button type="button" id="btn-toma-quiebre-zero" class="btn-quick-add" style="background:#fee2e2; border-color:#fecaca; color:#b91c1c; font-weight:700;" title="Protocolo: Registrar insumo con 0 unidades (Sin existencia física actual)"><i class="ph-bold ph-warning-octagon"></i> 0 (Sin Stock)</button>
                                             </div>
                                         </div>
+                                    </div>
+
+                                    <!-- Aviso de Protocolo Quiebre de Stock -->
+                                    <div id="toma-quiebre-notice" style="display:none; background:#fef2f2; border:1px solid #fecaca; color:#991b1b; border-radius:8px; padding:8px 12px; font-size:12px; margin-bottom:12px; line-height:1.4;">
+                                        <i class="ph-bold ph-warning-octagon" style="color:#dc2626;"></i> <strong>Protocolo Quiebre de Stock:</strong> Se catalogará con <strong>0 unidades físicas</strong> para auditoría en Google Sheets y habilitación para futuras compras o recepciones.
                                     </div>
 
                                     <!-- Fila Doble: Vencimiento y Lote -->
                                     <div class="grid-2-col-even mb-12" style="gap:10px;">
                                         <div class="form-group">
-                                            <label class="form-label" for="toma-vencimiento" style="font-weight:700;">VENCIMIENTO (MES / AÑO) <span style="color:var(--danger)">*</span></label>
-                                            <input type="month" id="toma-vencimiento" class="form-control" placeholder="AAAA-MM" required>
+                                            <label class="form-label" for="toma-vencimiento" style="font-weight:700;">VENCIMIENTO (MES / AÑO)</label>
+                                            <input type="month" id="toma-vencimiento" class="form-control" placeholder="AAAA-MM">
                                             <div id="toma-vto-alert" style="font-size:10px; margin-top:3px; font-weight:700; display:none;"></div>
                                         </div>
                                         <div class="form-group">
-                                            <label class="form-label" for="toma-lote" style="font-weight:700;">LOTE FABRICANTE <span style="color:var(--danger)">*</span></label>
-                                            <input type="text" id="toma-lote" class="form-control" placeholder="Ej: L-2024-X" required>
+                                            <label class="form-label" for="toma-lote" style="font-weight:700;">LOTE FABRICANTE</label>
+                                            <input type="text" id="toma-lote" class="form-control" placeholder="Ej: L-2024-X o S/L">
                                         </div>
                                     </div>
 

@@ -154,5 +154,20 @@ service cloud.firestore {
     match /Estadisticas_Operativas/{id} {
        allow read, write: if isAdmin();
     }
+
+    // -----------------------------------------------------
+    // INVENTARIO SEMANAL, RACKS Y RESPALDOS EN LA NUBE
+    // -----------------------------------------------------
+    match /Grupos_Racks/{rackId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /Inventarios_Semanales/{semanaId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    match /Respaldos_Toma_Inventario/{backupId} {
+      allow read, write: if isAuthenticated();
+    }
   }
 }

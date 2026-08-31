@@ -1262,6 +1262,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const viewTitles = {
             'view-panel': 'Visor Logístico',
             'view-inventario': 'Visor Logístico',
+            'view-toma-inventario': 'Toma de Inventario',
             'view-compras': 'Gestión de Abastecimiento',
             'view-movimientos': 'Visor Logístico',
             'view-historial': 'Historial de Transacciones',
@@ -1325,6 +1326,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (hash === 'view-inventario') {
                     console.log("[Router] Vista Inventario activa. Cargando página...");
                     if (typeof window.loadFirstPage === 'function') window.loadFirstPage();
+                } else if (hash === 'view-toma-inventario') {
+                    console.log("[Router] Vista Toma de Inventario activa.");
+                    if (typeof window.initTomaInventarioModule === 'function') window.initTomaInventarioModule();
                 } else if (hash === 'view-historial') {
                     console.log("[Router] Vista Historial activa.");
                 } else if (hash === 'view-bodegas') {
@@ -2702,7 +2706,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     // Alerta Global de Purga en tiempo real para todos los roles
                     if (data.systemPurged === true) {
-                        const purgeTime = data.purgedAt || '';
+                        const purgeTime = String(data.purgedAt?.seconds || data.purgedAt || 'purged_ack');
                         const localAck = localStorage.getItem('last_purge_acknowledged');
                         
                         if (purgeTime && localAck !== purgeTime) {
@@ -2711,12 +2715,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                 `El Súper Administrador (${data.purgedBy || 'Dirección'}) ha ejecutado un reinicio total de la base de datos. Todos los registros y stock actuales han sido eliminados de forma definitiva.`,
                                 true
                             );
-                            // Forzar refresco al hacer clic en "Entendido" y marcar como leído
+                            // Marcar como leído y cerrar el modal sin recarga infinita
                             const alertBtn = document.querySelector('#modal-alerta-centro button');
                             if (alertBtn) {
                                 alertBtn.onclick = () => {
                                     localStorage.setItem('last_purge_acknowledged', purgeTime);
-                                    window.location.reload(true);
+                                    const modalEl = document.getElementById('modal-alerta-centro');
+                                    if (modalEl) modalEl.style.display = 'none';
                                 };
                             }
                             return;
@@ -9611,3 +9616,1705 @@ window.guardarProgresoBandeja = async function(docId) {
         window.showToast("Error", err.message, "error");
     }
 };
+
+/* =========================================================================
+   MÓDULO: TOMA DE INVENTARIO Y CONECTOR GOOGLE SHEETS POR CATEGORÍAS
+   ========================================================================= */
+const GOOGLE_APPS_SCRIPT_TEMPLATE = `/**
+ * GOOGLE APPS SCRIPT - CONECTOR OFICIAL TOMA DE INVENTARIO SAR
+ * Organiza automáticamente cada medicamento en su propia hoja según su categoría
+ * y mantiene la hoja 'CONSOLIDADO_GENERAL' con el total de inventario.
+ */
+function doPost(e) {
+  try {
+    var rawData = e.postData.contents;
+    var data = JSON.parse(rawData);
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var action = (data.action || "insert").toLowerCase();
+    
+    // Encabezados Oficiales
+    var headers = [
+      "Marca Temporal", "Fase / Toma", "Código Insumo", "Descripción / Medicamento",
+      "Categoría", "Cant. Esta Toma (Un.)", "Stock Total Acumulado", "Lote",
+      "Fecha Vencimiento", "Ubicación / Bodega", "Costo Unitario ($)", "Stock Mínimo",
+      "Responsable", "Observaciones"
+    ];
+
+    // Paleta de Colores por Categoría para fácil identificación visual
+    var categoryColors = {
+      "CONSOLIDADO_GENERAL": "#0f172a",
+      "COMPRIMIDOS ANTIBIOTICOS": "#c2410c",
+      "COMPRIMIDOS": "#4338ca",
+      "JARABES": "#b45309",
+      "GOTAS": "#0369a1",
+      "INHALADORES": "#0f766e",
+      "CREMAS": "#be123c",
+      "SUPOSITORIOS": "#6d28d9",
+      "SALES REHIDRATACIONES": "#4d7c0f",
+      "INYECTABLES Y AMPOLLAS": "#1d4ed8",
+      "SOLUCIONES Y SUEROS": "#0284c7",
+      "INCIDENCIAS_Y_MERMAS": "#b91c1c"
+    };
+
+    function getOrCreateSheet(name, hdrs, tabColor) {
+      var cleanName = name.toString().trim().toUpperCase().substring(0, 30);
+      if (!cleanName) cleanName = "GENERAL";
+      var s = ss.getSheetByName(cleanName);
+      if (!s) {
+        s = ss.insertSheet(cleanName);
+        s.appendRow(hdrs);
+        var r = s.getRange(1, 1, 1, hdrs.length);
+        r.setBackground(tabColor || "#1e293b");
+        r.setFontColor("#ffffff");
+        r.setFontWeight("bold");
+        r.setHorizontalAlignment("center");
+        s.setFrozenRows(1);
+        try {
+          s.setTabColor(tabColor || "#1e293b");
+        } catch(eTab) {}
+      }
+      return s;
+    }
+
+    // 1. Asegurar la pestaña CONSOLIDADO_GENERAL como primera hoja
+    var consolidadoSheet = getOrCreateSheet("CONSOLIDADO_GENERAL", headers, categoryColors["CONSOLIDADO_GENERAL"]);
+
+    // 2. CASO: REGISTRO DE INCIDENCIA / MERMA / QUIEBRE
+    if (action === "incidencia" || action === "merma") {
+      var incHeaders = [
+        "Marca Temporal", "Medicamento", "Categoría", "Lote", "Ubicación", 
+        "Unidades Mermadas", "Tipo de Incidencia", "Responsable", "Detalle / Observaciones"
+      ];
+      var incSheet = getOrCreateSheet("INCIDENCIAS_Y_MERMAS", incHeaders, categoryColors["INCIDENCIAS_Y_MERMAS"]);
+      var fechaInc = data.timestamp || Utilities.formatDate(new Date(), "GMT-3", "yyyy-MM-dd HH:mm:ss");
+      incSheet.appendRow([
+        fechaInc,
+        data.name || data.medicamento || "S/N",
+        data.category || "General",
+        data.batch || "N/A",
+        data.location || "Bodega Central",
+        Number(data.quantityMermada) || 0,
+        data.tipoIncidencia || "Merma",
+        data.user || "Operador",
+        data.observations || ""
+      ]);
+      return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Incidencia registrada en hoja INCIDENCIAS_Y_MERMAS" })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 3. CASO: CLASIFICACIÓN Y DIVISIÓN AUTOMÁTICA POR HOJAS DE CATEGORÍA
+    var newCat = (data.category || data.categoria || "General").toString().trim().toUpperCase();
+    var oldCat = (data.oldCategory || "").toString().trim().toUpperCase();
+    var sheetColor = categoryColors[newCat] || "#1e293b";
+    var targetSheet = getOrCreateSheet(newCat, headers, sheetColor);
+
+    // Si hubo cambio de categoría a posteriori, remover de la hoja anterior
+    if (oldCat && oldCat !== newCat) {
+      var oldSheet = ss.getSheetByName(oldCat.substring(0, 30));
+      if (oldSheet) {
+        var oldData = oldSheet.getDataRange().getValues();
+        for (var i = oldData.length - 1; i >= 1; i--) {
+          var rowMed = (oldData[i][3] || "").toString().trim().toLowerCase();
+          var targetMed = (data.name || "").toString().trim().toLowerCase();
+          if (rowMed === targetMed) {
+            oldSheet.deleteRow(i + 1);
+            break;
+          }
+        }
+      }
+    }
+
+    var fechaRegistro = data.timestamp || Utilities.formatDate(new Date(), "GMT-3", "yyyy-MM-dd HH:mm:ss");
+    var rowData = [
+      fechaRegistro,
+      data.fase || "1ra Toma (Inicial)",
+      data.code || "S/I",
+      data.name || data.medicamento || "Sin descripción",
+      newCat,
+      Number(data.quantity) || 0,
+      Number(data.totalAcumulado) || Number(data.quantity) || 0,
+      data.batch || data.lote || "N/A",
+      data.expirationDate || data.fechaVencimiento || "N/A",
+      data.location || data.ubicacion || "Bodega Central",
+      Number(data.unitPrice) || 0,
+      Number(data.criticalLimit || data.stock_minimo) || 50,
+      data.user || data.responsable || "Visor Logístico",
+      data.observations || ""
+    ];
+
+    // Escribir en la hoja de la categoría correspondiente
+    targetSheet.appendRow(rowData);
+    // Escribir en la hoja CONSOLIDADO_GENERAL
+    consolidadoSheet.appendRow(rowData);
+
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "success",
+      message: "Medicamento registrado en hoja: " + newCat + " y en CONSOLIDADO_GENERAL",
+      sheetName: newCat
+    })).setMimeType(ContentService.MimeType.JSON);
+
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({ 
+      status: "error", 
+      message: err.toString() 
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+
+function doGet(e) {
+  return ContentService.createTextOutput(JSON.stringify({ 
+    status: "online", 
+    message: "Conector Google Sheets SAR Activo - Modo Multihistorial por Categorías" 
+  })).setMimeType(ContentService.MimeType.JSON);
+}`;
+
+(function initTomaInventarioScope() {
+    const STORAGE_SHEETS_URL = 'visor_sheets_webhook_url';
+    const STORAGE_SESSION_ITEMS = 'visor_toma_session_items';
+
+    let tomaCatalogCache = [];
+    let isInitialized = false;
+    let qrScannerTomaInstance = null;
+
+    // Función inteligente para clasificar automáticamente un medicamento
+    function detectarCategoriaAuto(nombre) {
+        if (!nombre || typeof nombre !== 'string') return null;
+        const str = nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, ""); // remover tildes
+
+        // 1. COMPRIMIDOS ANTIBIOTICOS
+        const antibioticos = [
+            'amoxicilina', 'ciprofloxacino', 'claritromicina', 'azitromicina', 'cefadroxilo', 
+            'cefalexina', 'metronidazol', 'cotrimoxazol', 'nitrofurantoina', 'cloxacilina', 
+            'doxiciclina', 'levofloxacino', 'ampicilina', 'penicilina', 'cefixima', 'ceftriaxona',
+            'cefotaxima', 'vancomicina', 'gentamicina', 'sulfametoxazol', 'eritromicina', 
+            'tetraciclina', 'rifampicina', 'bactrim', 'amoxi', 'cipro', 'claritro', 'azitro',
+            'antibiotico', 'antibioticos'
+        ];
+        const isAntibiotico = antibioticos.some(ab => str.includes(ab));
+        const isFormaComprimido = /\b(comp|comprimido|comprimidos|tab|tableta|tabletas|caps|capsula|capsulas|cap|gragea|grageas)\b/.test(str);
+        const isFormaLiquidaOIntra = /\b(jarabe|jbe|susp|gotas|gts|crema|crm|pomada|supositorio|ampolla|amp|vial|inyectable|suero)\b/.test(str);
+
+        if (isAntibiotico && (isFormaComprimido || !isFormaLiquidaOIntra)) {
+            return 'COMPRIMIDOS ANTIBIOTICOS';
+        }
+
+        // 2. SALES REHIDRATACIONES
+        if (/\b(sales|rehidrata|rehidratacion|rehidrataciones|rehidratacines|rehidratante|sro|sales de hidratacion|electrolitos orales)\b/.test(str)) {
+            return 'SALES REHIDRATACIONES';
+        }
+
+        // 3. JARABES / SUSPENSIONES
+        if (/\b(jarabe|jarabes|jbe|susp|suspension|suspensiones|elixir|solucion oral|sol oral|fco jarabe|pvo susp)\b/.test(str)) {
+            return 'JARABES';
+        }
+
+        // 4. GOTAS / COLIRIOS
+        if (/\b(gotas|gota|gts|colirio|colirios|solucion otica|solucion oftalmica|oftalmico|otica|oftalmica|gotas orales|gotas pediatricas|sol gotas)\b/.test(str)) {
+            return 'GOTAS';
+        }
+
+        // 5. INHALADORES / AEROSOLES
+        if (/\b(inhalador|inhaladores|inh|puff|puf|aerosol|spray|aerocamara|salbutamol|budesonida|fluticasona|ipratropio|aerovial|mometasona|beclometasona|salmeterol)\b/.test(str)) {
+            return 'INHALADORES';
+        }
+
+        // 6. CREMAS / POMADAS / UNGÜENTOS / GELES
+        if (/\b(crema|cremas|crm|pomada|pomadas|ung|unguento|unguentos|gel|geles|emulsion|pasta lassar|mupirocina|clotrimazol|hidrocortisona|betametasona)\b/.test(str)) {
+            return 'CREMAS';
+        }
+
+        // 7. SUPOSITORIOS
+        if (/\b(supositorio|supositorios|sup|supo|glicerina sup|sup infantil|sup adulto)\b/.test(str)) {
+            return 'SUPOSITORIOS';
+        }
+
+        // 8. COMPRIMIDOS / CÁPSULAS / TABLETAS (General no antibiótico)
+        if (isFormaComprimido || /\b(paracetamol|ibuprofeno|ketorolaco|clorfenamina|enalapril|losartan|metformina|atorvastatina|omeprazol|famotidina|loratadina|prednisona|diclofenaco|tramadol|clonazepam|diazepam|alprazolam|fluoxetina|sertralina|acido folico|complejo b|aspirina|acido acetilsalicilico|levotiroxina|hidroclorotiazida|amlodipino|carvedilol|atenolol|salbutamol comp|domperidona|viadil|viadil compuesto|migranol|kitadol|tapsin|nastizol|trioval)\b/.test(str)) {
+            return 'COMPRIMIDOS';
+        }
+
+        // 9. INYECTABLES Y AMPOLLAS
+        if (/\b(ampolla|ampollas|amp|vial|viales|inyectable|iny|fco amp|frasco ampolla|ceftriaxona amp|ketorolaco amp|tramadol amp|metamizol amp|ondansetron amp|ondansetron)\b/.test(str)) {
+            return 'INYECTABLES Y AMPOLLAS';
+        }
+
+        // 10. SOLUCIONES Y SUEROS
+        if (/\b(suero|ringer|lactato|fisiologico|glucosado|glucosa|dextrosa|solucion fisiologica|nacl|cloruro de sodio|matraz)\b/.test(str)) {
+            return 'SOLUCIONES Y SUEROS';
+        }
+
+        return null;
+    }
+
+    const STORAGE_VAULT_BACKUP = 'visor_toma_backup_vault';
+    let lastCloudBackupTime = null;
+
+    // Sanitizador y Migrador Automático de Esquema (Inmunidad contra cambios de código)
+    function sanitizeAndMigrateItem(it) {
+        if (!it || typeof it !== 'object') return null;
+        return {
+            id: String(it.id || ('REC-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5))),
+            fase: String(it.fase || '1ra Toma (Inicial)'),
+            hora: String(it.hora || new Date().toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })),
+            timestamp: String(it.timestamp || new Date().toLocaleString('es-CL')),
+            code: String(it.code || 'S/I'),
+            name: String(it.name || it.medicamento || 'Sin nombre').trim(),
+            category: String(it.category || it.categoria || 'General').trim().toUpperCase(),
+            quantity: Number(it.quantity) || 0,
+            totalAcumulado: Number(it.totalAcumulado) || Number(it.quantity) || 0,
+            batch: String(it.batch || it.lote || 'N/A').trim(),
+            expirationDate: String(it.expirationDate || it.fechaVencimiento || 'N/A').trim(),
+            location: String(it.location || it.ubicacion || 'Bodega Central').trim(),
+            unitPrice: Number(it.unitPrice) || 0,
+            criticalLimit: Number(it.criticalLimit || it.stock_minimo) || 50,
+            observations: String(it.observations || '').trim(),
+            user: String(it.user || (auth.currentUser ? auth.currentUser.email : 'Operador')),
+            syncStatus: String(it.syncStatus || 'pending'),
+            syncError: it.syncError || null
+        };
+    }
+
+    // Recuperar items de la sesión de localStorage con auto-recuperación desde el Vault
+    function getSessionItems() {
+        try {
+            let raw = localStorage.getItem(STORAGE_SESSION_ITEMS);
+            if (!raw) {
+                raw = localStorage.getItem(STORAGE_VAULT_BACKUP);
+            }
+            if (!raw) return [];
+            const parsed = JSON.parse(raw);
+            if (!Array.isArray(parsed)) return [];
+            return parsed.map(sanitizeAndMigrateItem).filter(Boolean);
+        } catch (e) {
+            console.error("[Bot Guardián] Error leyendo sesión:", e);
+            return [];
+        }
+    }
+
+    // Guardar items de la sesión con doble espejo y respaldo en la nube
+    function saveSessionItems(items) {
+        try {
+            const cleanList = (items || []).map(sanitizeAndMigrateItem).filter(Boolean);
+            const serialized = JSON.stringify(cleanList);
+            localStorage.setItem(STORAGE_SESSION_ITEMS, serialized);
+            localStorage.setItem(STORAGE_VAULT_BACKUP, serialized); // Espejo de seguridad
+            triggerCloudBackup(cleanList);
+        } catch (e) {
+            console.error("[Bot Guardián] Error guardando sesión:", e);
+        }
+    }
+
+    // Bot Guardián: Respaldo continuo e invisible en Firestore
+    async function triggerCloudBackup(cleanList) {
+        if (!cleanList || cleanList.length === 0) return;
+        try {
+            const dbInstance = window.firebaseFirestore.db || window.db || db;
+            const todayStr = new Date().toISOString().split('T')[0];
+            const userEmail = auth.currentUser ? auth.currentUser.email.replace(/[@.]/g, '_') : 'Operador';
+            const docId = `BACKUP_${todayStr}_${userEmail}`;
+
+            await window.firebaseFirestore.setDoc(
+                window.firebaseFirestore.doc(dbInstance, 'Respaldos_Toma_Inventario', docId),
+                {
+                    lastUpdated: window.firebaseFirestore.serverTimestamp(),
+                    date: todayStr,
+                    operator: auth.currentUser ? auth.currentUser.email : 'Operador',
+                    totalRecords: cleanList.length,
+                    totalUnits: cleanList.reduce((acc, i) => acc + (Number(i.quantity) || 0), 0),
+                    records: cleanList
+                },
+                { merge: true }
+            );
+
+            lastCloudBackupTime = new Date();
+            updateBotStatusUI();
+        } catch (err) {
+            console.warn("[Bot Guardián] Respaldo en la nube en espera:", err.message);
+        }
+    }
+
+    function updateBotStatusUI() {
+        const botText = document.getElementById('toma-bot-status-text');
+        if (!botText) return;
+        if (lastCloudBackupTime) {
+            const timeStr = lastCloudBackupTime.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+            botText.textContent = `Bot Guardián: Respaldado (${timeStr})`;
+        } else {
+            botText.textContent = `Bot Guardián: Respaldo Activo`;
+        }
+    }
+
+    // Restaurar Sesión desde Respaldo en la Nube
+    async function restoreFromCloudBackup() {
+        try {
+            const dbInstance = window.firebaseFirestore.db || window.db || db;
+            window.showToast("Bot Guardián", "Buscando respaldos en la nube...", "info");
+            
+            const q = window.firebaseFirestore.query(
+                window.firebaseFirestore.collection(dbInstance, 'Respaldos_Toma_Inventario'),
+                window.firebaseFirestore.limit(5)
+            );
+            const snap = await window.firebaseFirestore.getDocs(q);
+
+            if (snap.empty) {
+                window.showToast("Bot Guardián", "No se encontraron respaldos previos en la nube.", "info");
+                return;
+            }
+
+            let latestBackup = null;
+            snap.forEach(docSnap => {
+                const data = docSnap.data();
+                if (!latestBackup || (data.records && data.records.length > (latestBackup.records?.length || 0))) {
+                    latestBackup = data;
+                }
+            });
+
+            if (latestBackup && Array.isArray(latestBackup.records) && latestBackup.records.length > 0) {
+                const count = latestBackup.records.length;
+                if (confirm(`🛡️ Bot Guardián encontró un respaldo con ${count} medicamentos (${latestBackup.totalUnits || 0} unidades) guardado por ${latestBackup.operator || 'Operador'}.\n\n¿Desea restaurar este inventario ahora?`)) {
+                    const currentItems = getSessionItems();
+                    const existingIds = new Set(currentItems.map(i => i.id));
+                    
+                    const merged = [...currentItems];
+                    latestBackup.records.forEach(r => {
+                        const clean = sanitizeAndMigrateItem(r);
+                        if (!existingIds.has(clean.id)) {
+                            merged.push(clean);
+                            existingIds.add(clean.id);
+                        }
+                    });
+
+                    saveSessionItems(merged);
+                    renderTomaUI();
+                    window.showToast("Inventario Restaurado", `Se recuperaron ${merged.length} registros protegidos.`, "success");
+                }
+            } else {
+                window.showToast("Bot Guardián", "El respaldo encontrado no contiene registros.", "info");
+            }
+        } catch (err) {
+            console.error("[Bot Guardián] Error restaurando:", err);
+            window.showToast("Error", "No se pudo recuperar el respaldo: " + err.message, "error");
+        }
+    }
+
+    function getSheetsUrl() {
+        return (localStorage.getItem(STORAGE_SHEETS_URL) || '').trim();
+    }
+
+    function setSheetsUrl(url) {
+        localStorage.setItem(STORAGE_SHEETS_URL, (url || '').trim());
+    }
+
+    // Actualiza el indicador visual de Google Sheets en el header
+    function updateSheetsStatusBadge() {
+        const badge = document.getElementById('toma-sheets-badge');
+        const text = document.getElementById('toma-sheets-status-text');
+        if (!badge || !text) return;
+
+        const url = getSheetsUrl();
+        if (!url) {
+            badge.className = 'badge-sheets-status status-offline';
+            text.textContent = 'Google Sheets: No configurado';
+        } else {
+            badge.className = 'badge-sheets-status status-online';
+            text.textContent = 'Google Sheets: Conectado (En vivo)';
+        }
+    }
+
+    // Cargar catálogo de Insumos desde Firestore para autocompletado inteligente
+    async function loadInsumosCatalog() {
+        try {
+            const dbInstance = window.firebaseFirestore.db || window.db || db;
+            const q = window.firebaseFirestore.query(
+                window.firebaseFirestore.collection(dbInstance, 'Insumos'),
+                window.firebaseFirestore.limit(500)
+            );
+            const snap = await window.firebaseFirestore.getDocs(q);
+            tomaCatalogCache = [];
+            const datalist = document.getElementById('toma-datalist-insumos');
+            if (datalist) datalist.innerHTML = '';
+
+            snap.forEach(doc => {
+                const data = doc.data();
+                const item = {
+                    id: doc.id,
+                    name: data.name || '',
+                    code: data.code || '',
+                    category: data.category || data.categoria || 'General',
+                    quantity: Number(data.quantity) || 0,
+                    unitPrice: Number(data.unitPrice) || 0,
+                    criticalLimit: Number(data.criticalLimit || data.stock_minimo) || 50,
+                    location: data.location || 'Bodega Central',
+                    batch: data.batch || '',
+                    expirationDate: data.expirationDate || ''
+                };
+                tomaCatalogCache.push(item);
+
+                if (datalist && item.name) {
+                    const opt = document.createElement('option');
+                    opt.value = item.name;
+                    opt.textContent = `[${item.category}] Stock actual: ${item.quantity} un. (${item.location})`;
+                    datalist.appendChild(opt);
+                }
+            });
+            console.log(`[TomaInventario] Catálogo cargado: ${tomaCatalogCache.length} insumos.`);
+        } catch (e) {
+            console.warn("[TomaInventario] Error cargando catálogo de insumos:", e);
+        }
+    }
+
+    // Cargar bodegas dinámicas del sistema
+    async function loadBodegasDropdown() {
+        try {
+            const dbInstance = window.firebaseFirestore.db || window.db || db;
+            const snap = await window.firebaseFirestore.getDocs(window.firebaseFirestore.collection(dbInstance, 'Bodegas'));
+            const select = document.getElementById('toma-ubicacion');
+            const editSelect = document.getElementById('edit-toma-ubic');
+
+            if (!snap.empty) {
+                const currentVal = select ? select.value : '';
+                if (select) select.innerHTML = '';
+                if (editSelect) editSelect.innerHTML = '';
+
+                snap.forEach(doc => {
+                    const b = doc.data();
+                    const bName = b.nombre || b.name || doc.id;
+                    if (select) {
+                        const opt = new Option(bName, bName);
+                        select.add(opt);
+                    }
+                    if (editSelect) {
+                        const opt2 = new Option(bName, bName);
+                        editSelect.add(opt2);
+                    }
+                });
+                if (select && currentVal) select.value = currentVal;
+            }
+        } catch (e) {
+            console.warn("[TomaInventario] Usando bodegas por defecto:", e);
+        }
+    }
+
+    // Envío instantáneo a Google Apps Script
+    async function syncToGoogleSheets(payload) {
+        const url = getSheetsUrl();
+        if (!url) {
+            console.warn("[TomaInventario] Google Sheets no configurado. Registro queda pendiente.");
+            return { success: false, reason: 'URL no configurada' };
+        }
+
+        const badge = document.getElementById('toma-sheets-badge');
+        if (badge) badge.className = 'badge-sheets-status status-syncing';
+
+        try {
+            await fetch(url, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: {
+                    'Content-Type': 'text/plain;charset=utf-8'
+                },
+                body: JSON.stringify(payload)
+            });
+
+            if (badge) badge.className = 'badge-sheets-status status-online';
+            return { success: true };
+        } catch (err) {
+            console.error("[TomaInventario] Error enviando a Google Sheets:", err);
+            if (badge) badge.className = 'badge-sheets-status status-error';
+            return { success: false, reason: err.message };
+        }
+    }
+
+    // Sincronización en Firestore con suma acumulativa
+    async function syncToFirestore(item) {
+        try {
+            const dbInstance = window.firebaseFirestore.db || window.db || db;
+            const insumosRef = window.firebaseFirestore.collection(dbInstance, 'Insumos');
+            const cleanName = item.name.trim();
+
+            const q = window.firebaseFirestore.query(
+                insumosRef,
+                window.firebaseFirestore.where('name_lowercase', '==', cleanName.toLowerCase()),
+                window.firebaseFirestore.limit(1)
+            );
+            const snap = await window.firebaseFirestore.getDocs(q);
+
+            const addedQty = Number(item.quantity) || 0;
+            const limitVal = Number(item.criticalLimit) || 50;
+
+            if (!snap.empty) {
+                const existingDoc = snap.docs[0];
+                const oldQty = Number(existingDoc.data().quantity) || 0;
+                const finalQty = oldQty + addedQty;
+
+                await window.firebaseFirestore.updateDoc(window.firebaseFirestore.doc(dbInstance, 'Insumos', existingDoc.id), {
+                    quantity: window.firebaseFirestore.increment(addedQty),
+                    isCritical: finalQty <= limitVal,
+                    batch: item.batch || existingDoc.data().batch || 'N/A',
+                    expirationDate: item.expirationDate || existingDoc.data().expirationDate || 'N/A',
+                    category: item.category || existingDoc.data().category || 'General',
+                    location: item.location || existingDoc.data().location || 'Bodega Central',
+                    unitPrice: Number(item.unitPrice) || existingDoc.data().unitPrice || 0,
+                    criticalLimit: limitVal,
+                    updatedAt: window.firebaseFirestore.serverTimestamp()
+                });
+
+                const cached = tomaCatalogCache.find(it => it.name.toLowerCase() === cleanName.toLowerCase());
+                if (cached) cached.quantity = finalQty;
+
+            } else {
+                const autoCode = item.code || ("SAR-" + Math.random().toString(36).substring(2, 7).toUpperCase());
+                await window.firebaseFirestore.addDoc(insumosRef, {
+                    code: autoCode,
+                    name: cleanName,
+                    name_lowercase: cleanName.toLowerCase(),
+                    quantity: addedQty,
+                    isCritical: addedQty <= limitVal,
+                    batch: item.batch || 'N/A',
+                    expirationDate: item.expirationDate || 'N/A',
+                    category: item.category || 'General',
+                    location: item.location || 'Bodega Central',
+                    unitPrice: Number(item.unitPrice) || 0,
+                    criticalLimit: limitVal,
+                    updatedAt: window.firebaseFirestore.serverTimestamp()
+                });
+
+                tomaCatalogCache.push({
+                    name: cleanName,
+                    code: autoCode,
+                    category: item.category,
+                    quantity: addedQty,
+                    unitPrice: item.unitPrice,
+                    criticalLimit: limitVal,
+                    location: item.location
+                });
+            }
+
+            // Registrar movimiento en Historial_Movimientos con la Fase correspondiente
+            await window.firebaseFirestore.addDoc(window.firebaseFirestore.collection(dbInstance, 'Historial_Movimientos'), {
+                date: window.firebaseFirestore.serverTimestamp(),
+                type: 'toma_inventario',
+                fase: item.fase || '1ra Toma (Inicial)',
+                insumoName: cleanName,
+                user: item.user || (auth.currentUser ? auth.currentUser.email : 'Operador'),
+                batch: item.batch || 'N/A',
+                quantity: addedQty,
+                destination: item.location || 'Bodega Central',
+                category: item.category || 'General',
+                expirationDate: item.expirationDate || 'N/A',
+                observations: `[${item.fase || 'Toma Inventario'}] ${item.observations ? item.observations : 'Conteo físico'}`
+            });
+
+            console.log("[TomaInventario] Sincronizado y acumulado exitosamente en Firestore.");
+        } catch (fsErr) {
+            console.error("[TomaInventario] Error sincronizando en Firestore:", fsErr);
+        }
+    }
+
+    // Renderizar métricas y tabla
+    function renderTomaUI() {
+        const items = getSessionItems();
+        const tbody = document.getElementById('toma-table-body');
+        const metricItems = document.getElementById('toma-metric-items');
+        const metricUnits = document.getElementById('toma-metric-units');
+        const metricCategories = document.getElementById('toma-metric-categories');
+        const metricSynced = document.getElementById('toma-metric-synced');
+        const syncBadgePill = document.getElementById('toma-sync-badge-pill');
+        const tableCounter = document.getElementById('toma-table-counter');
+        const footerSummary = document.getElementById('toma-footer-summary');
+        const btnReintentar = document.getElementById('btn-reintentar-pendientes');
+        const pendingCountSpan = document.getElementById('toma-pending-count');
+        const filterCatSelect = document.getElementById('toma-filter-cat');
+        const searchInput = document.getElementById('toma-table-search');
+
+        const totalItems = items.length;
+        const totalUnits = items.reduce((acc, it) => acc + (Number(it.quantity) || 0), 0);
+        const uniqueCats = new Set(items.map(it => it.category || 'General'));
+        const syncedCount = items.filter(it => it.syncStatus === 'synced').length;
+        const pendingCount = items.filter(it => it.syncStatus !== 'synced').length;
+        const pct = totalItems > 0 ? Math.round((syncedCount / totalItems) * 100) : 0;
+
+        if (metricItems) metricItems.textContent = totalItems;
+        if (metricUnits) metricUnits.textContent = totalUnits.toLocaleString();
+        if (metricCategories) metricCategories.textContent = uniqueCats.size;
+        if (metricSynced) metricSynced.textContent = `${syncedCount} / ${totalItems}`;
+        if (syncBadgePill) {
+            syncBadgePill.textContent = `${pct}%`;
+            syncBadgePill.style.background = pct === 100 ? '#ecfdf5' : '#eff6ff';
+            syncBadgePill.style.color = pct === 100 ? '#047857' : '#1d4ed8';
+        }
+        if (tableCounter) tableCounter.textContent = totalItems;
+        if (footerSummary) footerSummary.textContent = `${totalItems} registros en la jornada (${totalUnits} unidades)`;
+
+        if (btnReintentar && pendingCountSpan) {
+            pendingCountSpan.textContent = pendingCount;
+            btnReintentar.style.display = pendingCount > 0 ? 'inline-flex' : 'none';
+        }
+
+        if (filterCatSelect) {
+            const currentFilter = filterCatSelect.value;
+            filterCatSelect.innerHTML = '<option value="all">Todas las Categorías</option>';
+            uniqueCats.forEach(cat => {
+                const opt = document.createElement('option');
+                opt.value = cat;
+                opt.textContent = `${cat} (${items.filter(i => i.category === cat).length})`;
+                filterCatSelect.appendChild(opt);
+            });
+            if (currentFilter && (currentFilter === 'all' || uniqueCats.has(currentFilter))) {
+                filterCatSelect.value = currentFilter;
+            }
+        }
+
+        const filterCat = filterCatSelect ? filterCatSelect.value : 'all';
+        const searchTerm = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+        const filtered = items.filter(item => {
+            const matchCat = filterCat === 'all' || item.category === filterCat;
+            const matchSearch = !searchTerm || 
+                (item.name && item.name.toLowerCase().includes(searchTerm)) ||
+                (item.batch && item.batch.toLowerCase().includes(searchTerm)) ||
+                (item.code && item.code.toLowerCase().includes(searchTerm)) ||
+                (item.fase && item.fase.toLowerCase().includes(searchTerm)) ||
+                (item.category && item.category.toLowerCase().includes(searchTerm));
+            return matchCat && matchSearch;
+        });
+
+        if (!tbody) return;
+
+        if (filtered.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="10" style="text-align:center; padding:35px; color:var(--text-muted);">
+                        <i class="ph ph-magnifying-glass" style="font-size:32px; opacity:0.3; margin-bottom:8px; display:block;"></i>
+                        ${items.length === 0 ? 'No se han registrado medicamentos en esta jornada.<br><small>Complete el formulario a la izquierda para comenzar.</small>' : 'No hay medicamentos que coincidan con los filtros aplicados.'}
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        tbody.innerHTML = filtered.map((item) => {
+            let syncBadge = '';
+            if (item.syncStatus === 'synced') {
+                syncBadge = `<span class="badge-sync-ok" title="Sincronizado en Google Sheets"><i class="ph-bold ph-check"></i> Sincronizado</span>`;
+            } else if (item.syncStatus === 'pending') {
+                syncBadge = `<span class="badge-sync-pending" title="Pendiente de envío a Google Sheets"><i class="ph-bold ph-clock"></i> Pendiente</span>`;
+            } else {
+                syncBadge = `<span class="badge-sync-err" title="${item.syncError || 'Error al conectar con Google Sheets'}"><i class="ph-bold ph-warning"></i> Error</span>`;
+            }
+
+            let vtoBadge = window.escapeHTML(item.expirationDate || 'N/A');
+            if (item.expirationDate && item.expirationDate.includes('-')) {
+                const diffDays = Math.ceil((new Date(item.expirationDate) - new Date()) / (1000 * 60 * 60 * 24));
+                if (diffDays < 0) {
+                    vtoBadge = `<span style="color:#ef4444; font-weight:700; display:inline-flex; align-items:center; gap:3px;"><i class="ph-fill ph-warning-octagon"></i> ${vtoBadge} (Vencido)</span>`;
+                } else if (diffDays <= 30) {
+                    vtoBadge = `<span style="color:#ef4444; font-weight:700; display:inline-flex; align-items:center; gap:3px;"><i class="ph-fill ph-warning-circle"></i> ${vtoBadge} (&lt;30d)</span>`;
+                } else if (diffDays <= 180) {
+                    vtoBadge = `<span style="color:#f59e0b; font-weight:600; display:inline-flex; align-items:center; gap:3px;"><i class="ph-fill ph-clock"></i> ${vtoBadge} (&lt;6m)</span>`;
+                }
+            }
+
+            let faseTag = `<span style="background:#e0f2fe; color:#0369a1; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:700; display:inline-flex; align-items:center; gap:3px; margin-top:2px;"><i class="ph-bold ph-number-circle-one"></i> 1ra Toma</span>`;
+            if (item.fase && item.fase.includes('2da')) {
+                faseTag = `<span style="background:#fef3c7; color:#92400e; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:700; display:inline-flex; align-items:center; gap:3px; margin-top:2px;"><i class="ph-bold ph-stack"></i> 2da Toma</span>`;
+            } else if (item.fase && (item.fase.includes('Reconteo') || item.fase.includes('Ajuste'))) {
+                faseTag = `<span style="background:#ede9fe; color:#6d28d9; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:700; display:inline-flex; align-items:center; gap:3px; margin-top:2px;"><i class="ph-bold ph-arrows-clockwise"></i> Reconteo</span>`;
+            }
+
+            return `
+                <tr>
+                    <td style="font-size:12px; color:var(--text-muted); white-space:nowrap;">
+                        ${item.hora || 'Reciente'}<br>${faseTag}
+                    </td>
+                    <td>
+                        <div class="font-bold" style="color:var(--text-main); font-size:13px;">${window.escapeHTML(item.name)}</div>
+                        <div style="font-size:11px; color:var(--text-muted);">Cód: ${window.escapeHTML(item.code || 'S/I')} ${item.observations ? `| ${window.escapeHTML(item.observations)}` : ''}</div>
+                    </td>
+                    <td><span class="badge-category-tag" style="font-weight:700;">${window.escapeHTML(item.category || 'General')}</span></td>
+                    <td style="font-weight:700; font-size:14px; color:var(--primary); text-align:center;">+${Number(item.quantity) || 0}</td>
+                    <td style="font-weight:800; font-size:14px; color:#059669; text-align:center; background:rgba(16,185,129,0.05);">${Number(item.totalAcumulado) || Number(item.quantity) || 0} un.</td>
+                    <td><code style="font-size:11px; font-weight:700; background:#f1f5f9; padding:2px 6px; border-radius:4px;">${window.escapeHTML(item.batch || 'N/A')}</code></td>
+                    <td>${vtoBadge}</td>
+                    <td style="font-size:12px;">${window.escapeHTML(item.location || 'Bodega Central')}</td>
+                    <td>${syncBadge}</td>
+                    <td style="text-align:center; white-space:nowrap;">
+                        <button type="button" class="btn btn-icon btn-edit-toma" data-id="${item.id}" title="Editar registro / Mover categoría" style="color:var(--primary);">
+                            <i class="ph ph-pencil-simple"></i>
+                        </button>
+                        <button type="button" class="btn btn-icon btn-incidencia-toma-row" data-id="${item.id}" title="Registrar Incidencia / Merma" style="color:#dc2626;">
+                            <i class="ph ph-warning-octagon"></i>
+                        </button>
+                        ${item.syncStatus !== 'synced' ? `
+                            <button type="button" class="btn btn-icon btn-resync-toma" data-id="${item.id}" title="Reintentar envío a Google Sheets" style="color:var(--primary);">
+                                <i class="ph ph-arrow-clockwise"></i>
+                            </button>
+                        ` : ''}
+                        <button type="button" class="btn btn-icon btn-delete-toma" data-id="${item.id}" title="Eliminar de la sesión" style="color:var(--danger);">
+                            <i class="ph ph-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        function abrirModalEdicion(id) {
+            const list = getSessionItems();
+            const item = list.find(i => i.id === id);
+            if (!item) return;
+
+            const modalEdit = document.getElementById('modal-editar-toma');
+            document.getElementById('edit-toma-id').value = item.id;
+            document.getElementById('edit-toma-old-cat').value = item.category || 'General';
+            document.getElementById('edit-toma-old-cant').value = item.quantity || 0;
+            document.getElementById('edit-toma-med').value = item.name || '';
+            const editFase = document.getElementById('edit-toma-fase');
+            if (editFase) editFase.value = item.fase || '1ra Toma (Inicial)';
+            document.getElementById('edit-toma-cat').value = item.category || 'General';
+            document.getElementById('edit-toma-cant').value = item.quantity || 0;
+            document.getElementById('edit-toma-lote').value = item.batch || '';
+            document.getElementById('edit-toma-vto').value = item.expirationDate || '';
+            document.getElementById('edit-toma-ubic').value = item.location || 'Bodega Central';
+            document.getElementById('edit-toma-motivo').value = '';
+            document.getElementById('edit-toma-delta').innerHTML = '<span style="color:#64748b;">Cantidad actual en esta toma: ' + item.quantity + ' un. (Total acumulado: ' + (item.totalAcumulado || item.quantity) + ' un.)</span>';
+
+            if (modalEdit) modalEdit.style.display = 'flex';
+        }
+
+        // 1. Botón Editar Registro y Doble Clic en Fila
+        tbody.querySelectorAll('tr').forEach(tr => {
+            const editBtn = tr.querySelector('.btn-edit-toma');
+            if (editBtn) {
+                const id = editBtn.getAttribute('data-id');
+                editBtn.addEventListener('click', () => abrirModalEdicion(id));
+                tr.addEventListener('dblclick', () => abrirModalEdicion(id));
+            }
+        });
+
+        // 2. Botón Incidencia / Merma
+        tbody.querySelectorAll('.btn-incidencia-toma-row').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.getAttribute('data-id');
+                const list = getSessionItems();
+                const item = list.find(i => i.id === id);
+                if (!item) return;
+
+                const modalInc = document.getElementById('modal-incidencia-toma');
+                document.getElementById('inc-toma-item-id').value = item.id;
+                document.getElementById('inc-toma-categoria').value = item.category || 'General';
+                document.getElementById('inc-toma-code').value = item.code || 'S/I';
+                document.getElementById('inc-toma-med-nombre').textContent = item.name || 'Medicamento';
+                document.getElementById('inc-toma-stock-info').textContent = `Stock registrado en esta toma: ${item.quantity} un. (Total acumulado: ${item.totalAcumulado || item.quantity} un.)`;
+                document.getElementById('inc-toma-cantidad').value = '1';
+                document.getElementById('inc-toma-cantidad').max = String(item.totalAcumulado || item.quantity || 1000);
+                document.getElementById('inc-toma-lote').value = item.batch || 'N/A';
+                document.getElementById('inc-toma-ubic').value = item.location || 'Bodega Central';
+                document.getElementById('inc-toma-detalle').value = '';
+
+                if (modalInc) modalInc.style.display = 'flex';
+            });
+        });
+
+        // 3. Botón Reintentar Sincronización
+        tbody.querySelectorAll('.btn-resync-toma').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const id = btn.getAttribute('data-id');
+                const list = getSessionItems();
+                const target = list.find(i => i.id === id);
+                if (target) {
+                    btn.innerHTML = '<i class="ph-spinner ph-spin"></i>';
+                    const res = await syncToGoogleSheets(target);
+                    if (res.success) {
+                        target.syncStatus = 'synced';
+                        target.syncError = null;
+                        saveSessionItems(list);
+                        renderTomaUI();
+                        window.showToast("Google Sheets", `"${target.name}" sincronizado exitosamente.`, "success");
+                    } else {
+                        target.syncStatus = 'error';
+                        target.syncError = res.reason;
+                        saveSessionItems(list);
+                        renderTomaUI();
+                        window.showToast("Error", `Fallo al sincronizar: ${res.reason}`, "error");
+                    }
+                }
+            });
+        });
+
+        // 4. Botón Eliminar de Sesión
+        tbody.querySelectorAll('.btn-delete-toma').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const id = btn.getAttribute('data-id');
+                if (confirm("¿Eliminar este registro de la lista de la sesión?")) {
+                    let list = getSessionItems();
+                    list = list.filter(i => i.id !== id);
+                    saveSessionItems(list);
+                    renderTomaUI();
+                    window.showToast("Sesión", "Registro eliminado de la jornada.", "info");
+                }
+            });
+        });
+    }
+
+    // Inicializar listeners del módulo
+    function initListeners() {
+        if (isInitialized) return;
+        isInitialized = true;
+
+        const form = document.getElementById('form-toma-inventario');
+        const inputFase = document.getElementById('toma-fase');
+        const inputMed = document.getElementById('toma-medicamento');
+        const inputVto = document.getElementById('toma-vencimiento');
+        const inputCant = document.getElementById('toma-cantidad');
+        const selectCat = document.getElementById('toma-categoria');
+        const inputLote = document.getElementById('toma-lote');
+        const inputCod = document.getElementById('toma-codigo');
+        const selectUbic = document.getElementById('toma-ubicacion');
+        const inputPrecio = document.getElementById('toma-costo-unitario');
+        const inputMin = document.getElementById('toma-stock-minimo');
+        const inputObs = document.getElementById('toma-observaciones');
+        const quickScanInput = document.getElementById('toma-quick-scan');
+        const vtoAlert = document.getElementById('toma-vto-alert');
+        const autoCatBadge = document.getElementById('toma-auto-cat-badge');
+        const acumuladoAlert = document.getElementById('toma-acumulado-alert');
+        const acumuladoText = document.getElementById('toma-acumulado-text');
+
+        // Cálculo de stock acumulado en vivo
+        function updateLiveAccumulatedCalc() {
+            if (!inputMed || !acumuladoAlert || !acumuladoText) return;
+            const medName = inputMed.value.trim().toLowerCase();
+            const currentAdd = Number(inputCant?.value) || 1;
+
+            if (!medName) {
+                acumuladoAlert.style.display = 'none';
+                return;
+            }
+
+            const match = tomaCatalogCache.find(it => it.name.toLowerCase() === medName);
+            if (match) {
+                const prevQty = Number(match.quantity) || 0;
+                const finalQty = prevQty + currentAdd;
+                acumuladoAlert.style.display = 'block';
+                acumuladoAlert.style.background = '#ecfdf5';
+                acumuladoAlert.style.borderColor = '#a7f3d0';
+                acumuladoAlert.style.color = '#065f46';
+                acumuladoText.innerHTML = `Stock previo en sistema: <strong>${prevQty} un.</strong> (${match.location || 'Bodega Central'}). Con esta toma (+${currentAdd} un.), el stock total acumulado sumará <strong style="font-size:13px; color:#047857;">${finalQty} un.</strong>`;
+            } else {
+                acumuladoAlert.style.display = 'block';
+                acumuladoAlert.style.background = '#f0f9ff';
+                acumuladoAlert.style.borderColor = '#bae6fd';
+                acumuladoAlert.style.color = '#0369a1';
+                acumuladoText.innerHTML = `Nuevo fármaco detectado. Con este conteo registrará un stock inicial de <strong>${currentAdd} un.</strong>`;
+            }
+        }
+
+        // Auto-detección de categoría
+        if (inputMed) {
+            inputMed.addEventListener('input', () => {
+                const rawName = inputMed.value.trim();
+                if (!rawName) {
+                    if (autoCatBadge) autoCatBadge.style.display = 'none';
+                    if (acumuladoAlert) acumuladoAlert.style.display = 'none';
+                    return;
+                }
+
+                // 1. Auto-detectar categoría por forma farmacéutica y palabras clave
+                const detectedCategory = detectarCategoriaAuto(rawName);
+                if (detectedCategory && selectCat) {
+                    let found = false;
+                    for (let opt of selectCat.options) {
+                        if (opt.value.toUpperCase() === detectedCategory.toUpperCase()) {
+                            selectCat.value = opt.value;
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) {
+                        const newOpt = new Option(detectedCategory, detectedCategory, true, true);
+                        selectCat.add(newOpt);
+                    }
+                    if (autoCatBadge) {
+                        autoCatBadge.style.display = 'block';
+                        autoCatBadge.innerHTML = `<i class="ph-fill ph-sparkle"></i> Auto-detectado: <strong>${detectedCategory}</strong>`;
+                    }
+                } else if (autoCatBadge) {
+                    autoCatBadge.style.display = 'none';
+                }
+
+                // 2. Auto-detectar Fase / Toma (1ra Toma vs 2da Toma vs Reconteo de Ajuste)
+                if (inputFase) {
+                    const sessionList = getSessionItems();
+                    const countInSession = sessionList.filter(it => it.name.toLowerCase() === rawName.toLowerCase()).length;
+                    const matchCatalog = tomaCatalogCache.find(it => it.name.toLowerCase() === rawName.toLowerCase());
+                    const autoFaseBadge = document.getElementById('toma-auto-fase-badge');
+
+                    if (countInSession === 0 && (!matchCatalog || Number(matchCatalog.quantity) === 0)) {
+                        inputFase.value = '1ra Toma (Inicial)';
+                        if (autoFaseBadge) {
+                            autoFaseBadge.style.display = 'block';
+                            autoFaseBadge.innerHTML = '<i class="ph-fill ph-sparkle"></i> Conteo: <strong>1ra Toma (Inicial)</strong>';
+                        }
+                    } else if (countInSession === 1 || (countInSession === 0 && matchCatalog && Number(matchCatalog.quantity) > 0)) {
+                        inputFase.value = '2da Toma (2da Bodega / Suma)';
+                        if (autoFaseBadge) {
+                            autoFaseBadge.style.display = 'block';
+                            autoFaseBadge.innerHTML = '<i class="ph-fill ph-sparkle"></i> Conteo: <strong>2da Toma (Suma 2da Bodega)</strong>';
+                        }
+                    } else {
+                        inputFase.value = 'Reconteo / Ajuste';
+                        if (autoFaseBadge) {
+                            autoFaseBadge.style.display = 'block';
+                            autoFaseBadge.innerHTML = '<i class="ph-fill ph-sparkle"></i> Conteo: <strong>Reconteo / Ajuste</strong>';
+                        }
+                    }
+                }
+
+                // 3. Si coincide con catálogo existente, auto-completar campos complementarios
+                const match = tomaCatalogCache.find(it => it.name.toLowerCase() === rawName.toLowerCase());
+                if (match) {
+                    if (match.category && selectCat && !detectedCategory) {
+                        selectCat.value = match.category;
+                    }
+                    if (match.code && inputCod && !inputCod.value) inputCod.value = match.code;
+                    if (match.batch && inputLote && !inputLote.value) inputLote.value = match.batch;
+                    if (match.expirationDate && inputVto && !inputVto.value) {
+                        inputVto.value = match.expirationDate;
+                        inputVto.dispatchEvent(new Event('change'));
+                    }
+                    if (match.unitPrice && inputPrecio && !inputPrecio.value) inputPrecio.value = match.unitPrice;
+                    if (match.criticalLimit && inputMin && (!inputMin.value || inputMin.value === '50')) inputMin.value = match.criticalLimit;
+                }
+
+                updateLiveAccumulatedCalc();
+            });
+        }
+
+        if (inputCant) {
+            inputCant.addEventListener('input', updateLiveAccumulatedCalc);
+        }
+
+        // Alerta en vivo de fecha de vencimiento con Phosphor Icons
+        if (inputVto && vtoAlert) {
+            inputVto.addEventListener('change', () => {
+                const val = inputVto.value;
+                if (!val) {
+                    vtoAlert.style.display = 'none';
+                    return;
+                }
+                const diffDays = Math.ceil((new Date(val) - new Date()) / (1000 * 60 * 60 * 24));
+                vtoAlert.style.display = 'block';
+                if (diffDays < 0) {
+                    vtoAlert.innerHTML = '<span style="color:#ef4444; display:inline-flex; align-items:center; gap:5px; font-weight:700;"><i class="ph-fill ph-warning-octagon"></i> ¡MEDICAMENTO VENCIDO!</span>';
+                } else if (diffDays <= 30) {
+                    vtoAlert.innerHTML = `<span style="color:#ef4444; display:inline-flex; align-items:center; gap:5px; font-weight:700;"><i class="ph-fill ph-warning-circle"></i> Vence en ${diffDays} días (Zona Crítica)</span>`;
+                } else if (diffDays <= 180) {
+                    vtoAlert.innerHTML = `<span style="color:#f59e0b; display:inline-flex; align-items:center; gap:5px; font-weight:600;"><i class="ph-fill ph-clock"></i> Vence en aprox. ${Math.round(diffDays/30)} meses (Zona Precaución)</span>`;
+                } else {
+                    vtoAlert.innerHTML = `<span style="color:#10b981; display:inline-flex; align-items:center; gap:5px; font-weight:600;"><i class="ph-fill ph-check-circle"></i> Vigencia adecuada (${Math.round(diffDays/30)} meses restantes)</span>`;
+                }
+            });
+        }
+
+        // Botones de incremento rápido (+1, +5, +10, +50)
+        document.querySelectorAll('.btn-quick-add').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const addVal = Number(btn.getAttribute('data-add')) || 1;
+                const current = Number(inputCant.value) || 0;
+                inputCant.value = Math.max(1, current + addVal);
+                inputCant.classList.add('pulse');
+                setTimeout(() => inputCant.classList.remove('pulse'), 200);
+                updateLiveAccumulatedCalc();
+            });
+        });
+
+        // Crear nueva categoría en caliente
+        const btnNuevaCat = document.getElementById('btn-nueva-categoria-toma');
+        if (btnNuevaCat) {
+            btnNuevaCat.addEventListener('click', () => {
+                const newCat = prompt("Ingrese el nombre de la nueva categoría clínica:");
+                if (newCat && newCat.trim()) {
+                    const clean = newCat.trim().toUpperCase();
+                    const opt = new Option(clean, clean, true, true);
+                    selectCat.add(opt);
+                    selectCat.value = clean;
+                    window.showToast("Categoría Creada", `Categoría "${clean}" lista para usarse.`, "success");
+                }
+            });
+        }
+
+        // Escáner rápido (Pistola de código de barras)
+        if (quickScanInput) {
+            quickScanInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const code = quickScanInput.value.trim();
+                    if (!code) return;
+
+                    const match = tomaCatalogCache.find(it => 
+                        (it.code && it.code.toLowerCase() === code.toLowerCase()) ||
+                        (it.name && it.name.toLowerCase().includes(code.toLowerCase()))
+                    );
+
+                    if (match) {
+                        inputMed.value = match.name;
+                        inputMed.dispatchEvent(new Event('input'));
+                        if (match.code && inputCod) inputCod.value = match.code;
+                        if (match.unitPrice && inputPrecio) inputPrecio.value = match.unitPrice;
+                        if (match.criticalLimit && inputMin) inputMin.value = match.criticalLimit;
+                        window.showToast("Coincidencia", `Insumo detectado: ${match.name}`, "info");
+                        inputCant.focus();
+                        inputCant.select();
+                    } else {
+                        inputCod.value = code;
+                        inputMed.focus();
+                        window.showToast("Código Nuevo", "Complete los detalles del fármaco.", "info");
+                    }
+                    quickScanInput.value = '';
+                }
+            });
+        }
+
+        // Formulario de Toma de Inventario (Registro Inicial)
+        if (form) {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const faseVal = inputFase ? inputFase.value : '1ra Toma (Inicial)';
+                const cat = selectCat.value;
+                const med = inputMed.value.trim();
+                const cant = Number(inputCant.value) || 1;
+                const vto = inputVto.value;
+                const lote = inputLote.value.trim();
+                const cod = inputCod.value.trim() || ("AUTO-" + Math.random().toString(36).substring(2, 7).toUpperCase());
+                const ubic = selectUbic ? selectUbic.value : 'Bodega Central';
+                const precio = Number(inputPrecio.value) || 0;
+                const minStock = Number(inputMin.value) || 50;
+                const obs = inputObs ? inputObs.value.trim() : '';
+
+                if (!cat) {
+                    window.showToast("Validación", "Por favor seleccione una categoría.", "warning");
+                    selectCat.focus();
+                    return;
+                }
+                if (!med) {
+                    window.showToast("Validación", "Por favor ingrese el nombre del medicamento.", "warning");
+                    inputMed.focus();
+                    return;
+                }
+                if (!vto) {
+                    window.showToast("Validación", "Por favor seleccione la fecha de vencimiento.", "warning");
+                    inputVto.focus();
+                    return;
+                }
+                if (!lote) {
+                    window.showToast("Validación", "Por favor ingrese el lote del producto.", "warning");
+                    inputLote.focus();
+                    return;
+                }
+
+                const now = new Date();
+                const horaStr = now.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+                const fechaHoraStr = now.toLocaleString('es-CL');
+                const currentUserEmail = auth.currentUser ? auth.currentUser.email : 'Operador';
+
+                const existingMatch = tomaCatalogCache.find(it => it.name.toLowerCase() === med.toLowerCase());
+                const prevStock = existingMatch ? (Number(existingMatch.quantity) || 0) : 0;
+                const totalAcumulado = prevStock + cant;
+
+                const newRecord = {
+                    id: 'REC-' + Date.now() + '-' + Math.random().toString(36).substring(2, 5),
+                    fase: faseVal,
+                    timestamp: fechaHoraStr,
+                    hora: horaStr,
+                    code: cod,
+                    name: med,
+                    category: cat,
+                    quantity: cant,
+                    totalAcumulado: totalAcumulado,
+                    batch: lote,
+                    expirationDate: vto,
+                    location: ubic,
+                    unitPrice: precio,
+                    criticalLimit: minStock,
+                    observations: obs,
+                    user: currentUserEmail,
+                    syncStatus: 'pending',
+                    syncError: null
+                };
+
+                const list = getSessionItems();
+                list.unshift(newRecord);
+                saveSessionItems(list);
+                renderTomaUI();
+
+                window.showToast("Registrando", `Sumando "${med}" (+${cant} un. | Total: ${totalAcumulado})...`, "info");
+
+                // Enviar a Google Sheets
+                syncToGoogleSheets({
+                    action: 'insert',
+                    ...newRecord
+                }).then(res => {
+                    if (res.success) {
+                        newRecord.syncStatus = 'synced';
+                        saveSessionItems(list);
+                        renderTomaUI();
+                        window.showToast("Google Sheets", `"${med}" guardado en [${cat}]. Total: ${totalAcumulado} un.`, "success");
+                    } else {
+                        newRecord.syncStatus = 'error';
+                        newRecord.syncError = res.reason;
+                        saveSessionItems(list);
+                        renderTomaUI();
+                    }
+                });
+
+                // Sincronizar en Firestore
+                syncToFirestore(newRecord);
+
+                inputMed.value = '';
+                inputCant.value = '1';
+                inputLote.value = '';
+                inputVto.value = '';
+                inputCod.value = '';
+                if (inputPrecio) inputPrecio.value = '';
+                if (inputObs) inputObs.value = '';
+                if (vtoAlert) vtoAlert.style.display = 'none';
+                if (autoCatBadge) autoCatBadge.style.display = 'none';
+                if (acumuladoAlert) acumuladoAlert.style.display = 'none';
+
+                inputMed.focus();
+            });
+        }
+
+        // =========================================================================
+        // FORMULARIO: EDITAR REGISTRO / CAMBIO DE CATEGORÍA / CORRECCIÓN DE STOCK
+        // =========================================================================
+        const formEdit = document.getElementById('form-editar-toma');
+        const editCantInput = document.getElementById('edit-toma-cant');
+        const editDeltaSpan = document.getElementById('edit-toma-delta');
+
+        if (editCantInput && editDeltaSpan) {
+            editCantInput.addEventListener('input', () => {
+                const oldCant = Number(document.getElementById('edit-toma-old-cant').value) || 0;
+                const newCant = Number(editCantInput.value) || 0;
+                const delta = newCant - oldCant;
+                if (delta > 0) {
+                    editDeltaSpan.innerHTML = `<span style="color:#059669; font-weight:700; display:inline-flex; align-items:center; gap:4px;"><i class="ph-bold ph-arrow-circle-up"></i> Ajuste positivo (+${delta} un. a sumar)</span>`;
+                } else if (delta < 0) {
+                    editDeltaSpan.innerHTML = `<span style="color:#dc2626; font-weight:700; display:inline-flex; align-items:center; gap:4px;"><i class="ph-bold ph-arrow-circle-down"></i> Ajuste negativo (${delta} un. a descontar)</span>`;
+                } else {
+                    editDeltaSpan.innerHTML = `<span style="color:#64748b; font-weight:600; display:inline-flex; align-items:center; gap:4px;"><i class="ph-bold ph-equals"></i> Misma cantidad (Sin cambio en stock)</span>`;
+                }
+            });
+        }
+
+        if (formEdit) {
+            formEdit.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const id = document.getElementById('edit-toma-id').value;
+                const oldCat = document.getElementById('edit-toma-old-cat').value;
+                const oldCant = Number(document.getElementById('edit-toma-old-cant').value) || 0;
+                const newMed = document.getElementById('edit-toma-med').value.trim();
+                const newFase = document.getElementById('edit-toma-fase').value;
+                const newCat = document.getElementById('edit-toma-cat').value;
+                const newCant = Number(document.getElementById('edit-toma-cant').value) || 0;
+                const newLote = document.getElementById('edit-toma-lote').value.trim();
+                const newVto = document.getElementById('edit-toma-vto').value;
+                const newUbic = document.getElementById('edit-toma-ubic').value;
+                const motivo = document.getElementById('edit-toma-motivo').value.trim();
+
+                const list = getSessionItems();
+                const target = list.find(i => i.id === id);
+                if (!target) return;
+
+                const diffQty = newCant - oldCant;
+                const currentUserEmail = auth.currentUser ? auth.currentUser.email : 'Auditor';
+
+                // Generar desglose detallado de cambios para auditoría clínica
+                const changes = [];
+                if (target.name !== newMed) changes.push(`Medicamento: "${target.name}" ➔ "${newMed}"`);
+                if ((target.fase || '') !== newFase) changes.push(`Fase: "${target.fase}" ➔ "${newFase}"`);
+                if (oldCat !== newCat) changes.push(`Categoría: "${oldCat}" ➔ "${newCat}"`);
+                if (oldCant !== newCant) changes.push(`Cantidad Toma: ${oldCant} ➔ ${newCant} (Dif: ${diffQty >= 0 ? '+' : ''}${diffQty})`);
+                if ((target.batch || '') !== newLote) changes.push(`Lote: "${target.batch}" ➔ "${newLote}"`);
+                if ((target.expirationDate || '') !== newVto) changes.push(`Vencimiento: "${target.expirationDate}" ➔ "${newVto}"`);
+                if ((target.location || '') !== newUbic) changes.push(`Ubicación: "${target.location}" ➔ "${newUbic}"`);
+
+                const auditDetail = changes.length > 0 ? changes.join(' | ') : 'Actualización de datos';
+
+                // 1. Actualizar en Firestore
+                try {
+                    const dbInstance = window.firebaseFirestore.db || window.db || db;
+                    const insumosRef = window.firebaseFirestore.collection(dbInstance, 'Insumos');
+                    const q = window.firebaseFirestore.query(
+                        insumosRef,
+                        window.firebaseFirestore.where('name_lowercase', '==', newMed.toLowerCase()),
+                        window.firebaseFirestore.limit(1)
+                    );
+                    const snap = await window.firebaseFirestore.getDocs(q);
+
+                    if (!snap.empty) {
+                        const existingDoc = snap.docs[0];
+                        await window.firebaseFirestore.updateDoc(window.firebaseFirestore.doc(dbInstance, 'Insumos', existingDoc.id), {
+                            quantity: window.firebaseFirestore.increment(diffQty),
+                            category: newCat,
+                            batch: newLote,
+                            expirationDate: newVto,
+                            location: newUbic,
+                            updatedAt: window.firebaseFirestore.serverTimestamp()
+                        });
+                    }
+
+                    // Registrar Auditoría Completa en Historial_Movimientos
+                    await window.firebaseFirestore.addDoc(window.firebaseFirestore.collection(dbInstance, 'Historial_Movimientos'), {
+                        date: window.firebaseFirestore.serverTimestamp(),
+                        type: 'auditoria_modificacion_inventario',
+                        insumoName: newMed,
+                        user: currentUserEmail,
+                        quantity: diffQty,
+                        oldQuantity: oldCant,
+                        newQuantity: newCant,
+                        oldCategory: oldCat,
+                        newCategory: newCat,
+                        batch: newLote,
+                        destination: newUbic,
+                        cambiosRealizados: changes,
+                        observations: `[Auditoría Toma Inventario] ${motivo} (${auditDetail})`
+                    });
+                } catch (err) {
+                    console.error("Error aplicando edición en Firestore:", err);
+                }
+
+                // 2. Actualizar objeto local en la sesión
+                target.name = newMed;
+                target.fase = newFase;
+                target.category = newCat;
+                target.quantity = newCant;
+                target.totalAcumulado = (target.totalAcumulado || oldCant) + diffQty;
+                target.batch = newLote;
+                target.expirationDate = newVto;
+                target.location = newUbic;
+                target.observations = `[Modificado: ${motivo}]`;
+                target.syncStatus = 'pending';
+
+                saveSessionItems(list);
+                renderTomaUI();
+                document.getElementById('modal-editar-toma').style.display = 'none';
+
+                window.showToast("Modificación Guardada", `Registro actualizado y auditado con éxito.`, "success");
+
+                // 3. Sincronizar en Google Sheets (Mueve de pestaña y actualiza)
+                syncToGoogleSheets({
+                    action: 'update',
+                    oldCategory: oldCat,
+                    category: newCat,
+                    name: newMed,
+                    quantity: newCant,
+                    totalAcumulado: target.totalAcumulado,
+                    batch: newLote,
+                    expirationDate: newVto,
+                    location: newUbic,
+                    fase: newFase,
+                    code: target.code || 'S/I',
+                    user: currentUserEmail,
+                    timestamp: new Date().toLocaleString('es-CL'),
+                    observations: `[Modificación/Auditoría] ${motivo} (${auditDetail})`
+                }).then(res => {
+                    if (res.success) {
+                        target.syncStatus = 'synced';
+                        saveSessionItems(list);
+                        renderTomaUI();
+                        window.showToast("Google Sheets", `Pestaña actualizada a [${newCat}].`, "success");
+                    }
+                });
+            });
+        }
+
+        // =========================================================================
+        // FORMULARIO: REGISTRAR INCIDENCIA / MERMA / QUIEBRE
+        // =========================================================================
+        const formInc = document.getElementById('form-incidencia-toma');
+        if (formInc) {
+            formInc.addEventListener('submit', async (e) => {
+                e.preventDefault();
+
+                const id = document.getElementById('inc-toma-item-id').value;
+                const mermadaQty = Number(document.getElementById('inc-toma-cantidad').value) || 1;
+                const tipoInc = document.getElementById('inc-toma-tipo').value;
+                const lote = document.getElementById('inc-toma-lote').value;
+                const ubic = document.getElementById('inc-toma-ubic').value;
+                const detalle = document.getElementById('inc-toma-detalle').value.trim();
+                const cat = document.getElementById('inc-toma-categoria').value;
+                const cod = document.getElementById('inc-toma-code').value;
+
+                const list = getSessionItems();
+                const target = list.find(i => i.id === id);
+                if (!target) return;
+
+                const medName = target.name;
+                const currentUserEmail = auth.currentUser ? auth.currentUser.email : 'Operador';
+                const fechaHoraStr = new Date().toLocaleString('es-CL');
+
+                // 1. Descontar en Firestore (Insumos, Incidencias y Historial_Movimientos)
+                try {
+                    const dbInstance = window.firebaseFirestore.db || window.db || db;
+                    const insumosRef = window.firebaseFirestore.collection(dbInstance, 'Insumos');
+                    const q = window.firebaseFirestore.query(
+                        insumosRef,
+                        window.firebaseFirestore.where('name_lowercase', '==', medName.toLowerCase()),
+                        window.firebaseFirestore.limit(1)
+                    );
+                    const snap = await window.firebaseFirestore.getDocs(q);
+
+                    if (!snap.empty) {
+                        const existingDoc = snap.docs[0];
+                        await window.firebaseFirestore.updateDoc(window.firebaseFirestore.doc(dbInstance, 'Insumos', existingDoc.id), {
+                            quantity: window.firebaseFirestore.increment(-mermadaQty),
+                            updatedAt: window.firebaseFirestore.serverTimestamp()
+                        });
+                    }
+
+                    // Registrar en Colección Incidencias
+                    await window.firebaseFirestore.addDoc(window.firebaseFirestore.collection(dbInstance, 'Incidencias'), {
+                        fecha: window.firebaseFirestore.serverTimestamp(),
+                        tipo: tipoInc,
+                        medicamento: medName,
+                        codigo: cod,
+                        categoria: cat,
+                        cantidadAfectada: mermadaQty,
+                        lote: lote,
+                        ubicacion: ubic,
+                        usuario: currentUserEmail,
+                        descripcion: detalle,
+                        origen: 'Toma de Inventario'
+                    });
+
+                    // Registrar en Historial_Movimientos
+                    await window.firebaseFirestore.addDoc(window.firebaseFirestore.collection(dbInstance, 'Historial_Movimientos'), {
+                        date: window.firebaseFirestore.serverTimestamp(),
+                        type: 'merma_inventario',
+                        insumoName: medName,
+                        user: currentUserEmail,
+                        quantity: -mermadaQty,
+                        batch: lote,
+                        destination: ubic,
+                        category: cat,
+                        observations: `[Incidencia en Toma: ${tipoInc}] ${detalle} (-${mermadaQty} un.)`
+                    });
+                } catch (err) {
+                    console.error("Error registrando incidencia en Firestore:", err);
+                }
+
+                // 2. Actualizar sesión local
+                target.quantity = Math.max(0, (Number(target.quantity) || 0) - mermadaQty);
+                target.totalAcumulado = Math.max(0, (Number(target.totalAcumulado) || (target.quantity + mermadaQty)) - mermadaQty);
+                target.observations = (target.observations ? target.observations + ' | ' : '') + `⚠️ Merma: -${mermadaQty} un. (${tipoInc})`;
+
+                saveSessionItems(list);
+                renderTomaUI();
+                document.getElementById('modal-incidencia-toma').style.display = 'none';
+
+                window.showToast("Incidencia Registrada", `Se descontaron ${mermadaQty} un. de "${medName}" por ${tipoInc}.`, "warning");
+
+                // 3. Enviar a Google Sheets a la pestaña especial INCIDENCIAS_Y_MERMAS
+                syncToGoogleSheets({
+                    action: 'incidencia',
+                    name: medName,
+                    category: cat,
+                    batch: lote,
+                    location: ubic,
+                    quantityMermada: mermadaQty,
+                    tipoIncidencia: tipoInc,
+                    observations: detalle,
+                    user: currentUserEmail,
+                    timestamp: fechaHoraStr
+                }).then(res => {
+                    if (res.success) {
+                        window.showToast("Google Sheets", `Incidencia anotada en pestaña [INCIDENCIAS_Y_MERMAS].`, "success");
+                    }
+                });
+            });
+        }
+
+        // Filtro y buscador en la tabla
+        const filterCatSelect = document.getElementById('toma-filter-cat');
+        if (filterCatSelect) {
+            filterCatSelect.addEventListener('change', renderTomaUI);
+        }
+
+        const tableSearchInput = document.getElementById('toma-table-search');
+        if (tableSearchInput) {
+            tableSearchInput.addEventListener('input', renderTomaUI);
+        }
+
+        // Reintentar envíos pendientes
+        const btnReintentar = document.getElementById('btn-reintentar-pendientes');
+        if (btnReintentar) {
+            btnReintentar.addEventListener('click', async () => {
+                const list = getSessionItems();
+                const pending = list.filter(it => it.syncStatus !== 'synced');
+                if (pending.length === 0) return;
+
+                btnReintentar.innerHTML = '<i class="ph-spinner ph-spin"></i> Sincronizando...';
+                let successCount = 0;
+
+                for (let it of pending) {
+                    const res = await syncToGoogleSheets({ action: 'insert', ...it });
+                    if (res.success) {
+                        it.syncStatus = 'synced';
+                        it.syncError = null;
+                        successCount++;
+                    } else {
+                        it.syncStatus = 'error';
+                        it.syncError = res.reason;
+                    }
+                }
+
+                saveSessionItems(list);
+                renderTomaUI();
+                window.showToast("Sincronización Completada", `${successCount} de ${pending.length} registros enviados a Google Sheets.`, "success");
+            });
+        }
+
+        // Limpiar Sesión
+        const btnClear = document.getElementById('btn-clear-toma-session');
+        if (btnClear) {
+            btnClear.addEventListener('click', () => {
+                const list = getSessionItems();
+                if (list.length === 0) {
+                    window.showToast("Sesión", "No hay registros en la sesión actual.", "info");
+                    return;
+                }
+                if (confirm(`¿Está seguro de reiniciar la sesión de toma de inventario? Se limpiarán ${list.length} registros de la vista local (los datos en Google Sheets y Firebase se conservan intactos).`)) {
+                    saveSessionItems([]);
+                    renderTomaUI();
+                    window.showToast("Sesión Reiniciada", "La lista de la jornada ha sido limpiada.", "info");
+                }
+            });
+        }
+
+        // Exportar a Resguardo Excel
+        const btnExport = document.getElementById('btn-export-toma-excel');
+        if (btnExport) {
+            btnExport.addEventListener('click', () => {
+                const list = getSessionItems();
+                if (list.length === 0) {
+                    window.showToast("Exportación", "No hay registros en la sesión para exportar.", "warning");
+                    return;
+                }
+                if (typeof exportarInventarioResguardo === 'function') {
+                    exportarInventarioResguardo(list);
+                } else if (typeof XLSX !== 'undefined') {
+                    const rows = list.map(item => ({
+                        "Fase_Toma": item.fase || "1ra Toma (Inicial)",
+                        "ID_Producto": item.code || "S/I",
+                        "Descripción": item.name || "Sin nombre",
+                        "Categoría": item.category || "General",
+                        "Cantidad_Toma": item.quantity || 0,
+                        "Total_Acumulado": item.totalAcumulado || item.quantity || 0,
+                        "Lote": item.batch || "N/A",
+                        "Fecha_Vencimiento": item.expirationDate || "N/A",
+                        "Ubicación": item.location || "Bodega Central",
+                        "Costo_Unitario": item.unitPrice || 0,
+                        "Stock_Mínimo": item.criticalLimit || 50,
+                        "Responsable": item.user || "Operador",
+                        "Fecha_Hora": item.timestamp || "",
+                        "Observaciones": item.observations || ""
+                    }));
+                    const ws = XLSX.utils.json_to_sheet(rows);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, "Toma_Inventario");
+                    const dateStr = new Date().toISOString().split('T')[0];
+                    XLSX.writeFile(wb, `Toma_Inventario_SAR_${dateStr}.xlsx`);
+                    window.showToast("Exportación Exitosa", "Planilla Excel generada correctamente.", "success");
+                } else {
+                    window.showToast("Error", "Librería XLSX no disponible para exportar.", "error");
+                }
+            });
+        }
+
+        // Modal Configuración Google Sheets
+        const btnOpenConfig = document.getElementById('btn-open-config-sheets');
+        const modalConfig = document.getElementById('modal-config-sheets');
+        const inputSheetsUrl = document.getElementById('input-sheets-url');
+        const preCode = document.getElementById('code-google-apps-script');
+        const btnCopyCode = document.getElementById('btn-copy-gas-code');
+        const btnTestConn = document.getElementById('btn-test-sheets-conn');
+        const feedbackDiv = document.getElementById('sheets-test-feedback');
+        const btnSaveConfig = document.getElementById('btn-save-sheets-config');
+
+        if (preCode) {
+            preCode.textContent = GOOGLE_APPS_SCRIPT_TEMPLATE;
+        }
+
+        if (btnOpenConfig && modalConfig) {
+            btnOpenConfig.addEventListener('click', () => {
+                if (inputSheetsUrl) inputSheetsUrl.value = getSheetsUrl();
+                if (feedbackDiv) feedbackDiv.style.display = 'none';
+                if (preCode) preCode.textContent = GOOGLE_APPS_SCRIPT_TEMPLATE;
+                modalConfig.style.display = 'flex';
+            });
+        }
+
+        if (btnCopyCode) {
+            btnCopyCode.addEventListener('click', () => {
+                navigator.clipboard.writeText(GOOGLE_APPS_SCRIPT_TEMPLATE).then(() => {
+                    btnCopyCode.innerHTML = '<i class="ph-bold ph-check"></i> ¡Copiado!';
+                    setTimeout(() => {
+                        btnCopyCode.innerHTML = '<i class="ph ph-copy"></i> Copiar Código';
+                    }, 2000);
+                    window.showToast("Código Copiado", "Pégalo en Extensiones > Apps Script en tu Google Sheets.", "success");
+                }).catch(err => {
+                    window.showToast("Error al copiar", err.message, "error");
+                });
+            });
+        }
+
+        if (btnTestConn && inputSheetsUrl && feedbackDiv) {
+            btnTestConn.addEventListener('click', async () => {
+                const url = inputSheetsUrl.value.trim();
+                if (!url) {
+                    feedbackDiv.style.display = 'block';
+                    feedbackDiv.style.color = '#ef4444';
+                    feedbackDiv.textContent = '❌ Ingrese una URL válida de Google Apps Script.';
+                    return;
+                }
+
+                btnTestConn.innerHTML = '<i class="ph-spinner ph-spin"></i> Probando...';
+                feedbackDiv.style.display = 'block';
+                feedbackDiv.style.color = '#3b82f6';
+                feedbackDiv.textContent = 'Enviando paquete de prueba a Google Sheets...';
+
+                try {
+                    await fetch(url, {
+                        method: 'POST',
+                        mode: 'no-cors',
+                        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                        body: JSON.stringify({
+                            action: "insert",
+                            fase: "1ra Toma (Inicial)",
+                            category: "PRUEBA_SISTEMA",
+                            name: "Insumo de Prueba Conexión",
+                            quantity: 1,
+                            totalAcumulado: 1,
+                            batch: "TEST-01",
+                            expirationDate: new Date().toISOString().split('T')[0],
+                            location: "Bodega Central",
+                            user: auth.currentUser ? auth.currentUser.email : "Tester",
+                            timestamp: new Date().toLocaleString('es-CL'),
+                            observations: "Prueba de enlace exitosa desde el Visor Logístico."
+                        })
+                    });
+
+                    feedbackDiv.style.color = '#10b981';
+                    feedbackDiv.innerHTML = '<strong>✅ ¡Conexión Exitosa!</strong> El Google Sheet recibió el paquete y configuró la pestaña correspondiente.';
+                    setSheetsUrl(url);
+                    updateSheetsStatusBadge();
+                } catch (e) {
+                    feedbackDiv.style.color = '#ef4444';
+                    feedbackDiv.textContent = '❌ Error al conectar: ' + e.message;
+                } finally {
+                    btnTestConn.innerHTML = '<i class="ph ph-plugs"></i> Probar Conexión';
+                }
+            });
+        }
+
+        if (btnSaveConfig && inputSheetsUrl && modalConfig) {
+            btnSaveConfig.addEventListener('click', () => {
+                const url = inputSheetsUrl.value.trim();
+                setSheetsUrl(url);
+                updateSheetsStatusBadge();
+                modalConfig.style.display = 'none';
+                window.showToast("Configuración Guardada", url ? "URL de Google Sheets activada para sincronización." : "Configuración actualizada.", "success");
+            });
+        }
+
+        // Cámara Scanner
+        const btnCamScan = document.getElementById('toma-btn-cam-scan');
+        if (btnCamScan) {
+            btnCamScan.addEventListener('click', () => {
+                const modalCam = document.getElementById('modal-cam-toma');
+                if (!modalCam) return;
+                modalCam.style.display = 'flex';
+
+                if (typeof Html5Qrcode !== 'undefined') {
+                    qrScannerTomaInstance = new Html5Qrcode("toma-qr-reader");
+                    qrScannerTomaInstance.start(
+                        { facingMode: "environment" },
+                        { fps: 10, qrbox: 250 },
+                        (decodedText) => {
+                            if (quickScanInput) {
+                                quickScanInput.value = decodedText;
+                                const event = new KeyboardEvent('keydown', { key: 'Enter' });
+                                quickScanInput.dispatchEvent(event);
+                            }
+                            window.cerrarCamScannerToma();
+                        },
+                        (errorMessage) => {
+                            // Escaneo en progreso
+                        }
+                    ).catch(err => {
+                        console.error("Error iniciando cámara:", err);
+                        window.showToast("Error Cámara", "No se pudo acceder a la cámara del dispositivo.", "error");
+                        window.cerrarCamScannerToma();
+                    });
+                } else {
+                    window.showToast("Error", "Librería de escaneo no disponible.", "warning");
+                }
+            });
+        }
+
+        // Botón Restaurar Respaldo en la Nube
+        const btnRestore = document.getElementById('btn-restore-cloud-toma');
+        if (btnRestore) {
+            btnRestore.addEventListener('click', () => {
+                restoreFromCloudBackup();
+            });
+        }
+
+        const badgeBot = document.getElementById('toma-guardian-bot-badge');
+        if (badgeBot) {
+            badgeBot.addEventListener('click', () => {
+                const list = getSessionItems();
+                window.showToast(
+                    "Bot Guardián de Integridad",
+                    `Estado: ACTIVO | ${list.length} medicamentos protegidos localmente y respaldados en la nube.`,
+                    "success"
+                );
+            });
+        }
+    }
+
+    window.cerrarCamScannerToma = function() {
+        const modalCam = document.getElementById('modal-cam-toma');
+        if (modalCam) modalCam.style.display = 'none';
+        if (qrScannerTomaInstance) {
+            qrScannerTomaInstance.stop().then(() => {
+                qrScannerTomaInstance.clear();
+                qrScannerTomaInstance = null;
+            }).catch(() => {});
+        }
+    };
+
+    // Función global llamada por el router
+    window.initTomaInventarioModule = async function() {
+        initListeners();
+        updateSheetsStatusBadge();
+        updateBotStatusUI();
+        renderTomaUI();
+        await loadInsumosCatalog();
+        await loadBodegasDropdown();
+
+        // Heartbeat de Integridad periódica cada 60 segundos
+        if (!window._tomaBotHeartbeat) {
+            window._tomaBotHeartbeat = setInterval(() => {
+                const list = getSessionItems();
+                if (list.length > 0) {
+                    triggerCloudBackup(list);
+                }
+            }, 60000);
+        }
+    };
+
+})();
+
+

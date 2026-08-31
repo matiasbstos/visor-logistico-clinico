@@ -3,7 +3,7 @@
 
 <head>
     <script>
-        const APP_VERSION = '14.2';
+        const APP_VERSION = '15.6';
         if (localStorage.getItem('APP_VERSION') !== APP_VERSION) {
             localStorage.setItem('APP_VERSION', APP_VERSION);
             if ('serviceWorker' in navigator) {
@@ -16,8 +16,7 @@
                     for (let key of keys) caches.delete(key);
                 });
             }
-            console.log('Cache borrado para la versión:', APP_VERSION);
-            window.location.href = window.location.pathname; // Recarga limpia
+            console.log('Actualización en caliente aplicada sin interrupción de inventario:', APP_VERSION);
         }
     </script>
     <meta charset="UTF-8">
@@ -118,6 +117,9 @@
                     </a>
                     <a href="#" class="menu-item normal" data-target="view-inventario">
                         <i class="ph ph-package"></i>Inventario
+                    </a>
+                    <a href="#" class="menu-item normal" data-target="view-toma-inventario">
+                        <i class="ph ph-clipboard-text"></i>Toma de Inventario
                     </a>
                     <a href="#" class="menu-item normal" data-target="view-movimientos">
                         <i class="ph ph-arrows-left-right"></i>Ingresos
@@ -511,6 +513,313 @@
                         </div>
                     </div>
             </div>
+            </section>
+
+            <!-- VIEW: Toma de Inventario (Google Sheets por Categorías) -->
+            <section id="view-toma-inventario" class="view-section" style="display:none;">
+                <div class="dashboard-container">
+                    <div class="page-header mb-16">
+                        <div class="page-title">
+                            <h1><i class="ph ph-clipboard-text" style="color:var(--primary); margin-right:8px;"></i>Toma de Inventario</h1>
+                            <p>Registro rápido de existencias físicas y sincronización instantánea con Google Sheets por categorías.</p>
+                        </div>
+                        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                            <div id="toma-guardian-bot-badge" class="badge-sheets-status status-online" style="background:#f0fdf4; border-color:#86efac; color:#15803d; cursor:pointer;" title="Bot Guardián de Integridad: Respaldo continuo en la nube y protección contra pérdida de datos activo.">
+                                <span class="status-indicator-dot" style="background:#16a34a;"></span>
+                                <span id="toma-bot-status-text">Bot Guardián: Respaldo Activo</span>
+                            </div>
+                            <div id="toma-sheets-badge" class="badge-sheets-status status-offline" title="Estado de la conexión con Google Sheets">
+                                <span class="status-indicator-dot"></span>
+                                <span id="toma-sheets-status-text">Google Sheets: No configurado</span>
+                            </div>
+                            <button type="button" class="btn btn-outline" id="btn-restore-cloud-toma" style="border-color:#16a34a; color:#15803d; font-weight:600; font-size:12px;" title="Restaurar sesión desde el último respaldo en la nube">
+                                <i class="ph ph-cloud-arrow-down"></i> Restaurar Respaldo
+                            </button>
+                            <button type="button" class="btn btn-outline" id="btn-open-config-sheets" style="border-color:var(--primary); color:var(--primary); font-weight:600;">
+                                <i class="ph ph-google-logo"></i> Configurar Google Sheets
+                            </button>
+                            <button type="button" class="btn btn-outline" id="btn-export-toma-excel" style="border-color:var(--success); color:var(--success); font-weight:600;">
+                                <i class="ph ph-file-arrow-down"></i> Exportar Resguardo
+                            </button>
+                            <button type="button" class="btn btn-outline" id="btn-clear-toma-session" style="color:var(--text-muted);" title="Reiniciar lista de la jornada">
+                                <i class="ph ph-trash"></i> Limpiar Sesión
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Métricas Rápidas de la Jornada -->
+                    <div class="cards-grid mb-20" style="grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));">
+                        <div class="card" style="padding:16px 20px;">
+                            <div class="card-header" style="margin-bottom:8px;">
+                                <div class="card-icon blue" style="width:36px; height:36px; font-size:18px;"><i class="ph ph-pill"></i></div>
+                                <span class="card-badge blue">SESIÓN ACTUAL</span>
+                            </div>
+                            <div class="card-title" style="font-size:11px;">MEDICAMENTOS REGISTRADOS</div>
+                            <div class="card-value" id="toma-metric-items" style="font-size:26px;">0</div>
+                        </div>
+                        <div class="card" style="padding:16px 20px;">
+                            <div class="card-header" style="margin-bottom:8px;">
+                                <div class="card-icon green" style="width:36px; height:36px; font-size:18px;"><i class="ph ph-stack"></i></div>
+                                <span class="card-badge green">STOCK FÍSICO</span>
+                            </div>
+                            <div class="card-title" style="font-size:11px;">TOTAL UNIDADES CONTADAS</div>
+                            <div class="card-value" id="toma-metric-units" style="font-size:26px;">0</div>
+                        </div>
+                        <div class="card" style="padding:16px 20px;">
+                            <div class="card-header" style="margin-bottom:8px;">
+                                <div class="card-icon orange" style="width:36px; height:36px; font-size:18px;"><i class="ph ph-folders"></i></div>
+                                <span class="card-badge orange">DIVERSIDAD</span>
+                            </div>
+                            <div class="card-title" style="font-size:11px;">CATEGORÍAS ACTIVAS</div>
+                            <div class="card-value" id="toma-metric-categories" style="font-size:26px;">0</div>
+                        </div>
+                        <div class="card" style="padding:16px 20px;">
+                            <div class="card-header" style="margin-bottom:8px;">
+                                <div class="card-icon purple" style="width:36px; height:36px; font-size:18px; background:rgba(139,92,246,0.1); color:#8b5cf6;"><i class="ph ph-cloud-arrow-up"></i></div>
+                                <span class="card-badge" id="toma-sync-badge-pill" style="background:#f1f5f9; color:var(--text-muted);">0%</span>
+                            </div>
+                            <div class="card-title" style="font-size:11px;">ENVIADOS A GOOGLE SHEETS</div>
+                            <div class="card-value" id="toma-metric-synced" style="font-size:26px; color:#8b5cf6;">0</div>
+                        </div>
+                    </div>
+
+                    <!-- Split Container: Formulario (Izquierda) + Tabla en Vivo (Derecha) -->
+                    <div class="toma-layout-grid">
+                        <!-- Panel Izquierdo: Formulario de Registro Rápido -->
+                        <div class="toma-form-panel">
+                            <div class="card form-card" style="position:sticky; top:15px; border-top: 4px solid var(--primary);">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid #f1f5f9; padding-bottom:12px;">
+                                    <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--text-main); display:flex; align-items:center; gap:8px;">
+                                        <i class="ph ph-plus-circle" style="color:var(--primary);"></i> Ingreso de Existencias
+                                    </h3>
+                                    <span class="badge-gray" style="font-size:10px; font-weight:700;">REGISTRO CONTINUO</span>
+                                </div>
+
+                                <!-- Barra de Escaneo Rápido -->
+                                <div class="barcode-scanner-box mb-16" style="padding:10px 14px;">
+                                    <label class="section-label text-primary" style="margin-bottom:6px; font-size:10px;">ESCANEO RÁPIDO (PISTOLA / LECTOR)</label>
+                                    <div class="scan-input-group">
+                                        <i class="ph ph-barcode"></i>
+                                        <input type="text" id="toma-quick-scan" placeholder="Escanee código o presione enter..." autocomplete="off">
+                                        <button type="button" class="btn btn-outline" id="toma-btn-cam-scan" title="Escanear con cámara" style="padding:4px 8px; font-size:12px;"><i class="ph ph-camera"></i></button>
+                                    </div>
+                                </div>
+
+                                <!-- Formulario Principal -->
+                                <form id="form-toma-inventario">
+                                    <!-- Fase de Conteo / Toma y Ubicación -->
+                                    <div class="grid-2-col-even mb-12" style="gap:10px;">
+                                        <div class="form-group">
+                                            <div style="display:flex; justify-content:space-between; align-items:center;">
+                                                <label class="form-label" for="toma-fase" style="font-weight:700; margin-bottom:2px;">CONTEO / TOMA <span style="color:var(--danger)">*</span></label>
+                                            </div>
+                                            <select id="toma-fase" class="form-control" style="font-weight:700; color:var(--primary); background:#f0f9ff; border-color:#bae6fd;">
+                                                <option value="1ra Toma (Inicial)" selected>1ra Toma (Conteo Inicial)</option>
+                                                <option value="2da Toma (2da Bodega / Suma)">2da Toma (2da Bodega / Suma)</option>
+                                                <option value="Reconteo / Ajuste">Reconteo / Ajuste</option>
+                                            </select>
+                                            <div id="toma-auto-fase-badge" style="font-size:10.5px; margin-top:3px; color:#0284c7; font-weight:700; display:none;">
+                                                <i class="ph-fill ph-sparkle"></i> Auto-detectado: 1ra Toma
+                                            </div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label" for="toma-ubicacion" style="font-weight:700;">UBICACIÓN / BODEGA <span style="color:var(--danger)">*</span></label>
+                                            <select id="toma-ubicacion" class="form-control font-bold">
+                                                <option value="Bodega Central" selected>Bodega Central</option>
+                                                <option value="Bodega Transitoria">Bodega Transitoria</option>
+                                                <option value="Botiquín Urgencia">Botiquín Urgencia</option>
+                                                <option value="Carro de Paro">Carro de Paro</option>
+                                                <option value="Bandeja de Turno">Bandeja de Turno</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <!-- Nombre del Medicamento / Insumo -->
+                                    <div class="form-group mb-12">
+                                        <label class="form-label" for="toma-medicamento" style="font-weight:700;">NOMBRE DEL MEDICAMENTO / INSUMO <span style="color:var(--danger)">*</span></label>
+                                        <div style="position:relative;">
+                                            <input type="text" id="toma-medicamento" list="toma-datalist-insumos" class="form-control font-bold" placeholder="Ej: Paracetamol Jarabe 120mg/5ml o Amoxicilina Comprimidos" autocomplete="off" required>
+                                            <datalist id="toma-datalist-insumos"></datalist>
+                                        </div>
+                                    </div>
+
+                                    <!-- Alerta en Vivo de Suma Acumulativa -->
+                                    <div id="toma-acumulado-alert" style="display:none; background:#ecfdf5; border:1px solid #a7f3d0; color:#065f46; border-radius:8px; padding:8px 12px; font-size:12px; margin-bottom:12px; line-height:1.4;">
+                                        <i class="ph-bold ph-plus-circle" style="color:#10b981;"></i> <span id="toma-acumulado-text"></span>
+                                    </div>
+
+                                    <!-- Categoría de Medicamento (Pestaña en Google Sheet) -->
+                                    <div class="form-group mb-12">
+                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                                            <label class="form-label" for="toma-categoria" style="margin-bottom:0; font-weight:700;">CATEGORÍA (PESTAÑA EN GOOGLE SHEETS) <span style="color:var(--danger)">*</span></label>
+                                            <button type="button" id="btn-nueva-categoria-toma" class="table-link" style="font-size:11px; background:none; border:none; color:var(--primary); cursor:pointer; font-weight:600;">+ Nueva Categoría</button>
+                                        </div>
+                                        <select class="form-control" id="toma-categoria" required style="font-weight:700; color:var(--text-main);">
+                                            <option value="" disabled selected>-- Seleccione o escriba el fármaco para auto-detectar --</option>
+                                            <optgroup label="⭐ Formas Farmacéuticas Principales (Google Sheets)">
+                                                <option value="JARABES">JARABES</option>
+                                                <option value="SALES REHIDRATACIONES">SALES REHIDRATACIONES</option>
+                                                <option value="GOTAS">GOTAS</option>
+                                                <option value="INHALADORES">INHALADORES</option>
+                                                <option value="CREMAS">CREMAS</option>
+                                                <option value="SUPOSITORIOS">SUPOSITORIOS</option>
+                                                <option value="COMPRIMIDOS">COMPRIMIDOS</option>
+                                                <option value="COMPRIMIDOS ANTIBIOTICOS">COMPRIMIDOS ANTIBIOTICOS</option>
+                                                <option value="INYECTABLES Y AMPOLLAS">INYECTABLES Y AMPOLLAS</option>
+                                                <option value="SOLUCIONES Y SUEROS">SOLUCIONES Y SUEROS</option>
+                                            </optgroup>
+                                            <optgroup label="Familias Clínicas Complementarias">
+                                                <option value="Analgésicos y Antiinflamatorios">Analgésicos y Antiinflamatorios</option>
+                                                <option value="Antibióticos y Antimicrobianos">Antibióticos y Antimicrobianos</option>
+                                                <option value="Cardiovascular e Hipertensión">Cardiovascular e Hipertensión</option>
+                                                <option value="Respiratorio y Antiasmáticos">Respiratorio y Antiasmáticos</option>
+                                                <option value="Psicotrópicos y Controlados">Psicotrópicos y Controlados</option>
+                                                <option value="Urgencia y Reanimación">Urgencia y Reanimación</option>
+                                                <option value="Digestivo y Antieméticos">Digestivo y Antieméticos</option>
+                                                <option value="Anestésicos y Sedantes">Anestésicos y Sedantes</option>
+                                                <option value="Corticoides y Hormonas">Corticoides y Hormonas</option>
+                                            </optgroup>
+                                            <optgroup label="Insumos y Dispositivos">
+                                                <option value="Insumos Médicos Descartables">Insumos Médicos Descartables</option>
+                                                <option value="Curaciones y Vendas">Curaciones y Vendas</option>
+                                                <option value="Vía Aérea y Oxigenoterapia">Vía Aérea y Oxigenoterapia</option>
+                                                <option value="Equipos de Infusión">Equipos de Infusión</option>
+                                                <option value="Quirúrgico y Bioseguridad">Quirúrgico y Bioseguridad</option>
+                                                <option value="General">General</option>
+                                            </optgroup>
+                                        </select>
+                                        <div id="toma-auto-cat-badge" style="font-size:11px; margin-top:4px; color:#0284c7; font-weight:700; display:none;">
+                                            <i class="ph-fill ph-sparkle"></i> Categoría auto-detectada automáticamente
+                                        </div>
+                                    </div>
+
+                                    <!-- Fila: Cantidad y Botones Rápidos -->
+                                    <div class="form-group mb-12">
+                                        <label class="form-label" for="toma-cantidad" style="font-weight:700;">CANTIDAD FÍSICA (UNIDADES DE ESTA TOMA) <span style="color:var(--danger)">*</span></label>
+                                        <div style="display:flex; gap:8px; align-items:center;">
+                                            <input type="number" id="toma-cantidad" class="form-control font-bold" min="1" step="1" value="1" required style="font-size:16px; width:120px;">
+                                            <div class="toma-quick-add-group">
+                                                <button type="button" class="btn-quick-add" data-add="1">+1</button>
+                                                <button type="button" class="btn-quick-add" data-add="5">+5</button>
+                                                <button type="button" class="btn-quick-add" data-add="10">+10</button>
+                                                <button type="button" class="btn-quick-add" data-add="50">+50</button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <!-- Fila Doble: Vencimiento y Lote -->
+                                    <div class="grid-2-col-even mb-12" style="gap:10px;">
+                                        <div class="form-group">
+                                            <label class="form-label" for="toma-vencimiento" style="font-weight:700;">FECHA VENCIMIENTO <span style="color:var(--danger)">*</span></label>
+                                            <input type="date" id="toma-vencimiento" class="form-control" required>
+                                            <div id="toma-vto-alert" style="font-size:10px; margin-top:3px; font-weight:700; display:none;"></div>
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label" for="toma-lote" style="font-weight:700;">LOTE FABRICANTE <span style="color:var(--danger)">*</span></label>
+                                            <input type="text" id="toma-lote" class="form-control" placeholder="Ej: L-2024-X" required>
+                                        </div>
+                                    </div>
+
+                                    <!-- Código Insumo -->
+                                    <div class="form-group mb-12">
+                                        <label class="form-label" for="toma-codigo">CÓDIGO / ID (OPCIONAL O ESCANEADO)</label>
+                                        <input type="text" id="toma-codigo" class="form-control" placeholder="Auto o Código de Barras">
+                                    </div>
+
+                                    <!-- Datos Adicionales Colapsables -->
+                                    <details style="margin-bottom:14px; background:#f8fafc; border-radius:8px; padding:8px 12px; border:1px solid var(--border-color);">
+                                        <summary style="font-size:11px; font-weight:700; color:var(--text-muted); cursor:pointer;">
+                                            <i class="ph ph-sliders"></i> Parámetros Opcionales (Precio, Stock Crítico, Observaciones)
+                                        </summary>
+                                        <div class="grid-2-col-even mt-8" style="gap:10px;">
+                                            <div class="form-group">
+                                                <label class="form-label" for="toma-costo-unitario">COSTO UNITARIO ($)</label>
+                                                <input type="number" id="toma-costo-unitario" class="form-control" placeholder="0" min="0" step="1">
+                                            </div>
+                                            <div class="form-group">
+                                                <label class="form-label" for="toma-stock-minimo">STOCK MÍNIMO (CRÍTICO)</label>
+                                                <input type="number" id="toma-stock-minimo" class="form-control" placeholder="50" min="1" step="1" value="50">
+                                            </div>
+                                        </div>
+                                        <div class="form-group mt-8">
+                                            <label class="form-label" for="toma-observaciones">OBSERVACIONES</label>
+                                            <input type="text" id="toma-observaciones" class="form-control" placeholder="Estado del empaque, sello, notas...">
+                                        </div>
+                                    </details>
+
+                                    <!-- Botón Principal de Envío -->
+                                    <button type="submit" id="btn-registrar-toma" class="btn btn-primary btn-large" style="width:100%; justify-content:center; gap:10px; font-size:14px; font-weight:700; box-shadow:0 4px 12px rgba(14,165,233,0.3);">
+                                        <i class="ph-bold ph-paper-plane-right"></i> REGISTRAR Y SINCRONIZAR
+                                    </button>
+                                    <div style="text-align:center; margin-top:8px;">
+                                        <small style="font-size:11px; color:var(--text-muted);">Atajo: presione <kbd style="background:#e2e8f0; padding:2px 6px; border-radius:4px; font-weight:700;">Enter</kbd> para registrar y continuar.</small>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Panel Derecho: Tabla en Vivo de la Jornada -->
+                        <div class="toma-table-panel">
+                            <div class="data-table-card">
+                                <div class="data-table-header" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; padding:16px 20px;">
+                                    <div class="table-header-title" style="display:flex; align-items:center; gap:8px;">
+                                        <i class="ph ph-list-checks" style="color:var(--primary); font-size:20px;"></i>
+                                        <span>Registros de la Jornada</span>
+                                        <span class="badge-count" id="toma-table-counter">0</span>
+                                    </div>
+                                    <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+                                        <!-- Filtro Categoría en Tabla -->
+                                        <select id="toma-filter-cat" class="form-control" style="width:auto; font-size:12px; padding:6px 12px; height:auto;">
+                                            <option value="all">Todas las Categorías</option>
+                                        </select>
+                                        <!-- Buscador en Tabla -->
+                                        <div class="search-input-wrapper" style="width:200px; margin:0;">
+                                            <i class="ph ph-magnifying-glass" style="font-size:14px;"></i>
+                                            <input type="text" id="toma-table-search" class="form-control" placeholder="Filtrar medicamentos..." style="font-size:12px; padding-top:6px; padding-bottom:6px; height:auto;">
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="table-wrapper" style="max-height: calc(100vh - 350px); overflow-y: auto;">
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>HORA / TOMA</th>
+                                                <th>MEDICAMENTO / INSUMO</th>
+                                                <th>CATEGORÍA</th>
+                                                <th>CANT. (TOMA)</th>
+                                                <th>TOTAL ACUMULADO</th>
+                                                <th>LOTE</th>
+                                                <th>VENCIMIENTO</th>
+                                                <th>UBICACIÓN</th>
+                                                <th>GOOGLE SHEETS</th>
+                                                <th style="text-align:center;">ACCIONES</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="toma-table-body">
+                                            <tr>
+                                                <td colspan="9" style="text-align:center; padding:40px; color:var(--text-muted);">
+                                                    <i class="ph ph-clipboard" style="font-size:36px; opacity:0.4; margin-bottom:8px; display:block;"></i>
+                                                    No se han registrado medicamentos en esta jornada.<br>
+                                                    <small>Complete el formulario a la izquierda para comenzar el conteo.</small>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+
+                                <div class="table-footer" style="display:flex; justify-content:space-between; align-items:center; padding:12px 20px;">
+                                    <span style="font-size:12px; color:var(--text-muted);" id="toma-footer-summary">0 medicamentos registrados</span>
+                                    <div style="display:flex; gap:10px;">
+                                        <button type="button" id="btn-reintentar-pendientes" class="btn btn-outline" style="font-size:12px; padding:6px 12px; display:none; color:var(--warning); border-color:var(--warning);">
+                                            <i class="ph ph-arrow-counter-clockwise"></i> Reintentar pendientes (<span id="toma-pending-count">0</span>)
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </section>
 
             <!-- VIEW: Movimientos -->
@@ -2789,6 +3098,265 @@
         </div>
     </div>
 
+    <!-- MODAL CONFIGURACIÓN GOOGLE SHEETS -->
+    <div id="modal-config-sheets" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.75); z-index: 999999; justify-content: center; align-items: center; backdrop-filter: blur(4px);">
+        <div class="modal-content" style="background: white; padding: 32px; border-radius: 16px; width: 680px; max-width: 95%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0,0,0,0.25);">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 16px; margin-bottom: 20px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 40px; height: 40px; border-radius: 10px; background: rgba(16, 185, 129, 0.1); color: #10b981; display: flex; align-items: center; justify-content: center; font-size: 22px;">
+                        <i class="ph ph-google-logo"></i>
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.25rem; font-weight: 700; color: var(--text-main);">Conector Google Sheets</h3>
+                        <p style="margin: 0; font-size: 0.85rem; color: var(--text-muted);">Sincronización instantánea por categorías de medicamentos</p>
+                    </div>
+                </div>
+                <button class="btn btn-icon" onclick="document.getElementById('modal-config-sheets').style.display='none'"><i class="ph ph-x" style="font-size: 20px;"></i></button>
+            </div>
+
+            <!-- Sección de URL del Webhook -->
+            <div class="form-group mb-20">
+                <label class="form-label" style="font-weight: 700;">URL DEL WEB APP DE GOOGLE APPS SCRIPT (WEBHOOK)</label>
+                <div style="display: flex; gap: 10px;">
+                    <input type="url" id="input-sheets-url" class="form-control" placeholder="https://script.google.com/macros/s/AKfycb.../exec" style="font-family: monospace; font-size: 13px;">
+                    <button type="button" id="btn-test-sheets-conn" class="btn btn-outline" style="border-color: var(--primary); color: var(--primary); font-weight: 600; white-space: nowrap;">
+                        <i class="ph ph-plugs"></i> Probar Conexión
+                    </button>
+                </div>
+                <div id="sheets-test-feedback" style="margin-top: 8px; font-size: 12px; display: none;"></div>
+            </div>
+
+            <!-- Paso a Paso e Instrucciones -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 18px; margin-bottom: 20px;">
+                <h4 style="margin: 0 0 12px 0; font-size: 13px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 6px;">
+                    <i class="ph ph-book-open" style="color: var(--primary);"></i> ¿Cómo obtener tu URL en 3 sencillos pasos?
+                </h4>
+                <ol style="margin: 0; padding-left: 20px; font-size: 12.5px; color: #475569; line-height: 1.6;">
+                    <li>Abre tu hoja de cálculo en <strong>Google Sheets</strong> y ve al menú superior: <code>Extensiones &gt; Apps Script</code>.</li>
+                    <li>Pega el código que está abajo y presiona <strong>Guardar (Ctrl + S)</strong>.</li>
+                    <li>Haz clic en el botón azul superior <strong>Implementar &gt; Nueva implementación</strong>, selecciona tipo <em>"Aplicación web"</em>, en <em>Quién tiene acceso</em> elige <strong>"Cualquier usuario"</strong> (Anyone), y copia la URL generada.</li>
+                </ol>
+            </div>
+
+            <!-- Código de Google Apps Script con botón Copiar -->
+            <div class="form-group mb-20">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <label class="form-label" style="margin: 0; font-weight: 700;">CÓDIGO OFICIAL GOOGLE APPS SCRIPT (AUTO-PESTAÑAS POR CATEGORÍA)</label>
+                    <button type="button" id="btn-copy-gas-code" class="btn btn-outline" style="font-size: 11px; padding: 4px 10px; font-weight: 700; color: var(--primary); border-color: var(--primary);">
+                        <i class="ph ph-copy"></i> Copiar Código
+                    </button>
+                </div>
+                <pre id="code-google-apps-script" style="background: #0f172a; color: #e2e8f0; padding: 14px; border-radius: 8px; font-size: 11.5px; font-family: monospace; max-height: 200px; overflow-y: auto; line-height: 1.4; border: 1px solid #334155; user-select: all;"></pre>
+            </div>
+
+            <div style="display: flex; justify-content: flex-end; gap: 12px; border-top: 1px solid #f1f5f9; padding-top: 16px;">
+                <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('modal-config-sheets').style.display='none'">Cerrar</button>
+                <button type="button" id="btn-save-sheets-config" class="btn btn-primary" style="font-weight: 700; padding: 10px 24px;">
+                    <i class="ph ph-floppy-disk"></i> Guardar Configuración
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL EDITAR / CORREGIR REGISTRO DE TOMA DE INVENTARIO -->
+    <div id="modal-editar-toma" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.75); z-index: 999999; justify-content: center; align-items: center; backdrop-filter: blur(4px);">
+        <div class="modal-content" style="background: white; padding: 28px; border-radius: 16px; width: 560px; max-width: 95%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0,0,0,0.25);">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 14px; margin-bottom: 18px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(14, 165, 233, 0.1); color: var(--primary); display: flex; align-items: center; justify-content: center; font-size: 20px;">
+                        <i class="ph ph-note-pencil"></i>
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--text-main);">Editar Registro de Inventario</h3>
+                        <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Corrección de stock, cambio de categoría y reubicación en Google Sheets</p>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-icon" onclick="document.getElementById('modal-editar-toma').style.display='none'"><i class="ph ph-x" style="font-size: 20px;"></i></button>
+            </div>
+
+            <form id="form-editar-toma">
+                <input type="hidden" id="edit-toma-id">
+                <input type="hidden" id="edit-toma-old-cat">
+                <input type="hidden" id="edit-toma-old-cant">
+
+                <div class="grid-2-col-even mb-12" style="gap: 10px;">
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">MEDICAMENTO / INSUMO</label>
+                        <input type="text" id="edit-toma-med" class="form-control font-bold" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">FASE DE CONTEO / TOMA</label>
+                        <select id="edit-toma-fase" class="form-control font-bold" style="color:var(--primary);">
+                            <option value="1ra Toma (Inicial)">1ra Toma (Inicial)</option>
+                            <option value="2da Toma (2da Bodega / Suma)">2da Toma (2da Bodega / Suma)</option>
+                            <option value="Reconteo / Ajuste">Reconteo / Ajuste</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid-2-col-even mb-12" style="gap: 10px;">
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">CATEGORÍA (PESTAÑA GOOGLE SHEETS)</label>
+                        <select id="edit-toma-cat" class="form-control font-bold" required>
+                            <optgroup label="⭐ Formas Farmacéuticas Principales">
+                                <option value="JARABES">JARABES</option>
+                                <option value="SALES REHIDRATACIONES">SALES REHIDRATACIONES</option>
+                                <option value="GOTAS">GOTAS</option>
+                                <option value="INHALADORES">INHALADORES</option>
+                                <option value="CREMAS">CREMAS</option>
+                                <option value="SUPOSITORIOS">SUPOSITORIOS</option>
+                                <option value="COMPRIMIDOS">COMPRIMIDOS</option>
+                                <option value="COMPRIMIDOS ANTIBIOTICOS">COMPRIMIDOS ANTIBIOTICOS</option>
+                                <option value="INYECTABLES Y AMPOLLAS">INYECTABLES Y AMPOLLAS</option>
+                                <option value="SOLUCIONES Y SUEROS">SOLUCIONES Y SUEROS</option>
+                            </optgroup>
+                            <optgroup label="Familias Clínicas Complementarias">
+                                <option value="Analgésicos y Antiinflamatorios">Analgésicos y Antiinflamatorios</option>
+                                <option value="Antibióticos y Antimicrobianos">Antibióticos y Antimicrobianos</option>
+                                <option value="Cardiovascular e Hipertensión">Cardiovascular e Hipertensión</option>
+                                <option value="Respiratorio y Antiasmáticos">Respiratorio y Antiasmáticos</option>
+                                <option value="Psicotrópicos y Controlados">Psicotrópicos y Controlados</option>
+                                <option value="Urgencia y Reanimación">Urgencia y Reanimación</option>
+                                <option value="Digestivo y Antieméticos">Digestivo y Antieméticos</option>
+                                <option value="Anestésicos y Sedantes">Anestésicos y Sedantes</option>
+                                <option value="Corticoides y Hormonas">Corticoides y Hormonas</option>
+                            </optgroup>
+                            <optgroup label="Insumos y Dispositivos">
+                                <option value="Insumos Médicos Descartables">Insumos Médicos Descartables</option>
+                                <option value="Curaciones y Vendas">Curaciones y Vendas</option>
+                                <option value="Vía Aérea y Oxigenoterapia">Vía Aérea y Oxigenoterapia</option>
+                                <option value="Equipos de Infusión">Equipos de Infusión</option>
+                                <option value="Quirúrgico y Bioseguridad">Quirúrgico y Bioseguridad</option>
+                                <option value="General">General</option>
+                            </optgroup>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">CANTIDAD DE ESTA TOMA (UNIDADES)</label>
+                        <input type="number" id="edit-toma-cant" class="form-control font-bold" min="0" step="1" required>
+                        <div id="edit-toma-delta" style="font-size: 11px; margin-top: 3px; font-weight: 700;"></div>
+                    </div>
+                </div>
+
+                <div class="grid-2-col-even mb-12" style="gap: 10px;">
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">LOTE</label>
+                        <input type="text" id="edit-toma-lote" class="form-control" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">FECHA VENCIMIENTO</label>
+                        <input type="date" id="edit-toma-vto" class="form-control" required>
+                    </div>
+                </div>
+
+                <div class="form-group mb-12">
+                    <label class="form-label" style="font-weight: 700;">UBICACIÓN / BODEGA</label>
+                    <select id="edit-toma-ubic" class="form-control font-bold">
+                        <option value="Bodega Central">Bodega Central</option>
+                        <option value="Bodega Transitoria">Bodega Transitoria</option>
+                        <option value="Botiquín Urgencia">Botiquín Urgencia</option>
+                        <option value="Carro de Paro">Carro de Paro</option>
+                        <option value="Bandeja de Turno">Bandeja de Turno</option>
+                    </select>
+                </div>
+
+                <div class="form-group mb-16">
+                    <label class="form-label" style="font-weight: 700;">MOTIVO DE LA MODIFICACIÓN (AUDITORÍA) <span style="color:var(--danger)">*</span></label>
+                    <input type="text" id="edit-toma-motivo" class="form-control" placeholder="Ej: Error en conteo visual inicial / Reclasificación de categoría..." required>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #f1f5f9; padding-top: 14px;">
+                    <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('modal-editar-toma').style.display='none'">Cancelar</button>
+                    <button type="submit" class="btn btn-primary font-bold" style="padding: 9px 20px;">
+                        <i class="ph ph-check-circle"></i> Guardar Cambios y Reubicar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL REGISTRO DE INCIDENCIA / MERMA / QUIEBRE -->
+    <div id="modal-incidencia-toma" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.75); z-index: 999999; justify-content: center; align-items: center; backdrop-filter: blur(4px);">
+        <div class="modal-content" style="background: white; padding: 28px; border-radius: 16px; width: 540px; max-width: 95%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0,0,0,0.25);">
+            <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #fee2e2; padding-bottom: 14px; margin-bottom: 18px;">
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 38px; height: 38px; border-radius: 10px; background: #fee2e2; color: #dc2626; display: flex; align-items: center; justify-content: center; font-size: 22px;">
+                        <i class="ph ph-warning-octagon"></i>
+                    </div>
+                    <div>
+                        <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: #991b1b;">Registrar Incidencia / Merma</h3>
+                        <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Quiebre, precipitación o merma durante la toma de inventario</p>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-icon" onclick="document.getElementById('modal-incidencia-toma').style.display='none'"><i class="ph ph-x" style="font-size: 20px;"></i></button>
+            </div>
+
+            <form id="form-incidencia-toma">
+                <input type="hidden" id="inc-toma-item-id">
+                <input type="hidden" id="inc-toma-categoria">
+                <input type="hidden" id="inc-toma-code">
+
+                <div class="form-group mb-12" style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px; padding: 10px 14px;">
+                    <div style="font-size: 13px; font-weight: 800; color: #991b1b;" id="inc-toma-med-nombre">Medicamento</div>
+                    <div style="font-size: 11.5px; color: #b91c1c; margin-top: 2px;" id="inc-toma-stock-info">Stock registrado: 0 un.</div>
+                </div>
+
+                <div class="grid-2-col-even mb-12" style="gap: 10px;">
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">UNIDADES MERMADAS / DESCONTAR <span style="color:var(--danger)">*</span></label>
+                        <input type="number" id="inc-toma-cantidad" class="form-control font-bold" min="1" step="1" value="1" required style="font-size: 16px; color: #dc2626;">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">TIPO DE INCIDENCIA <span style="color:var(--danger)">*</span></label>
+                        <select id="inc-toma-tipo" class="form-control font-bold" required>
+                            <option value="Quiebre Físico (Frasco/Ampolla)">Quiebre Físico (Frasco/Ampolla)</option>
+                            <option value="Precipitación / Cristalización">Precipitación / Cristalización</option>
+                            <option value="Empaque Roto / Contaminado">Empaque Roto / Contaminado</option>
+                            <option value="Vencimiento Inmediato">Vencimiento Inmediato</option>
+                            <option value="Pérdida / Extravío">Pérdida / Extravío</option>
+                            <option value="Otro Daño Farmacológico">Otro Daño Farmacológico</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="grid-2-col-even mb-12" style="gap: 10px;">
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">LOTE AFECTADO</label>
+                        <input type="text" id="inc-toma-lote" class="form-control" placeholder="Lote">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label" style="font-weight: 700;">UBICACIÓN / BODEGA</label>
+                        <input type="text" id="inc-toma-ubic" class="form-control" readonly style="background:#f1f5f9;">
+                    </div>
+                </div>
+
+                <div class="form-group mb-16">
+                    <label class="form-label" style="font-weight: 700;">DETALLE DE LA INCIDENCIA (OBSERVACIONES) <span style="color:var(--danger)">*</span></label>
+                    <textarea id="inc-toma-detalle" class="form-control" rows="2" placeholder="Ej: Se cayó una ampolla al suelo durante el conteo / Frasco con solución turbia con sedimentos..." required></textarea>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #fee2e2; padding-top: 14px;">
+                    <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('modal-incidencia-toma').style.display='none'">Cancelar</button>
+                    <button type="submit" class="btn btn-danger font-bold" style="padding: 9px 20px; background: #dc2626; border-color: #dc2626;">
+                        <i class="ph-bold ph-minus-circle"></i> Descontar del Stock y Registrar Incidencia
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL ESCÁNER CÁMARA TOMA INVENTARIO -->
+    <div id="modal-cam-toma" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); z-index: 999999; justify-content: center; align-items: center; backdrop-filter: blur(4px);">
+        <div style="background: white; padding: 24px; border-radius: 16px; width: 450px; max-width: 95%; text-align: center;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3 style="margin: 0; font-size: 1.1rem; font-weight: 700;">Escanear Código de Barras / QR</h3>
+                <button class="btn btn-icon" onclick="window.cerrarCamScannerToma()"><i class="ph ph-x"></i></button>
+            </div>
+            <div id="toma-qr-reader" style="width: 100%; border-radius: 8px; overflow: hidden; background: #000; min-height: 260px;"></div>
+            <p style="font-size: 12px; color: var(--text-muted); margin-top: 12px;">Apunte la cámara hacia el código de barras o QR del medicamento.</p>
+            <button type="button" class="btn btn-outline-danger" onclick="window.cerrarCamScannerToma()" style="width: 100%; margin-top: 10px;">Cerrar Cámara</button>
+        </div>
+    </div>
 
     <style>
         @keyframes scaleIn {

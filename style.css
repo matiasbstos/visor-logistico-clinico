@@ -369,6 +369,7 @@ select.form-control { appearance: none; background-image: url("data:image/svg+xm
 ---------------------------------------------------- */
 /* ENFERMERO: Oculta Compras, Informes, Bodega, Usuarios, Transferencias, Configuración y botones admin-only */
 body[data-user-role="enfermero"] .menu-item[data-target="view-inventario"],
+body[data-user-role="enfermero"] .menu-item[data-target="view-toma-inventario"],
 body[data-user-role="enfermero"] .menu-item[data-target="view-movimientos"],
 body[data-user-role="enfermero"] .menu-item[data-target="view-historial"],
 body[data-user-role="enfermero"] .menu-item[data-target="view-ajustes"],
@@ -602,3 +603,160 @@ gemini-analysis {
     overflow-y: auto;
     padding-right: 10px;
 }
+
+/* =========================================================
+   ESTILOS: TOMA DE INVENTARIO & GOOGLE SHEETS
+========================================================= */
+.badge-sheets-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.status-indicator-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.badge-sheets-status.status-online {
+    background: #ecfdf5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+}
+.badge-sheets-status.status-online .status-indicator-dot {
+    background: #10b981;
+    box-shadow: 0 0 8px #10b981;
+}
+
+.badge-sheets-status.status-syncing {
+    background: #eff6ff;
+    color: #1e40af;
+    border: 1px solid #bfdbfe;
+}
+.badge-sheets-status.status-syncing .status-indicator-dot {
+    background: #3b82f6;
+    animation: pulseSync 1s infinite alternate;
+}
+
+.badge-sheets-status.status-offline {
+    background: #f8fafc;
+    color: #64748b;
+    border: 1px solid #cbd5e1;
+}
+.badge-sheets-status.status-offline .status-indicator-dot {
+    background: #94a3b8;
+}
+
+.badge-sheets-status.status-error {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+}
+.badge-sheets-status.status-error .status-indicator-dot {
+    background: #ef4444;
+}
+
+@keyframes pulseSync {
+    from { opacity: 0.4; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1.2); }
+}
+
+.toma-layout-grid {
+    display: grid;
+    grid-template-columns: 460px 1fr;
+    gap: 20px;
+    align-items: start;
+}
+
+@media (max-width: 1100px) {
+    .toma-layout-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.toma-quick-add-group {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+.btn-quick-add {
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    color: var(--text-main);
+    font-size: 11px;
+    font-weight: 700;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.btn-quick-add:hover {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    transform: translateY(-1px);
+}
+
+.btn-quick-add:active {
+    transform: scale(0.95);
+}
+
+.badge-sync-ok {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #ecfdf5;
+    color: #047857;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid #a7f3d0;
+}
+
+.badge-sync-pending {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #fffbeb;
+    color: #b45309;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid #fde68a;
+}
+
+.badge-sync-err {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: #fef2f2;
+    color: #b91c1c;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid #fecaca;
+}
+
+.badge-category-tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    background: #e0f2fe;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+}
+

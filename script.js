@@ -11787,6 +11787,7 @@ function doGet(e) {
             });
         }
     }
+}
 
     window.cerrarCamScannerToma = function() {
         const modalCam = document.getElementById('modal-cam-toma');

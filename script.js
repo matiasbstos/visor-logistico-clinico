@@ -35,6 +35,61 @@ window.showAlertCenter = function (titulo, mensaje, isError = false) {
     modal.style.display = 'flex';
 };
 
+window.SAR_Utils = {
+    parseDate: function(val) {
+        if (!val) return null;
+        if (typeof val === 'object' && val instanceof Date) return isNaN(val.getTime()) ? null : val;
+        val = String(val).trim();
+        if (!val || val === 'N/A' || val === 'S/I' || val === 'null' || val === 'undefined') return null;
+
+        // Formato MM/YYYY o M/YYYY
+        if (/^\d{1,2}\/\d{4}$/.test(val)) {
+            const parts = val.split('/');
+            const month = Number(parts[0]);
+            const year = Number(parts[1]);
+            if (month >= 1 && month <= 12 && year >= 2000) {
+                return new Date(year, month, 0, 23, 59, 59);
+            }
+        }
+
+        // Formato YYYY-MM o YYYY-MM-DD
+        if (/^\d{4}-\d{1,2}/.test(val)) {
+            const parts = val.split(/[-T/]/);
+            const year = Number(parts[0]);
+            const month = Number(parts[1]);
+            const day = parts[2] ? Number(parts[2].substring(0, 2)) : 0;
+            if (month >= 1 && month <= 12 && year >= 2000) {
+                if (day > 0) return new Date(year, month - 1, day, 23, 59, 59);
+                return new Date(year, month, 0, 23, 59, 59);
+            }
+        }
+
+        // Formato DD/MM/YYYY
+        if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(val)) {
+            const parts = val.split('/');
+            const day = Number(parts[0]);
+            const month = Number(parts[1]);
+            const year = Number(parts[2]);
+            if (month >= 1 && month <= 12 && year >= 2000) {
+                return new Date(year, month - 1, day, 23, 59, 59);
+            }
+        }
+
+        const parsed = new Date(val);
+        if (!isNaN(parsed.getTime())) {
+            return parsed;
+        }
+        return null;
+    },
+    formatDate: function(date) {
+        if (!date) return 'N/A';
+        const d = this.parseDate(date);
+        if (!d) return String(date);
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const y = d.getFullYear();
+        return `${m}/${y}`;
+    }
+};
 
 /* ----------------------------------------------------
    1a. UTILERÍA ROBUSTA DE TIPOS (T-GUARD)
@@ -1250,6 +1305,351 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // =========================================================================
+    // 📊 MOTOR DE TIEMPO REAL: PANEL DE CONTROL Y RESUMEN GLOBAL EJECUTIVO
+    // =========================================================================
+    window.globalDashboardCriticalItems = [];
+
+    window.startRealTimeDashboard = function () {
+        if (!auth.currentUser) return;
+        clearListener('dashboard');
+
+        const totalInsumosEl = document.getElementById('dash-total-insumos');
+        const criticalCountEl = document.getElementById('dash-critical-count');
+        const expiringCountEl = document.getElementById('dash-expiring-count');
+        const capitalValueEl = document.getElementById('dash-capital-value');
+        const urgenciasTbody = document.getElementById('dash-urgencias-tbody') || document.querySelector('#view-panel .data-table-header.danger')?.closest('.data-table-card')?.querySelector('tbody');
+        const urgenciasBadge = document.getElementById('dash-urgencias-badge') || document.querySelector('#view-panel .data-table-header.danger .header-badge');
+        const precaucionTbody = document.getElementById('dash-precaucion-tbody') || document.querySelector('#view-panel .data-table-header.warning')?.closest('.data-table-card')?.querySelector('tbody');
+        const precaucionBadge = document.getElementById('dash-precaucion-badge') || document.querySelector('#view-panel .data-table-header.warning .header-badge');
+        const locationsGrid = document.getElementById('dashboard-locations-grid');
+
+        const q = query(collection(db, 'Insumos'));
+        activeListeners.dashboard = onSnapshot(q, (snapshot) => {
+            let items = [];
+            snapshot.forEach(docSnap => {
+                items.push({ id: docSnap.id, ...docSnap.data() });
+            });
+
+            // Fallback: Si Firestore aún está vacío o cargando, nutrir con los ítems de sesión local de Toma de Inventario
+            if (items.length === 0) {
+                try {
+                    const localSession = JSON.parse(localStorage.getItem('SAR_TOMA_INVENTARIO_ITEMS_v2') || localStorage.getItem('visor_toma_backup_vault') || '[]');
+                    if (localSession.length > 0) {
+                        items = localSession.map(it => ({
+                            id: it.id,
+                            code: it.code || 'S/I',
+                            name: it.name,
+                            category: it.category || 'General',
+                            quantity: Number(it.quantity) || 0,
+                            totalAcumulado: Number(it.totalAcumulado) || Number(it.quantity) || 0,
+                            batch: it.batch || 'N/A',
+                            expirationDate: it.expirationDate || 'N/A',
+                            location: it.location || 'Bodega Central',
+                            unitPrice: Number(it.unitPrice) || 0,
+                            criticalLimit: Number(it.criticalLimit) || 50
+                        }));
+                    }
+                } catch(e) {}
+            }
+
+            const hoy = new Date();
+            hoy.setHours(0, 0, 0, 0);
+
+            let totalInsumosUnicos = items.length;
+            let criticos = [];
+            let proximosVencer = [];
+            let urgencias = [];
+            let precauciones = [];
+            let capitalTotal = 0;
+            let locationMap = {};
+
+            items.forEach(item => {
+                const qty = item.quantity !== undefined ? Number(item.quantity) : (Number(item.totalAcumulado) || 0);
+                const limitVal = Number(item.criticalLimit || item.stock_minimo) || 50;
+                const price = Number(item.unitPrice) || 0;
+                capitalTotal += (qty * price);
+
+                // 1. Stock Crítico
+                if (qty <= limitVal) {
+                    criticos.push({ ...item, quantity: qty, criticalLimit: limitVal });
+                }
+
+                // 2. Vencimientos
+                const expDate = SAR_Utils.parseDate(item.expirationDate);
+                if (expDate && !isNaN(expDate.getTime())) {
+                    const diffDays = Math.ceil((expDate - hoy) / (1000 * 60 * 60 * 24));
+                    if (diffDays <= 180) {
+                        proximosVencer.push({ ...item, quantity: qty, diffDays });
+                    }
+                    if (diffDays <= 30) {
+                        urgencias.push({ ...item, quantity: qty, diffDays });
+                    } else if (diffDays <= 180) {
+                        precauciones.push({ ...item, quantity: qty, diffDays });
+                    }
+                }
+
+                // 3. Agrupación por Ubicaciones
+                const loc = item.location || 'Bodega Central';
+                if (!locationMap[loc]) {
+                    locationMap[loc] = { name: loc, count: 0, totalStock: 0, capital: 0 };
+                }
+                locationMap[loc].count++;
+                locationMap[loc].totalStock += qty;
+                locationMap[loc].capital += (qty * price);
+            });
+
+            window.globalDashboardCriticalItems = criticos;
+            window.globalDashboardUrgenciasItems = urgencias;
+            window.globalDashboardCautionItems = precauciones;
+
+            // Actualizar tarjetas de KPI
+            if (totalInsumosEl) totalInsumosEl.textContent = totalInsumosUnicos;
+            if (criticalCountEl) {
+                criticalCountEl.textContent = criticos.length;
+                const critBadge = document.querySelector('#card-stock-critico .card-badge');
+                if (critBadge) {
+                    if (criticos.length > 0) {
+                        critBadge.className = 'card-badge red';
+                        critBadge.textContent = 'ACCIÓN REQUERIDA';
+                    } else {
+                        critBadge.className = 'card-badge green';
+                        critBadge.textContent = 'ÓPTIMO';
+                    }
+                }
+            }
+            if (expiringCountEl) expiringCountEl.textContent = (urgencias.length + precauciones.length);
+            if (capitalValueEl) {
+                capitalValueEl.textContent = capitalTotal > 0 ? ('$' + Math.round(capitalTotal).toLocaleString('es-CL')) : '$0';
+            }
+
+            // Render Tabla Urgencias (< 30 días o Vencidos)
+            if (urgenciasBadge) {
+                urgenciasBadge.textContent = `${urgencias.length} REPORTADOS`;
+                urgenciasBadge.className = urgencias.length > 0 ? 'header-badge danger' : 'header-badge';
+            }
+            if (urgenciasTbody) {
+                if (urgencias.length === 0) {
+                    urgenciasTbody.innerHTML = `
+                        <tr>
+                            <td colspan="4" style="text-align:center; padding:24px; color:var(--text-muted); font-size:12.5px;">
+                                <i class="ph ph-check-circle" style="color:var(--success); font-size:22px; display:block; margin-bottom:4px;"></i>
+                                Sin urgencias reportadas (0 fármacos vencidos o &lt; 30 días).
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    urgenciasTbody.innerHTML = urgencias.map(u => {
+                        const isExpired = u.diffDays < 0;
+                        const badgeText = isExpired ? `VENCIDO (${Math.abs(u.diffDays)}d)` : `VENCE EN ${u.diffDays}d`;
+                        const badgeClass = isExpired ? 'action-badge danger' : 'action-badge warning';
+                        return `
+                            <tr class="${isExpired ? 'table-row-danger' : ''}">
+                                <td>
+                                    <div style="font-weight:700; font-size:13px; color:var(--text-main);">${window.escapeHTML(u.name)}</div>
+                                    <div style="font-size:11px; color:var(--text-muted);">${window.escapeHTML(u.category || 'General')} | Stock: <strong>${u.quantity || 0} un.</strong></div>
+                                </td>
+                                <td><code style="background:#f1f5f9; padding:2px 6px; border-radius:4px; font-weight:700; font-size:11px;">${window.escapeHTML(u.batch || 'N/A')}</code></td>
+                                <td><span class="${badgeClass}">${badgeText}</span></td>
+                                <td>
+                                    <button type="button" class="btn btn-outline btn-sm" onclick="window.location.hash='view-toma-inventario'" style="padding:4px 8px; font-size:11px;">
+                                        <i class="ph ph-eye"></i> Ver
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('');
+                }
+            }
+
+            // Render Tabla Precaución (1 a 6 meses)
+            if (precaucionBadge) {
+                precaucionBadge.textContent = `${precauciones.length} REPORTADOS`;
+                precaucionBadge.className = precauciones.length > 0 ? 'header-badge warning' : 'header-badge';
+            }
+            if (precaucionTbody) {
+                if (precauciones.length === 0) {
+                    precaucionTbody.innerHTML = `
+                        <tr>
+                            <td colspan="4" style="text-align:center; padding:24px; color:var(--text-muted); font-size:12.5px;">
+                                <i class="ph ph-check-circle" style="color:var(--success); font-size:22px; display:block; margin-bottom:4px;"></i>
+                                Sin precauciones reportadas (Todos los lotes con vigencia superior a 6 meses).
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    precaucionTbody.innerHTML = precauciones.map(p => {
+                        const meses = Math.round(p.diffDays / 30);
+                        return `
+                            <tr>
+                                <td>
+                                    <div style="font-weight:700; font-size:13px; color:var(--text-main);">${window.escapeHTML(p.name)}</div>
+                                    <div style="font-size:11px; color:var(--text-muted);">${window.escapeHTML(p.category || 'General')} | Stock: <strong>${p.quantity || 0} un.</strong></div>
+                                </td>
+                                <td><code style="background:#f1f5f9; padding:2px 6px; border-radius:4px; font-weight:700; font-size:11px;">${window.escapeHTML(p.batch || 'N/A')}</code></td>
+                                <td><span class="action-badge warning"><i class="ph ph-clock"></i> ~${meses} meses (${p.expirationDate || 'N/A'})</span></td>
+                                <td>
+                                    <button type="button" class="btn btn-outline btn-sm" onclick="window.location.hash='view-toma-inventario'" style="padding:4px 8px; font-size:11px;">
+                                        <i class="ph ph-arrows-left-right"></i> Rotar
+                                    </button>
+                                </td>
+                            </tr>
+                        `;
+                    }).join('');
+                }
+            }
+
+            // Botón Reporte de Descarte y Planificar Rotación
+            const btnDescarte = document.getElementById('btn-reporte-descarte');
+            if (btnDescarte) {
+                btnDescarte.onclick = (e) => {
+                    e.preventDefault();
+                    window.openReporteDescarteModal();
+                };
+            }
+            const btnRot = document.getElementById('btn-planificar-rotacion');
+            if (btnRot) {
+                btnRot.onclick = (e) => {
+                    e.preventDefault();
+                    window.handlePlanificarRotacion();
+                };
+            }
+
+            // Render Estado por Ubicación Grid
+            if (locationsGrid) {
+                const locKeys = Object.keys(locationMap);
+                if (locKeys.length === 0) {
+                    locationsGrid.innerHTML = `
+                        <div class="card" style="grid-column: 1 / -1; text-align:center; padding:24px; color:var(--text-muted);">
+                            <i class="ph ph-map-pin" style="font-size:28px; opacity:0.3; margin-bottom:6px; display:block;"></i>
+                            No hay ubicaciones registradas con existencias.
+                        </div>
+                    `;
+                } else {
+                    locationsGrid.innerHTML = locKeys.map(key => {
+                        const locData = locationMap[key];
+                        return `
+                            <div class="card" style="border-left: 4px solid var(--primary); padding: 16px 20px;">
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:12px;">
+                                    <div>
+                                        <div style="font-size:15px; font-weight:800; color:var(--text-main); display:flex; align-items:center; gap:6px;">
+                                            <i class="ph-fill ph-map-pin" style="color:var(--primary);"></i> ${window.escapeHTML(locData.name)}
+                                        </div>
+                                        <div style="font-size:11.5px; color:var(--text-muted); margin-top:2px;">Centro Logístico Activo</div>
+                                    </div>
+                                    <span class="card-badge green">EN OPERACIÓN</span>
+                                </div>
+                                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:12px; border-top:1px solid #f1f5f9; padding-top:12px;">
+                                    <div>
+                                        <div style="font-size:11px; color:var(--text-muted); font-weight:700;">INSUMOS ÚNICOS</div>
+                                        <div style="font-size:18px; font-weight:800; color:var(--primary);">${locData.count}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size:11px; color:var(--text-muted); font-weight:700;">TOTAL UNIDADES</div>
+                                        <div style="font-size:18px; font-weight:800; color:#059669;">${locData.totalStock.toLocaleString('es-CL')} un.</div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            }
+        }, (err) => {
+            console.warn("[Dashboard] Error leyendo Insumos en tiempo real:", err);
+        });
+    };
+
+    // Modal de Stock Crítico y Quiebres
+    window.openCriticalStockModal = function () {
+        let modal = document.getElementById('modal-stock-critico');
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = 'modal-stock-critico';
+            modal.className = 'modal-overlay';
+            modal.style.cssText = 'display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(15,23,42,0.75); z-index: 999999; justify-content: center; align-items: center; backdrop-filter: blur(4px);';
+            modal.innerHTML = `
+                <div class="modal-content" style="background: white; padding: 28px; border-radius: 16px; width: 850px; max-width: 95%; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0,0,0,0.25);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f1f5f9; padding-bottom: 14px; margin-bottom: 18px;">
+                        <div style="display: flex; align-items: center; gap: 10px;">
+                            <div style="width: 38px; height: 38px; border-radius: 10px; background: rgba(239, 68, 68, 0.15); color: #ef4444; display: flex; align-items: center; justify-content: center; font-size: 22px;">
+                                <i class="ph ph-warning-octagon"></i>
+                            </div>
+                            <div>
+                                <h3 style="margin: 0; font-size: 1.15rem; font-weight: 700; color: var(--text-main);">Auditoría de Stock Crítico y Quiebres</h3>
+                                <p style="margin: 0; font-size: 0.8rem; color: var(--text-muted);">Medicamentos bajo el stock mínimo operacional que requieren reposición</p>
+                            </div>
+                        </div>
+                        <button type="button" class="btn btn-icon close-modal-btn" onclick="document.getElementById('modal-stock-critico').style.display='none'"><i class="ph ph-x" style="font-size: 20px;"></i></button>
+                    </div>
+                    <div class="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>MEDICAMENTO</th>
+                                    <th>CATEGORÍA</th>
+                                    <th>STOCK ACTUAL</th>
+                                    <th>STOCK MÍNIMO</th>
+                                    <th>ESTADO</th>
+                                    <th>ACCIÓN</th>
+                                </tr>
+                            </thead>
+                            <tbody id="modal-critico-tbody">
+                                <tr><td colspan="6" style="text-align:center; padding:24px;"><i class="ph-spinner ph-spin"></i> Cargando...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #f1f5f9; padding-top: 14px; margin-top: 16px;">
+                        <button type="button" class="btn btn-outline-secondary" onclick="document.getElementById('modal-stock-critico').style.display='none'">Cerrar</button>
+                        <button type="button" class="btn btn-primary font-bold" onclick="document.getElementById('modal-stock-critico').style.display='none'; window.location.hash='view-compras';">
+                            <i class="ph ph-shopping-cart"></i> Ir a Gestión de Compras
+                        </button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modal);
+        }
+
+        const tbody = document.getElementById('modal-critico-tbody');
+        const items = window.globalDashboardCriticalItems || [];
+
+        if (items.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" style="text-align:center; padding:32px; color:var(--success); font-weight:600;">
+                        <i class="ph-fill ph-check-circle" style="font-size:28px; display:block; margin-bottom:8px;"></i>
+                        ¡Excelente! No hay medicamentos en condición de stock crítico ni quiebre.
+                    </td>
+                </tr>
+            `;
+        } else {
+            tbody.innerHTML = items.map(it => {
+                const isZero = (it.quantity || 0) === 0;
+                const badge = isZero ? 
+                    `<span class="action-badge danger" style="font-weight:800;"><i class="ph-bold ph-warning-octagon"></i> QUIEBRE (0 un.)</span>` : 
+                    `<span class="action-badge warning" style="font-weight:700;"><i class="ph ph-warning"></i> CRÍTICO (${it.quantity} un.)</span>`;
+                return `
+                    <tr class="${isZero ? 'table-row-danger' : ''}">
+                        <td>
+                            <div style="font-weight:700; color:var(--text-main); font-size:13px;">${window.escapeHTML(it.name)}</div>
+                            <div style="font-size:11px; color:var(--text-muted);">Cód: ${window.escapeHTML(it.code || 'S/I')} | Lote: ${window.escapeHTML(it.batch || 'N/A')}</div>
+                        </td>
+                        <td><span class="badge-category-tag">${window.escapeHTML(it.category || 'General')}</span></td>
+                        <td style="font-weight:800; font-size:14px; text-align:center; color:${isZero ? '#dc2626' : '#d97706'};">${it.quantity || 0} un.</td>
+                        <td style="font-weight:700; text-align:center; color:var(--text-muted);">${it.criticalLimit || 50} un.</td>
+                        <td>${badge}</td>
+                        <td>
+                            <button type="button" class="btn btn-outline btn-sm" onclick="document.getElementById('modal-stock-critico').style.display='none'; window.location.hash='view-toma-inventario';" style="padding:4px 10px; font-size:11px;">
+                                <i class="ph ph-plus"></i> Recontar
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        modal.style.display = 'flex';
+    };
+
     // 3. ENCAPSULAMIENTO DEL FLUJO SPA
     function initializeRestOfSPA() {
         /* ----------------------------------------------------
@@ -1320,7 +1720,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 activeView.style.display = 'block';
                 activeView.classList.add('active');
 
-                if (hash === 'view-informes') {
+                if (hash === 'view-panel') {
+                    console.log("[Router] Vista Panel de Control activa.");
+                    if (typeof window.startRealTimeDashboard === 'function') window.startRealTimeDashboard();
+                } else if (hash === 'view-informes') {
                     console.log("[Router] Entrando a Informes, disparando carga de auditoría...");
                     loadInformesAuditoria();
                     if (typeof window.startRealTimeInformes === 'function') window.startRealTimeInformes();
@@ -1704,158 +2107,157 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         /* ----------------------------------------------------
-           8c. HANDLER: VER REPORTE DE DESCARTE
+           8c. HANDLER: VER REPORTE DE DESCARTE (URGENCIAS & VENCIDOS)
            ---------------------------------------------------- */
-        async function handleReporteDescarte() {
+        window.openReporteDescarteModal = async function handleReporteDescarte() {
             openModal('modal-reporte-descarte');
             const tbody = document.getElementById('modal-descarte-tbody');
-            tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:32px;">
-            <i class="ph-spinner ph-spin" style="font-size:28px; color:var(--danger);"></i>
-            <p style="margin-top:8px; color:var(--text-muted); font-size:13px;">Consultando registros urgentes en Firestore...</p>
-        </td></tr>`;
+            if (!tbody) return;
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:32px;">
+                <i class="ph-spinner ph-spin" style="font-size:28px; color:var(--danger);"></i>
+                <p style="margin-top:8px; color:var(--text-muted); font-size:13px;">Procesando lotes vencidos o próximos a vencer...</p>
+            </td></tr>`;
 
             try {
-                const hoy = new Date();
-                const limite = new Date();
-                limite.setDate(hoy.getDate() + 30);
-                const todayStr = hoy.toISOString().split('T')[0];
-                const limiteStr = limite.toISOString().split('T')[0];
+                let urgenciasList = window.globalDashboardUrgenciasItems || [];
+                
+                if (urgenciasList.length === 0) {
+                    const snap = await getDocs(collection(db, 'Insumos'));
+                    const hoy = new Date();
+                    hoy.setHours(0,0,0,0);
+                    urgenciasList = [];
+                    snap.forEach(d => {
+                        const data = d.data();
+                        const exp = SAR_Utils.parseDate(data.expirationDate);
+                        if (exp && !isNaN(exp.getTime())) {
+                            const diffDays = Math.ceil((exp - hoy) / (1000 * 60 * 60 * 24));
+                            if (diffDays <= 30) {
+                                urgenciasList.push({ id: d.id, ...data, diffDays });
+                            }
+                        }
+                    });
+                }
 
-                const q = query(
-                    collection(db, 'Insumos'),
-                    where('estado', '==', 'VENCIDO'),
-                    limit(50)
-                );
-                const snapshot = await getDocs(q);
-                renderDescarteTable(snapshot, tbody, todayStr);
+                if (urgenciasList.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:32px; color:var(--success); font-weight:600;">
+                        <i class="ph-fill ph-check-circle" style="font-size:28px;"></i><br>Sin urgencias ni medicamentos vencidos en el inventario.
+                    </td></tr>`;
+                    return;
+                }
+
+                urgenciasList.sort((a,b) => a.diffDays - b.diffDays);
+
+                tbody.innerHTML = urgenciasList.map(u => {
+                    const isExpired = u.diffDays < 0;
+                    const badgeClass = isExpired ? 'danger' : 'warning';
+                    const badgeText = isExpired ? `VENCIDO (${Math.abs(u.diffDays)}d)` : `VENCE EN ${u.diffDays}d`;
+                    const dateClass = isExpired ? 'date-text danger' : 'date-text warning';
+
+                    return `
+                        <tr class="${isExpired ? 'table-row-danger' : ''}">
+                            <td>
+                                <div class="item-name" style="font-weight:700; color:var(--text-main);">${window.escapeHTML(u.name || 'Sin nombre')}</div>
+                                <div class="item-category" style="font-size:11px; color:var(--text-muted);">${window.escapeHTML(u.category || 'General')}</div>
+                            </td>
+                            <td style="font-family:monospace; font-weight:700;">${window.escapeHTML(u.batch || 'N/A')}</td>
+                            <td style="font-weight:700;">${(Number(u.quantity) || 0).toLocaleString('es-CL')} un.</td>
+                            <td><div class="${dateClass}">${window.escapeHTML(u.expirationDate || 'N/A')}</div></td>
+                            <td><span class="action-badge ${badgeClass}">${badgeText}</span></td>
+                        </tr>
+                    `;
+                }).join('');
 
             } catch (error) {
                 console.error('[Modal Descarte]', error);
-                tbody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:32px; color:var(--danger); font-weight:600;">
-                Error al cargar. Puede requerir un índice en Firestore — revise la consola del navegador.
-            </td></tr>`;
-                showToast('Error', 'No se pudo recuperar el reporte de descarte.', 'error');
+                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:32px; color:var(--danger); font-weight:600;">
+                    Error al recuperar reporte de descarte.
+                </td></tr>`;
             }
-        }
-
-        function renderDescarteTable(snapshot, tbody, todayStr) {
-            if (snapshot.empty) {
-                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:32px; color:var(--success); font-weight:600;">
-                <i class="ph-fill ph-check-circle" style="font-size:28px;"></i><br>Sin urgencias detectadas en el inventario.
-            </td></tr>`;
-                return;
-            }
-            tbody.innerHTML = '';
-            snapshot.forEach(docSnap => {
-                const item = docSnap.data();
-                const isExpired = item.expirationDate && item.expirationDate <= todayStr;
-                const badgeClass = isExpired ? 'danger' : 'warning';
-                const badgeText = isExpired ? 'VENCIDO (ACTA)' : 'PRÓXIMO A VENCER';
-                const dateClass = isExpired ? 'date-text danger' : 'date-text warning';
-
-                const tr = document.createElement('tr');
-                if (isExpired) tr.classList.add('table-row-danger');
-                tr.innerHTML = `
-                <td>
-                    <div class="item-name">${window.escapeHTML(item.name || 'Sin nombre')}</div>
-                    <div class="item-category">${window.escapeHTML(item.category || '')}</div>
-                </td>
-                <td style="font-family:monospace; font-weight:600;">${window.escapeHTML(item.batch || 'N/A')}</td>
-                <td>${(item.quantity || 0).toLocaleString('es-CL')} unds.</td>
-                <td><div class="${dateClass}">${window.escapeHTML(item.expirationDate || 'N/A')}</div></td>
-                <td><span class="action-badge ${badgeClass}">${badgeText}</span></td>
-            `;
-                tbody.appendChild(tr);
-            });
-        }
+        };
 
         const btnDescarte = document.getElementById('btn-reporte-descarte');
         if (btnDescarte) {
-            btnDescarte.addEventListener('click', (e) => { e.preventDefault(); handleReporteDescarte(); });
+            btnDescarte.addEventListener('click', (e) => { e.preventDefault(); window.openReporteDescarteModal(); });
         }
 
         /* ----------------------------------------------------
-           8d. HANDLER: PLANIFICAR ROTACIÓN
+           8d. HANDLER: PLANIFICAR ROTACIÓN (PRECAUCIÓN 1 A 6 MESES)
            ---------------------------------------------------- */
-        async function handlePlanificarRotacion() {
+        window.handlePlanificarRotacion = async function() {
             openModal('modal-rotacion');
             const tbody = document.getElementById('modal-rotacion-tbody');
+            if (!tbody) return;
             tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:32px;">
-            <i class="ph-spinner ph-spin" style="font-size:28px; color:var(--warning);"></i>
-            <p style="margin-top:8px; color:var(--text-muted); font-size:13px;">Calculando plan de rotación óptimo...</p>
-        </td></tr>`;
+                <i class="ph-spinner ph-spin" style="font-size:28px; color:var(--warning);"></i>
+                <p style="margin-top:8px; color:var(--text-muted); font-size:13px;">Calculando plan de rotación óptimo...</p>
+            </td></tr>`;
 
             try {
-                const hoy = new Date();
-                const en1mes = new Date(); en1mes.setMonth(hoy.getMonth() + 1);
-                const en6meses = new Date(); en6meses.setMonth(hoy.getMonth() + 6);
-                const en1mesStr = en1mes.toISOString().split('T')[0];
-                const en6mesesStr = en6meses.toISOString().split('T')[0];
+                let rotacionList = window.globalDashboardCautionItems || [];
+                
+                if (rotacionList.length === 0) {
+                    const snap = await getDocs(collection(db, 'Insumos'));
+                    const hoy = new Date();
+                    hoy.setHours(0,0,0,0);
+                    rotacionList = [];
+                    snap.forEach(d => {
+                        const data = d.data();
+                        const exp = SAR_Utils.parseDate(data.expirationDate);
+                        if (exp && !isNaN(exp.getTime())) {
+                            const diffDays = Math.ceil((exp - hoy) / (1000 * 60 * 60 * 24));
+                            if (diffDays > 30 && diffDays <= 180) {
+                                rotacionList.push({ id: d.id, ...data, diffDays });
+                            }
+                        }
+                    });
+                }
 
-                const hoyStr = hoy.toISOString().split('T')[0];
-                const q = query(
-                    collection(db, 'Insumos'),
-                    where('expirationDate', '>', hoyStr),
-                    where('expirationDate', '<=', en6mesesStr),
-                    orderBy('expirationDate', 'asc')
-                );
-                const snapshot = await getDocs(q);
-                renderRotacionTable(snapshot, tbody, en1mes);
+                if (rotacionList.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:32px; color:var(--success); font-weight:600;">
+                        <i class="ph-fill ph-check-circle" style="font-size:28px;"></i><br>Sin ítems en zona de precaución (Todos los lotes con más de 6 meses de vigencia).
+                    </td></tr>`;
+                    return;
+                }
+
+                rotacionList.sort((a,b) => a.diffDays - b.diffDays);
+
+                tbody.innerHTML = rotacionList.map(item => {
+                    const meses = Math.round(item.diffDays / 30);
+                    const stock = Number(item.quantity) || 0;
+                    const stockClass = stock <= 50 ? 'badge-red-solid' : (stock <= 200 ? 'badge-orange' : 'badge-green');
+                    return `
+                        <tr>
+                            <td>
+                                <div class="item-name" style="font-weight:700; color:var(--text-main);">${window.escapeHTML(item.name || 'Sin nombre')}</div>
+                                <div class="item-category" style="font-size:11px; color:var(--text-muted);">${window.escapeHTML(item.category || 'General')} | LOTE: <strong>${window.escapeHTML(item.batch || 'N/A')}</strong></div>
+                            </td>
+                            <td>
+                                <div style="font-weight:600; font-size:12px; display:flex; align-items:center; gap:6px;">
+                                    <i class="ph-fill ph-map-pin" style="color:var(--primary);"></i> ${window.escapeHTML(item.location || 'Bodega Central')}
+                                </div>
+                            </td>
+                            <td><span class="${stockClass}">${stock.toLocaleString('es-CL')}</span></td>
+                            <td><div class="date-text warning font-bold">~${meses} meses (${item.expirationDate || 'N/A'})</div></td>
+                            <td>
+                                <button class="btn btn-outline" style="padding:4px 10px; font-size:11px; display:inline-flex; align-items:center; gap:4px;" onclick="window.filterInventoryByLocation('${window.escapeHTML(item.location || 'Bodega Central')}'); closeModal('modal-rotacion');">
+                                    <i class="ph ph-arrows-left-right"></i> Mover a Box
+                                </button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('');
 
             } catch (error) {
                 console.error('[Modal Rotación]', error);
                 tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:32px; color:var(--danger); font-weight:600;">
-                No se pudo generar el plan. Revise si se requiere índice compuesto en Firestore (consola del navegador).
-            </td></tr>`;
-                showToast('Error', 'Fallo al calcular la rotación de inventario.', 'error');
+                    Fallo al calcular la rotación de inventario.
+                </td></tr>`;
             }
-        }
-
-        function renderRotacionTable(snapshot, tbody, en1mes) {
-            if (snapshot.empty) {
-                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:32px; color:var(--success); font-weight:600;">
-                <i class="ph-fill ph-check-circle" style="font-size:28px;"></i><br>Sin ítems en zona de precaución (1 a 6 meses).
-            </td></tr>`;
-                return;
-            }
-            const en3meses = new Date(en1mes);
-            en3meses.setMonth(en3meses.getMonth() + 2);
-            const en3mesesStr = en3meses.toISOString().split('T')[0];
-
-            tbody.innerHTML = '';
-            snapshot.forEach(docSnap => {
-                const item = docSnap.data();
-                const stock = item.quantity || 0;
-                const vencePronto = item.expirationDate && item.expirationDate <= en3mesesStr;
-                const stockClass = stock <= 50 ? 'badge-red-solid' : (stock <= 200 ? 'badge-orange' : 'badge-green');
-                const ubicacion = item.location || 'Bodega Central';
-
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                <td>
-                    <div class="item-name">${window.escapeHTML(item.name || 'Sin nombre')}</div>
-                    <div class="item-category" style="font-family:monospace; font-size:10px;">LOTE: ${window.escapeHTML(item.batch || 'N/A')}</div>
-                </td>
-                <td>
-                    <div style="font-weight:600; font-size:12px; display:flex; align-items:center; gap:6px;">
-                        <i class="ph-fill ph-map-pin" style="color:var(--primary);"></i> ${window.escapeHTML(ubicacion)}
-                    </div>
-                </td>
-                <td><span class="${stockClass}">${stock.toLocaleString('es-CL')}</span></td>
-                <td><div class="date-text warning">${item.expirationDate || 'N/A'}</div></td>
-                <td>
-                    <button class="btn btn-outline" style="padding:4px 10px; font-size:11px; display:inline-flex; align-items:center; gap:4px;">
-                        <i class="ph ph-arrows-left-right"></i> Mover a Box
-                    </button>
-                </td>
-            `;
-                tbody.appendChild(tr);
-            });
-        }
+        };
 
         const btnRotacion = document.getElementById('btn-planificar-rotacion');
         if (btnRotacion) {
-            btnRotacion.addEventListener('click', (e) => { e.preventDefault(); handlePlanificarRotacion(); });
+            btnRotacion.addEventListener('click', (e) => { e.preventDefault(); window.handlePlanificarRotacion(); });
         }
 
         /* ----------------------------------------------------
@@ -2172,13 +2574,45 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 inventoryTableBody.innerHTML = '<tr><td colspan="7" style="text-align:center; padding:32px;"><i class="ph-spinner ph-spin" style="font-size:24px;"></i><br>Cargando inventario...</td></tr>';
 
-                if (globalInventorySnapshots.length === 0) {
-                    const insumosRef = collection(db, 'Insumos');
-                    const q = query(insumosRef, orderBy('name'));
-                    const snapshot = await getDocs(q);
-                    globalInventorySnapshots = snapshot.docs;
+                const insumosRef = collection(db, 'Insumos');
+                let snapshot = await getDocs(insumosRef);
+
+                // Auto-Sincronización: Si Firestore Insumos está vacío pero hay datos en la sesión local
+                if (snapshot.empty) {
+                    try {
+                        const localSession = JSON.parse(localStorage.getItem('SAR_TOMA_INVENTARIO_ITEMS_v2') || localStorage.getItem('visor_toma_backup_vault') || '[]');
+                        if (localSession.length > 0) {
+                            console.info("[Inventario] Auto-poblando Firestore Insumos con", localSession.length, "medicamentos de la sesión...");
+                            const batch = writeBatch(db);
+                            for (const it of localSession) {
+                                const newDoc = doc(insumosRef);
+                                const qVal = Number(it.quantity) || 0;
+                                const critVal = Number(it.criticalLimit) || 50;
+                                batch.set(newDoc, {
+                                    code: it.code || 'S/I',
+                                    name: it.name || 'Sin nombre',
+                                    name_lowercase: (it.name || '').toLowerCase().trim(),
+                                    category: it.category || 'General',
+                                    quantity: qVal,
+                                    totalAcumulado: Number(it.totalAcumulado) || qVal,
+                                    batch: it.batch || 'N/A',
+                                    expirationDate: it.expirationDate || 'N/A',
+                                    location: it.location || 'Bodega Central',
+                                    unitPrice: Number(it.unitPrice) || 0,
+                                    criticalLimit: critVal,
+                                    isCritical: qVal <= critVal,
+                                    updatedAt: serverTimestamp()
+                                });
+                            }
+                            await batch.commit();
+                            snapshot = await getDocs(insumosRef);
+                        }
+                    } catch (eSync) {
+                        console.warn("[Inventario] Error en auto-sincronización local:", eSync);
+                    }
                 }
 
+                globalInventorySnapshots = snapshot.docs;
                 applyInventoryFilters();
 
             } catch (error) {
@@ -2685,9 +3119,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
         /* ----------------------------------------------------
-           9g. DASHBOARD REACTIVO (REAL-TIME ENGINE)
+           9g. DASHBOARD REACTIVO (LEGACY REMOVED)
            ---------------------------------------------------- */
-        window.startRealTimeDashboard = async function (locationFilter = 'all') {
+        window._legacy_unused_dashboard = async function (locationFilter = 'all') {
             if (!auth.currentUser) return;
             const criticalEl = document.getElementById('dash-critical-count');
             const expiringEl = document.getElementById('dash-expiring-count');
@@ -9626,26 +10060,407 @@ window.guardarProgresoBandeja = async function(docId) {
    ========================================================================= */
 const GOOGLE_APPS_SCRIPT_TEMPLATE = `/**
  * =========================================================================
- * GOOGLE APPS SCRIPT - CONECTOR OFICIAL TOMA DE INVENTARIO SAR (v17.7)
+ * GOOGLE APPS SCRIPT - CONECTOR OFICIAL TOMA DE INVENTARIO SAR (v18.6)
  * - Mantiene sincronizado CADA medicamento en su hoja de categoría Y en CONSOLIDADO_GENERAL.
+ * - Incluye generación y actualización automática de la hoja "📊 DASHBOARD" ejecutiva.
  * - Nuevos ingresos se agregan en ambos lugares.
  * - Modificaciones/Ediciones se actualizan en el lugar exacto sin duplicar.
- * - Incluye menú para Reconstruir / Sincronizar CONSOLIDADO_GENERAL con 1 clic.
+ * - Incluye menú para Reconstruir / Sincronizar CONSOLIDADO_GENERAL y DASHBOARD con 1 clic.
  * =========================================================================
  */
 
 function onOpen() {
   var ui = SpreadsheetApp.getUi();
   ui.createMenu('🏥 SAR Inventario')
+    .addItem('📊 Actualizar / Generar Hoja DASHBOARD', 'actualizarDashboardEjecutivo')
+    .addItem('📂 Generar / Sincronizar Pestañas de Categorías', 'distribuirConsolidadoACategorias')
     .addItem('🔄 Reconstruir / Sincronizar CONSOLIDADO_GENERAL', 'reconstruirConsolidadoDesdeCategorias')
     .addItem('🧹 Limpiar Filas Duplicadas Antiguas', 'limpiarYDepurarDuplicados')
     .addToUi();
 }
 
+function parseDateGAS(val) {
+  if (!val) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  var s = val.toString().trim();
+  if (!s || s === 'N/A' || s === 'S/I' || s === 'null' || s === 'undefined') return null;
+
+  if (/^\\d{1,2}\\/\\d{4}$/.test(s)) {
+    var p = s.split('/');
+    var m = Number(p[0]);
+    var y = Number(p[1]);
+    if (m >= 1 && m <= 12 && y >= 2000) {
+      return new Date(y, m, 0, 23, 59, 59);
+    }
+  }
+  if (/^\\d{4}-\\d{1,2}/.test(s)) {
+    var p2 = s.split(/[-T/]/);
+    var y2 = Number(p2[0]);
+    var m2 = Number(p2[1]);
+    var d2 = p2[2] ? Number(p2[2].substring(0, 2)) : 0;
+    if (m2 >= 1 && m2 <= 12 && y2 >= 2000) {
+      if (d2 > 0) return new Date(y2, m2 - 1, d2, 23, 59, 59);
+      return new Date(y2, m2, 0, 23, 59, 59);
+    }
+  }
+  if (/^\\d{1,2}\\/\\d{1,2}\\/\\d{4}$/.test(s)) {
+    var p3 = s.split('/');
+    var d3 = Number(p3[0]);
+    var m3 = Number(p3[1]);
+    var y3 = Number(p3[2]);
+    if (m3 >= 1 && m3 <= 12 && y3 >= 2000) {
+      return new Date(y3, m3 - 1, d3, 23, 59, 59);
+    }
+  }
+  var parsed = new Date(s);
+  return isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function formatExpDateDisplay(val) {
+  if (!val) return "N/A";
+  if (val instanceof Date) {
+    var m = val.getMonth() + 1;
+    var y = val.getFullYear();
+    return (m < 10 ? '0' + m : m) + '/' + y;
+  }
+  var s = val.toString().trim();
+  if (s.indexOf("GMT") !== -1 || s.indexOf("00:00:00") !== -1) {
+    var p = parseDateGAS(s);
+    if (p) {
+      var mp = p.getMonth() + 1;
+      var yp = p.getFullYear();
+      return (mp < 10 ? '0' + mp : mp) + '/' + yp;
+    }
+  }
+  return s;
+}
+
+/**
+ * 📊 GENERA / ACTUALIZA LA HOJA MAESTRA DE DASHBOARD EJECUTIVO (DISEÑO VISOR PRO)
+ */
+function actualizarDashboardEjecutivo() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var dashSheet = ss.getSheetByName("📊 DASHBOARD");
+  if (!dashSheet) {
+    dashSheet = ss.insertSheet("📊 DASHBOARD", 0);
+  } else {
+    try {
+      ss.setActiveSheet(dashSheet);
+      ss.moveActiveSheet(1);
+    } catch(eMove) {}
+  }
+  
+  try { dashSheet.setTabColor("#2563eb"); } catch(eTab) {}
+  dashSheet.clear();
+
+  // Extraer items desde CONSOLIDADO_GENERAL o directamente desde las hojas de categoría
+  var items = [];
+  var consSheet = ss.getSheetByName("CONSOLIDADO_GENERAL");
+  
+  if (consSheet && consSheet.getLastRow() > 1) {
+    var rawData = consSheet.getRange(2, 1, consSheet.getLastRow() - 1, consSheet.getLastColumn()).getValues();
+    for (var i = 0; i < rawData.length; i++) {
+      var r = rawData[i];
+      var name = (r[3] || "").toString().trim();
+      if (!name || name === "Descripción / Medicamento" || name === "Nombre") continue;
+      items.push({
+        fase: r[1] || "1ra Toma",
+        code: r[2] || "S/I",
+        name: name,
+        category: (r[4] || "General").toString().trim().toUpperCase(),
+        qty: Number(r[5]) || 0,
+        totalAcumulado: Number(r[6]) || Number(r[5]) || 0,
+        batch: (r[7] || "N/A").toString().trim(),
+        expDate: formatExpDateDisplay(r[8] || "N/A"),
+        location: (r[9] || "Bodega Central").toString().trim(),
+        unitPrice: Number(r[10]) || 0,
+        criticalLimit: Number(r[11]) || 50,
+        user: r[12] || "Operador",
+        obs: r[13] || ""
+      });
+    }
+  } else {
+    // Si aún no hay consolidado, extraer directo de las pestañas
+    var sheets = ss.getSheets();
+    for (var s = 0; s < sheets.length; s++) {
+      var sh = sheets[s];
+      var shName = sh.getName();
+      if (shName === "CONSOLIDADO_GENERAL" || shName === "📊 DASHBOARD" || shName === "INCIDENCIAS_Y_MERMAS" || shName === "INSTRUCCIONES" || shName === "PRUEBA_SISTEMA") continue;
+      if (sh.getLastRow() > 1) {
+        var shData = sh.getDataRange().getValues();
+        for (var j = 1; j < shData.length; j++) {
+          var sRow = shData[j];
+          var sName = (sRow[3] || sRow[0] || "").toString().trim();
+          if (!sName || sName === "Descripción / Medicamento" || sName === "Nombre") continue;
+          items.push({
+            fase: sRow[1] || "1ra Toma",
+            code: sRow[2] || "S/I",
+            name: sName,
+            category: (sRow[4] || shName).toString().trim().toUpperCase(),
+            qty: Number(sRow[5]) || Number(sRow[1]) || 0,
+            totalAcumulado: Number(sRow[6]) || Number(sRow[5]) || Number(sRow[1]) || 0,
+            batch: (sRow[7] || sRow[3] || "N/A").toString().trim(),
+            expDate: formatExpDateDisplay(sRow[8] || sRow[2] || "N/A"),
+            location: (sRow[9] || "Bodega Central").toString().trim(),
+            unitPrice: Number(sRow[10]) || 0,
+            criticalLimit: Number(sRow[11]) || 50,
+            user: sRow[12] || "Operador",
+            obs: sRow[13] || ""
+          });
+        }
+      }
+    }
+  }
+
+  var hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+
+  var totalInsumos = items.length;
+  var totalUnidades = 0;
+  var totalCapital = 0;
+  var stockCriticoCount = 0;
+  var urgenciasList = [];
+  var precaucionList = [];
+  var optimosCount = 0;
+  var catStats = {};
+
+  items.forEach(function(item) {
+    var q = Number(item.qty) || 0;
+    totalUnidades += q;
+    totalCapital += (q * item.unitPrice);
+
+    if (q <= item.criticalLimit) {
+      stockCriticoCount++;
+    }
+
+    if (!catStats[item.category]) {
+      catStats[item.category] = { count: 0, units: 0 };
+    }
+    catStats[item.category].count++;
+    catStats[item.category].units += q;
+
+    var exp = parseDateGAS(item.expDate);
+    if (exp) {
+      var diffDays = Math.ceil((exp - hoy) / (1000 * 60 * 60 * 24));
+      if (diffDays <= 30) {
+        urgenciasList.push({ item: item, diffDays: diffDays });
+      } else if (diffDays <= 180) {
+        precaucionList.push({ item: item, diffDays: diffDays });
+      } else {
+        optimosCount++;
+      }
+    } else {
+      optimosCount++;
+    }
+  });
+
+  // AJUSTE DE ANCHO DE COLUMNAS (A - G)
+  dashSheet.setColumnWidth(1, 280);
+  dashSheet.setColumnWidth(2, 170);
+  dashSheet.setColumnWidth(3, 140);
+  dashSheet.setColumnWidth(4, 140);
+  dashSheet.setColumnWidth(5, 140);
+  dashSheet.setColumnWidth(6, 170);
+  dashSheet.setColumnWidth(7, 140);
+
+  // 1. BANNER PRINCIPAL ESTILO HEADER VISOR (A1:G2)
+  dashSheet.setRowHeight(1, 40);
+  dashSheet.setRowHeight(2, 24);
+  dashSheet.setRowHeight(3, 14);
+
+  var titleRange = dashSheet.getRange("A1:G1");
+  titleRange.merge();
+  titleRange.setValue("🏥 VISOR LOGÍSTICO CLÍNICO — PANEL DE CONTROL EJECUTIVO");
+  titleRange.setBackground("#0f172a");
+  titleRange.setFontColor("#ffffff");
+  titleRange.setFontWeight("bold");
+  titleRange.setFontSize(13);
+  titleRange.setHorizontalAlignment("center");
+  titleRange.setVerticalAlignment("middle");
+
+  var subRange = dashSheet.getRange("A2:G2");
+  subRange.merge();
+  var syncStr = Utilities.formatDate(new Date(), "GMT-3", "dd/MM/yyyy HH:mm:ss");
+  subRange.setValue("⚡ Sincronización en vivo con Base de Datos | Última Actualización: " + syncStr);
+  subRange.setBackground("#1e293b");
+  subRange.setFontColor("#94a3b8");
+  subRange.setFontSize(9);
+  subRange.setHorizontalAlignment("center");
+  subRange.setVerticalAlignment("middle");
+
+  // ALTURA DE FILAS DE TARJETAS KPI (Filas 4 a 7)
+  dashSheet.setRowHeight(4, 22);
+  dashSheet.setRowHeight(5, 18);
+  dashSheet.setRowHeight(6, 38);
+  dashSheet.setRowHeight(7, 20);
+  dashSheet.setRowHeight(8, 16);
+
+  // 2. TARJETAS KPI (ESTILO EXACTO VISOR WEB)
+  // CARD 1: Fármacos Únicos (Col A)
+  dashSheet.getRange("A4").setValue("📌 REGISTRO CLÍNICO").setFontWeight("bold").setFontSize(8).setFontColor("#1d4ed8").setBackground("#eff6ff").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  dashSheet.getRange("A5").setValue("FÁRMACOS ÚNICOS").setFontWeight("bold").setFontSize(8.5).setFontColor("#64748b").setBackground("#ffffff").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  dashSheet.getRange("A6").setValue(totalInsumos).setFontWeight("bold").setFontSize(20).setFontColor("#0f172a").setBackground("#ffffff").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  dashSheet.getRange("A7").setValue("En catálogo activo").setFontSize(8).setFontColor("#94a3b8").setBackground("#ffffff").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  dashSheet.getRange("A4:A7").setBorder(true, true, true, true, false, false, "#cbd5e1", SpreadsheetApp.BorderStyle.SOLID);
+
+  // CARD 2: Stock Físico Contado (Cols B:C)
+  var c2Pill = dashSheet.getRange("B4:C4"); c2Pill.merge();
+  c2Pill.setValue("📦 EXISTENCIAS FÍSICAS").setFontWeight("bold").setFontSize(8).setFontColor("#15803d").setBackground("#f0fdf4").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  var c2Title = dashSheet.getRange("B5:C5"); c2Title.merge();
+  c2Title.setValue("TOTAL UNIDADES CONTADAS").setFontWeight("bold").setFontSize(8.5).setFontColor("#64748b").setBackground("#ffffff").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  var c2Val = dashSheet.getRange("B6:C6"); c2Val.merge();
+  c2Val.setValue(totalUnidades).setFontWeight("bold").setFontSize(20).setFontColor("#059669").setBackground("#ffffff").setHorizontalAlignment("center").setVerticalAlignment("middle").setNumberFormat('#,##0 "un."');
+  var c2Sub = dashSheet.getRange("B7:C7"); c2Sub.merge();
+  c2Sub.setValue("Stock acumulado en bodegas").setFontSize(8).setFontColor("#94a3b8").setBackground("#ffffff").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  dashSheet.getRange("B4:C7").setBorder(true, true, true, true, false, false, "#cbd5e1", SpreadsheetApp.BorderStyle.SOLID);
+
+  // CARD 3: Stock Crítico (Col D)
+  dashSheet.getRange("D4").setValue("⚠️ ACCIÓN INMEDIATA").setFontWeight("bold").setFontSize(8).setFontColor("#dc2626").setBackground("#fef2f2").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  dashSheet.getRange("D5").setValue("STOCK CRÍTICO").setFontWeight("bold").setFontSize(8.5).setFontColor("#64748b").setBackground("#ffffff").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  dashSheet.getRange("D6").setValue(stockCriticoCount).setFontWeight("bold").setFontSize(20).setFontColor("#dc2626").setBackground("#ffffff").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  dashSheet.getRange("D7").setValue("Bajo stock mínimo").setFontSize(8).setFontColor("#94a3b8").setBackground("#ffffff").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  dashSheet.getRange("D4:D7").setBorder(true, true, true, true, false, false, "#cbd5e1", SpreadsheetApp.BorderStyle.SOLID);
+
+  // CARD 4: Capital Estimado (Col E)
+  dashSheet.getRange("E4").setValue("💰 VALORIZACIÓN").setFontWeight("bold").setFontSize(8).setFontColor("#166534").setBackground("#f0fdf4").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  dashSheet.getRange("E5").setValue("CAPITAL ESTIMADO").setFontWeight("bold").setFontSize(8.5).setFontColor("#64748b").setBackground("#ffffff").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  dashSheet.getRange("E6").setValue(totalCapital).setFontWeight("bold").setFontSize(18).setFontColor("#15803d").setBackground("#ffffff").setHorizontalAlignment("center").setVerticalAlignment("middle").setNumberFormat("$#,##0");
+  dashSheet.getRange("E7").setValue("Costo total inventario").setFontSize(8).setFontColor("#94a3b8").setBackground("#ffffff").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  dashSheet.getRange("E4:E7").setBorder(true, true, true, true, false, false, "#cbd5e1", SpreadsheetApp.BorderStyle.SOLID);
+
+  // CARD 5: Categorías Activas (Cols F:G)
+  var c5Pill = dashSheet.getRange("F4:G4"); c5Pill.merge();
+  c5Pill.setValue("🗂️ FORMAS FARMACÉUTICAS").setFontWeight("bold").setFontSize(8).setFontColor("#7e22ce").setBackground("#faf5ff").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  var c5Title = dashSheet.getRange("F5:G5"); c5Title.merge();
+  c5Title.setValue("CATEGORÍAS ACTIVAS").setFontWeight("bold").setFontSize(8.5).setFontColor("#64748b").setBackground("#ffffff").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  var c5Val = dashSheet.getRange("F6:G6"); c5Val.merge();
+  c5Val.setValue(Object.keys(catStats).length).setFontWeight("bold").setFontSize(20).setFontColor("#7c3aed").setBackground("#ffffff").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  var c5Sub = dashSheet.getRange("F7:G7"); c5Sub.merge();
+  c5Sub.setValue("Pestañas habilitadas").setFontSize(8).setFontColor("#94a3b8").setBackground("#ffffff").setHorizontalAlignment("center").setVerticalAlignment("middle");
+  dashSheet.getRange("F4:G7").setBorder(true, true, true, true, false, false, "#cbd5e1", SpreadsheetApp.BorderStyle.SOLID);
+
+  // 3. SEMÁFORO DE VENCIMIENTOS CLÍNICOS (Filas 9 a 12)
+  dashSheet.setRowHeight(9, 30);
+  dashSheet.setRowHeight(10, 24);
+  dashSheet.setRowHeight(11, 36);
+  dashSheet.setRowHeight(12, 16);
+
+  var semTitle = dashSheet.getRange("A9:G9"); semTitle.merge();
+  semTitle.setValue("⏳ SEMÁFORO DE VENCIMIENTOS Y ROTACIÓN CLÍNICA").setBackground("#0f172a").setFontColor("#ffffff").setFontWeight("bold").setFontSize(10).setHorizontalAlignment("center").setVerticalAlignment("middle");
+
+  // Urgencias (< 30 días)
+  var uH = dashSheet.getRange("A10:B10"); uH.merge(); uH.setValue("🔴 CRÍTICO / VENCIDO (< 30 DÍAS)").setBackground("#fee2e2").setFontColor("#991b1b").setFontWeight("bold").setFontSize(8.5).setHorizontalAlignment("center").setVerticalAlignment("middle");
+  var uV = dashSheet.getRange("A11:B11"); uV.merge(); uV.setValue(urgenciasList.length + " Lote(s)").setBackground("#ffffff").setFontColor("#dc2626").setFontWeight("bold").setFontSize(16).setHorizontalAlignment("center").setVerticalAlignment("middle");
+  dashSheet.getRange("A10:B11").setBorder(true, true, true, true, false, false, "#fca5a5", SpreadsheetApp.BorderStyle.SOLID);
+
+  // Precaución (1 a 6 meses)
+  var pH = dashSheet.getRange("C10:E10"); pH.merge(); pH.setValue("🟠 PRECAUCIÓN / ROTACIÓN (1 A 6 MESES)").setBackground("#fef3c7").setFontColor("#92400e").setFontWeight("bold").setFontSize(8.5).setHorizontalAlignment("center").setVerticalAlignment("middle");
+  var pV = dashSheet.getRange("C11:E11"); pV.merge(); pV.setValue(precaucionList.length + " Lote(s)").setBackground("#ffffff").setFontColor("#d97706").setFontWeight("bold").setFontSize(16).setHorizontalAlignment("center").setVerticalAlignment("middle");
+  dashSheet.getRange("C10:E11").setBorder(true, true, true, true, false, false, "#fcd34d", SpreadsheetApp.BorderStyle.SOLID);
+
+  // Vigentes (> 6 meses)
+  var oH = dashSheet.getRange("F10:G10"); oH.merge(); oH.setValue("🟢 VIGENCIA ÓPTIMA (> 6 MESES)").setBackground("#dcfce7").setFontColor("#166534").setFontWeight("bold").setFontSize(8.5).setHorizontalAlignment("center").setVerticalAlignment("middle");
+  var oV = dashSheet.getRange("F11:G11"); oV.merge(); oV.setValue(optimosCount + " Insumo(s)").setBackground("#ffffff").setFontColor("#16a34a").setFontWeight("bold").setFontSize(16).setHorizontalAlignment("center").setVerticalAlignment("middle");
+  dashSheet.getRange("F10:G11").setBorder(true, true, true, true, false, false, "#86efac", SpreadsheetApp.BorderStyle.SOLID);
+
+  // 4. TABLA DE RESUMEN POR CATEGORÍAS (Fila 13+)
+  dashSheet.setRowHeight(13, 30);
+  dashSheet.setRowHeight(14, 26);
+  
+  var catTitle = dashSheet.getRange("A13:D13"); catTitle.merge();
+  catTitle.setValue("📦 DISTRIBUCIÓN Y PARTICIPACIÓN POR CATEGORÍA").setBackground("#1e293b").setFontColor("#ffffff").setFontWeight("bold").setFontSize(9.5).setHorizontalAlignment("center").setVerticalAlignment("middle");
+  
+  var catHdrs = ["Categoría / Forma Farmacéutica", "Fármacos Únicos", "Stock Físico (Un.)", "% Participación"];
+  var catHdrRange = dashSheet.getRange("A14:D14");
+  catHdrRange.setValues([catHdrs]).setBackground("#334155").setFontColor("#ffffff").setFontWeight("bold").setFontSize(8.5).setHorizontalAlignment("center").setVerticalAlignment("middle");
+
+  var catRows = [];
+  var sortedCats = Object.keys(catStats).sort();
+  sortedCats.forEach(function(catName) {
+    var cData = catStats[catName];
+    var pct = totalUnidades > 0 ? (cData.units / totalUnidades) : 0;
+    catRows.push([catName, cData.count, cData.units, pct]);
+  });
+
+  if (catRows.length > 0) {
+    var catRange = dashSheet.getRange(15, 1, catRows.length, 4);
+    catRange.setValues(catRows);
+    dashSheet.setRowHeights(15, catRows.length, 24);
+
+    for (var cr = 0; cr < catRows.length; cr++) {
+      var rowNum = 15 + cr;
+      var bgRow = (cr % 2 === 0) ? "#ffffff" : "#f8fafc";
+      dashSheet.getRange(rowNum, 1, 1, 4).setBackground(bgRow).setVerticalAlignment("middle").setFontSize(9);
+    }
+
+    dashSheet.getRange(15, 2, catRows.length, 1).setHorizontalAlignment("center").setFontWeight("bold");
+    dashSheet.getRange(15, 3, catRows.length, 1).setNumberFormat("#,##0").setHorizontalAlignment("right").setFontWeight("bold");
+    dashSheet.getRange(15, 4, catRows.length, 1).setNumberFormat("0.0%").setHorizontalAlignment("center").setFontWeight("bold").setFontColor("#2563eb");
+    dashSheet.getRange(14, 1, catRows.length + 1, 4).setBorder(true, true, true, true, true, true, "#e2e8f0", SpreadsheetApp.BorderStyle.SOLID);
+  }
+
+  // 5. TABLA DE ALERTAS DE VENCIMIENTO Y LOTES EN RIESGO
+  var nextRow = 15 + Math.max(catRows.length, 1) + 2;
+  dashSheet.setRowHeight(nextRow - 1, 16);
+  dashSheet.setRowHeight(nextRow, 30);
+  dashSheet.setRowHeight(nextRow + 1, 26);
+
+  var alertTitle = dashSheet.getRange(nextRow, 1, 1, 7);
+  alertTitle.merge().setValue("⚠️ AUDITORÍA DE LOTES EN RIESGO (URGENCIAS & PRECAUCIÓN DE ROTACIÓN)").setBackground("#7f1d1d").setFontColor("#ffffff").setFontWeight("bold").setFontSize(9.5).setHorizontalAlignment("center").setVerticalAlignment("middle");
+  
+  var alertHdrs = ["Medicamento / Fármaco", "Categoría", "Lote", "Fecha Vto.", "Días Restantes", "Nivel de Alerta", "Stock Físico"];
+  var alertHdrRange = dashSheet.getRange(nextRow + 1, 1, 1, 7);
+  alertHdrRange.setValues([alertHdrs]).setBackground("#991b1b").setFontColor("#ffffff").setFontWeight("bold").setFontSize(8.5).setHorizontalAlignment("center").setVerticalAlignment("middle");
+
+  var alertRows = [];
+  urgenciasList.forEach(function(u) {
+    var d = u.diffDays;
+    var estado = d < 0 ? ("⛔ VENCIDO (" + Math.abs(d) + "d)") : ("🔴 URGENCIA (" + d + "d)");
+    var cleanExp = formatExpDateDisplay(u.item.expDate);
+    alertRows.push([u.item.name, u.item.category, u.item.batch, cleanExp, d, estado, u.item.qty]);
+  });
+  precaucionList.forEach(function(p) {
+    var d = p.diffDays;
+    var meses = Math.round(d / 30);
+    var estado = "🟠 PRECAUCIÓN (~" + meses + "m)";
+    var cleanExp = formatExpDateDisplay(p.item.expDate);
+    alertRows.push([p.item.name, p.item.category, p.item.batch, cleanExp, d, estado, p.item.qty]);
+  });
+
+  if (alertRows.length > 0) {
+    var alertRange = dashSheet.getRange(nextRow + 2, 1, alertRows.length, 7);
+    alertRange.setValues(alertRows);
+    dashSheet.setRowHeights(nextRow + 2, alertRows.length, 24);
+
+    for (var ar = 0; ar < alertRows.length; ar++) {
+      var aRowNum = nextRow + 2 + ar;
+      var aRowData = alertRows[ar];
+      var isUrgent = aRowData[5].indexOf("🔴") !== -1 || aRowData[5].indexOf("⛔") !== -1;
+      var bgAlert = isUrgent ? "#fef2f2" : "#fffbeb";
+      var txtAlert = isUrgent ? "#dc2626" : "#d97706";
+
+      dashSheet.getRange(aRowNum, 1, 1, 7).setBackground(bgAlert).setVerticalAlignment("middle").setFontSize(9);
+      dashSheet.getRange(aRowNum, 6).setFontColor(txtAlert).setFontWeight("bold");
+    }
+
+    dashSheet.getRange(nextRow + 2, 3, alertRows.length, 1).setHorizontalAlignment("center");
+    dashSheet.getRange(nextRow + 2, 4, alertRows.length, 1).setHorizontalAlignment("center");
+    dashSheet.getRange(nextRow + 2, 5, alertRows.length, 1).setHorizontalAlignment("center");
+    dashSheet.getRange(nextRow + 2, 6, alertRows.length, 1).setHorizontalAlignment("center");
+    dashSheet.getRange(nextRow + 2, 7, alertRows.length, 1).setNumberFormat("#,##0").setHorizontalAlignment("right").setFontWeight("bold");
+    dashSheet.getRange(nextRow + 1, 1, alertRows.length + 1, 7).setBorder(true, true, true, true, true, true, "#fecaca", SpreadsheetApp.BorderStyle.SOLID);
+  } else {
+    var emptyRange = dashSheet.getRange(nextRow + 2, 1, 1, 7);
+    emptyRange.merge().setValue("✅ No hay lotes en riesgo ni urgencias detectadas (Todos con vigencia mayor a 6 meses).").setBackground("#f0fdf4").setFontColor("#16a34a").setFontWeight("bold").setFontSize(9.5).setHorizontalAlignment("center").setVerticalAlignment("middle");
+    dashSheet.setRowHeight(nextRow + 2, 32);
+    emptyRange.setBorder(true, true, true, true, false, false, "#bbf7d0", SpreadsheetApp.BorderStyle.SOLID);
+  }
+}
+
 /**
  * 🔄 FUNCIÓN DE RECONSTRUCCIÓN Y SINCRONIZACIÓN TOTAL:
  * Lee todas las pestañas de categorías y pasa automáticamente
- * todos los medicamentos que falten hacia CONSOLIDADO_GENERAL.
+ * todos los medicamentos que falten hacia CONSOLIDADO_GENERAL y actualiza DASHBOARD.
  */
 function reconstruirConsolidadoDesdeCategorias() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -9663,7 +10478,6 @@ function reconstruirConsolidadoDesdeCategorias() {
     consSheet = ss.insertSheet("CONSOLIDADO_GENERAL", 0);
   }
   
-  // 1. Leer datos que ya están en el Consolidado
   var existingConsData = [];
   if (consSheet.getLastRow() > 1) {
     existingConsData = consSheet.getRange(2, 1, consSheet.getLastRow() - 1, headers.length).getValues();
@@ -9686,11 +10500,10 @@ function reconstruirConsolidadoDesdeCategorias() {
     }
   }
 
-  // 2. Extraer medicamentos de CADA pestaña de categoría que no estén en el consolidado
   for (var s = 0; s < sheets.length; s++) {
     var sheet = sheets[s];
     var sheetName = sheet.getName();
-    if (sheetName === "CONSOLIDADO_GENERAL" || sheetName === "INCIDENCIAS_Y_MERMAS" || sheetName === "INSTRUCCIONES" || sheetName === "PRUEBA_SISTEMA") continue;
+    if (sheetName === "CONSOLIDADO_GENERAL" || sheetName === "📊 DASHBOARD" || sheetName === "INCIDENCIAS_Y_MERMAS" || sheetName === "INSTRUCCIONES" || sheetName === "PRUEBA_SISTEMA") continue;
 
     if (sheet.getLastRow() > 1) {
       var data = sheet.getDataRange().getValues();
@@ -9749,7 +10562,6 @@ function reconstruirConsolidadoDesdeCategorias() {
     }
   }
 
-  // 3. Escribir limpiamente en CONSOLIDADO_GENERAL
   consSheet.clear();
   consSheet.appendRow(headers);
   var headerRange = consSheet.getRange(1, 1, 1, headers.length);
@@ -9764,15 +10576,105 @@ function reconstruirConsolidadoDesdeCategorias() {
     consSheet.getRange(2, 1, allRows.length, headers.length).setValues(allRows);
   }
 
-  try {
-    SpreadsheetApp.getUi().alert('✅ Consolidado General Actualizado', 'Total de medicamentos en CONSOLIDADO_GENERAL: ' + allRows.length + ' filas sincronizadas desde todas las categorías.', SpreadsheetApp.getUi().ButtonSet.OK);
-  } catch(eAlert) {
-    Logger.log('Consolidado actualizado. Total: ' + allRows.length);
-  }
+  actualizarDashboardEjecutivo();
 }
 
 function limpiarYDepurarDuplicados() {
   reconstruirConsolidadoDesdeCategorias();
+}
+
+/**
+ * 📂 DISTRIBUYE Y CREA PESTAÑAS AUTOMÁTICAS:
+ * Lee todo CONSOLIDADO_GENERAL y crea/actualiza cada pestaña de categoría
+ * (ej: INYECTABLES Y AMPOLLAS, SOLUCIONES Y SUEROS, etc.).
+ */
+function distribuirConsolidadoACategorias() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var consSheet = ss.getSheetByName("CONSOLIDADO_GENERAL");
+  if (!consSheet || consSheet.getLastRow() <= 1) return;
+
+  var headers = [
+    "Marca Temporal", "Fase / Toma", "Código Insumo", "Descripción / Medicamento",
+    "Categoría", "Cant. Esta Toma (Un.)", "Stock Total Acumulado", "Lote",
+    "Fecha Vencimiento", "Ubicación / Bodega", "Costo Unitario ($)", "Stock Mínimo",
+    "Responsable", "Observaciones"
+  ];
+
+  var categoryColors = {
+    "CONSOLIDADO_GENERAL": "#0f172a",
+    "COMPRIMIDOS ANTIBIOTICOS": "#c2410c",
+    "COMPRIMIDOS": "#4338ca",
+    "JARABES": "#b45309",
+    "GOTAS": "#0369a1",
+    "INHALADORES": "#0f766e",
+    "CREMAS": "#be123c",
+    "SUPOSITORIOS": "#6d28d9",
+    "SALES REHIDRATACIONES": "#4d7c0f",
+    "INYECTABLES Y AMPOLLAS": "#1d4ed8",
+    "SOLUCIONES Y SUEROS": "#0284c7",
+    "INCIDENCIAS_Y_MERMAS": "#b91c1c"
+  };
+
+  function getOrCreateSheet(name, hdrs, tabColor) {
+    var cleanName = name.toString().trim().toUpperCase().substring(0, 30);
+    if (!cleanName) cleanName = "GENERAL";
+    var s = ss.getSheetByName(cleanName);
+    if (!s) {
+      s = ss.insertSheet(cleanName);
+      s.appendRow(hdrs);
+      var r = s.getRange(1, 1, 1, hdrs.length);
+      r.setBackground(tabColor || "#1e293b").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center");
+      s.setFrozenRows(1);
+      try { s.setTabColor(tabColor || "#1e293b"); } catch(eTab) {}
+    }
+    return s;
+  }
+
+  function findRowInSheet(sheet, code, name, fase, lote) {
+    if (!sheet || sheet.getLastRow() <= 1) return -1;
+    var values = sheet.getDataRange().getValues();
+    var cCode = (code || "").toString().trim().toUpperCase();
+    var cName = (name || "").toString().trim().toLowerCase();
+    var cFase = (fase || "").toString().trim().toLowerCase();
+    var cLote = (lote || "").toString().trim().toLowerCase();
+
+    if (cCode && cCode !== "S/I" && cCode !== "N/A" && cCode !== "S/N") {
+      for (var i = 1; i < values.length; i++) {
+        if ((values[i][2] || "").toString().trim().toUpperCase() === cCode) return i + 1;
+      }
+    }
+
+    for (var j = 1; j < values.length; j++) {
+      var rFase = (values[j][1] || "").toString().trim().toLowerCase();
+      var rName = (values[j][3] || "").toString().trim().toLowerCase();
+      var rLote = (values[j][7] || "").toString().trim().toLowerCase();
+
+      if (rName === cName) {
+        if (cFase && rFase && cFase === rFase) return j + 1;
+        if (cLote && rLote && cLote === rLote) return j + 1;
+      }
+    }
+    return -1;
+  }
+
+  var data = consSheet.getRange(2, 1, consSheet.getLastRow() - 1, consSheet.getLastColumn()).getValues();
+  for (var i = 0; i < data.length; i++) {
+    var row = data[i];
+    var med = (row[3] || "").toString().trim();
+    if (!med || med === "Descripción / Medicamento" || med === "Nombre") continue;
+
+    var cat = (row[4] || "GENERAL").toString().trim().toUpperCase();
+    var catSheet = getOrCreateSheet(cat, headers, categoryColors[cat] || "#1e293b");
+    
+    var existingRow = findRowInSheet(catSheet, row[2], med, row[1], row[7]);
+    if (existingRow > 0) {
+      catSheet.getRange(existingRow, 1, 1, row.length).setValues([row]);
+    } else {
+      catSheet.appendRow(row);
+    }
+  }
+
+  actualizarDashboardEjecutivo();
 }
 
 function doPost(e) {
@@ -9789,7 +10691,12 @@ function doPost(e) {
     
     if (action === "rebuild_consolidated" || action === "sync_consolidated") {
       reconstruirConsolidadoDesdeCategorias();
-      return ContentService.createTextOutput(JSON.stringify({ status: 'success', message: 'CONSOLIDADO_GENERAL reconstruido con éxito' })).setMimeType(ContentService.MimeType.JSON);
+      return ContentService.createTextOutput(JSON.stringify({ status: 'success', message: 'CONSOLIDADO_GENERAL y DASHBOARD reconstruidos con éxito' })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    if (action === "update_dashboard" || action === "refresh_dashboard") {
+      actualizarDashboardEjecutivo();
+      return ContentService.createTextOutput(JSON.stringify({ status: 'success', message: 'Hoja 📊 DASHBOARD actualizada con éxito' })).setMimeType(ContentService.MimeType.JSON);
     }
 
     // Encabezados Oficiales
@@ -9848,28 +10755,19 @@ function doPost(e) {
       var targetFase = (item.fase || item.oldFase || "").toString().trim().toLowerCase();
       var targetLote = (item.batch || item.lote || item.oldLote || "").toString().trim().toLowerCase();
 
-      // 1. Coincidencia por Código si existe
-      if (targetCode && targetCode !== "S/I" && targetCode !== "N/A" && targetCode !== "S/N") {
-        for (var i = 1; i < values.length; i++) {
-          var rowCode = (values[i][2] || "").toString().trim().toUpperCase();
-          if (rowCode === targetCode) {
-            return i + 1;
-          }
-        }
-      }
-
-      // 2. Coincidencia por Nombre (antiguo o actual) + Fase / Lote
       for (var j = 1; j < values.length; j++) {
         var rowFase = (values[j][1] || "").toString().trim().toLowerCase();
+        var rowCode = (values[j][2] || "").toString().trim().toUpperCase();
         var rowMedNorm = normalizeStr(values[j][3] || values[j][0] || "");
         var rowLote = (values[j][7] || values[j][3] || "").toString().trim().toLowerCase();
 
+        var codeMatches = (targetCode && targetCode !== "S/I" && targetCode !== "N/A" && targetCode !== "S/N" && rowCode === targetCode);
         var nameMatches = (targetOldNameNorm && rowMedNorm === targetOldNameNorm) || (targetNameNorm && rowMedNorm === targetNameNorm);
-        if (nameMatches) {
-          if (targetFase && rowFase && targetFase === rowFase) {
-            return j + 1;
-          }
-          if (targetLote && rowLote && targetLote === rowLote) {
+
+        if (codeMatches || nameMatches) {
+          var faseMatches = (!targetFase || !rowFase || targetFase === rowFase);
+          var loteMatches = (!targetLote || !rowLote || targetLote === rowLote);
+          if (faseMatches && loteMatches) {
             return j + 1;
           }
         }
@@ -9882,11 +10780,15 @@ function doPost(e) {
 
     // 1. CASO: TRANSFERENCIA / EXPORTACIÓN MASIVA (BATCH INSERT)
     if (action === "batch_insert" && Array.isArray(data.items)) {
-      var countInserted = 0;
+      // Limpiar y poblar con la lista completa y autoritativa de la sesión para evitar discrepancias
+      var catBuckets = {};
+      var consRows = [];
+
       for (var b = 0; b < data.items.length; b++) {
         var it = data.items[b];
         var itCat = (it.category || it.categoria || "General").toString().trim().toUpperCase();
-        var itSheet = getOrCreateSheet(itCat, headers, categoryColors[itCat] || "#1e293b");
+        if (!catBuckets[itCat]) catBuckets[itCat] = [];
+
         var itRow = [
           it.timestamp || Utilities.formatDate(new Date(), "GMT-3", "yyyy-MM-dd HH:mm:ss"),
           it.fase || "1ra Toma (Inicial)",
@@ -9896,33 +10798,47 @@ function doPost(e) {
           Number(it.quantity) || 0,
           Number(it.totalAcumulado) || Number(it.quantity) || 0,
           it.batch || it.lote || "N/A",
-          it.expirationDate || it.fechaVencimiento || "N/A",
+          formatExpDateDisplay(it.expirationDate || it.fechaVencimiento || "N/A"),
           it.location || it.ubicacion || "Bodega Central",
           Number(it.unitPrice) || 0,
           Number(it.criticalLimit || it.stock_minimo) || 50,
           it.user || it.responsable || "Visor Logístico",
           it.observations || ""
         ];
-        
-        var exCons = findRowInSheet(consolidadoSheet, it);
-        if (exCons > 0) {
-          consolidadoSheet.getRange(exCons, 1, 1, itRow.length).setValues([itRow]);
-        } else {
-          consolidadoSheet.appendRow(itRow);
-        }
 
-        var exCat = findRowInSheet(itSheet, it);
-        if (exCat > 0) {
-          itSheet.getRange(exCat, 1, 1, itRow.length).setValues([itRow]);
-        } else {
-          itSheet.appendRow(itRow);
-        }
-        countInserted++;
+        consRows.push(itRow);
+        catBuckets[itCat].push(itRow);
       }
+
+      // Escribir CONSOLIDADO_GENERAL
+      consSheet.clear();
+      consSheet.appendRow(headers);
+      consSheet.getRange(1, 1, 1, headers.length).setBackground("#0f172a").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center");
+      consSheet.setFrozenRows(1);
+      try { consSheet.setTabColor("#0f172a"); } catch(eTab) {}
+      if (consRows.length > 0) {
+        consSheet.getRange(2, 1, consRows.length, headers.length).setValues(consRows);
+      }
+
+      // Escribir cada pestaña de Categoría
+      Object.keys(catBuckets).forEach(function(catKey) {
+        var cSheet = getOrCreateSheet(catKey, headers, categoryColors[catKey] || "#1e293b");
+        cSheet.clear();
+        cSheet.appendRow(headers);
+        cSheet.getRange(1, 1, 1, headers.length).setBackground(categoryColors[catKey] || "#1e293b").setFontColor("#ffffff").setFontWeight("bold").setHorizontalAlignment("center");
+        cSheet.setFrozenRows(1);
+        try { cSheet.setTabColor(categoryColors[catKey] || "#1e293b"); } catch(eT) {}
+        if (catBuckets[catKey].length > 0) {
+          cSheet.getRange(2, 1, catBuckets[catKey].length, headers.length).setValues(catBuckets[catKey]);
+        }
+      });
+
+      actualizarDashboardEjecutivo();
+
       return ContentService.createTextOutput(JSON.stringify({
         status: "success",
-        message: "Procesados " + countInserted + " registros exitosamente.",
-        count: countInserted
+        message: "Sincronizados exactamente " + consRows.length + " medicamentos en todas las pestañas.",
+        count: consRows.length
       })).setMimeType(ContentService.MimeType.JSON);
     }
 
@@ -9946,6 +10862,58 @@ function doPost(e) {
         data.observations || ""
       ]);
       return ContentService.createTextOutput(JSON.stringify({ status: "success", message: "Incidencia registrada en hoja INCIDENCIAS_Y_MERMAS" })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 2b. CASO: ELIMINACIÓN DE REGISTRO
+    if (action === "delete" || action === "remove" || action === "eliminar") {
+      var delCat = (data.category || data.categoria || "General").toString().trim().toUpperCase();
+      var delSheet = ss.getSheetByName(delCat.substring(0, 30));
+      var countDeleted = 0;
+
+      if (delSheet) {
+        var rowInCat = findRowInSheet(delSheet, data);
+        if (rowInCat > 0) {
+          delSheet.deleteRow(rowInCat);
+          countDeleted++;
+        }
+      }
+
+      if (consolidadoSheet) {
+        var rowInCons = findRowInSheet(consolidadoSheet, data);
+        if (rowInCons > 0) {
+          consolidadoSheet.deleteRow(rowInCons);
+          countDeleted++;
+        }
+      }
+
+      actualizarDashboardEjecutivo();
+
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        message: "Registro eliminado de " + delCat + " y de CONSOLIDADO_GENERAL.",
+        deleted: countDeleted > 0
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
+    // 2c. CASO: REINICIO TOTAL / VACIADO COMPLETO DEL INVENTARIO DESDE CERO
+    if (action === "wipe_all" || action === "clear_all" || action === "reset_inventory") {
+      var allSheets = ss.getSheets();
+      var clearedCount = 0;
+      for (var w = 0; w < allSheets.length; w++) {
+        var sh = allSheets[w];
+        var shName = sh.getName();
+        if (shName === "INSTRUCCIONES") continue;
+        if (sh.getLastRow() > 1) {
+          sh.deleteRows(2, sh.getLastRow() - 1);
+          clearedCount++;
+        }
+      }
+      actualizarDashboardEjecutivo();
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        message: "Inventario reiniciado a 0. Se vaciaron " + clearedCount + " hojas correctamente.",
+        clearedSheets: clearedCount
+      })).setMimeType(ContentService.MimeType.JSON);
     }
 
     // 3. CASO: INSERCIÓN O ACTUALIZACIÓN INDIVIDUAL
@@ -9974,7 +10942,6 @@ function doPost(e) {
     ];
 
     if (isEditMode) {
-      // MODO EDICIÓN / CORRECCIÓN: Actualiza en sitio sin duplicar
       if (oldCat && oldCat !== newCat) {
         var oldSheet = ss.getSheetByName(oldCat.substring(0, 30));
         if (oldSheet) {
@@ -9999,14 +10966,15 @@ function doPost(e) {
         consolidadoSheet.appendRow(rowData);
       }
     } else {
-      // MODO INSERCIÓN REGULAR: Agrega SIEMPRE en su pestaña de categoría Y en CONSOLIDADO_GENERAL
       targetSheet.appendRow(rowData);
       consolidadoSheet.appendRow(rowData);
     }
 
+    actualizarDashboardEjecutivo();
+
     return ContentService.createTextOutput(JSON.stringify({
       status: "success",
-      message: isEditMode ? "Registro actualizado en hoja " + newCat + " y en CONSOLIDADO_GENERAL." : "Medicamento registrado con éxito en " + newCat + " y CONSOLIDADO_GENERAL.",
+      message: isEditMode ? "Registro actualizado en hoja " + newCat + ", CONSOLIDADO_GENERAL y 📊 DASHBOARD." : "Medicamento registrado con éxito en " + newCat + ", CONSOLIDADO_GENERAL y 📊 DASHBOARD.",
       sheetName: newCat
     })).setMimeType(ContentService.MimeType.JSON);
 
@@ -10169,31 +11137,58 @@ function doGet(e) {
     // HELPERS: VENCIMIENTO (MES/AÑO) Y GENERADOR ESTÁNDAR DE CÓDIGOS CLÍNICOS
     // =========================================================================
 
-    // Formatear siempre a MM/AAAA para tablas y Google Sheets
+    // Formatear siempre a MM/AAAA en español para tablas y Google Sheets
     function formatearMesAno(val) {
-        if (!val || typeof val !== 'string') return 'N/A';
-        val = val.trim();
-        if (/^\d{4}-\d{2}/.test(val)) {
-            const parts = val.split('-');
-            return `${parts[1]}/${parts[0]}`; // MM/AAAA
+        if (!val) return 'N/A';
+        if (typeof val === 'object' && val instanceof Date) {
+            const m = String(val.getMonth() + 1).padStart(2, '0');
+            const y = val.getFullYear();
+            return `${m}/${y}`;
         }
+        val = String(val).trim();
+        if (!val || val === 'N/A' || val === 'S/I' || val === 'null' || val === 'undefined') return 'N/A';
+        
+        // Formato MM/YYYY o M/YYYY
         if (/^\d{1,2}\/\d{4}$/.test(val)) {
             const parts = val.split('/');
             return `${parts[0].padStart(2, '0')}/${parts[1]}`;
+        }
+        // Formato YYYY-MM o YYYY-MM-DD
+        if (/^\d{4}-\d{1,2}/.test(val)) {
+            const parts = val.split(/[-T]/);
+            return `${parts[1].padStart(2, '0')}/${parts[0]}`;
+        }
+        // Formato con fecha completa o string de Google Sheets en inglés (ej: "Thu Jun 01 2028...")
+        const parsed = new Date(val);
+        if (!isNaN(parsed.getTime())) {
+            const m = String(parsed.getMonth() + 1).padStart(2, '0');
+            const y = parsed.getFullYear();
+            return `${m}/${y}`;
         }
         return val;
     }
 
     // Convertir a YYYY-MM para input type="month"
     function toMonthInputValue(val) {
-        if (!val || typeof val !== 'string') return '';
-        val = val.trim();
+        if (!val) return '';
+        if (typeof val === 'object' && val instanceof Date) {
+            const m = String(val.getMonth() + 1).padStart(2, '0');
+            const y = val.getFullYear();
+            return `${y}-${m}`;
+        }
+        val = String(val).trim();
         if (/^\d{4}-\d{2}/.test(val)) {
             return val.substring(0, 7);
         }
         if (/^\d{1,2}\/\d{4}$/.test(val)) {
             const parts = val.split('/');
             return `${parts[1]}-${parts[0].padStart(2, '0')}`;
+        }
+        const parsed = new Date(val);
+        if (!isNaN(parsed.getTime())) {
+            const m = String(parsed.getMonth() + 1).padStart(2, '0');
+            const y = parsed.getFullYear();
+            return `${y}-${m}`;
         }
         return '';
     }
@@ -10202,8 +11197,8 @@ function doGet(e) {
     function calcularDiasHastaVencimiento(val) {
         if (!val) return null;
         let year, month;
-        if (/^\d{4}-\d{2}/.test(val)) {
-            const parts = val.split('-');
+        if (/^\d{4}-\d{1,2}/.test(val)) {
+            const parts = val.split(/[-T]/);
             year = Number(parts[0]);
             month = Number(parts[1]);
         } else if (/^\d{1,2}\/\d{4}$/.test(val)) {
@@ -10211,7 +11206,13 @@ function doGet(e) {
             month = Number(parts[0]);
             year = Number(parts[1]);
         } else {
-            return null;
+            const parsed = new Date(val);
+            if (!isNaN(parsed.getTime())) {
+                year = parsed.getFullYear();
+                month = parsed.getMonth() + 1;
+            } else {
+                return null;
+            }
         }
         if (!year || !month || month < 1 || month > 12) return null;
         const endOfMonth = new Date(year, month, 0, 23, 59, 59);
@@ -10880,16 +11881,16 @@ function doGet(e) {
     // Sincronización en Firestore con suma acumulativa
     async function syncToFirestore(item) {
         try {
-            const dbInstance = window.firebaseFirestore.db || window.db || db;
-            const insumosRef = window.firebaseFirestore.collection(dbInstance, 'Insumos');
-            const cleanName = item.name.trim();
+            const cleanName = (item.name || '').trim();
+            if (!cleanName) return;
 
-            const q = window.firebaseFirestore.query(
+            const insumosRef = collection(db, 'Insumos');
+            const q = query(
                 insumosRef,
-                window.firebaseFirestore.where('name_lowercase', '==', cleanName.toLowerCase()),
-                window.firebaseFirestore.limit(1)
+                where('name_lowercase', '==', cleanName.toLowerCase()),
+                limit(1)
             );
-            const snap = await window.firebaseFirestore.getDocs(q);
+            const snap = await getDocs(q);
 
             const addedQty = Number(item.quantity) || 0;
             const limitVal = Number(item.criticalLimit) || 50;
@@ -10899,8 +11900,8 @@ function doGet(e) {
                 const oldQty = Number(existingDoc.data().quantity) || 0;
                 const finalQty = oldQty + addedQty;
 
-                await window.firebaseFirestore.updateDoc(window.firebaseFirestore.doc(dbInstance, 'Insumos', existingDoc.id), {
-                    quantity: window.firebaseFirestore.increment(addedQty),
+                await updateDoc(doc(db, 'Insumos', existingDoc.id), {
+                    quantity: increment(addedQty),
                     isCritical: finalQty <= limitVal,
                     batch: item.batch || existingDoc.data().batch || 'N/A',
                     expirationDate: item.expirationDate || existingDoc.data().expirationDate || 'N/A',
@@ -10908,7 +11909,7 @@ function doGet(e) {
                     location: item.location || existingDoc.data().location || 'Bodega Central',
                     unitPrice: Number(item.unitPrice) || existingDoc.data().unitPrice || 0,
                     criticalLimit: limitVal,
-                    updatedAt: window.firebaseFirestore.serverTimestamp()
+                    updatedAt: serverTimestamp()
                 });
 
                 const cached = tomaCatalogCache.find(it => it.name.toLowerCase() === cleanName.toLowerCase());
@@ -10916,7 +11917,7 @@ function doGet(e) {
 
             } else {
                 const autoCode = item.code || ("SAR-" + Math.random().toString(36).substring(2, 7).toUpperCase());
-                await window.firebaseFirestore.addDoc(insumosRef, {
+                await addDoc(insumosRef, {
                     code: autoCode,
                     name: cleanName,
                     name_lowercase: cleanName.toLowerCase(),
@@ -10928,7 +11929,7 @@ function doGet(e) {
                     location: item.location || 'Bodega Central',
                     unitPrice: Number(item.unitPrice) || 0,
                     criticalLimit: limitVal,
-                    updatedAt: window.firebaseFirestore.serverTimestamp()
+                    updatedAt: serverTimestamp()
                 });
 
                 tomaCatalogCache.push({
@@ -10943,8 +11944,8 @@ function doGet(e) {
             }
 
             // Registrar movimiento en Historial_Movimientos con la Fase correspondiente
-            await window.firebaseFirestore.addDoc(window.firebaseFirestore.collection(dbInstance, 'Historial_Movimientos'), {
-                date: window.firebaseFirestore.serverTimestamp(),
+            await addDoc(collection(db, 'Historial_Movimientos'), {
+                date: serverTimestamp(),
                 type: 'toma_inventario',
                 fase: item.fase || '1ra Toma (Inicial)',
                 insumoName: cleanName,
@@ -11210,16 +12211,79 @@ function doGet(e) {
             });
         });
 
-        // 4. Botón Eliminar de Sesión
+        // 4. Botón Eliminar de Sesión, Google Sheets y Base de Datos
         tbody.querySelectorAll('.btn-delete-toma').forEach(btn => {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', async () => {
                 const id = btn.getAttribute('data-id');
-                if (confirm("¿Eliminar este registro de la lista de la sesión?")) {
-                    let list = getSessionItems();
+                let list = getSessionItems();
+                const target = list.find(i => i.id === id);
+                if (!target) return;
+
+                if (confirm(`¿Eliminar definitivamente "${target.name}" (${target.quantity} un.) de la sesión, de Google Sheets y de la base de datos?`)) {
+                    btn.innerHTML = '<i class="ph-spinner ph-spin"></i>';
+                    
+                    // 1. Eliminar en Google Sheets (tanto en su pestaña de categoría como en CONSOLIDADO_GENERAL)
+                    syncToGoogleSheets({
+                        action: 'delete',
+                        name: target.name,
+                        category: target.category || 'General',
+                        batch: target.batch || '',
+                        fase: target.fase || '',
+                        code: target.code || '',
+                        observations: target.observations || ''
+                    }).then(res => {
+                        console.log("[TomaInventario] Eliminación en Google Sheets:", res);
+                    });
+
+                    // 2. Descontar o Eliminar en Firestore Insumos
+                    try {
+                        const snap = await getDocs(collection(db, 'Insumos'));
+                        let targetDoc = null;
+                        snap.forEach(d => {
+                            const dData = d.data();
+                            if ((dData.name && dData.name.toLowerCase().trim() === target.name.toLowerCase().trim()) ||
+                                (dData.name_lowercase && dData.name_lowercase === target.name.toLowerCase().trim()) ||
+                                (target.code && dData.code === target.code)) {
+                                targetDoc = d;
+                            }
+                        });
+
+                        if (targetDoc) {
+                            const currentQty = Number(targetDoc.data().quantity) || 0;
+                            const newQty = Math.max(0, currentQty - (Number(target.quantity) || 0));
+                            if (newQty === 0) {
+                                await deleteDoc(targetDoc.ref);
+                            } else {
+                                await updateDoc(targetDoc.ref, {
+                                    quantity: newQty,
+                                    isCritical: newQty <= (Number(target.criticalLimit) || 50),
+                                    updatedAt: serverTimestamp()
+                                });
+                            }
+                        }
+
+                        // Registrar en Historial_Movimientos
+                        await addDoc(collection(db, 'Historial_Movimientos'), {
+                            date: serverTimestamp(),
+                            type: 'eliminacion_inventario',
+                            insumoName: target.name,
+                            user: (auth && auth.currentUser) ? auth.currentUser.email : 'Auditor',
+                            quantity: -(Number(target.quantity) || 0),
+                            category: target.category || 'General',
+                            batch: target.batch || 'N/A',
+                            observations: `[Eliminación de Registro de Toma] ${target.name} (-${target.quantity} un.)`
+                        });
+                    } catch (err) {
+                        console.error("Error descontando insumo en Firestore:", err);
+                    }
+
+                    // 3. Eliminar de la sesión local, bóvedas y re-renderizar
                     list = list.filter(i => i.id !== id);
                     saveSessionItems(list);
                     renderTomaUI();
-                    window.showToast("Sesión", "Registro eliminado de la jornada.", "info");
+                    if (typeof window.startRealTimeDashboard === 'function') window.startRealTimeDashboard();
+                    if (typeof window.loadFirstPage === 'function') window.loadFirstPage();
+                    window.showToast("Registro Eliminado", `"${target.name}" eliminado de la sesión, Google Sheets, Dashboard e inventario.`, "info");
                 }
             });
         });
@@ -11774,30 +12838,29 @@ function doGet(e) {
 
                 // 1. Actualizar en Firestore
                 try {
-                    const dbInstance = window.firebaseFirestore.db || window.db || db;
-                    const insumosRef = window.firebaseFirestore.collection(dbInstance, 'Insumos');
-                    const q = window.firebaseFirestore.query(
+                    const insumosRef = collection(db, 'Insumos');
+                    const q = query(
                         insumosRef,
-                        window.firebaseFirestore.where('name_lowercase', '==', newMed.toLowerCase()),
-                        window.firebaseFirestore.limit(1)
+                        where('name_lowercase', '==', newMed.toLowerCase()),
+                        limit(1)
                     );
-                    const snap = await window.firebaseFirestore.getDocs(q);
+                    const snap = await getDocs(q);
 
                     if (!snap.empty) {
                         const existingDoc = snap.docs[0];
-                        await window.firebaseFirestore.updateDoc(window.firebaseFirestore.doc(dbInstance, 'Insumos', existingDoc.id), {
-                            quantity: window.firebaseFirestore.increment(diffQty),
+                        await updateDoc(doc(db, 'Insumos', existingDoc.id), {
+                            quantity: increment(diffQty),
                             category: newCat,
                             batch: newLote,
                             expirationDate: newVto,
                             location: newUbic,
-                            updatedAt: window.firebaseFirestore.serverTimestamp()
+                            updatedAt: serverTimestamp()
                         });
                     }
 
                     // Registrar Auditoría Completa en Historial_Movimientos
-                    await window.firebaseFirestore.addDoc(window.firebaseFirestore.collection(dbInstance, 'Historial_Movimientos'), {
-                        date: window.firebaseFirestore.serverTimestamp(),
+                    await addDoc(collection(db, 'Historial_Movimientos'), {
+                        date: serverTimestamp(),
                         type: 'auditoria_modificacion_inventario',
                         insumoName: newMed,
                         user: currentUserEmail,
@@ -11891,26 +12954,25 @@ function doGet(e) {
 
                 // 1. Descontar en Firestore (Insumos, Incidencias y Historial_Movimientos)
                 try {
-                    const dbInstance = window.firebaseFirestore.db || window.db || db;
-                    const insumosRef = window.firebaseFirestore.collection(dbInstance, 'Insumos');
-                    const q = window.firebaseFirestore.query(
+                    const insumosRef = collection(db, 'Insumos');
+                    const q = query(
                         insumosRef,
-                        window.firebaseFirestore.where('name_lowercase', '==', medName.toLowerCase()),
-                        window.firebaseFirestore.limit(1)
+                        where('name_lowercase', '==', medName.toLowerCase()),
+                        limit(1)
                     );
-                    const snap = await window.firebaseFirestore.getDocs(q);
+                    const snap = await getDocs(q);
 
                     if (!snap.empty) {
                         const existingDoc = snap.docs[0];
-                        await window.firebaseFirestore.updateDoc(window.firebaseFirestore.doc(dbInstance, 'Insumos', existingDoc.id), {
-                            quantity: window.firebaseFirestore.increment(-mermadaQty),
-                            updatedAt: window.firebaseFirestore.serverTimestamp()
+                        await updateDoc(doc(db, 'Insumos', existingDoc.id), {
+                            quantity: increment(-mermadaQty),
+                            updatedAt: serverTimestamp()
                         });
                     }
 
                     // Registrar en Colección Incidencias
-                    await window.firebaseFirestore.addDoc(window.firebaseFirestore.collection(dbInstance, 'Incidencias'), {
-                        fecha: window.firebaseFirestore.serverTimestamp(),
+                    await addDoc(collection(db, 'Incidencias'), {
+                        fecha: serverTimestamp(),
                         tipo: tipoInc,
                         medicamento: medName,
                         codigo: cod,
@@ -11924,8 +12986,8 @@ function doGet(e) {
                     });
 
                     // Registrar en Historial_Movimientos
-                    await window.firebaseFirestore.addDoc(window.firebaseFirestore.collection(dbInstance, 'Historial_Movimientos'), {
-                        date: window.firebaseFirestore.serverTimestamp(),
+                    await addDoc(collection(db, 'Historial_Movimientos'), {
+                        date: serverTimestamp(),
                         type: 'merma_inventario',
                         insumoName: medName,
                         user: currentUserEmail,
@@ -11970,6 +13032,45 @@ function doGet(e) {
             });
         }
 
+        // =========================================================================
+        // BOTÓN: ENVIAR TODO EL INVENTARIO ACTUAL A GOOGLE SHEETS (BATCH SYNC)
+        // =========================================================================
+        const btnPushAllToSheets = document.getElementById('btn-push-all-to-sheets');
+        if (btnPushAllToSheets) {
+            btnPushAllToSheets.addEventListener('click', async () => {
+                const list = getSessionItems();
+                if (list.length === 0) {
+                    window.showToast("Sin medicamentos", "No hay medicamentos en la sesión actual para enviar.", "warning");
+                    return;
+                }
+
+                btnPushAllToSheets.disabled = true;
+                btnPushAllToSheets.innerHTML = '<i class="ph-spinner ph-spin"></i> Enviando...';
+
+                try {
+                    const res = await syncToGoogleSheets({
+                        action: 'batch_insert',
+                        items: list
+                    });
+
+                    if (res && res.success) {
+                        list.forEach(i => i.syncStatus = 'synced');
+                        saveSessionItems(list);
+                        renderTomaUI();
+                        window.showToast("Sincronización Exitosa", `Se enviaron y guardaron los ${list.length} medicamentos en Google Sheets y DASHBOARD.`, "success");
+                    } else {
+                        window.showToast("Error", res ? res.reason : "No se pudo sincronizar", "error");
+                    }
+                } catch (err) {
+                    console.error("Error en Push masivo:", err);
+                    window.showToast("Error", err.message, "error");
+                } finally {
+                    btnPushAllToSheets.disabled = false;
+                    btnPushAllToSheets.innerHTML = '<i class="ph ph-cloud-arrow-up"></i> 📤 Enviar Todo a Sheets';
+                }
+            });
+        }
+
         // Filtro y buscador en la tabla
         const filterCatSelect = document.getElementById('toma-filter-cat');
         if (filterCatSelect) {
@@ -12010,19 +13111,94 @@ function doGet(e) {
             });
         }
 
-        // Limpiar Sesión
-        const btnClear = document.getElementById('btn-clear-toma-session');
-        if (btnClear) {
-            btnClear.addEventListener('click', () => {
-                const list = getSessionItems();
-                if (list.length === 0) {
-                    window.showToast("Sesión", "No hay registros en la sesión actual.", "info");
+        // Actualizar / Generar Hoja Dashboard en Google Sheets
+        const btnSyncSheetsDash = document.getElementById('btn-sync-sheets-dashboard');
+        if (btnSyncSheetsDash) {
+            btnSyncSheetsDash.addEventListener('click', async () => {
+                const url = getSheetsUrl();
+                if (!url) {
+                    window.showToast("Google Sheets", "Configure la URL del Webhook de Google Sheets primero.", "warning");
                     return;
                 }
-                if (confirm(`¿Está seguro de reiniciar la sesión de toma de inventario? Se limpiarán ${list.length} registros de la vista local (los datos en Google Sheets y Firebase se conservan intactos).`)) {
+                const origHtml = btnSyncSheetsDash.innerHTML;
+                btnSyncSheetsDash.innerHTML = '<i class="ph-spinner ph-spin"></i> Generando Dashboard...';
+                btnSyncSheetsDash.disabled = true;
+
+                try {
+                    const res = await syncToGoogleSheets({ action: 'update_dashboard' });
+                    if (res && res.status === 'success') {
+                        window.showToast("Dashboard en Sheets", "¡Hoja 📊 DASHBOARD generada y actualizada con éxito en Google Sheets!", "success");
+                    } else {
+                        window.showToast("Dashboard en Sheets", "Dashboard procesado en la planilla.", "info");
+                    }
+                } catch(err) {
+                    console.error("Error actualizando Dashboard en Sheets:", err);
+                    window.showToast("Error", "No se pudo actualizar el Dashboard en Google Sheets.", "error");
+                } finally {
+                    btnSyncSheetsDash.innerHTML = origHtml;
+                    btnSyncSheetsDash.disabled = false;
+                }
+            });
+        }
+
+        // Limpiar Sesión / Reinicio Total de Inventario desde Cero
+        const btnClear = document.getElementById('btn-clear-toma-session');
+        if (btnClear) {
+            btnClear.addEventListener('click', async () => {
+                const confirmMsg = `⚠️ ¿REINICIAR TODO EL INVENTARIO DESDE CERO? ⚠️\n\nEsta acción ejecutará un borrado total:\n1. Vaciará todas las hojas de medicamentos en Google Sheets conservando los encabezados.\n2. Eliminará todos los insumos de la base de datos maestra en Firebase.\n3. Limpiará toda la sesión activa en el Visor para empezar desde cero.\n\n¿Está seguro de continuar?`;
+                
+                if (confirm(confirmMsg)) {
+                    btnClear.innerHTML = '<i class="ph-spinner ph-spin"></i> Reiniciando...';
+                    btnClear.disabled = true;
+
+                    // 1. Limpiar Google Sheets
+                    try {
+                        await syncToGoogleSheets({ action: 'wipe_all' });
+                    } catch(err) {
+                        console.warn("Fallo al contactar webhook de Sheets para wipe:", err);
+                    }
+
+                    // 2. Limpiar Firestore Insumos
+                    try {
+                        const snap = await getDocs(collection(db, 'Insumos'));
+                        if (!snap.empty) {
+                            const docs = snap.docs;
+                            for (let i = 0; i < docs.length; i += 400) {
+                                const chunk = docs.slice(i, i + 400);
+                                const batch = writeBatch(db);
+                                chunk.forEach(docSnap => batch.delete(docSnap.ref));
+                                await batch.commit();
+                            }
+                        }
+
+                        // Registrar purga en Historial
+                        await addDoc(collection(db, 'Historial_Movimientos'), {
+                            date: serverTimestamp(),
+                            type: 'reinicio_total',
+                            user: (auth && auth.currentUser) ? auth.currentUser.email : 'SuperAdmin',
+                            observations: `[REINICIO TOTAL DE INVENTARIO] El operador vació todas las existencias para comenzar desde cero.`
+                        });
+                    } catch (fsErr) {
+                        console.error("Error vaciando Firestore:", fsErr);
+                    }
+
+                    // 3. Limpiar almacenamiento local y cachés
                     saveSessionItems([]);
+                    localStorage.removeItem('SAR_TOMA_INVENTARIO_ITEMS_v2');
+                    localStorage.removeItem(STORAGE_VAULT_BACKUP);
+                    localStorage.removeItem('visor_toma_backup_vault');
+                    tomaCatalogCache = [];
+                    if (typeof window.globalInventorySnapshots !== 'undefined') {
+                        window.globalInventorySnapshots = [];
+                    }
+
                     renderTomaUI();
-                    window.showToast("Sesión Reiniciada", "La lista de la jornada ha sido limpiada.", "info");
+                    if (typeof window.startRealTimeDashboard === 'function') window.startRealTimeDashboard();
+                    if (typeof window.loadFirstPage === 'function') window.loadFirstPage();
+
+                    btnClear.innerHTML = '<i class="ph ph-trash"></i> Limpiar Sesión';
+                    btnClear.disabled = false;
+                    window.showToast("Inventario Reiniciado", "Todo el inventario fue vaciado en Google Sheets, Firebase y Visor. Listo para ingresar desde cero.", "success");
                 }
             });
         }
@@ -12250,11 +13426,11 @@ function doGet(e) {
                     if (!resp.ok) throw new Error(`HTTP error! status: ${resp.status}`);
                     
                     const data = await resp.json();
-                    if (data.status !== "success" || !Array.isArray(data.records)) {
+                    const remoteRecords = data.items || data.records || [];
+                    if (data.status !== "success" || !Array.isArray(remoteRecords)) {
                         throw new Error(data.message || "Estructura de respuesta no válida.");
                     }
 
-                    const remoteRecords = data.records;
                     let updatedCount = 0;
                     const currentSession = getSessionItems();
 

@@ -59,15 +59,63 @@ async function cargarInsumosBase() {
         const q = query(collection(db, 'Insumos'), orderBy('name'));
         const snap = await getDocs(q);
         insumosBase = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+        // Fallback robusto a sesión local si Firestore aún está sincronizando
+        if (insumosBase.length === 0) {
+            try {
+                const localSession = JSON.parse(localStorage.getItem('SAR_TOMA_INVENTARIO_ITEMS_v2') || localStorage.getItem('visor_toma_backup_vault') || '[]');
+                if (localSession.length > 0) {
+                    insumosBase = localSession.map(it => ({ id: it.id, name: it.name, ...it }));
+                }
+            } catch(eLocal) {}
+        }
         
+        // Catálogo clínico estándar para asegurar sugerencias instantáneas
+        const standardDrugs = [
+            "PARACETAMOL 500 MG COMPRIMIDOS", "PARACETAMOL 120 MG/5 ML JARABE", "PARACETAMOL 100 MG/ML GOTAS",
+            "IBUPROFENO 400 MG COMPRIMIDOS", "IBUPROFENO 600 MG COMPRIMIDOS", "IBUPROFENO 200 MG/5 ML SUSPENSION",
+            "AMOXICILINA 500 MG COMPRIMIDOS", "AMOXICILINA 250 MG/5 ML SUSPENSION", "AMOXICILINA 500 MG/5 ML SUSPENSION",
+            "AMOXICILINA + ACIDO CLAVULANICO 500/125 MG", "AMOXICILINA + ACIDO CLAVULANICO 400/57 MG SUSPENSION",
+            "AZITROMICINA 500 MG COMPRIMIDOS", "AZITROMICINA 200 MG/5 ML SUSPENSION",
+            "CIPROFLOXACINO 500 MG COMPRIMIDOS", "CLOXACILINA 500 MG CAPSULAS", "CLOXACILINA 250 MG/5 ML SUSPENSION",
+            "CLORFENAMINA 4 MG COMPRIMIDOS", "CLORFENAMINA 2 MG/5 ML JARABE", "CLORFENAMINA 10 MG/ML AMPOLLAS",
+            "CLONAZEPAM 0.5 MG COMPRIMIDOS", "CLONAZEPAM 2 MG COMPRIMIDOS", "CLONAZEPAM 2.5 MG/ML GOTAS",
+            "SALBUTAMOL 100 MCG INHALADOR", "BROMURO DE IPATROPIO 20 MCG INHALADOR", "FLUTICASONA 250 MCG INHALADOR",
+            "BUDESONIDA 200 MCG INHALADOR", "BECLOMETASONA 250 MCG INHALADOR",
+            "LOSARTAN 50 MG COMPRIMIDOS", "ENALAPRIL 10 MG COMPRIMIDOS", "ENALAPRIL 20 MG COMPRIMIDOS",
+            "METFORMINA 850 MG COMPRIMIDOS", "GLIBENCLAMIDA 5 MG COMPRIMIDOS",
+            "ATORVASTATINA 20 MG COMPRIMIDOS", "OMEPRAZOL 20 MG CAPSULAS",
+            "KETOROLACO 10 MG COMPRIMIDOS", "KETOROLACO 30 MG/ML AMPOLLAS",
+            "DEXAMETASONA 4 MG COMPRIMIDOS", "DEXAMETASONA 4 MG/ML AMPOLLAS",
+            "BETAMETASONA 0.05% CREMA", "CLOTRIMAZOL 1% CREMA", "HIDROCORTISONA 1% CREMA",
+            "SUERO FISIOLOGICO 0.9% 500 ML MATRAZ", "SUERO FISIOLOGICO 0.9% 100 ML MATRAZ", "SUERO RINGER LACTATO 500 ML MATRAZ",
+            "SUERO GLUCOSADO 5% 500 ML MATRAZ", "AGUA BIDESTILADA 5 ML AMPOLLAS"
+        ];
+
+        const setNombres = new Set();
         datalistInsumos.innerHTML = '';
+
         insumosBase.forEach(ins => {
-            const opt = document.createElement('option');
-            opt.value = ins.name;
-            datalistInsumos.appendChild(opt);
+            const n = (ins.name || ins.descripcion || '').trim();
+            if (n && !setNombres.has(n.toLowerCase())) {
+                setNombres.add(n.toLowerCase());
+                const opt = document.createElement('option');
+                opt.value = n;
+                datalistInsumos.appendChild(opt);
+            }
         });
+
+        standardDrugs.forEach(med => {
+            if (!setNombres.has(med.toLowerCase())) {
+                setNombres.add(med.toLowerCase());
+                const opt = document.createElement('option');
+                opt.value = med;
+                datalistInsumos.appendChild(opt);
+            }
+        });
+
     } catch (e) {
-        console.error("Error cargando insumos base", e);
+        console.error("Error cargando insumos base en plantillas:", e);
     }
 }
 

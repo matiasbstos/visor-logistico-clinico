@@ -250,14 +250,13 @@
                             <div class="card-title">CAPITAL ESTIMADO</div>
                             <div class="card-value" id="dash-capital-value">$0</div>
                         </div>
-                    </div>
+                    </div> <!-- END stats-grid -->
 
                     <div class="tables-grid">
-                        <div class="data-table-card">
+                        <div class="data-table-card" id="card-dash-urgencias">
                             <div class="data-table-header danger">
-                                <div class="table-header-title"><i class="ph-fill ph-warning-circle"></i>Urgencias
-                                    (Vencidos o &lt; 30 días)</div>
-                                <span class="header-badge">3 REPORTADOS</span>
+                                <div class="table-header-title"><i class="ph-fill ph-warning-circle"></i>Urgencias (Vencidos o &lt; 30 días)</div>
+                                <span class="header-badge" id="dash-urgencias-badge">0 REPORTADOS</span>
                             </div>
                             <div class="table-wrapper">
                                 <table>
@@ -269,20 +268,22 @@
                                             <th>ACCIÓN</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
+                                    <tbody id="dash-urgencias-tbody">
+                                        <tr><td colspan="4" style="text-align:center; padding:20px; color:var(--text-muted);">Cargando alertas de urgencia...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
-                            <div class="table-footer"><button type="button" id="btn-reporte-descarte" class="table-link"
-                                    style="background:none;border:none;cursor:pointer;">VER REPORTE DE DESCARTE</button>
+                            <div class="table-footer">
+                                <button type="button" id="btn-reporte-descarte" class="table-link" style="background:none;border:none;cursor:pointer;font-weight:700;">
+                                    <i class="ph ph-file-pdf"></i> VER REPORTE DE DESCARTE
+                                </button>
                             </div>
                         </div>
 
-                        <div class="data-table-card">
+                        <div class="data-table-card" id="card-dash-precaucion">
                             <div class="data-table-header warning">
-                                <div class="table-header-title"><i class="ph-fill ph-clock"></i>Precaución (1 a 6 meses)
-                                </div>
-                                <span class="header-badge">2 REPORTADOS</span>
+                                <div class="table-header-title"><i class="ph-fill ph-clock"></i>Precaución (1 a 6 meses)</div>
+                                <span class="header-badge" id="dash-precaucion-badge">0 REPORTADOS</span>
                             </div>
                             <div class="table-wrapper">
                                 <table>
@@ -294,16 +295,18 @@
                                             <th>ACCIÓN</th>
                                         </tr>
                                     </thead>
-                                    <tbody>
+                                    <tbody id="dash-precaucion-tbody">
+                                        <tr><td colspan="4" style="text-align:center; padding:20px; color:var(--text-muted);">Cargando alertas de precaución...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
-                            <div class="table-footer"><button type="button" id="btn-planificar-rotacion"
-                                    class="table-link warning"
-                                    style="background:none;border:none;cursor:pointer;">PLANIFICAR ROTACIÓN</button>
+                            <div class="table-footer">
+                                <button type="button" id="btn-planificar-rotacion" class="table-link warning" style="background:none;border:none;cursor:pointer;font-weight:700;">
+                                    <i class="ph ph-arrows-clockwise"></i> PLANIFICAR ROTACIÓN
+                                </button>
                             </div>
                         </div>
-                    </div>
+                    </div> <!-- END tables-grid -->
 
                     <h3 style="margin: 30px 0 15px 0; color: var(--text-main); font-size: 1.2rem;">Estado por Ubicación</h3>
                     <div id="dashboard-locations-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 20px;">
@@ -548,8 +551,14 @@
                                 <span class="status-indicator-dot"></span>
                                 <span id="toma-sheets-status-text">Google Sheets: No configurado</span>
                             </div>
+                            <button type="button" class="btn btn-outline" id="btn-push-all-to-sheets" style="border-color:#059669; color:#047857; font-weight:700; background:#f0fdf4;" title="Enviar y registrar todos los medicamentos de esta sesión hacia Google Sheets">
+                                <i class="ph ph-cloud-arrow-up"></i> 📤 Enviar Todo a Sheets
+                            </button>
                             <button type="button" class="btn btn-outline" id="btn-pull-from-sheets" style="border-color:#8b5cf6; color:#7c3aed; font-weight:600;" title="Sincronizar cambios y ediciones realizadas directamente en Google Sheets">
                                 <i class="ph ph-arrows-clockwise"></i> Sincronizar desde Sheets
+                            </button>
+                            <button type="button" class="btn btn-outline" id="btn-sync-sheets-dashboard" style="border-color:#2563eb; color:#1d4ed8; font-weight:700;" title="Generar / Actualizar la hoja 📊 DASHBOARD en Google Sheets">
+                                <i class="ph ph-chart-polar"></i> Actualizar Dashboard en Sheets
                             </button>
                             <button type="button" class="btn btn-outline" id="btn-restore-cloud-toma" style="border-color:#16a34a; color:#15803d; font-weight:600; font-size:12px;" title="Restaurar sesión desde el último respaldo en la nube">
                                 <i class="ph ph-cloud-arrow-down"></i> Restaurar Respaldo
@@ -658,31 +667,14 @@
                                         <div class="form-group">
                                             <label class="form-label" for="toma-medicamento" style="font-weight:700;">FÁRMACO / MEDICAMENTO <span style="color:var(--danger)">*</span></label>
                                             <div style="position:relative;">
-                                                <input type="text" id="toma-medicamento" list="toma-datalist-insumos" class="form-control font-bold" placeholder="Ej: Azitromicina, Paracetamol" autocomplete="off" required>
-                                                <datalist id="toma-datalist-insumos"></datalist>
+                                                <input type="text" id="toma-medicamento" class="form-control font-bold" placeholder="Ej: Azitromicina, Paracetamol" autocomplete="off" required>
                                             </div>
                                         </div>
                                         <div class="form-group">
                                             <label class="form-label" for="toma-dosis" style="font-weight:700;">DOSIS / UNIDAD</label>
-                                            <input type="text" id="toma-dosis" list="toma-datalist-dosis" class="form-control font-bold" placeholder="Ej: 200mg/5ml, 500mg, 5ml" autocomplete="off">
-                                            <datalist id="toma-datalist-dosis">
-                                                <option value="200 mg / 5 ml">
-                                                <option value="250 mg / 5 ml">
-                                                <option value="500 mg / 5 ml">
-                                                <option value="120 mg / 5 ml">
-                                                <option value="5 mg / 5 ml">
-                                                <option value="2.5 mg / 5 ml">
-                                                <option value="20 mg / 5 ml">
-                                                <option value="12 mg / ml">
-                                                <option value="400 mg / 57 mg">
-                                                <option value="500 mg">
-                                                <option value="850 mg">
-                                                <option value="1 g">
-                                                <option value="10 mg">
-                                                <option value="20 mg">
-                                                <option value="100 mcg / dosis">
-                                                <option value="250 mcg / dosis">
-                                            </datalist>
+                                            <div style="position:relative;">
+                                                <input type="text" id="toma-dosis" class="form-control font-bold" placeholder="Ej: 200mg/5ml, 500mg, 5ml" autocomplete="off">
+                                            </div>
                                         </div>
                                     </div>
 
@@ -3852,7 +3844,7 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=17.7"></script>
-    <script type="module" src="patch-plantillas.js?v=17.7"></script>
+    <script type="module" src="script.js?v=18.14"></script>
+    <script type="module" src="patch-plantillas.js?v=18.14"></script>
 </body>
 </html>

@@ -421,9 +421,16 @@ tr:last-child td { border-bottom: none; }
 .form-group { margin-bottom: 16px; }
 .form-label { display: block; font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 8px; text-transform: uppercase; }
 .form-control { width: 100%; padding: 10px 12px; border: 1px solid var(--border-color); border-radius: 8px; font-size: 14px; background-color: #f8fafc; color: var(--text-main); outline: none; }
-.form-control:focus { border-color: var(--primary); background-color: white; }
-select.form-control { appearance: none; background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e"); background-repeat: no-repeat; background-position: right 1rem center; background-size: 1em; }
-.input-with-icon { position: relative; }
+select.form-control, select {
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 16px;
+    padding-right: 38px !important;
+}
 .input-icon { position: absolute; left: 12px; top: 10px; color: var(--text-muted); font-size: 14px; font-weight: 600; }
 .form-control.with-icon { padding-left: 32px; }
 .search-input-wrapper { display: flex; align-items: center; background-color: var(--gray-light); border: 1px solid var(--border-color); border-radius: 8px; padding-left: 12px; }
@@ -1200,20 +1207,158 @@ gemini-analysis {
         justify-content: center !important;
     }
 
-    /* Banner de Escáner vs Pistola en Ingreso */
-    div[style*="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr))"] {
+    /* 1. DASHBOARD: Tablas de Urgencias y Precaución (Screenshot 1) */
+    .tables-grid {
         grid-template-columns: 1fr !important;
+        gap: 16px !important;
+    }
+
+    .data-table-card {
+        width: 100% !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
+    }
+
+    .data-table-header {
+        padding: 12px 14px !important;
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        flex-wrap: wrap !important;
+        gap: 8px !important;
+    }
+
+    .data-table-header .table-header-title {
+        font-size: 13px !important;
+        font-weight: 700 !important;
+        white-space: normal !important;
+        word-break: break-word !important;
+    }
+
+    .data-table-header .header-badge {
+        flex-shrink: 0 !important;
+        white-space: nowrap !important;
+        font-size: 10px !important;
+    }
+
+    .data-table-card .table-wrapper {
+        width: 100% !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+
+    .data-table-card table {
+        min-width: 440px !important;
+    }
+
+    .data-table-card th, .data-table-card td {
+        padding: 10px 12px !important;
+        font-size: 12px !important;
+    }
+
+    /* 2. INVENTARIO: Buscador y Filtros Avanzados (Screenshot 2) */
+    #view-inventario .page-header > div:last-child {
+        display: flex !important;
+        flex-direction: column !important;
+        width: 100% !important;
+        gap: 10px !important;
+    }
+
+    #view-inventario .search-input-wrapper {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+
+    #view-inventario div[style*="flex-wrap:wrap"] {
+        display: flex !important;
+        flex-direction: column !important;
+        width: 100% !important;
+        gap: 8px !important;
+    }
+
+    #view-inventario select.form-control {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        min-height: 42px !important;
+    }
+
+    #view-inventario .table-wrapper table {
+        min-width: 680px !important;
+    }
+
+    /* 3. TOMA DE INVENTARIO: Formulario y botones rápidos (Screenshot 3) */
+    .toma-layout-grid {
+        grid-template-columns: 1fr !important;
+        width: 100% !important;
+    }
+
+    .toma-form-panel {
+        width: 100% !important;
+    }
+
+    .toma-form-panel .card.form-card {
+        padding: 16px 14px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
+    }
+
+    .toma-quick-add-group {
+        display: flex !important;
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+        width: 100% !important;
+        margin-top: 6px !important;
+    }
+
+    .btn-quick-add {
+        flex: 1 1 auto !important;
+        min-width: 44px !important;
+        text-align: center !important;
+        padding: 8px 10px !important;
+        font-size: 12px !important;
+        min-height: 38px !important;
+    }
+
+    /* 4. REGISTRO DE INGRESOS: Grids y Banner de Triaje (Screenshot 4) */
+    .ingreso-scanners-grid {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        gap: 14px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        margin-bottom: 20px !important;
+    }
+
+    .ingreso-scanners-grid .barcode-scanner-box {
+        width: 100% !important;
+        box-sizing: border-box !important;
+        margin-bottom: 0 !important;
     }
 
     #banner-trigger-triaje {
         flex-direction: column !important;
-        align-items: flex-start !important;
-        gap: 12px !important;
+        align-items: stretch !important;
+        gap: 14px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        padding: 16px !important;
     }
 
     #banner-trigger-triaje button {
         width: 100% !important;
         justify-content: center !important;
+        min-height: 42px !important;
+    }
+
+    .card.form-card {
+        padding: 18px 14px !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        overflow: hidden !important;
     }
 
     /* Tarjetas de Métricas */
@@ -1224,6 +1369,24 @@ gemini-analysis {
 
     .card {
         padding: 14px 12px;
+        box-sizing: border-box;
+    }
+
+    .card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 4px;
+    }
+
+    .card-badge {
+        font-size: 9px !important;
+        padding: 2px 6px !important;
+        border-radius: 8px !important;
+        white-space: nowrap !important;
+        max-width: 65% !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
     }
 
     .card-title {
@@ -1232,18 +1395,6 @@ gemini-analysis {
 
     .card-value {
         font-size: 20px;
-    }
-
-    /* Botones de acción rápida */
-    .toma-quick-add-group {
-        width: 100%;
-        justify-content: flex-start;
-    }
-
-    .btn-quick-add {
-        padding: 8px 12px;
-        font-size: 12px;
-        min-height: 40px;
     }
 
     .btn-large {

@@ -3,7 +3,7 @@
 
 <head>
     <script>
-        const APP_VERSION = '18.17';
+        const APP_VERSION = '18.18';
         if (localStorage.getItem('APP_VERSION') !== APP_VERSION) {
             localStorage.setItem('APP_VERSION', APP_VERSION);
             if ('serviceWorker' in navigator) {
@@ -23,7 +23,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=18.17-predictive">
+    <link rel="stylesheet" href="style.css?v=18.18-predictive">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -1161,7 +1161,7 @@
                     </div>
 
                     <div class="card form-card mb-24">
-                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; margin-bottom: 20px;">
+                        <div class="ingreso-scanners-grid">
                             <div class="barcode-scanner-box" style="margin-bottom: 0;">
                                 <label class="section-label text-primary">ESCANEO RÁPIDO (PISTOLA)</label>
                                 <div class="scan-input-group">
@@ -1170,7 +1170,7 @@
                                     <span class="badge-gray">AUTO-DETECCIÓN</span>
                                 </div>
                             </div>
-                            <div id="banner-trigger-triaje" style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 1.5px dashed #0284c7; border-radius: 10px; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'" title="Abrir Escáner Inteligente de Triaje">
+                            <div id="banner-trigger-triaje" style="background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%); border: 1.5px dashed #0284c7; border-radius: 10px; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; box-sizing: border-box; width: 100%;" onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'" title="Abrir Escáner Inteligente de Triaje">
                                 <div style="display: flex; align-items: center; gap: 14px;">
                                     <div style="background: #0284c7; color: white; width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; box-shadow: 0 3px 8px rgba(2,132,199,0.3); flex-shrink: 0;">
                                         <i class="ph-bold ph-scan"></i>
@@ -4022,8 +4022,8 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=18.17"></script>
-    <script type="module" src="patch-plantillas.js?v=18.17"></script>
-    <script src="visor-triaje.js?v=18.17"></script>
+    <script type="module" src="script.js?v=18.18"></script>
+    <script type="module" src="patch-plantillas.js?v=18.18"></script>
+    <script src="visor-triaje.js?v=18.18"></script>
 </body>
 </html>

@@ -35,7 +35,7 @@ function run(cmd, desc) {
 
 // 1. VALIDACIÓN SINTÁCTICA JS
 console.log('--- PASO 1: Comprobación de Integridad Sintáctica ---');
-const filesToCheck = ['script.js', 'patch-plantillas.js', 'excelUtils.js'];
+const filesToCheck = ['script.js', 'patch-plantillas.js', 'excelUtils.js', 'visor-triaje.js'];
 filesToCheck.forEach(file => {
   if (fs.existsSync(path.join(__dirname, file))) {
     run(`node -c "${file}"`, `Validando ${file}`);
@@ -72,6 +72,7 @@ if (fs.existsSync(indexPath) && newVersionStr) {
   indexContent = indexContent.replace(/style\.css\?v=[\d.]+/g, `style.css?v=${versionSimple}`);
   indexContent = indexContent.replace(/script\.js\?v=[\d.]+/g, `script.js?v=${versionSimple}`);
   indexContent = indexContent.replace(/patch-plantillas\.js\?v=[\d.]+/g, `patch-plantillas.js?v=${versionSimple}`);
+  indexContent = indexContent.replace(/visor-triaje\.js\?v=[\d.]+/g, `visor-triaje.js?v=${versionSimple}`);
   fs.writeFileSync(indexPath, indexContent, 'utf-8');
   console.log(`✅ index.html actualizado con versión: ${versionSimple}\n`);
 }

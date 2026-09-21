@@ -13,7 +13,7 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/Usuarios/$(docId)) 
         ? get(/databases/$(database)/documents/Usuarios/$(docId)).data.get('rol', 
             get(/databases/$(database)/documents/Usuarios/$(docId)).data.get('role', 'sin_acceso')
-          ).toLower()
+          )
         : 'sin_acceso';
     }
 
@@ -24,15 +24,18 @@ service cloud.firestore {
     }
 
     function isAdmin() {
-      return getUserRole() in ['admin', 'superadmin', 'administrador', 'global'];
+      return getUserRole() in ['admin', 'superadmin', 'administrador', 'global', 'ADMIN', 'SUPERADMIN', 'ADMINISTRADOR', 'GLOBAL'];
     }
 
     function isSuperAdmin() {
-      return getUserRole() == 'superadmin';
+      return getUserRole() in ['superadmin', 'SUPERADMIN'];
     }
 
     function isOperadorOrAdmin() {
-      return getUserRole() in ['admin', 'superadmin', 'administrador', 'global', 'operador', 'enfermero'];
+      return getUserRole() in [
+        'admin', 'superadmin', 'administrador', 'global', 'operador', 'enfermero',
+        'ADMIN', 'SUPERADMIN', 'ADMINISTRADOR', 'GLOBAL', 'OPERADOR', 'ENFERMERO'
+      ];
     }
 
     function isOwner(userId) {

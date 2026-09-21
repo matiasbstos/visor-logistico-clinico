@@ -2,9 +2,9 @@
  * ============================================================================
  * MÓDULO: ESCÁNER INTELIGENTE DE INGRESO Y TRIAJE (visor-triaje.js)
  * ============================================================================
- * Manejo de Expresiones Regulares clínicas, discriminación de estado de caja
- * (Abierta/Cerrada), captura dual (Foto OCR vs Manual) e integración segura
- * con el apartado de Ingresos sin colisión con el código preexistente.
+ * Motor de extracción OCR clínica multilínea, diccionario médico inteligente,
+ * control de condición de caja (Abierta/Cerrada), reseteo de estado previo
+ * y vuelco directo a formulario de Ingreso.
  */
 
 (function (window, document) {
@@ -13,14 +13,24 @@
   // --- 1. ESTADO LOCAL EN MEMORIA (Tránsito temporal de la sesión) ---
   const articulosEnTransito = [];
 
-  // --- 2. SELECTORES DEL MODAL Y FORMULARIO DE INGRESO ---
+  // --- 2. DICCIONARIO MÉDICO CLÍNICO PARA EXTRACCIÓN DE INSUMOS ---
+  // Palabras clave requeridas y complementarias para evitar capturar marcas
+  // de laboratorios, distribuidores o importadores (ej: Reutter, Cranberry, etc.)
+  const DICCIONARIO_MEDICO = [
+    'GASA', 'BISTURI', 'GUANTES', 'MASCARILLA', 'JERINGA', 'SUERO',
+    'PARACETAMOL', 'IBUPROFENO', 'AMOXICILINA', 'ALCOHOL', 'AGUJA',
+    'APOSITO', 'SONDA', 'CATETER', 'ALGODON', 'TERMOMETRO', 'VENDA',
+    'COMPRESA', 'JABON', 'CLORHEXIDINA', 'SUTURA', 'CANULA', 'JABON'
+  ];
+
+  // --- 3. SELECTORES DEL MODAL Y FORMULARIO DE INGRESO ---
   const DOM = {
     modal: () => document.getElementById('modal-escaner-triaje'),
-    btnOpenModal: () => document.getElementById('btn-open-triaje-modal'),
     bannerTrigger: () => document.getElementById('banner-trigger-triaje'),
     btnCloseModal: () => document.getElementById('btn-cerrar-triaje-modal'),
     
-    // Captura Dual
+    // Captura Dual y Botón Foto Etiqueta
+    btnFotoEtiqueta: () => document.getElementById('btn-triaje-foto-etiqueta'),
     fileInput: () => document.getElementById('triaje-file-input'),
     btnModoManual: () => document.getElementById('btn-triaje-modo-manual'),
     processingIndicator: () => document.getElementById('triaje-processing-indicator'),
@@ -58,9 +68,52 @@
   };
 
   /**
-   * --- 3. MOTOR DE EXTRACCIÓN AVANZADA CON EXPRESIONES REGULARES ---
-   * @param {string} rawText Salida de texto crudo.
-   * @returns {Object} Datos extraídos normalizados.
+   * --- PASO 1: LIMPIEZA DE ESTADO (RESET) ---
+   * Vacía explícitamente todos los inputs del formulario antes de cada escaneo.
+   */
+  function resetCamposFormulario() {
+    const elInsumo = DOM.inputInsumo();
+    const elCantidad = DOM.inputCantidad();
+    const elLote = DOM.inputLote();
+    const elVencimiento = DOM.inputVencimiento();
+    const elFabricacion = DOM.inputFabricacion();
+    const elFabricante = DOM.inputFabricante();
+
+    if (elInsumo) elInsumo.value = '';
+    if (elCantidad) elCantidad.value = '';
+    if (elLote) elLote.value = '';
+    if (elVencimiento) elVencimiento.value = '';
+    if (elFabricacion) elFabricacion.value = '';
+    if (elFabricante) elFabricante.value = '';
+  }
+
+  /**
+   * Normaliza cualquier formato de fecha a MM-YYYY.
+   */
+  function normalizarFechaMMYYYY(fechaRaw) {
+    if (!fechaRaw) return '';
+    const limpia = fechaRaw.replace(/[\/\.]/g, '-').trim();
+    const partes = limpia.split('-');
+
+    if (partes.length >= 2) {
+      if (partes[0].length === 4) {
+        // Formato YYYY-MM
+        return `${partes[1].padStart(2, '0')}-${partes[0]}`;
+      } else {
+        // Formato MM-YY o MM-YYYY
+        const mes = partes[0].padStart(2, '0');
+        const anio = partes[1].length === 2 ? `20${partes[1]}` : partes[1];
+        return `${mes}-${anio}`;
+      }
+    }
+    return limpia;
+  }
+
+  /**
+   * --- PASO 2 Y 3: MOTOR DE EXTRACCIÓN AVANZADA CON REGEX MULTILÍNEA Y DICCIONARIO ---
+   * Tolera saltos de línea (\n), extrae Lote, Fechas, Cantidades y discrimina Insumos.
+   * @param {string} rawText Texto sin formato devuelto por el OCR.
+   * @returns {Object} Objeto estructurado con datos normalizados.
    */
   function extraerDatosEtiqueta(rawText) {
     if (!rawText || typeof rawText !== 'string') {
@@ -77,60 +130,114 @@
       fabricante: null
     };
 
-    // A. LOTE: LOT, LOTE, LOTE N°, LOT:, LOT#
-    const regexLote = /(?:LOTE(?:\s*N[°º.]?)?|LOT[\s.:#-]*)\s*([A-Z0-9\-_]{3,25})/i;
-    const matchLote = texto.match(regexLote);
+    // -------------------------------------------------------------
+    // 2.A. LOTE (REGEX MULTILÍNEA)
+    // Busca: /LOTE\s*N?[°o]?\s*[\r\n]*\s*(?:LOT)?\s*([A-Z0-9]{5,20})/i
+    // Tolera saltos de línea y captura el valor alfanumérico que sigue a LOTE o LOT
+    // -------------------------------------------------------------
+    const regexLotePrincipal = /LOTE\s*N?[°oº.]?\s*[:\-]?\s*[\r\n]*\s*(?:LOT)?\s*[:\-]?\s*([A-Z0-9\-_]{4,25})/i;
+    const regexLoteSecundario = /LOT\s*[:\-]?\s*[\r\n]*\s*([A-Z0-9\-_]{4,25})/i;
+    const matchLote = texto.match(regexLotePrincipal) || texto.match(regexLoteSecundario);
     if (matchLote && matchLote[1]) {
       datos.lote = matchLote[1].trim().toUpperCase();
     }
 
-    // B. FECHA DE VENCIMIENTO (EXP.DATE, FECHA VENCE, VENCIMIENTO, VTO)
-    const regexVence = /(?:EXP\.?\s*DATE|FECHA\s*(?:DE\s*)?VENC(?:IMIENTO|E)?|VENCE|VTO)[\s.:#-]*([0-1]?[0-9][\/\-\.](?:20\d{2}|\d{2})|(?:20\d{2})[\/\-\.][0-1]?[0-9])/i;
+    // -------------------------------------------------------------
+    // 2.B. VENCIMIENTO (REGEX MULTILÍNEA)
+    // Busca: /(?:VENCE|VENCIMIENTO|EXP\.?DATE|EXP)\s*[:\-]?\s*[\r\n]*\s*([0-9]{2}[-/][0-9]{2,4})/i
+    // -------------------------------------------------------------
+    const regexVence = /(?:VENCE|VENCIMIENTO|EXP\.?\s*DATE|EXP)\s*[:\-]?\s*[\r\n]*\s*([0-9]{2}[-/][0-9]{2,4})/i;
     const matchVence = texto.match(regexVence);
     if (matchVence && matchVence[1]) {
       datos.vencimiento = normalizarFechaMMYYYY(matchVence[1]);
+    } else {
+      // Fallback para fechas invertidas año-mes (ej: 2028-05)
+      const regexVenceInvertido = /(?:VENCE|VENCIMIENTO|EXP\.?\s*DATE|EXP)\s*[:\-]?\s*[\r\n]*\s*(20[0-9]{2}[-/][0-9]{2})/i;
+      const matchVenceInv = texto.match(regexVenceInvertido);
+      if (matchVenceInv && matchVenceInv[1]) {
+        datos.vencimiento = normalizarFechaMMYYYY(matchVenceInv[1]);
+      }
     }
 
-    // C. FECHA DE FABRICACIÓN (MFG.DATE, FAB, FECHA FABRICACIÓN, PROD.DATE)
-    const regexFab = /(?:MFG(?:\.?\s*DATE)?|FECHA\s*(?:DE\s*)?FAB(?:RICACI[OÓ]N)?|FAB)[\s.:#-]*([0-1]?[0-9][\/\-\.](?:20\d{2}|\d{2})|(?:20\d{2})[\/\-\.][0-1]?[0-9])/i;
+    // -------------------------------------------------------------
+    // 2.C. FABRICACIÓN (REGEX MULTILÍNEA)
+    // Busca: /(?:FABRICACI[OÓ]N|MFG\.?DATE|MFG|ESTERILIZACI[OÓ]N)\s*[:\-]?\s*[\r\n]*\s*([0-9]{2}[-/][0-9]{2,4})/i
+    // -------------------------------------------------------------
+    const regexFab = /(?:FABRICACI[OÓ]N|MFG\.?\s*DATE|MFG|ESTERILIZACI[OÓ]N)\s*[:\-]?\s*[\r\n]*\s*([0-9]{2}[-/][0-9]{2,4})/i;
     const matchFab = texto.match(regexFab);
     if (matchFab && matchFab[1]) {
       datos.fabricacion = normalizarFechaMMYYYY(matchFab[1]);
     }
 
-    // D. CANTIDADES: Multiplicador (ej: 20 x 50) o Directo (Qty: 5000pcs)
-    const regexMultiplicador = /\b(\d+)\s*[xX*]\s*(\d+)\b/;
-    const regexQty = /(?:Qty|Cantidad|Cant|Cont\.?(?:enido)?)\s*[:#\-]?\s*(\d+)(?:\s*(?:pcs|piezas|unidades|und|u\b))?/i;
-
+    // -------------------------------------------------------------
+    // 3.A. CANTIDAD MATEMÁTICA O DIRECTA
+    // Multiplicación: /(\d+)\s*[xX]\s*(\d+)/ -> ej: "50 x 50" = 2500
+    // Si no: /(?:QTY|CANTIDAD|CONTENIDO)\s*[:\-]?\s*(\d+)/i
+    // -------------------------------------------------------------
+    const regexMultiplicador = /(\d+)\s*[xX*]\s*(\d+)/;
     const matchMultiplicador = texto.match(regexMultiplicador);
+
     if (matchMultiplicador) {
       const f1 = parseInt(matchMultiplicador[1], 10);
       const f2 = parseInt(matchMultiplicador[2], 10);
       datos.cantidad = (f1 * f2).toString();
     } else {
+      const regexQty = /(?:QTY|CANTIDAD|CONTENIDO)\s*[:\-]?\s*[\r\n]*\s*(\d+)/i;
       const matchQty = texto.match(regexQty);
       if (matchQty && matchQty[1]) {
         datos.cantidad = matchQty[1].trim();
       }
     }
 
-    // E. FABRICANTE / LABORATORIO
-    const regexFabricante = /(?:FABRICADO\s*POR|MANUFACTURED\s*BY|MFR|LABORATORIO|LAB)[\s.:#-]+([A-Z0-9\s.,&'-]{3,35})/i;
+    // -------------------------------------------------------------
+    // 3.B. NOMBRE DEL INSUMO (DICCIONARIO CLÍNICO INTELIGENTE)
+    // Busca palabras clave médicas. Si encuentra alguna, extrae la LÍNEA COMPLETA
+    // para evitar capturar laboratorios o importadores (Reutter, Cranberry, etc.)
+    // -------------------------------------------------------------
+    const lineas = texto.split('\n')
+      .map(l => l.trim())
+      .filter(l => l.length > 2);
+
+    let insumoDetectado = null;
+
+    // 1er intento: Búsqueda estricta por diccionario clínico
+    for (const linea of lineas) {
+      for (const palabra of DICCIONARIO_MEDICO) {
+        const regexPalabra = new RegExp(`\\b${palabra}`, 'i');
+        if (regexPalabra.test(linea)) {
+          insumoDetectado = linea.toUpperCase();
+          break;
+        }
+      }
+      if (insumoDetectado) break;
+    }
+
+    if (insumoDetectado) {
+      datos.insumo = insumoDetectado;
+    } else {
+      // 2do intento: Heurística con filtro estricto anti-laboratorios y anti-importadores
+      for (const linea of lineas) {
+        const esLabOImportador = /(REUTTER|CRANBERRY|LABORATORIO|DISTRIBUIDORA|IMPORTADORA|IMPORTADO|FABRICADO|MANUFACTURED|RUT|DIRECCI[OÓ]N|CHILE|S\.A\.|LTDA|HECHO EN|MADE IN|PRODUCIDO)/i.test(linea);
+        const esMetadato = /(LOTE|LOT|EXP|VENC|MFG|FAB|ESTERILIZACI|QTY|CANTIDAD|CONTENIDO|REF|CAT|MODELO)/i.test(linea);
+        if (!esLabOImportador && !esMetadato && !datos.insumo) {
+          datos.insumo = linea.toUpperCase();
+          break;
+        }
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 3.C. FABRICANTE / LABORATORIO (Si existe explícitamente en el empaque)
+    // -------------------------------------------------------------
+    const regexFabricante = /(?:FABRICADO\s*POR|MANUFACTURED\s*BY|MFR|LABORATORIO|DISTRIBUIDO\s*POR|IMPORTADO\s*POR)[\s.:#-]+([A-Z0-9\s.,&'-]{3,35})/i;
     const matchFabr = texto.match(regexFabricante);
     if (matchFabr && matchFabr[1]) {
       datos.fabricante = matchFabr[1].split('\n')[0].trim().toUpperCase();
-    }
-
-    // F. INSUMO / DESCRIPCIÓN
-    const lineas = texto.split('\n')
-      .map(l => l.trim())
-      .filter(l => l.length > 3);
-
-    for (const linea of lineas) {
-      const esMetadato = /(LOTE|LOT|EXP|VENC|MFG|FAB|QTY|CANTIDAD|MADE IN|REF|CAT)/i.test(linea);
-      if (!esMetadato && !datos.insumo) {
-        datos.insumo = linea.toUpperCase();
-        break;
+    } else {
+      // Detectar marcas habituales si están presentes en la cabecera
+      const marcaConocida = /(REUTTER|CRANBERRY|BRAUN|BECTON|NIPRO|BAXTER|MEDICORP)/i.exec(texto);
+      if (marcaConocida && marcaConocida[1]) {
+        datos.fabricante = marcaConocida[1].toUpperCase();
       }
     }
 
@@ -138,20 +245,7 @@
   }
 
   /**
-   * Normaliza cualquier formato de fecha a MM-YYYY.
-   */
-  function normalizarFechaMMYYYY(fechaRaw) {
-    const limpia = fechaRaw.replace(/[\/\.]/g, '-');
-    const partes = limpia.split('-');
-    if (partes[0].length === 4) {
-      return `${partes[1].padStart(2, '0')}-${partes[0]}`;
-    }
-    const anio = partes[1].length === 2 ? `20${partes[1]}` : partes[1];
-    return `${partes[0].padStart(2, '0')}-${anio}`;
-  }
-
-  /**
-   * --- 4. RELLENO ACUMULATIVO RESPETANDO REGLA DE CAJA ABIERTA/CERRADA ---
+   * --- 4. APLICACIÓN DE DATOS AL FORMULARIO ---
    */
   function aplicarRellenoAcumulativo(datos) {
     const elInsumo = DOM.inputInsumo();
@@ -164,14 +258,14 @@
 
     const cajaAbierta = radioAbierta ? radioAbierta.checked : false;
 
-    // 1. Relleno acumulativo (solo campos vacíos)
-    if (elInsumo && !elInsumo.value.trim() && datos.insumo) elInsumo.value = datos.insumo;
-    if (elLote && !elLote.value.trim() && datos.lote) elLote.value = datos.lote;
-    if (elVencimiento && !elVencimiento.value.trim() && datos.vencimiento) elVencimiento.value = datos.vencimiento;
-    if (elFab && !elFab.value.trim() && datos.fabricacion) elFab.value = datos.fabricacion;
-    if (elFabricante && !elFabricante.value.trim() && datos.fabricante) elFabricante.value = datos.fabricante;
+    // Asignación de datos extraídos
+    if (elInsumo && datos.insumo) elInsumo.value = datos.insumo;
+    if (elLote && datos.lote) elLote.value = datos.lote;
+    if (elVencimiento && datos.vencimiento) elVencimiento.value = datos.vencimiento;
+    if (elFab && datos.fabricacion) elFab.value = datos.fabricacion;
+    if (elFabricante && datos.fabricante) elFabricante.value = datos.fabricante;
 
-    // 2. Control de Cantidad según Estado de la Caja
+    // Control de Cantidad según Estado de la Caja
     if (elCantidad) {
       if (cajaAbierta) {
         elCantidad.value = '';
@@ -181,13 +275,13 @@
         return;
       } else {
         actualizarEstadoCajaVisual(false);
-        if (!elCantidad.value.trim() && datos.cantidad) {
+        if (datos.cantidad) {
           elCantidad.value = datos.cantidad;
         }
       }
     }
 
-    // 3. Llevar el foco al primer campo vacío pendiente
+    // Llevar foco al primer campo pendiente
     const secuencia = [
       elInsumo,
       elCantidad,
@@ -325,7 +419,6 @@
       </tr>
     `).join('');
 
-    // Eventos de botones en filas
     tbody.querySelectorAll('.btn-cargar-fila').forEach(btn => {
       btn.addEventListener('click', (e) => {
         const idx = parseInt(e.target.dataset.idx, 10);
@@ -384,7 +477,6 @@
       }
     }
 
-    // Scroll suave hacia el formulario para feedback inmediato
     const form = DOM.formMovimiento();
     if (form) {
       form.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -395,14 +487,7 @@
    * --- 8. LIMPIEZA DE CAMPOS ---
    */
   function limpiarCamposModal() {
-    [
-      DOM.inputInsumo(),
-      DOM.inputCantidad(),
-      DOM.inputLote(),
-      DOM.inputVencimiento(),
-      DOM.inputFabricacion(),
-      DOM.inputFabricante()
-    ].forEach(inp => { if (inp) inp.value = ''; });
+    resetCamposFormulario();
 
     if (DOM.radioCerrada()) DOM.radioCerrada().checked = true;
     actualizarEstadoCajaVisual(false);
@@ -411,10 +496,60 @@
   }
 
   /**
+   * Ejecuta reconocimiento de texto (OCR) sobre imagen base64.
+   * Utiliza Tesseract en cliente (o Google Cloud Function) con fallback.
+   */
+  async function reconocerTextoOCR(base64Data) {
+    // 1. Cargar Tesseract.js bajo demanda si no existe
+    if (typeof Tesseract === 'undefined') {
+      await new Promise((resolve) => {
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
+        script.onload = resolve;
+        script.onerror = resolve;
+        document.head.appendChild(script);
+      });
+    }
+
+    if (typeof Tesseract !== 'undefined') {
+      try {
+        const worker = await Tesseract.createWorker('spa+eng');
+        const ret = await worker.recognize(base64Data);
+        await worker.terminate();
+        if (ret && ret.data && ret.data.text && ret.data.text.trim().length > 6) {
+          return ret.data.text;
+        }
+      } catch (ocrErr) {
+        console.warn('[OCR Tesseract] Fallback a backend:', ocrErr);
+      }
+    }
+
+    // 2. Intentar backend Cloud Function si está desplegada
+    try {
+      const resp = await fetch('https://us-central1-sarinventario.cloudfunctions.net/detectarEtiquetaClinica', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageBase64: base64Data })
+      });
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data.rawText) return data.rawText;
+      }
+    } catch (cfErr) {
+      console.warn('[Cloud Function OCR]:', cfErr);
+    }
+
+    return null;
+  }
+
+  /**
    * --- 9. PROCESAMIENTO DE ARCHIVO DE FOTO DE ETIQUETA ---
    */
-  function procesarFotoEtiqueta(file) {
+  async function procesarFotoEtiqueta(file) {
     if (!file) return;
+
+    // PASO 1 OBLIGATORIO: RESET EXPLÍCITO DE CAMPOS ANTES DE ENVIAR A OCR
+    resetCamposFormulario();
 
     const ind = DOM.processingIndicator();
     if (ind) ind.style.display = 'block';
@@ -424,26 +559,24 @@
       const base64Data = e.target.result;
 
       try {
-        // Intentar primero endpoint de Cloud Function si está disponible
-        // Fallback inmediato a simulación y heurística de OCR
-        setTimeout(() => {
-          // Lectura de prueba / simulación inteligente con patrones
-          const textoDetectado = `LABORATORIO CHILE S.A.
-PARACETAMOL 500 MG COMPRIMIDOS
-LOT: 461716
-EXP.DATE: 11-2027
-MFG.DATE: 11-2024
-Qty: 20 x 50 pcs`;
+        const textoDetectado = await reconocerTextoOCR(base64Data);
 
+        if (textoDetectado) {
           const datos = extraerDatosEtiqueta(textoDetectado);
           aplicarRellenoAcumulativo(datos);
-
-          if (ind) ind.style.display = 'none';
-        }, 1200);
-
+        } else {
+          // Si el OCR no detectó texto legible (ej: imagen borrosa),
+          // los campos permanecen limpios y con foco para ingreso manual inmediato
+          const elInsumo = DOM.inputInsumo();
+          if (elInsumo) elInsumo.focus();
+        }
       } catch (err) {
-        console.error('[Triaje] Error procesando imagen:', err);
+        console.error('[Triaje OCR Error]:', err);
+      } finally {
         if (ind) ind.style.display = 'none';
+        // Reset del input file para permitir volver a capturar la misma imagen si es necesario
+        const fileInp = DOM.fileInput();
+        if (fileInp) fileInp.value = '';
       }
     };
     reader.readAsDataURL(file);
@@ -453,13 +586,7 @@ Qty: 20 x 50 pcs`;
    * --- 10. INICIALIZACIÓN Y ENLACE DE EVENTOS SEGURO ---
    */
   function inicializarModuloTriaje() {
-    // Abrir Modal
-    const btnOpen = DOM.btnOpenModal();
-    if (btnOpen && !btnOpen.dataset.bound) {
-      btnOpen.addEventListener('click', abrirModal);
-      btnOpen.dataset.bound = 'true';
-    }
-
+    // Abrir Modal desde banner de escáner
     const banner = DOM.bannerTrigger();
     if (banner && !banner.dataset.bound) {
       banner.addEventListener('click', abrirModal);
@@ -482,9 +609,21 @@ Qty: 20 x 50 pcs`;
       btnManual.dataset.bound = 'true';
     }
 
+    // PASO 1: Intercepción de captura al presionar botón "Foto Etiqueta"
+    const btnFoto = DOM.btnFotoEtiqueta();
+    if (btnFoto && !btnFoto.dataset.boundReset) {
+      btnFoto.addEventListener('click', () => {
+        resetCamposFormulario();
+      });
+      btnFoto.dataset.boundReset = 'true';
+    }
+
     // Input de Foto
     const fileInp = DOM.fileInput();
     if (fileInp && !fileInp.dataset.bound) {
+      fileInp.addEventListener('click', () => {
+        resetCamposFormulario();
+      });
       fileInp.addEventListener('change', (e) => {
         if (e.target.files && e.target.files[0]) {
           procesarFotoEtiqueta(e.target.files[0]);
@@ -536,7 +675,7 @@ Qty: 20 x 50 pcs`;
       btnVaciar.dataset.bound = 'true';
     }
 
-    // Cerrar al hacer clic en el backdrop exterior
+    // Cerrar al hacer clic en backdrop
     const modal = DOM.modal();
     if (modal && !modal.dataset.boundBackdrop) {
       modal.addEventListener('click', (e) => {
@@ -546,18 +685,21 @@ Qty: 20 x 50 pcs`;
     }
   }
 
-  // Ejecución segura
+  // Ejecución segura sin interferir con scripts existentes
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', inicializarModuloTriaje);
   } else {
     inicializarModuloTriaje();
   }
 
-  // Exposición en ventana global
+  // API pública en window para testing o llamadas programáticas
   window.TriajeIngreso = {
     abrirModal: abrirModal,
     cerrarModal: cerrarModal,
+    resetCampos: resetCamposFormulario,
+    extraerDatosEtiqueta: extraerDatosEtiqueta,
     procesarOCR: function (rawText) {
+      resetCamposFormulario();
       const extraidos = extraerDatosEtiqueta(rawText);
       aplicarRellenoAcumulativo(extraidos);
       return extraidos;

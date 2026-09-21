@@ -3,7 +3,7 @@
 
 <head>
     <script>
-        const APP_VERSION = '18.19';
+        const APP_VERSION = '18.20';
         if (localStorage.getItem('APP_VERSION') !== APP_VERSION) {
             localStorage.setItem('APP_VERSION', APP_VERSION);
             if ('serviceWorker' in navigator) {
@@ -23,7 +23,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=18.19-predictive">
+    <link rel="stylesheet" href="style.css?v=18.20-predictive">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -3876,7 +3876,7 @@
 
             <!-- MODALIDAD DUAL: FOTO/OCR vs INGRESO MANUAL -->
             <div style="display: flex; gap: 12px; margin-bottom: 20px;">
-                <label for="triaje-file-input" class="btn btn-primary" style="flex: 1; justify-content: center; cursor: pointer; padding: 12px; display: flex; align-items: center; gap: 8px; font-weight: 600; background: #0284c7; border: none; border-radius: 8px;">
+                <label for="triaje-file-input" id="btn-triaje-foto-etiqueta" class="btn btn-primary" style="flex: 1; justify-content: center; cursor: pointer; padding: 12px; display: flex; align-items: center; gap: 8px; font-weight: 600; background: #0284c7; border: none; border-radius: 8px;">
                     <i class="ph-bold ph-camera" style="font-size: 18px;"></i> Capturar / Subir Foto Etiqueta
                 </label>
                 <input type="file" id="triaje-file-input" accept="image/*" capture="environment" style="display: none;">
@@ -4017,8 +4017,8 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=18.19"></script>
-    <script type="module" src="patch-plantillas.js?v=18.19"></script>
-    <script src="visor-triaje.js?v=18.19"></script>
+    <script type="module" src="script.js?v=18.20"></script>
+    <script type="module" src="patch-plantillas.js?v=18.20"></script>
+    <script src="visor-triaje.js?v=18.20"></script>
 </body>
 </html>

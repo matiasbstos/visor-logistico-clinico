@@ -13,7 +13,7 @@ service cloud.firestore {
       return exists(/databases/$(database)/documents/Usuarios/$(docId)) 
         ? get(/databases/$(database)/documents/Usuarios/$(docId)).data.get('rol', 
             get(/databases/$(database)/documents/Usuarios/$(docId)).data.get('role', 'sin_acceso')
-          ).lower()
+          ).toLower()
         : 'sin_acceso';
     }
 

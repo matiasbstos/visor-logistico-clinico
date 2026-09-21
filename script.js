@@ -6457,6 +6457,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 row.innerHTML = `<td><strong>${window.escapeHTML(data.codigo || 'N/A')}</strong></td><td>${dateStr}</td><td>${window.escapeHTML(data.usuario || 'Desconocido')}</td><td><span class="badge" style="background:var(--warning); color:#000;">${window.escapeHTML(data.estado || 'Pendiente')}</span></td><td>${actionHtml}</td>`;
                                 tbody.appendChild(row);
                             });
+                        }, (err) => {
+                            console.warn("[Solicitudes_Criticas] Error escuchando bandeja:", err);
                         });
                     }
                 }

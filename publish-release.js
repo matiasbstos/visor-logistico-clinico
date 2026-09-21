@@ -88,9 +88,9 @@ try {
 run('git push origin main', 'git push a GitHub (muro de actualizaciones)');
 console.log('✅ GitHub actualizado exitosamente.\n');
 
-// 4. DESPLIEGUE A FIREBASE HOSTING
-console.log('--- PASO 4: Despliegue en Producción (Firebase Hosting) ---');
-run('npx firebase-tools deploy --only hosting', 'Desplegando en Firebase');
+// 4. DESPLIEGUE A FIREBASE (HOSTING Y REGLAS FIRESTORE)
+console.log('--- PASO 4: Despliegue en Producción (Firebase Hosting y Firestore Rules) ---');
+run('npx firebase-tools deploy --only hosting,firestore:rules', 'Desplegando en Firebase (Hosting y Reglas Firestore)');
 console.log('\n=============================================================');
 console.log('🎉 DESPLIEGUE Y PUBLICACIÓN COMPLETADOS EXITOSAMENTE');
 console.log(`📦 Versión desplegada: ${newVersionStr || 'Actual'}`);

@@ -1,11 +1,11 @@
-const CACHE_NAME = 'visor-logistico-v18.18';
+const CACHE_NAME = 'visor-logistico-v18.19';
 const urlsToCache = [
   './',
   './index.html',
-  './style.css?v=18.18',
-  './script.js?v=18.18',
-  './patch-plantillas.js?v=18.18',
-  './visor-triaje.js?v=18.18',
+  './style.css?v=18.19',
+  './script.js?v=18.19',
+  './patch-plantillas.js?v=18.19',
+  './visor-triaje.js?v=18.19',
   './excelUtils.js',
   'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap',
   'https://unpkg.com/@phosphor-icons/web',

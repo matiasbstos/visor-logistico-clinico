@@ -70,7 +70,12 @@ node -c patch-plantillas.js
 # - Actualizar CACHE_NAME en sw.js (ej: v18.8 -> v18.9)
 # - Actualizar referencias ?v=X.X en index.html
 
-# 4. Despliegue a Firebase Hosting
+# 4. Sincronización y Muro de Actualizaciones en GitHub
+git add .
+git commit -m "feat/fix: descripción detallada del cambio o elemento agregado"
+git push origin main
+
+# 5. Despliegue a Producción en Firebase Hosting
 npx firebase-tools deploy --only hosting
 ```
 

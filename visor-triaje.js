@@ -496,89 +496,113 @@
   }
 
   /**
-   * Ejecuta reconocimiento de texto (OCR) sobre imagen base64.
-   * Utiliza Tesseract en cliente (o Google Cloud Function) con fallback.
-   */
-  async function reconocerTextoOCR(base64Data) {
-    // 1. Cargar Tesseract.js bajo demanda si no existe
-    if (typeof Tesseract === 'undefined') {
-      await new Promise((resolve) => {
-        const script = document.createElement('script');
-        script.src = 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js';
-        script.onload = resolve;
-        script.onerror = resolve;
-        document.head.appendChild(script);
-      });
-    }
-
-    if (typeof Tesseract !== 'undefined') {
-      try {
-        const worker = await Tesseract.createWorker('spa+eng');
-        const ret = await worker.recognize(base64Data);
-        await worker.terminate();
-        if (ret && ret.data && ret.data.text && ret.data.text.trim().length > 6) {
-          return ret.data.text;
-        }
-      } catch (ocrErr) {
-        console.warn('[OCR Tesseract] Fallback a backend:', ocrErr);
-      }
-    }
-
-    // 2. Intentar backend Cloud Function si está desplegada
-    try {
-      const resp = await fetch('https://us-central1-sarinventario.cloudfunctions.net/detectarEtiquetaClinica', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: base64Data })
-      });
-      if (resp.ok) {
-        const data = await resp.json();
-        if (data.rawText) return data.rawText;
-      }
-    } catch (cfErr) {
-      console.warn('[Cloud Function OCR]:', cfErr);
-    }
-
-    return null;
-  }
-
-  /**
-   * --- 9. PROCESAMIENTO DE ARCHIVO DE FOTO DE ETIQUETA ---
+   * --- 9. PROCESAMIENTO DE FOTO CON AGENTE MULTIMODAL (GEMINI VISION) ---
+   * Convierte la imagen a Base64, consulta gemini-1.5-flash con prompt estructurado,
+   * sanitiza bloques markdown e inyecta la información en el formulario de Triaje.
    */
   async function procesarFotoEtiqueta(file) {
     if (!file) return;
 
-    // PASO 1 OBLIGATORIO: RESET EXPLÍCITO DE CAMPOS ANTES DE ENVIAR A OCR
+    // 1. Limpieza preventiva de campos
     resetCamposFormulario();
 
     const ind = DOM.processingIndicator();
     if (ind) ind.style.display = 'block';
 
     const reader = new FileReader();
+
     reader.onload = async function (e) {
-      const base64Data = e.target.result;
+      const dataUrl = e.target.result;
+      const base64Data = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+      const mimeType = file.type || 'image/jpeg';
+
+      const apiKey = window.GEMINI_API_KEY || localStorage.getItem('gemini_api_key') || (window.globalConfig && window.globalConfig.geminiApiKey) || "AIzaSyAyktOnoB-j7nX4-YZLa6B74wOBCbZvlsA";
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+      const promptTexto = `Analiza esta fotografía de una caja de insumos médicos. Extrae la información clave y responde ÚNICAMENTE con un objeto JSON válido con esta estructura exacta: {"insumo": "Nombre del producto", "cantidadTotal": "Multiplica cajas x unidades si aplica, o pon el número", "lote": "Código de lote", "fechaVencimiento": "MM/YYYY", "fechaFabricacion": "MM/YYYY", "laboratorio": "Fabricante"}. Si un dato no existe, déjalo en blanco. No devuelvas markdown, solo el texto JSON puro.`;
+
+      const requestPayload = {
+        contents: [
+          {
+            parts: [
+              { text: promptTexto },
+              {
+                inlineData: {
+                  mimeType: mimeType,
+                  data: base64Data
+                }
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          temperature: 0.1
+        }
+      };
 
       try {
-        const textoDetectado = await reconocerTextoOCR(base64Data);
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestPayload)
+        });
 
-        if (textoDetectado) {
-          const datos = extraerDatosEtiqueta(textoDetectado);
-          aplicarRellenoAcumulativo(datos);
-        } else {
-          // Si el OCR no detectó texto legible (ej: imagen borrosa),
-          // los campos permanecen limpios y con foco para ingreso manual inmediato
-          const elInsumo = DOM.inputInsumo();
-          if (elInsumo) elInsumo.focus();
+        if (!response.ok) {
+          throw new Error(`Error en API Gemini: ${response.status} ${response.statusText}`);
         }
+
+        const data = await response.json();
+        const rawResponse = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+        // Sanitización estricta de Markdown
+        let cleanResponse = rawResponse.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+        // Parseo seguro del JSON
+        const parsed = JSON.parse(cleanResponse);
+
+        // Inyección directa en los inputs del formulario de Triaje
+        const elInsumo = DOM.inputInsumo();
+        const elCantidad = DOM.inputCantidad();
+        const elLote = DOM.inputLote();
+        const elVencimiento = DOM.inputVencimiento();
+        const elFabricacion = DOM.inputFabricacion();
+        const elFabricante = DOM.inputFabricante();
+
+        if (elInsumo && parsed.insumo) elInsumo.value = parsed.insumo.toUpperCase();
+        if (elLote && parsed.lote) elLote.value = parsed.lote.toUpperCase();
+        if (elVencimiento && parsed.fechaVencimiento) elVencimiento.value = parsed.fechaVencimiento;
+        if (elFabricacion && parsed.fechaFabricacion) elFabricacion.value = parsed.fechaFabricacion;
+        if (elFabricante && parsed.laboratorio) elFabricante.value = parsed.laboratorio.toUpperCase();
+
+        if (elCantidad) {
+          const cajaAbierta = DOM.radioAbierta() && DOM.radioAbierta().checked;
+          if (cajaAbierta) {
+            elCantidad.value = '';
+            elCantidad.placeholder = '¡Caja abierta! Conteo manual...';
+            elCantidad.focus();
+            actualizarEstadoCajaVisual(true);
+          } else {
+            actualizarEstadoCajaVisual(false);
+            if (parsed.cantidadTotal) {
+              elCantidad.value = parsed.cantidadTotal;
+            }
+          }
+        }
+
+        // Foco visual al primer campo vacío pendiente
+        const secuencia = [elInsumo, elCantidad, elLote, elVencimiento, elFabricacion, elFabricante].filter(Boolean);
+        const primerVacio = secuencia.find(inp => !inp.value.trim());
+        if (primerVacio) primerVacio.focus();
+
       } catch (err) {
-        console.error('[Triaje OCR Error]:', err);
+        console.error('[Gemini Vision Triaje] Error procesando imagen o estructura JSON inválida:', err);
       } finally {
         if (ind) ind.style.display = 'none';
-        // Reset del input file para permitir volver a capturar la misma imagen si es necesario
         const fileInp = DOM.fileInput();
         if (fileInp) fileInp.value = '';
       }
     };
+
     reader.readAsDataURL(file);
   }
 

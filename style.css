@@ -946,7 +946,52 @@ gemini-analysis {
     opacity: 1;
 }
 
-/* Tablets (iPad, Android Tablets, Pantallas Medianas) */
+/* =========================================================================
+   PROTECCIÓN GENERAL CONTRA DESBORDES EN PANTALLAS PEQUEÑAS
+   ========================================================================= */
+.app-container {
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
+    box-sizing: border-box;
+}
+
+.main-content {
+    overflow-x: hidden;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+}
+
+.form-control, input, select, textarea {
+    max-width: 100%;
+    box-sizing: border-box;
+    min-width: 0;
+}
+
+.scan-input-group {
+    min-width: 0;
+}
+
+.scan-input-group input {
+    min-width: 0;
+}
+
+/* Evitar que los iconos se deformen o solapen con el texto */
+.btn i, .card-icon i, .scan-input-group i, .menu-item i, .badge-gray i {
+    flex-shrink: 0;
+}
+
+/* Tablas con scroll horizontal suave garantizado */
+.table-responsive, .table-container {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    width: 100%;
+}
+
+/* =========================================================================
+   TABLETS (iPad, Android Tablets, Pantallas Medianas <= 1024px)
+   ========================================================================= */
 @media (max-width: 1024px) {
     .sidebar {
         position: fixed;
@@ -954,8 +999,9 @@ gemini-analysis {
         bottom: 0;
         left: -280px;
         width: 260px !important;
-        z-index: 9999;
+        z-index: 99999;
         box-shadow: none;
+        transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
 
     .sidebar.mobile-open {
@@ -983,6 +1029,10 @@ gemini-analysis {
 
     .mobile-menu-btn {
         display: flex !important;
+        align-items: center;
+        justify-content: center;
+        min-width: 40px;
+        min-height: 40px;
     }
 
     .desktop-toggle-btn {
@@ -990,7 +1040,17 @@ gemini-analysis {
     }
 
     .dashboard-container {
-        padding: 20px 24px;
+        padding: 18px 20px;
+    }
+
+    .grid-3-col {
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 18px;
+    }
+
+    .details-section .grid-3-col {
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 16px;
     }
 
     .toma-layout-grid {
@@ -1003,49 +1063,107 @@ gemini-analysis {
     }
 
     .topbar {
-        padding: 12px 20px;
+        padding: 12px 18px;
     }
 
     .cards-grid {
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 14px;
+    }
+
+    .modal-content, .modal-card {
+        max-width: 90vw;
+        padding: 24px;
     }
 }
 
-/* Teléfonos Móviles (Smartphones) */
-@media (max-width: 640px) {
+/* =========================================================================
+   TELÉFONOS MÓVILES (Smartphones <= 768px y <= 640px)
+   ========================================================================= */
+@media (max-width: 768px) {
     .dashboard-container {
         padding: 12px 14px;
     }
 
+    /* Grids a 1 sola columna para que nada se comprima ni solape */
+    .grid-3-col,
+    .grid-2-col-even,
+    .grid-4-col {
+        grid-template-columns: 1fr !important;
+        gap: 14px !important;
+    }
+
+    .details-section .grid-3-col,
+    .details-section .grid-2-col-even {
+        grid-template-columns: 1fr !important;
+        gap: 14px !important;
+    }
+
+    /* Topbar compacta y ordenada */
     .topbar {
-        padding: 10px 14px;
-    }
-
-    .topbar-left {
-        gap: 10px;
-    }
-
-    .topbar-title {
-        font-size: 15px;
-    }
-
-    .topbar-right {
+        padding: 8px 12px;
+        min-height: 56px;
         gap: 8px;
     }
 
+    .topbar-left {
+        gap: 8px;
+        min-width: 0;
+        flex-shrink: 1;
+    }
+
+    .topbar-title {
+        font-size: 14px !important;
+        max-width: 140px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .topbar-right {
+        gap: 6px;
+        flex-shrink: 0;
+    }
+
     .status-badge {
-        display: none;
+        display: none !important;
     }
 
     .user-text {
-        display: none;
+        display: none !important;
     }
 
+    .user-profile {
+        padding: 4px;
+        gap: 0;
+    }
+
+    .user-avatar {
+        width: 34px;
+        height: 34px;
+        font-size: 18px;
+    }
+
+    /* Cabeceras de página y botones de acción */
     .page-header {
         flex-direction: column;
-        align-items: flex-start;
+        align-items: stretch !important;
         gap: 12px;
         margin-bottom: 16px;
+    }
+
+    .page-header > div:last-child {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        width: 100%;
+    }
+
+    .page-header .btn {
+        flex: 1 1 auto;
+        justify-content: center;
+        min-height: 42px;
+        font-size: 13px;
     }
 
     .page-title h1 {
@@ -1056,15 +1174,67 @@ gemini-analysis {
         font-size: 12px;
     }
 
+    /* Pestañas superiores de Ingreso y Escáner */
+    div[style*="border-bottom: 2px solid #e9ecef"] {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 10px !important;
+    }
+
+    div[style*="border-bottom: 2px solid #e9ecef"] > div {
+        display: flex;
+        gap: 8px !important;
+        width: 100%;
+    }
+
+    div[style*="border-bottom: 2px solid #e9ecef"] .btn {
+        flex: 1 1 auto;
+        justify-content: center;
+        text-align: center;
+        padding: 10px 12px !important;
+        font-size: 13px !important;
+    }
+
+    #btn-open-triaje-modal {
+        width: 100% !important;
+        justify-content: center !important;
+    }
+
+    /* Banner de Escáner vs Pistola en Ingreso */
+    div[style*="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr))"] {
+        grid-template-columns: 1fr !important;
+    }
+
+    #banner-trigger-triaje {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 12px !important;
+    }
+
+    #banner-trigger-triaje button {
+        width: 100% !important;
+        justify-content: center !important;
+    }
+
+    /* Tarjetas de Métricas */
     .cards-grid {
         grid-template-columns: 1fr 1fr;
         gap: 10px;
     }
 
-    .grid-2-col-even {
-        grid-template-columns: 1fr !important;
+    .card {
+        padding: 14px 12px;
     }
 
+    .card-title {
+        font-size: 11px;
+    }
+
+    .card-value {
+        font-size: 20px;
+    }
+
+    /* Botones de acción rápida */
     .toma-quick-add-group {
         width: 100%;
         justify-content: flex-start;
@@ -1079,17 +1249,62 @@ gemini-analysis {
     .btn-large {
         padding: 14px 18px;
         font-size: 15px;
+        width: 100%;
+        justify-content: center;
     }
 
-    .modal-card {
-        padding: 18px 14px;
-        max-width: 95vw !important;
-        margin: 10px;
+    /* MODALES TOTALMENTE ADAPTABLES */
+    .modal-content, .modal-card {
+        width: 96vw !important;
+        max-width: 96vw !important;
+        max-height: 94vh !important;
+        padding: 16px !important;
+        margin: 6px auto !important;
+        box-sizing: border-box !important;
+        border-radius: 12px !important;
     }
 
-    .table-responsive, .table-container {
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
+    .modal-content div[style*="grid-template-columns"],
+    .modal-card div[style*="grid-template-columns"] {
+        grid-template-columns: 1fr !important;
+        gap: 12px !important;
+    }
+
+    .modal-content div[style*="justify-content: space-between"],
+    .modal-card div[style*="justify-content: space-between"] {
+        flex-direction: column-reverse !important;
+        align-items: stretch !important;
+        gap: 10px !important;
+    }
+
+    .modal-content div[style*="justify-content: space-between"] > div,
+    .modal-card div[style*="justify-content: space-between"] > div {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        gap: 8px;
+    }
+
+    .modal-content .btn, .modal-card .btn {
+        width: 100% !important;
+        justify-content: center !important;
+        min-height: 44px;
+    }
+}
+
+/* Teléfonos muy angostos (<= 380px) */
+@media (max-width: 380px) {
+    .cards-grid {
+        grid-template-columns: 1fr !important;
+    }
+
+    .topbar-title {
+        max-width: 110px;
+    }
+
+    .btn {
+        font-size: 12px;
+        padding: 8px 10px;
     }
 }
 

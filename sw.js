@@ -6,7 +6,7 @@ const urlsToCache = [
   './script.js?v=20.15',
   './patch-plantillas.js?v=20.15',
   './visor-triaje.js?v=20.11',
-  './visor-adquisiciones.js?v=20.11',
+  './visor-adquisiciones.js?v=20.14',
   './excelUtils.js?v=20.11',
   'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap',
   'https://unpkg.com/@phosphor-icons/web',

@@ -3,7 +3,7 @@
 
 <head>
     <script>
-        const APP_VERSION = '18.26';
+        const APP_VERSION = '18.27';
         if (localStorage.getItem('APP_VERSION') !== APP_VERSION) {
             localStorage.setItem('APP_VERSION', APP_VERSION);
             if ('serviceWorker' in navigator) {
@@ -23,7 +23,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=18.26-predictive">
+    <link rel="stylesheet" href="style.css?v=18.27-predictive">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -2680,170 +2680,768 @@
             <!-- VISTA LAYOUT ERP CORPORATIVO SAR (#view-erp-adquisiciones)               -->
             <!-- ========================================================================= -->
             <section id="view-erp-adquisiciones" style="display:none;" class="erp-layout view-section">
-                <!-- Barra Lateral Izquierda Corporativa (--sar-blue) -->
-                <aside class="erp-sidebar">
+                <!-- Backdrop para Menú Hamburguesa en Móviles / Terminales Portátiles -->
+                <div id="erp-mobile-backdrop" class="erp-sidebar-backdrop"></div>
+
+                <!-- Barra Lateral Izquierda Corporativa (--sar-blue: #1A3668) -->
+                <aside class="erp-sidebar" id="erp-sidebar-nav">
                     <div class="erp-sidebar__brand">
-                        <h2 class="erp-sidebar__brand-title">
-                            <i class="ph-fill ph-shield-check"></i> SAR ERP Logístico
-                        </h2>
-                        <div class="erp-sidebar__brand-sub">Adquisiciones &amp; Red</div>
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <h2 class="erp-sidebar__brand-title">
+                                <i class="ph-fill ph-shield-check"></i> VISOR LOGÍSTICO
+                            </h2>
+                            <button type="button" id="btn-erp-close-mobile-menu" class="erp-hamburger-btn" style="width:32px; height:32px; background:rgba(255,255,255,0.12);" title="Cerrar menú">
+                                <i class="ph-bold ph-x"></i>
+                            </button>
+                        </div>
+                        <div class="erp-sidebar__brand-sub">ERP Médico • Red Asistencial</div>
                     </div>
+
+                    <div style="font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.8px; color:rgba(255,255,255,0.45); padding:0 8px;">
+                        Operaciones Clínicas
+                    </div>
+
                     <nav class="erp-sidebar__nav" aria-label="Menú ERP Adquisiciones">
-                        <button type="button" class="erp-sidebar__item active" data-erp-panel="erp-panel-tablero">
+                        <button type="button" class="erp-sidebar__item" data-erp-panel="erp-panel-dashboard" data-erp-title="Dashboard Principal">
+                            <i class="ph-bold ph-squares-four"></i>
+                            <span>Dashboard</span>
+                        </button>
+                        <button type="button" class="erp-sidebar__item active" data-erp-panel="erp-panel-tablero" data-erp-title="Tablero Kanban SDC/OC">
                             <i class="ph-bold ph-kanban"></i>
-                            <span>Tablero SDC/OC</span>
+                            <span style="flex:1;">Tablero SDC/OC</span>
+                            <span class="badge badge-sar-orange" style="font-size:10px; padding:1px 6px;">12</span>
                         </button>
-                        <button type="button" class="erp-sidebar__item" data-erp-panel="erp-panel-recepcion">
+                        <button type="button" class="erp-sidebar__item" data-erp-panel="erp-panel-recepcion" data-erp-title="Recepción Dinámica y Auditoría">
                             <i class="ph-bold ph-package"></i>
-                            <span>Recepción Dinámica</span>
+                            <span style="flex:1;">Recepción Dinámica</span>
+                            <span class="badge badge-sar-red" style="font-size:10px; padding:1px 6px;">5</span>
                         </button>
-                        <button type="button" class="erp-sidebar__item" data-erp-panel="erp-panel-despachos">
+                        <button type="button" class="erp-sidebar__item" data-erp-panel="erp-panel-catalogo" data-erp-title="Catálogo Maestro de Insumos">
+                            <i class="ph-bold ph-pill"></i>
+                            <span>Catálogo de Insumos</span>
+                        </button>
+                        <button type="button" class="erp-sidebar__item" data-erp-panel="erp-panel-despachos" data-erp-title="Despachos a Red (Cross-Docking)">
                             <i class="ph-bold ph-truck"></i>
                             <span>Despachos a Red</span>
                         </button>
                     </nav>
+
+                    <div class="erp-sidebar__footer">
+                        <div class="erp-sidebar__node-box">
+                            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;">
+                                <span style="font-size:10px; font-weight:800; text-transform:uppercase; color:rgba(255,255,255,0.7);">Estado Red SAR</span>
+                                <span style="display:inline-flex; align-items:center; gap:5px; font-size:10px; font-weight:700; color:var(--sar-green);">
+                                    <span style="width:7px; height:7px; border-radius:50%; background:var(--sar-green); display:inline-block;"></span> Online
+                                </span>
+                            </div>
+                            <div style="font-size:11.5px; font-weight:700; color:#ffffff;">SAR Santiago Norte</div>
+                            <div style="font-size:10px; color:rgba(255,255,255,0.55); margin-top:2px;">v2.4.1 Enterprise Node</div>
+                        </div>
+                    </div>
                 </aside>
 
-                <!-- Área Principal ERP (--sar-bg-app) -->
+                <!-- Área Principal ERP (--sar-bg-app: #F8F9FA) -->
                 <main class="erp-content">
-                    <header class="erp-content__header">
-                        <div>
-                            <h1 class="erp-content__title">Tablero Kanban de Adquisiciones</h1>
-                            <p class="erp-content__subtitle">Monitoreo corporativo SAR de Solicitudes de Compra (SDC), Órdenes de Compra (OC) y cumplimiento de SLA.</p>
+                    <!-- Topbar Persistente del Módulo ERP -->
+                    <header class="erp-topbar">
+                        <div class="erp-topbar__left">
+                            <button type="button" id="btn-erp-mobile-menu" class="erp-hamburger-btn" aria-label="Abrir menú ERP">
+                                <i class="ph-bold ph-list"></i>
+                            </button>
+                            <nav class="erp-breadcrumb" aria-label="Ruta de navegación ERP">
+                                <span>Red Asistencial</span>
+                                <i class="ph-bold ph-caret-right" style="font-size:11px;"></i>
+                                <span>Visor Logístico</span>
+                                <i class="ph-bold ph-caret-right" style="font-size:11px;"></i>
+                                <span class="erp-breadcrumb__current" id="erp-breadcrumb-current">Tablero Kanban SDC/OC</span>
+                            </nav>
+                        </div>
+
+                        <div class="erp-topbar__right">
+                            <div class="erp-search-box">
+                                <i class="ph-bold ph-magnifying-glass"></i>
+                                <input type="text" id="erp-global-search" class="erp-input" placeholder="Buscar OC, SDC, SKU o Lote...">
+                            </div>
+                            <button type="button" id="btn-erp-nueva-sdc" class="erp-btn erp-btn--primary">
+                                <i class="ph-bold ph-plus"></i>
+                                <span>Nueva SDC</span>
+                            </button>
                         </div>
                     </header>
 
-                    <!-- Submódulo 1: Tablero SDC/OC -->
+                    <!-- ================================================================= -->
+                    <!-- VISTA 1: DASHBOARD PRINCIPAL (VISOR LOGÍSTICO)                    -->
+                    <!-- ================================================================= -->
+                    <div id="erp-panel-dashboard" class="erp-main-view-panel" style="display:none;">
+                        <!-- Barra de Estado del Nodo -->
+                        <div class="erp-filter-bar" style="margin-bottom:16px;">
+                            <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+                                <span class="badge badge-sar-green">
+                                    <i class="ph-fill ph-check-circle"></i> Nodo Operativo Activo
+                                </span>
+                                <span style="font-size:12.5px; color:#475569; font-weight:600;">
+                                    Bodega Central: <strong>SAR Santiago Norte</strong> • Sincronizado en tiempo real
+                                </span>
+                            </div>
+                            <button type="button" id="btn-erp-refresh-dashboard" class="erp-btn erp-btn--outline">
+                                <i class="ph-bold ph-arrows-clockwise"></i> Actualizar Datos
+                            </button>
+                        </div>
+
+                        <!-- 4 KPI Cards Superiores -->
+                        <div class="erp-kpi-grid-4">
+                            <div class="erp-kpi-card erp-kpi-card--blue">
+                                <div class="erp-kpi-card__top">
+                                    <span class="erp-kpi-card__label">Recepciones Previstas</span>
+                                    <span class="badge badge-sar-green">+18% hoy</span>
+                                </div>
+                                <div class="erp-kpi-card__value" id="erp-dash-kpi-recepciones">12</div>
+                                <div class="erp-kpi-card__meta">
+                                    <i class="ph-bold ph-clock"></i> 4 en andén de descarga
+                                </div>
+                            </div>
+
+                            <div class="erp-kpi-card erp-kpi-card--red">
+                                <div class="erp-kpi-card__top">
+                                    <span class="erp-kpi-card__label" style="color:var(--sar-red);">Quiebres Críticos</span>
+                                    <span class="badge badge-sar-red">Alerta Roja</span>
+                                </div>
+                                <div class="erp-kpi-card__value" style="color:var(--sar-red);" id="erp-dash-kpi-quiebres">3</div>
+                                <div class="erp-kpi-card__meta" style="color:var(--sar-red); font-weight:700;">
+                                    <i class="ph-fill ph-warning"></i> Insumos vitales UCI/Urgencia
+                                </div>
+                            </div>
+
+                            <div class="erp-kpi-card erp-kpi-card--orange">
+                                <div class="erp-kpi-card__top">
+                                    <span class="erp-kpi-card__label">Penalizaciones SLA</span>
+                                    <span class="badge badge-sar-orange">En Disputa</span>
+                                </div>
+                                <div class="erp-kpi-card__value" id="erp-dash-kpi-sla">1</div>
+                                <div class="erp-kpi-card__meta">
+                                    Proveedor: MedLog Chile S.A. (+48h)
+                                </div>
+                            </div>
+
+                            <div class="erp-kpi-card erp-kpi-card--yellow">
+                                <div class="erp-kpi-card__top">
+                                    <span class="erp-kpi-card__label">SDC por Autorizar</span>
+                                    <span class="badge badge-sar-yellow">Firma Pendiente</span>
+                                </div>
+                                <div class="erp-kpi-card__value" id="erp-dash-kpi-sdc">8</div>
+                                <div class="erp-kpi-card__meta">
+                                    Monto acum: $14.2M CLP
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Sección Central: Flujo Logístico Semanal (Gráfico SVG) + Acción Inmediata -->
+                        <div class="erp-dashboard-mid-grid">
+                            <!-- Gráfico de Flujo Logístico Semanal -->
+                            <div class="erp-card">
+                                <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+                                    <div>
+                                        <h3 style="margin:0; font-size:16px; font-weight:800; color:var(--sar-blue);">Flujo Logístico Semanal</h3>
+                                        <p style="margin:4px 0 0 0; font-size:12px; color:#64748B;">Comparativa de lotes recepcionados vs consumo clínico confirmado (Unidades)</p>
+                                    </div>
+                                    <div style="display:flex; align-items:center; gap:16px; font-size:12px; font-weight:700;">
+                                        <span style="display:inline-flex; align-items:center; gap:6px; color:var(--sar-blue);">
+                                            <span style="width:10px; height:10px; background:var(--sar-blue); display:inline-block;"></span> Recepciones (Incoming)
+                                        </span>
+                                        <span style="display:inline-flex; align-items:center; gap:6px; color:var(--sar-green);">
+                                            <span style="width:10px; height:10px; background:var(--sar-green); display:inline-block;"></span> Consumo Clínico
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div style="width:100%; overflow-x:auto;">
+                                    <svg viewBox="0 0 700 220" style="width:100%; height:220px; min-width:480px; display:block;">
+                                        <defs>
+                                            <linearGradient id="erpGradBlue" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="0%" stop-color="#1A3668" stop-opacity="0.22"/>
+                                                <stop offset="100%" stop-color="#1A3668" stop-opacity="0.0"/>
+                                            </linearGradient>
+                                            <linearGradient id="erpGradGreen" x1="0" y1="0" x2="0" y2="1">
+                                                <stop offset="0%" stop-color="#8CC63F" stop-opacity="0.22"/>
+                                                <stop offset="100%" stop-color="#8CC63F" stop-opacity="0.0"/>
+                                            </linearGradient>
+                                        </defs>
+                                        <line x1="40" y1="30" x2="680" y2="30" stroke="#F1F5F9" stroke-width="1"/>
+                                        <line x1="40" y1="80" x2="680" y2="80" stroke="#F1F5F9" stroke-width="1"/>
+                                        <line x1="40" y1="130" x2="680" y2="130" stroke="#F1F5F9" stroke-width="1"/>
+                                        <line x1="40" y1="180" x2="680" y2="180" stroke="#E2E8F0" stroke-width="1"/>
+                                        <text x="8" y="34" fill="#94A3B8" font-size="10" font-family="monospace">1.2k</text>
+                                        <text x="8" y="84" fill="#94A3B8" font-size="10" font-family="monospace">800</text>
+                                        <text x="8" y="134" fill="#94A3B8" font-size="10" font-family="monospace">400</text>
+                                        <text x="18" y="184" fill="#94A3B8" font-size="10" font-family="monospace">0</text>
+
+                                        <path d="M50,130 C110,115 140,75 190,68 C240,60 280,105 330,90 C380,75 420,35 470,28 C520,22 560,72 610,58 L670,45 L670,180 L50,180 Z" fill="url(#erpGradBlue)"/>
+                                        <path d="M50,130 C110,115 140,75 190,68 C240,60 280,105 330,90 C380,75 420,35 470,28 C520,22 560,72 610,58 L670,45" fill="none" stroke="#1A3668" stroke-width="3"/>
+
+                                        <path d="M50,148 C110,138 140,112 190,104 C240,95 280,122 330,108 C380,95 420,68 470,58 C520,48 560,86 610,76 L670,64 L670,180 L50,180 Z" fill="url(#erpGradGreen)"/>
+                                        <path d="M50,148 C110,138 140,112 190,104 C240,95 280,122 330,108 C380,95 420,68 470,58 C520,48 560,86 610,76 L670,64" fill="none" stroke="#8CC63F" stroke-width="2.5" stroke-dasharray="5,3"/>
+
+                                        <circle cx="190" cy="68" r="4.5" fill="#FFFFFF" stroke="#1A3668" stroke-width="2.5"/>
+                                        <circle cx="330" cy="90" r="4.5" fill="#FFFFFF" stroke="#1A3668" stroke-width="2.5"/>
+                                        <circle cx="470" cy="28" r="5.5" fill="#1A3668" stroke="#FFFFFF" stroke-width="2"/>
+                                        <circle cx="610" cy="58" r="4.5" fill="#FFFFFF" stroke="#1A3668" stroke-width="2.5"/>
+
+                                        <text x="45" y="202" fill="#64748B" font-size="11" font-weight="600">Lun</text>
+                                        <text x="180" y="202" fill="#64748B" font-size="11" font-weight="600">Mar</text>
+                                        <text x="320" y="202" fill="#64748B" font-size="11" font-weight="600">Mié</text>
+                                        <text x="460" y="202" fill="#1A3668" font-size="11" font-weight="800">Jue (Peak: 1,140 u.)</text>
+                                        <text x="600" y="202" fill="#64748B" font-size="11" font-weight="600">Vie</text>
+                                    </svg>
+                                </div>
+                            </div>
+
+                            <!-- Panel de Acción Inmediata -->
+                            <div class="erp-card">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid #F1F5F9;">
+                                    <div style="display:flex; align-items:center; gap:8px;">
+                                        <i class="ph-fill ph-bell-ringing" style="color:var(--sar-red); font-size:18px;"></i>
+                                        <h3 style="margin:0; font-size:15px; font-weight:800; color:var(--sar-blue);">Acción Inmediata</h3>
+                                    </div>
+                                    <span class="badge badge-sar-red">3 Pendientes</span>
+                                </div>
+
+                                <div class="erp-alert-list">
+                                    <div class="erp-alert-item erp-alert-item--red">
+                                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                                            <span style="font-family:monospace; font-size:11px; font-weight:800; color:var(--sar-red);">OC-109311-SE26</span>
+                                            <span class="badge badge-sar-red">+30h Retraso</span>
+                                        </div>
+                                        <div style="font-size:13px; font-weight:800; color:#0F172A;">Ketorolaco 30mg/ml Ampolla</div>
+                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+                                            <span style="font-size:11.5px; color:#64748B;">SLA Excedido • Lab. Sanderson</span>
+                                            <button type="button" class="erp-btn erp-btn--danger" style="padding:4px 10px; font-size:11px;" data-erp-open-audit="OC-109311-SE26">
+                                                Resolver
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="erp-alert-item erp-alert-item--orange">
+                                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                                            <span style="font-family:monospace; font-size:11px; font-weight:800; color:var(--sar-orange);">OC-109190-SE26</span>
+                                            <span class="badge badge-sar-orange">Parcial 63%</span>
+                                        </div>
+                                        <div style="font-size:13px; font-weight:800; color:#0F172A;">Ibuprofeno 400mg (1.500 pend.)</div>
+                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+                                            <span style="font-size:11.5px; color:#64748B;">Discrepancia de entrega</span>
+                                            <button type="button" class="erp-btn erp-btn--warning" style="padding:4px 10px; font-size:11px;" data-erp-open-audit="OC-109190-SE26">
+                                                Auditar
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="erp-alert-item">
+                                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                                            <span style="font-family:monospace; font-size:11px; font-weight:800; color:var(--sar-blue);">SDC-2026-101</span>
+                                            <span class="badge badge-sar-yellow">En Análisis</span>
+                                        </div>
+                                        <div style="font-size:13px; font-weight:800; color:#0F172A;">Paracetamol 500mg (5.000 COMP)</div>
+                                        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+                                            <span style="font-size:11.5px; color:#64748B;">Requiere vínculo de OC</span>
+                                            <button type="button" class="erp-btn erp-btn--outline" style="padding:4px 10px; font-size:11px;" data-erp-goto-panel="erp-panel-tablero">
+                                                Revisar
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Accesos Rápidos de Operación Clínica -->
+                        <div class="erp-shortcuts-grid">
+                            <button type="button" class="erp-shortcut-card" data-erp-goto-panel="erp-panel-tablero">
+                                <div class="erp-shortcut-icon" style="background:rgba(26,54,104,0.1); color:var(--sar-blue);">
+                                    <i class="ph-bold ph-kanban"></i>
+                                </div>
+                                <div>
+                                    <div style="font-size:14px; font-weight:800; color:var(--sar-blue);">Ir al Tablero Kanban SDC/OC</div>
+                                    <div style="font-size:12px; color:#64748B;">Monitoreo de SLA y etapas de compra</div>
+                                </div>
+                            </button>
+
+                            <button type="button" class="erp-shortcut-card" data-erp-goto-panel="erp-panel-recepcion">
+                                <div class="erp-shortcut-icon" style="background:rgba(140,198,63,0.15); color:#4d7c0f;">
+                                    <i class="ph-bold ph-barcode"></i>
+                                </div>
+                                <div>
+                                    <div style="font-size:14px; font-weight:800; color:var(--sar-blue);">Auditar Recepción de Guías</div>
+                                    <div style="font-size:12px; color:#64748B;">Validación física de lotes y discrepancias</div>
+                                </div>
+                            </button>
+
+                            <button type="button" class="erp-shortcut-card" data-erp-goto-panel="erp-panel-catalogo">
+                                <div class="erp-shortcut-icon" style="background:rgba(232,93,30,0.12); color:var(--sar-orange);">
+                                    <i class="ph-bold ph-pill"></i>
+                                </div>
+                                <div>
+                                    <div style="font-size:14px; font-weight:800; color:var(--sar-blue);">Explorar Catálogo de Insumos</div>
+                                    <div style="font-size:12px; color:#64748B;">Consulta de SKU, lotes y puntos de reorden</div>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- ================================================================= -->
+                    <!-- VISTA 2: TABLERO KANBAN DE ADQUISICIONES (SDC / OC)               -->
+                    <!-- ================================================================= -->
                     <div id="erp-panel-tablero" class="erp-main-view-panel" style="display:block;">
-                        <!-- Contenedor Horizontal con Scroll (.kanban-board) y 4 Columnas Fijas (.kanban-col) -->
+                        <!-- KPIs Superiores del Tablero Kanban -->
+                        <div class="erp-kpi-grid-3">
+                            <div class="erp-kpi-card erp-kpi-card--blue">
+                                <div class="erp-kpi-card__top">
+                                    <span class="erp-kpi-card__label">Total Solicitudes (SDC)</span>
+                                    <span class="badge badge-sar-blue">Activas</span>
+                                </div>
+                                <div class="erp-kpi-card__value" id="erp-kanban-kpi-total">5</div>
+                                <div class="erp-kpi-card__meta">Trazabilidad completa Mercado Público / Cenabast</div>
+                            </div>
+
+                            <div class="erp-kpi-card erp-kpi-card--orange">
+                                <div class="erp-kpi-card__top">
+                                    <span class="erp-kpi-card__label">Entregas Parciales</span>
+                                    <span class="badge badge-sar-orange">Stock Pendiente</span>
+                                </div>
+                                <div class="erp-kpi-card__value" id="erp-kanban-kpi-parciales">1</div>
+                                <div class="erp-kpi-card__meta">Con acta parcial y backorder abierto</div>
+                            </div>
+
+                            <div class="erp-kpi-card erp-kpi-card--red">
+                                <div class="erp-kpi-card__top">
+                                    <span class="erp-kpi-card__label" style="color:var(--sar-red);">SLA Excedido (>48h)</span>
+                                    <span class="badge badge-sar-red">Prioridad</span>
+                                </div>
+                                <div class="erp-kpi-card__value" style="color:var(--sar-red);" id="erp-kanban-kpi-vencidos">1</div>
+                                <div class="erp-kpi-card__meta">Requiere gestión con proveedor adjudicado</div>
+                            </div>
+                        </div>
+
+                        <!-- Barra de Filtros del Kanban -->
+                        <div class="erp-filter-bar">
+                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                <span style="font-size:11px; font-weight:800; text-transform:uppercase; color:#64748B; margin-right:4px;">
+                                    <i class="ph-bold ph-funnel"></i> Filtrar Tablero:
+                                </span>
+                                <button type="button" class="erp-btn erp-btn--primary erp-kanban-filter-btn" data-kanban-filter="ALL" style="padding:6px 12px; font-size:12px;">
+                                    Todos los Registros
+                                </button>
+                                <button type="button" class="erp-btn erp-btn--outline erp-kanban-filter-btn" data-kanban-filter="SLA_VENCIDO" style="padding:6px 12px; font-size:12px;">
+                                    <span style="width:8px; height:8px; border-radius:50%; background:var(--sar-red); display:inline-block;"></span>
+                                    SLA Atrasado
+                                </button>
+                                <button type="button" class="erp-btn erp-btn--outline erp-kanban-filter-btn" data-kanban-filter="PARCIAL" style="padding:6px 12px; font-size:12px;">
+                                    <span style="width:8px; height:8px; border-radius:50%; background:var(--sar-orange); display:inline-block;"></span>
+                                    Recepción Parcial
+                                </button>
+                            </div>
+                            <div style="font-size:12px; color:#64748B; font-weight:600;">
+                                <i class="ph-bold ph-hand-pointing"></i> Clic en cualquier tarjeta para auditar o recepcionar
+                            </div>
+                        </div>
+
+                        <!-- Contenedor Kanban (4 Columnas en Desktop, 2 en Tablet, 1 Apilada en Móvil) -->
                         <div class="kanban-board" id="erp-kanban-board">
-                        <!-- Columna 1: SDC Creada -->
-                        <div class="kanban-col">
-                            <div class="kanban-col__header">
-                                <h3 class="kanban-col__title">
-                                    <i class="ph-fill ph-file-text"></i> SDC Creada
-                                </h3>
-                                <span class="kanban-col__counter">1</span>
+                            <!-- Columna 1: SDC Creada -->
+                            <div class="kanban-col" data-erp-col="SDC_CREADA">
+                                <div class="kanban-col__header">
+                                    <h3 class="kanban-col__title">
+                                        <i class="ph-fill ph-file-text"></i> 1. SDC Creada
+                                    </h3>
+                                    <span class="kanban-col__counter" id="erp-col-count-sdc">1</span>
+                                </div>
+                                <div class="kanban-col__cards" id="erp-col-cards-sdc">
+                                    <article class="kanban-card" data-sdc-id="SDC-2026-101">
+                                        <div class="kanban-card__header">
+                                            <span class="kanban-card__id">SDC-2026-101</span>
+                                            <span class="badge badge-sar-yellow">En Análisis</span>
+                                        </div>
+                                        <h4 class="kanban-card__title">PARACETAMOL 500 MG (5.000 COMP)</h4>
+                                        <div class="kanban-card__meta">
+                                            <span><i class="ph ph-user"></i> Analista: C. Rojas</span>
+                                            <span><i class="ph ph-calendar-blank"></i> 31/10/2026</span>
+                                        </div>
+                                    </article>
+                                </div>
                             </div>
-                            <div class="kanban-col__cards">
-                                <!-- Tarjeta de Ejemplo 1: En Análisis (--sar-yellow) -->
-                                <article class="kanban-card">
-                                    <div class="kanban-card__header">
-                                        <span class="kanban-card__id">SDC-2026-101</span>
-                                        <span class="badge badge-sar-yellow">En Análisis</span>
-                                    </div>
-                                    <h4 class="kanban-card__title">PARACETAMOL 500 MG (5.000 COMP)</h4>
-                                    <div class="kanban-card__meta">
-                                        <span><i class="ph ph-user"></i> Analista: C. Rojas</span>
-                                        <span><i class="ph ph-calendar-blank"></i> 31/10/2026</span>
-                                    </div>
-                                </article>
-                            </div>
-                        </div>
 
-                        <!-- Columna 2: OC Publicada -->
-                        <div class="kanban-col">
-                            <div class="kanban-col__header">
-                                <h3 class="kanban-col__title">
-                                    <i class="ph-fill ph-megaphone"></i> OC Publicada
-                                </h3>
-                                <span class="kanban-col__counter">1</span>
+                            <!-- Columna 2: OC Publicada -->
+                            <div class="kanban-col" data-erp-col="PUBLICADA">
+                                <div class="kanban-col__header">
+                                    <h3 class="kanban-col__title">
+                                        <i class="ph-fill ph-megaphone"></i> 2. OC Publicada
+                                    </h3>
+                                    <span class="kanban-col__counter" id="erp-col-count-publicada">1</span>
+                                </div>
+                                <div class="kanban-col__cards" id="erp-col-cards-publicada">
+                                    <article class="kanban-card" data-oc-id="OC-109510-SE26" data-sdc-id="SDC-2026-098">
+                                        <div class="kanban-card__header">
+                                            <span class="kanban-card__id">OC-109510-SE26</span>
+                                            <span class="badge badge-sar-blue">Publicada</span>
+                                        </div>
+                                        <h4 class="kanban-card__title">SUERO FISIOLÓGICO 0.9% 500 ML</h4>
+                                        <div class="kanban-card__meta">
+                                            <span><i class="ph ph-buildings"></i> B. Braun Medical</span>
+                                            <span>Ref: SDC-2026-098</span>
+                                        </div>
+                                    </article>
+                                </div>
                             </div>
-                            <div class="kanban-col__cards">
-                                <!-- Tarjeta de Ejemplo 2: Publicada (--sar-blue) -->
-                                <article class="kanban-card">
-                                    <div class="kanban-card__header">
-                                        <span class="kanban-card__id">OC-109510-SE26</span>
-                                        <span class="badge badge-sar-blue">Publicada</span>
-                                    </div>
-                                    <h4 class="kanban-card__title">SUERO FISIOLÓGICO 0.9% 500 ML</h4>
-                                    <div class="kanban-card__meta">
-                                        <span><i class="ph ph-buildings"></i> B. Braun Medical</span>
-                                        <span>Ref: SDC-2026-098</span>
-                                    </div>
-                                </article>
-                            </div>
-                        </div>
 
-                        <!-- Columna 3: En Despacho (SLA) -->
-                        <div class="kanban-col">
-                            <div class="kanban-col__header">
-                                <h3 class="kanban-col__title">
-                                    <i class="ph-fill ph-truck"></i> En Despacho (SLA)
-                                </h3>
-                                <span class="kanban-col__counter">1</span>
+                            <!-- Columna 3: En Despacho (SLA) -->
+                            <div class="kanban-col" data-erp-col="EN_DESPACHO">
+                                <div class="kanban-col__header">
+                                    <h3 class="kanban-col__title">
+                                        <i class="ph-fill ph-truck"></i> 3. En Despacho (SLA)
+                                    </h3>
+                                    <span class="kanban-col__counter" id="erp-col-count-despacho">1</span>
+                                </div>
+                                <div class="kanban-col__cards" id="erp-col-cards-despacho">
+                                    <article class="kanban-card" data-oc-id="OC-109311-SE26" data-sdc-id="SDC-2026-085">
+                                        <div class="kanban-card__header">
+                                            <span class="kanban-card__id">OC-109311-SE26</span>
+                                            <span class="badge badge-sar-red">SLA Atrasado (+30h)</span>
+                                        </div>
+                                        <h4 class="kanban-card__title">KETOROLACO 30 MG/ML AMPOLLA</h4>
+                                        <div class="kanban-card__meta">
+                                            <span><i class="ph ph-buildings"></i> Lab. Sanderson</span>
+                                            <span>SLA 5d Vencido</span>
+                                        </div>
+                                    </article>
+                                </div>
                             </div>
-                            <div class="kanban-col__cards">
-                                <!-- Tarjeta de Ejemplo 3: Alerta SLA Vencido (--sar-red) -->
-                                <article class="kanban-card">
-                                    <div class="kanban-card__header">
-                                        <span class="kanban-card__id">OC-109311-SE26</span>
-                                        <span class="badge badge-sar-red">SLA Atrasado (+30h)</span>
-                                    </div>
-                                    <h4 class="kanban-card__title">KETOROLACO 30 MG/ML AMPOLLA</h4>
-                                    <div class="kanban-card__meta">
-                                        <span><i class="ph ph-buildings"></i> Lab. Sanderson</span>
-                                        <span>SLA 5d Vencido</span>
-                                    </div>
-                                </article>
-                            </div>
-                        </div>
 
-                        <!-- Columna 4: Recepcionada -->
-                        <div class="kanban-col">
-                            <div class="kanban-col__header">
-                                <h3 class="kanban-col__title">
-                                    <i class="ph-fill ph-check-circle"></i> Recepcionada
-                                </h3>
-                                <span class="kanban-col__counter">2</span>
-                            </div>
-                            <div class="kanban-col__cards">
-                                <!-- Tarjeta de Ejemplo 4A: Despacho Parcial (--sar-orange) -->
-                                <article class="kanban-card">
-                                    <div class="kanban-card__header">
-                                        <span class="kanban-card__id">OC-109190-SE26</span>
-                                        <span class="badge badge-sar-orange">Despacho Parcial</span>
-                                    </div>
-                                    <h4 class="kanban-card__title">IBUPROFENO 400 MG (2.500 / 4.000)</h4>
-                                    <div class="kanban-card__meta">
-                                        <span><i class="ph ph-buildings"></i> Lab. Chile</span>
-                                        <span>63% Recibido</span>
-                                    </div>
-                                </article>
+                            <!-- Columna 4: Recepcionada -->
+                            <div class="kanban-col" data-erp-col="RECEPCIONADA">
+                                <div class="kanban-col__header">
+                                    <h3 class="kanban-col__title">
+                                        <i class="ph-fill ph-check-circle"></i> 4. Recepcionada
+                                    </h3>
+                                    <span class="kanban-col__counter" id="erp-col-count-recepcionada">2</span>
+                                </div>
+                                <div class="kanban-col__cards" id="erp-col-cards-recepcionada">
+                                    <article class="kanban-card" data-oc-id="OC-109190-SE26" data-sdc-id="SDC-2026-079">
+                                        <div class="kanban-card__header">
+                                            <span class="kanban-card__id">OC-109190-SE26</span>
+                                            <span class="badge badge-sar-orange">Despacho Parcial</span>
+                                        </div>
+                                        <h4 class="kanban-card__title">IBUPROFENO 400 MG (2.500 / 4.000)</h4>
+                                        <div class="kanban-card__meta">
+                                            <span><i class="ph ph-buildings"></i> Lab. Chile</span>
+                                            <span>63% Recibido</span>
+                                        </div>
+                                    </article>
 
-                                <!-- Tarjeta de Ejemplo 4B: Recepcionado Conforme (--sar-green) -->
-                                <article class="kanban-card">
-                                    <div class="kanban-card__header">
-                                        <span class="kanban-card__id">OC-109044-SE26</span>
-                                        <span class="badge badge-sar-green">Conforme 100%</span>
-                                    </div>
-                                    <h4 class="kanban-card__title">GUANTES DE NITRILO TALLA M</h4>
-                                    <div class="kanban-card__meta">
-                                        <span><i class="ph ph-buildings"></i> Cenabast</span>
-                                        <span>150 / 150 Cajas</span>
-                                    </div>
-                                </article>
+                                    <article class="kanban-card" data-oc-id="OC-109044-SE26" data-sdc-id="SDC-2026-072">
+                                        <div class="kanban-card__header">
+                                            <span class="kanban-card__id">OC-109044-SE26</span>
+                                            <span class="badge badge-sar-green">Conforme 100%</span>
+                                        </div>
+                                        <h4 class="kanban-card__title">GUANTES DE NITRILO TALLA M</h4>
+                                        <div class="kanban-card__meta">
+                                            <span><i class="ph ph-buildings"></i> Cenabast</span>
+                                            <span>150 / 150 Cajas</span>
+                                        </div>
+                                    </article>
+                                </div>
                             </div>
                         </div>
                     </div>
-                    </div>
 
-                    <!-- Submódulo 2: Recepción Dinámica -->
+                    <!-- ================================================================= -->
+                    <!-- VISTA 3: RECEPCIÓN DINÁMICA Y AUDITORÍA DE GUÍAS                  -->
+                    <!-- ================================================================= -->
                     <div id="erp-panel-recepcion" class="erp-main-view-panel" style="display:none;">
-                        <div class="card" style="border-radius: var(--shape-card);">
-                            <h3 style="color: var(--sar-blue); margin-top: 0;"><i class="ph-fill ph-package"></i> Recepción Dinámica (Parcial / Total)</h3>
-                            <p class="text-muted text-sm">Seleccione una tarjeta del Tablero SDC/OC o ingrese el número de Orden de Compra para registrar actas de recepción parcial o conforme.</p>
+                        <!-- 3 KPIs de Recepción -->
+                        <div class="erp-kpi-grid-3">
+                            <div class="erp-kpi-card erp-kpi-card--blue">
+                                <div class="erp-kpi-card__top">
+                                    <span class="erp-kpi-card__label">Órdenes en Recepción</span>
+                                    <span class="badge badge-sar-blue">Andén Activo</span>
+                                </div>
+                                <div class="erp-kpi-card__value" id="erp-rec-kpi-pendientes">4</div>
+                                <div class="erp-kpi-card__meta">OC vinculadas a guías de despacho</div>
+                            </div>
+
+                            <div class="erp-kpi-card erp-kpi-card--green">
+                                <div class="erp-kpi-card__top">
+                                    <span class="erp-kpi-card__label">Actas Conformes</span>
+                                    <span class="badge badge-sar-green">100% Match</span>
+                                </div>
+                                <div class="erp-kpi-card__value" id="erp-rec-kpi-conformes">2</div>
+                                <div class="erp-kpi-card__meta">Conciliación física y documental validada</div>
+                            </div>
+
+                            <div class="erp-kpi-card erp-kpi-card--orange">
+                                <div class="erp-kpi-card__top">
+                                    <span class="erp-kpi-card__label">Discrepancias / Parciales</span>
+                                    <span class="badge badge-sar-orange">Auditoría</span>
+                                </div>
+                                <div class="erp-kpi-card__value" id="erp-rec-kpi-discrepancias">2</div>
+                                <div class="erp-kpi-card__meta">Generan ticket de Backorder automático</div>
+                            </div>
+                        </div>
+
+                        <!-- Barra de Filtros de Recepción -->
+                        <div class="erp-filter-bar">
+                            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                                <button type="button" class="erp-btn erp-btn--primary erp-rec-filter-btn" data-rec-filter="ALL" style="padding:6px 12px; font-size:12px;">
+                                    Todas las OC
+                                </button>
+                                <button type="button" class="erp-btn erp-btn--outline erp-rec-filter-btn" data-rec-filter="PENDIENTE" style="padding:6px 12px; font-size:12px;">
+                                    Pendientes
+                                </button>
+                                <button type="button" class="erp-btn erp-btn--outline erp-rec-filter-btn" data-rec-filter="PARCIAL" style="padding:6px 12px; font-size:12px;">
+                                    Parciales / Discrepancias
+                                </button>
+                                <button type="button" class="erp-btn erp-btn--outline erp-rec-filter-btn" data-rec-filter="TOTAL" style="padding:6px 12px; font-size:12px;">
+                                    Completadas (100%)
+                                </button>
+                            </div>
+                            <div class="erp-search-box">
+                                <i class="ph-bold ph-magnifying-glass"></i>
+                                <input type="text" id="erp-recepcion-search" class="erp-input" placeholder="Filtrar por OC, proveedor o insumo...">
+                            </div>
+                        </div>
+
+                        <!-- Tabla Responsiva con overflow-x: auto -->
+                        <div class="erp-table-container">
+                            <div class="erp-table-scroll">
+                                <table class="erp-reception-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Orden ID / SDC</th>
+                                            <th>Proveedor</th>
+                                            <th>Producto / Presentación</th>
+                                            <th style="text-align:right;">Cant. Esperada</th>
+                                            <th style="text-align:right;">Cant. Recibida</th>
+                                            <th style="text-align:center;">Estado Conciliación</th>
+                                            <th style="text-align:right;">Acción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="erp-recepcion-tbody">
+                                        <!-- Poblado dinámicamente por visor-adquisiciones.js -->
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Submódulo 3: Despachos a Red -->
+                    <!-- ================================================================= -->
+                    <!-- VISTA 4: CATÁLOGO MAESTRO DE INSUMOS                              -->
+                    <!-- ================================================================= -->
+                    <div id="erp-panel-catalogo" class="erp-main-view-panel" style="display:none;">
+                        <!-- 4 KPIs del Catálogo -->
+                        <div class="erp-kpi-grid-4">
+                            <div class="erp-kpi-card erp-kpi-card--blue">
+                                <div class="erp-kpi-card__top">
+                                    <span class="erp-kpi-card__label">SKUs Activos en Maestro</span>
+                                    <span class="badge badge-sar-blue">CENABAST</span>
+                                </div>
+                                <div class="erp-kpi-card__value" id="erp-cat-kpi-total">8</div>
+                                <div class="erp-kpi-card__meta">Estandarizados con código SAR</div>
+                            </div>
+
+                            <div class="erp-kpi-card erp-kpi-card--green">
+                                <div class="erp-kpi-card__top">
+                                    <span class="erp-kpi-card__label">Stock Saludable</span>
+                                    <span class="badge badge-sar-green">Óptimo</span>
+                                </div>
+                                <div class="erp-kpi-card__value" id="erp-cat-kpi-optimo">5</div>
+                                <div class="erp-kpi-card__meta">Sobre el punto de reorden mínimo</div>
+                            </div>
+
+                            <div class="erp-kpi-card erp-kpi-card--orange">
+                                <div class="erp-kpi-card__top">
+                                    <span class="erp-kpi-card__label">Stock Bajo / Reorden</span>
+                                    <span class="badge badge-sar-orange">Reposición</span>
+                                </div>
+                                <div class="erp-kpi-card__value" id="erp-cat-kpi-bajo">2</div>
+                                <div class="erp-kpi-card__meta">Sugeridos para próxima SDC</div>
+                            </div>
+
+                            <div class="erp-kpi-card erp-kpi-card--red">
+                                <div class="erp-kpi-card__top">
+                                    <span class="erp-kpi-card__label" style="color:var(--sar-red);">Quiebre Crítico</span>
+                                    <span class="badge badge-sar-red">Urgente</span>
+                                </div>
+                                <div class="erp-kpi-card__value" style="color:var(--sar-red);" id="erp-cat-kpi-critico">1</div>
+                                <div class="erp-kpi-card__meta">Requiere compra o traslado inmediato</div>
+                            </div>
+                        </div>
+
+                        <!-- Barra de Búsqueda y Filtros del Catálogo -->
+                        <div class="erp-filter-bar">
+                            <div class="erp-search-box" style="flex:1; min-width:240px;">
+                                <i class="ph-bold ph-magnifying-glass"></i>
+                                <input type="text" id="erp-catalog-search" class="erp-input" style="width:100%;" placeholder="Buscar por código SAR, principio activo, lote o categoría...">
+                            </div>
+                            <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
+                                <select id="erp-catalog-category-filter" class="erp-select">
+                                    <option value="ALL">Categoría: Todas</option>
+                                    <option value="FARMACOS">Fármacos Clínicos</option>
+                                    <option value="INSUMOS">Insumos Médicos / EPP</option>
+                                    <option value="SUEROS">Soluciones y Sueros</option>
+                                    <option value="CRITICOS">Urgencia / Reanimación</option>
+                                </select>
+                                <select id="erp-catalog-status-filter" class="erp-select">
+                                    <option value="ALL">Estado Stock: Todos</option>
+                                    <option value="OPTIMO">En Stock Óptimo</option>
+                                    <option value="BAJO">Stock Bajo / Reorden</option>
+                                    <option value="CRITICO">Quiebre Crítico</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Grilla Responsiva de Productos (4 cols Desktop / 2 cols Tablet / 1 col Móvil) -->
+                        <div class="erp-catalog-grid" id="erp-catalog-grid">
+                            <!-- Poblado dinámicamente por visor-adquisiciones.js -->
+                        </div>
+                    </div>
+
+                    <!-- ================================================================= -->
+                    <!-- VISTA 5: DESPACHOS A RED ASISTENCIAL (CROSS-DOCKING)              -->
+                    <!-- ================================================================= -->
                     <div id="erp-panel-despachos" class="erp-main-view-panel" style="display:none;">
-                        <div class="card" style="border-radius: var(--shape-card);">
-                            <h3 style="color: var(--sar-blue); margin-top: 0;"><i class="ph-fill ph-truck"></i> Despachos a Red (Cross-Docking)</h3>
-                            <p class="text-muted text-sm">Módulo de distribución directa hacia centros de salud de la red comunal (CESFAM / CECOSF / SAR).</p>
+                        <div class="erp-card" style="margin-bottom:16px;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
+                                <div>
+                                    <h3 style="color: var(--sar-blue); margin: 0; font-size:17px; font-weight:800;">
+                                        <i class="ph-fill ph-truck"></i> Despachos a Red Asistencial (Cross-Docking)
+                                    </h3>
+                                    <p style="margin:4px 0 0 0; font-size:12.5px; color:#64748B;">
+                                        Distribución directa de ítems recepcionados hacia centros de salud periféricos (CESFAM / CECOSF / SAR).
+                                    </p>
+                                </div>
+                                <span class="badge badge-sar-green">Ruta Comunal Activa</span>
+                            </div>
+                            <div class="erp-table-scroll">
+                                <table class="erp-reception-table" id="erp-despachos-table">
+                                    <thead>
+                                        <tr>
+                                            <th>OC / SDC Origen</th>
+                                            <th>Insumo Clínico</th>
+                                            <th>Centro Destino (Red)</th>
+                                            <th style="text-align:right;">Cant. Asignada</th>
+                                            <th style="text-align:right;">Disponible Bodega</th>
+                                            <th style="text-align:center;">Estado Ruta</th>
+                                            <th style="text-align:right;">Acción</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="erp-despachos-tbody">
+                                        <!-- Poblado dinámicamente por visor-adquisiciones.js -->
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                 </main>
+
+                <!-- ===================================================================== -->
+                <!-- MODAL DE AUDITORÍA DE RECEPCIÓN DINÁMICA (backdrop-filter: blur(3px)) -->
+                <!-- ===================================================================== -->
+                <div id="erp-audit-modal-overlay" class="erp-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="erp-audit-modal-title">
+                    <div class="erp-modal-dialog">
+                        <header class="erp-modal-header">
+                            <div style="display:flex; align-items:center; gap:12px;">
+                                <div style="width:40px; height:40px; background:rgba(255,255,255,0.14); border-radius:var(--shape-card); display:flex; align-items:center; justify-content:center; font-size:20px;">
+                                    <i class="ph-bold ph-clipboard-text"></i>
+                                </div>
+                                <div>
+                                    <div style="display:flex; align-items:center; gap:8px;">
+                                        <h3 id="erp-audit-modal-title" style="margin:0; font-size:16px; font-weight:800; color:#ffffff;">Auditoría de Recepción: OC-109190-SE26</h3>
+                                        <span class="badge badge-sar-orange" id="erp-audit-modal-badge">Auditoría en Vivo</span>
+                                    </div>
+                                    <div id="erp-audit-modal-subtitle" style="font-size:12px; color:rgba(255,255,255,0.78); margin-top:2px;">
+                                        Proveedor: Laboratorio Chile / Teva • SDC Origen: SDC-2026-079
+                                    </div>
+                                </div>
+                            </div>
+                            <button type="button" id="btn-erp-close-audit-modal" class="erp-drawer__close" title="Cerrar modal">
+                                <i class="ph-bold ph-x"></i>
+                            </button>
+                        </header>
+
+                        <div class="erp-modal-body">
+                            <!-- Columna Izquierda: Especificaciones de la Orden -->
+                            <div style="display:flex; flex-direction:column; gap:12px;">
+                                <div style="font-size:11px; font-weight:800; text-transform:uppercase; color:#64748B; letter-spacing:0.5px;">
+                                    Especificación de Orden de Compra
+                                </div>
+                                <div style="background:#F8FAFC; border:1px solid #E2E8F0; border-radius:var(--shape-card); padding:16px; display:flex; flex-direction:column; gap:12px;">
+                                    <div>
+                                        <div style="font-size:10px; font-weight:800; text-transform:uppercase; color:#94A3B8;">Descripción Clínica</div>
+                                        <div id="erp-audit-item-name" style="font-size:14px; font-weight:800; color:var(--sar-blue); margin-top:2px;">IBUPROFENO 400 MG</div>
+                                        <div id="erp-audit-item-sku" style="font-size:12px; color:#64748B; font-family:monospace;">Código: SAR-1015</div>
+                                    </div>
+
+                                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; padding-top:10px; border-top:1px solid #E2E8F0;">
+                                        <div>
+                                            <div style="font-size:10px; font-weight:800; text-transform:uppercase; color:#94A3B8;">Cant. Pedida OC</div>
+                                            <div id="erp-audit-expected-qty" style="font-size:20px; font-weight:900; color:#0F172A;">4.000</div>
+                                        </div>
+                                        <div>
+                                            <div style="font-size:10px; font-weight:800; text-transform:uppercase; color:#94A3B8;">Recibido Previo</div>
+                                            <div id="erp-audit-prev-qty" style="font-size:20px; font-weight:900; color:var(--sar-blue);">2.500</div>
+                                        </div>
+                                    </div>
+
+                                    <div style="padding-top:10px; border-top:1px solid #E2E8F0; font-size:12px; color:#475569;">
+                                        <i class="ph-fill ph-map-pin" style="color:var(--sar-blue);"></i>
+                                        Destino Asignado: <strong id="erp-audit-destino">SAR Central</strong>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Columna Derecha: Conteo Físico y Detección de Discrepancias -->
+                            <div style="display:flex; flex-direction:column; gap:12px;">
+                                <div style="font-size:11px; font-weight:800; text-transform:uppercase; color:#64748B; letter-spacing:0.5px;">
+                                    Verificación Física en Bodega
+                                </div>
+
+                                <div>
+                                    <label for="erp-audit-input-qty" style="display:block; font-size:12px; font-weight:700; color:#334155; margin-bottom:6px;">
+                                        Cantidad Total Verificada (Acumulada)
+                                    </label>
+                                    <input type="number" id="erp-audit-input-qty" class="erp-input" style="width:100%; padding:10px 14px; font-size:18px; font-weight:900; color:var(--sar-blue); background:#ffffff; border:2px solid var(--sar-blue);" min="0" value="2500">
+                                </div>
+
+                                <!-- Alerta Dinámica de Discrepancia / Backorder -->
+                                <div id="erp-audit-discrepancy-box" style="background:rgba(232,93,30,0.08); border:1px solid rgba(232,93,30,0.35); border-left:4px solid var(--sar-orange); border-radius:var(--shape-card); padding:12px;">
+                                    <div style="font-size:12px; font-weight:800; color:var(--sar-orange); display:flex; align-items:center; gap:6px;">
+                                        <i class="ph-fill ph-warning"></i>
+                                        <span id="erp-audit-discrepancy-title">Recepción Parcial Detectada (-1.500 u.)</span>
+                                    </div>
+                                    <p id="erp-audit-discrepancy-desc" style="margin:4px 0 0 0; font-size:11.5px; color:#475569; line-height:1.4;">
+                                        El saldo pendiente quedará registrado en estado PARCIAL y mantendrá activo el seguimiento SLA al proveedor.
+                                    </p>
+                                </div>
+
+                                <label style="display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:#334155; cursor:pointer;">
+                                    <input type="checkbox" id="erp-audit-chk-conforme" checked>
+                                    Emitir Acta Digital de Recepción y actualizar Kanban
+                                </label>
+                            </div>
+                        </div>
+
+                        <footer class="erp-modal-footer">
+                            <span style="font-size:11.5px; color:#64748B;">
+                                <i class="ph-fill ph-shield-check" style="color:var(--sar-green);"></i> Registro auditable compatible con Firebase Firestore
+                            </span>
+                            <div style="display:flex; gap:10px;">
+                                <button type="button" id="btn-erp-cancel-audit-modal" class="erp-btn erp-btn--outline">
+                                    Cancelar
+                                </button>
+                                <button type="button" id="btn-erp-confirm-audit-modal" class="erp-btn erp-btn--warning">
+                                    <i class="ph-bold ph-check-circle"></i>
+                                    <span id="erp-audit-confirm-text">Confirmar Recepción</span>
+                                </button>
+                            </div>
+                        </footer>
+                    </div>
+                </div>
 
                 <!-- Panel Lateral (Drawer) de Detalle de Productos y Recepciones Parciales (Appflow) -->
                 <div id="erp-kanban-drawer-overlay" class="erp-drawer-overlay" role="dialog" aria-modal="true" aria-labelledby="erp-drawer-title">
@@ -4348,9 +4946,9 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=18.26"></script>
-    <script type="module" src="patch-plantillas.js?v=18.26"></script>
-    <script src="visor-triaje.js?v=18.26"></script>
-    <script src="visor-adquisiciones.js?v=18.26"></script>
+    <script type="module" src="script.js?v=18.27"></script>
+    <script type="module" src="patch-plantillas.js?v=18.27"></script>
+    <script src="visor-triaje.js?v=18.27"></script>
+    <script src="visor-adquisiciones.js?v=18.27"></script>
 </body>
 </html>

@@ -9,10 +9,12 @@
  *    - SDC: id, fecha, creador, estado, itemsSolicitados
  *    - OC: id, sdc_id (FK), proveedor, fechaAceptacion, deadlineDespacho, items (cantidadPedida, cantidadRecepcionada)
  *    - Recepcion: id, oc_id (FK), fecha, esParcial (boolean), actaConforme
- * 2. Appflow Interactivo:
- *    - Navegación lateral dentro de #view-erp-adquisiciones
- *    - Clic en tarjeta Kanban -> Abre Panel Lateral (Drawer) con el detalle
- *      de ítems y registro en vivo de Recepciones Parciales / Totales.
+ * 2. Vistas Auditadas "Visor Logístico" (#view-erp-adquisiciones):
+ *    - Vista 1: Dashboard Principal (KPIs, Flujo Semanal SVG, Acción Inmediata, Accesos Rápidos)
+ *    - Vista 2: Tablero Kanban SDC/OC (4 columnas responsivas, filtros SLA/Parcial, Drawer y Modal)
+ *    - Vista 3: Recepción Dinámica + Modal de Auditoría con cálculo de discrepancias en vivo
+ *    - Vista 4: Catálogo Maestro de Insumos (Grilla responsiva 4 -> 2 -> 1 con búsqueda y filtros)
+ *    - Vista 5: Despachos a Red Asistencial (Cross-Docking)
  *
  * REGLA DE ORO: Módulo 100% aislado. No altera la lógica del inventario actual,
  * el enrutador SPA principal ni el módulo de Triaje Logístico.
@@ -47,18 +49,10 @@
      * Colección destino en Firestore: `ERP_SDC`
      */
     class SDC {
-        /**
-         * @param {Object} params
-         * @param {string} params.id - Identificador único de la SDC (ej: "SDC-2026-101")
-         * @param {string|Date} [params.fecha] - Fecha ISO de emisión de la solicitud
-         * @param {string} [params.creador] - Analista o profesional creador de la solicitud
-         * @param {string} [params.estado] - Estado en el flujo ('SDC_CREADA' | 'PUBLICADA' | 'EN_DESPACHO' | 'RECEPCIONADA')
-         * @param {Array<{codigo: string, nombre: string, cantidadSolicitada: number, unidad?: string, centroDestino?: string}>} [params.itemsSolicitados]
-         */
         constructor({
             id,
             fecha = new Date().toISOString(),
-             fechaCreacion = null,
+            fechaCreacion = null,
             creador = 'Sin Asignar',
             analistaAsignado = null,
             estado = ESTADOS_KANBAN.SDC_CREADA,
@@ -91,9 +85,6 @@
             this.productosSolicitados = this.itemsSolicitados;
         }
 
-        /**
-         * Retorna un objeto JSON plano 100% serializable para Firebase Firestore.
-         */
         toJSON() {
             return {
                 id: this.id,
@@ -120,20 +111,9 @@
     /**
      * @class OC (Orden de Compra — Mercado Público / Cenabast)
      * Vinculada a una SDC mediante la clave foránea `sdc_id`.
-     * Soporta múltiples ítems con control de `cantidadPedida` y `cantidadRecepcionada`
-     * para gestionar recepciones parciales y despachos a red (Cross-docking).
      * Colección destino en Firestore: `ERP_OC`
      */
     class OC {
-        /**
-         * @param {Object} params
-         * @param {string} params.id - Identificador único de la OC (ej: "OC-109190-SE26")
-         * @param {string} params.sdc_id - Clave foránea (Foreign Key) hacia `SDC.id`
-         * @param {string} params.proveedor - Razón social del proveedor adjudicado
-         * @param {string|Date} [params.fechaAceptacion] - Timestamp ISO de aceptación en Mercado Público
-         * @param {string|Date} [params.deadlineDespacho] - Timestamp ISO límite comprometido según SLA
-         * @param {Array<{codigo?: string, nombre: string, cantidadPedida: number, cantidadRecepcionada?: number, centroDestino?: string}>} [params.items]
-         */
         constructor({
             id,
             sdc_id = null,
@@ -178,7 +158,6 @@
                         nombre: String(item.nombre || 'INSUMO SIN NOMBRE').trim().toUpperCase(),
                         cantidadPedida: pedida,
                         cantidadRecepcionada: recepcionada,
-                        // Alias de compatibilidad
                         cantidadComprada: pedida,
                         cantidadRecibida: recepcionada,
                         centroDestino: String(item.centroDestino || 'Bodega Central SAR').trim()
@@ -186,15 +165,11 @@
                 })
                 : [];
 
-            // Propiedades espejo para compatibilidad
             this.sdcId = this.sdc_id;
             this.fechaLimiteDespacho = this.deadlineDespacho;
             this.productos = this.items;
         }
 
-        /**
-         * Porcentaje global recepcionado sobre el total pedido (0 a 100).
-         */
         getPorcentajeRecepcion() {
             const totalPedido = this.items.reduce((acc, it) => acc + it.cantidadPedida, 0);
             if (totalPedido <= 0) return 0;
@@ -205,9 +180,6 @@
             return Math.round((totalRecibido / totalPedido) * 100);
         }
 
-        /**
-         * Retorna 'PENDIENTE', 'PARCIAL' o 'TOTAL' según el avance de recepción.
-         */
         getEstadoRecepcion() {
             const pct = this.getPorcentajeRecepcion();
             if (pct === 0) return 'PENDIENTE';
@@ -215,9 +187,6 @@
             return 'PARCIAL';
         }
 
-        /**
-         * Evalúa el cumplimiento del SLA frente a `deadlineDespacho`.
-         */
         evaluarSLA(estadoColumna = ESTADOS_KANBAN.EN_DESPACHO, now = new Date()) {
             if (estadoColumna === ESTADOS_KANBAN.RECEPCIONADA && this.getEstadoRecepcion() === 'TOTAL') {
                 return { status: 'en-plazo', label: 'Conforme 100%', horasRestantes: 0 };
@@ -245,9 +214,6 @@
             return { status: 'en-plazo', label: restanteTexto, horasRestantes: diffHours };
         }
 
-        /**
-         * Objeto JSON plano serializable para Firebase Firestore.
-         */
         toJSON() {
             return {
                 id: this.id,
@@ -282,19 +248,9 @@
 
     /**
      * @class Recepcion (Acta de Recepción Logística Parcial o Total)
-     * Registra cada evento de ingreso físico asociado a una Orden de Compra (`oc_id`).
      * Colección destino en Firestore: `ERP_Recepciones`
      */
     class Recepcion {
-        /**
-         * @param {Object} params
-         * @param {string} params.id - Identificador único de la recepción (ej: "REC-2026-0081")
-         * @param {string} params.oc_id - Clave foránea (Foreign Key) hacia `OC.id`
-         * @param {string|Date} [params.fecha] - Fecha/hora ISO de la recepción en bodega
-         * @param {boolean} [params.esParcial] - `true` si es entrega parcial, `false` si completa la OC
-         * @param {boolean|string} [params.actaConforme] - Estado o folio de conformidad del acta clínica
-         * @param {Array<{codigo: string, nombre: string, cantidadIngresada: number}>} [params.detalleRecibido]
-         */
         constructor({
             id,
             oc_id,
@@ -314,9 +270,6 @@
             this.detalleRecibido = Array.isArray(detalleRecibido) ? detalleRecibido : [];
         }
 
-        /**
-         * Objeto JSON plano serializable para Firebase Firestore.
-         */
         toJSON() {
             return {
                 id: this.id,
@@ -341,7 +294,6 @@
         }
     }
 
-    // Esquemas documentales de referencia para Firestore
     const BACKEND_SCHEMAS = Object.freeze({
         SDC: {
             collection: 'ERP_SDC',
@@ -482,14 +434,141 @@
             })
         ];
 
-        return { sdcList, ocList, recepcionesList };
+        const catalogoList = [
+            {
+                sku: 'SAR-1002',
+                nombre: 'Paracetamol 500 mg Comprimido',
+                descripcion: 'Analgésico y antipirético oral en blíster clínico bioequivalente.',
+                categoria: 'FARMACOS',
+                categoriaLabel: 'Fármacos Clínicos',
+                ubicacion: 'Bodega A-12',
+                stockActual: 4500,
+                stockMinimo: 1000,
+                unidad: 'COMP',
+                lote: 'LT-2026-88A',
+                vencimiento: '11/2027',
+                estadoStock: 'OPTIMO',
+                icono: 'ph-pill'
+            },
+            {
+                sku: 'SAR-5001',
+                nombre: 'Ketorolaco 30 mg/ml Ampolla',
+                descripcion: 'AINE inyectable para manejo de dolor agudo en box de urgencia.',
+                categoria: 'CRITICOS',
+                categoriaLabel: 'Urgencia / Reanimación',
+                ubicacion: 'Bodega Urgencia B-02',
+                stockActual: 40,
+                stockMinimo: 300,
+                unidad: 'AMP',
+                lote: 'LT-9920-K',
+                vencimiento: '04/2027',
+                estadoStock: 'CRITICO',
+                icono: 'ph-syringe'
+            },
+            {
+                sku: 'SAR-1045',
+                nombre: 'Suero Fisiológico NaCl 0.9% 500 ml',
+                descripcion: 'Solución parenteral isotónica estéril libre de pirógenos (Matraz Colapsable).',
+                categoria: 'SUEROS',
+                categoriaLabel: 'Soluciones y Sueros',
+                ubicacion: 'Zona Pallets C-01',
+                stockActual: 820,
+                stockMinimo: 400,
+                unidad: 'MATRAZ',
+                lote: 'BB-4410-S',
+                vencimiento: '09/2028',
+                estadoStock: 'OPTIMO',
+                icono: 'ph-drop'
+            },
+            {
+                sku: 'SAR-1015',
+                nombre: 'Ibuprofeno 400 mg Comprimido',
+                descripcion: 'Antiinflamatorio no esteroideo oral para atención primaria y SAR.',
+                categoria: 'FARMACOS',
+                categoriaLabel: 'Fármacos Clínicos',
+                ubicacion: 'Bodega A-14',
+                stockActual: 620,
+                stockMinimo: 800,
+                unidad: 'COMP',
+                lote: 'CH-2091-I',
+                vencimiento: '06/2027',
+                estadoStock: 'BAJO',
+                icono: 'ph-pill'
+            },
+            {
+                sku: 'SAR-3012',
+                nombre: 'Guantes de Nitrilo Examen Talla M',
+                descripcion: 'Guante clínico ambidiestro libre de polvo y látex, caja dispensadora x 100 u.',
+                categoria: 'INSUMOS',
+                categoriaLabel: 'Insumos Médicos / EPP',
+                ubicacion: 'Rack EPP D-04',
+                stockActual: 310,
+                stockMinimo: 120,
+                unidad: 'CAJA',
+                lote: 'DP-7741-N',
+                vencimiento: '12/2028',
+                estadoStock: 'OPTIMO',
+                icono: 'ph-hand-palm'
+            },
+            {
+                sku: 'SAR-5008',
+                nombre: 'Ondansetrón 4 mg/2ml Ampolla',
+                descripcion: 'Antiemético parenteral de uso en urgencia clínica y observación.',
+                categoria: 'CRITICOS',
+                categoriaLabel: 'Urgencia / Reanimación',
+                ubicacion: 'Bodega Urgencia B-05',
+                stockActual: 190,
+                stockMinimo: 250,
+                unidad: 'AMP',
+                lote: 'FK-3382-O',
+                vencimiento: '08/2027',
+                estadoStock: 'BAJO',
+                icono: 'ph-syringe'
+            },
+            {
+                sku: 'SAR-2040',
+                nombre: 'Catéter Venoso Periférico 20G',
+                descripcion: 'Bránula estéril con cámara de reflujo y bioseguridad pasiva.',
+                categoria: 'INSUMOS',
+                categoriaLabel: 'Insumos Médicos / EPP',
+                ubicacion: 'Estante Punción E-02',
+                stockActual: 1200,
+                stockMinimo: 400,
+                unidad: 'UN',
+                lote: 'BD-6612-V',
+                vencimiento: '03/2029',
+                estadoStock: 'OPTIMO',
+                icono: 'ph-first-aid-kit'
+            },
+            {
+                sku: 'SAR-1088',
+                nombre: 'Metamizol Sódico 1g/2ml Ampolla',
+                descripcion: 'Analgésico y antipirético inyectable de alta rotación en SAPU/SAR.',
+                categoria: 'FARMACOS',
+                categoriaLabel: 'Fármacos Clínicos',
+                ubicacion: 'Bodega A-08',
+                stockActual: 950,
+                stockMinimo: 500,
+                unidad: 'AMP',
+                lote: 'SN-5190-M',
+                vencimiento: '10/2027',
+                estadoStock: 'OPTIMO',
+                icono: 'ph-syringe'
+            }
+        ];
+
+        return {
+            sdcList,
+            ocList,
+            recepcionesList,
+            catalogoList,
+            filtroKanbanActivo: 'ALL',
+            filtroRecepcionActivo: 'ALL',
+            busquedaGlobal: ''
+        };
     }
 
     const estadoMemoria = inicializarDatosERP();
-
-    // =========================================================================
-    // 4. APPFLOW: RENDERIZADO DEL KANBAN CORPORATIVO Y DRAWER DE RECEPCIÓN
-    // =========================================================================
 
     function formatearFechaCorta(isoStr) {
         if (!isoStr) return 'S/F';
@@ -498,10 +577,607 @@
         return d.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' });
     }
 
+    function notificarERP(titulo, mensaje, tipo = 'success') {
+        if (typeof window.showToast === 'function') {
+            window.showToast(titulo, mensaje, tipo);
+        }
+    }
+
+    // =========================================================================
+    // 4. RENDERIZADO DINÁMICO DE LAS 5 VISTAS EN #view-erp-adquisiciones
+    // =========================================================================
+
     /**
-     * Abre el Drawer Lateral (Modal de Detalle y Recepción Parcial) al hacer clic
-     * en cualquier tarjeta del Tablero Kanban (#view-erp-adquisiciones o #view-adquisiciones).
+     * Renderiza el Tablero Kanban Corporativo de 4 Columnas (#erp-kanban-board)
+     * aplicando filtros por SLA, Recepción Parcial y Búsqueda Global.
      */
+    function renderizarKanbanCorporativo4Cols() {
+        const colSdc = document.getElementById('erp-col-cards-sdc');
+        const colPub = document.getElementById('erp-col-cards-publicada');
+        const colDesp = document.getElementById('erp-col-cards-despacho');
+        const colRec = document.getElementById('erp-col-cards-recepcionada');
+
+        if (!colSdc || !colPub || !colDesp || !colRec) return;
+
+        colSdc.innerHTML = '';
+        colPub.innerHTML = '';
+        colDesp.innerHTML = '';
+        colRec.innerHTML = '';
+
+        const counts = {
+            SDC_CREADA: 0,
+            PUBLICADA: 0,
+            EN_DESPACHO: 0,
+            RECEPCIONADA: 0
+        };
+
+        let totalParciales = 0;
+        let totalVencidos = 0;
+        const ahora = new Date();
+        const query = (estadoMemoria.busquedaGlobal || '').toLowerCase().trim();
+        const filtro = estadoMemoria.filtroKanbanActivo || 'ALL';
+
+        estadoMemoria.sdcList.forEach(sdc => {
+            const oc = estadoMemoria.ocList.find(o => o.sdc_id === sdc.id) || null;
+            const sla = oc ? oc.evaluarSLA(sdc.estado, ahora) : { status: 'en-plazo', label: 'En Análisis' };
+            const estadoRec = oc ? oc.getEstadoRecepcion() : 'PENDIENTE';
+            const pctRec = oc ? oc.getPorcentajeRecepcion() : 0;
+
+            if (estadoRec === 'PARCIAL') totalParciales++;
+            if (sla.status === 'vencido') totalVencidos++;
+
+            // Aplicar filtros del tablero
+            if (filtro === 'SLA_VENCIDO' && sla.status !== 'vencido') return;
+            if (filtro === 'PARCIAL' && estadoRec !== 'PARCIAL') return;
+
+            const cardId = oc ? oc.id : sdc.id;
+            const primerItem = oc ? (oc.items[0] || {}) : (sdc.itemsSolicitados[0] || {});
+            const tituloItem = primerItem.nombre || 'INSUMO CLÍNICO';
+            const subMeta = oc ? oc.proveedor : `Analista: ${sdc.creador}`;
+
+            if (query) {
+                const textoBusqueda = `${sdc.id} ${cardId} ${tituloItem} ${subMeta}`.toLowerCase();
+                if (!textoBusqueda.includes(query)) return;
+            }
+
+            // Determinar badge corporativo
+            let badgeClass = 'badge-sar-yellow';
+            let badgeLabel = 'En Análisis';
+            let derechaMeta = formatearFechaCorta(sdc.fecha);
+
+            if (sdc.estado === ESTADOS_KANBAN.PUBLICADA || sdc.estado === ESTADOS_KANBAN.OC_ACEPTADA) {
+                badgeClass = 'badge-sar-blue';
+                badgeLabel = 'Publicada';
+                derechaMeta = `Ref: ${sdc.id}`;
+            } else if (sdc.estado === ESTADOS_KANBAN.EN_DESPACHO) {
+                if (sla.status === 'vencido') {
+                    badgeClass = 'badge-sar-red';
+                    badgeLabel = sla.label;
+                    derechaMeta = 'SLA 5d Vencido';
+                } else {
+                    badgeClass = 'badge-sar-blue';
+                    badgeLabel = sla.label;
+                    derechaMeta = 'En Ruta';
+                }
+            } else if (sdc.estado === ESTADOS_KANBAN.RECEPCIONADA) {
+                if (estadoRec === 'PARCIAL') {
+                    badgeClass = 'badge-sar-orange';
+                    badgeLabel = 'Despacho Parcial';
+                    derechaMeta = `${pctRec}% Recibido`;
+                } else {
+                    badgeClass = 'badge-sar-green';
+                    badgeLabel = 'Conforme 100%';
+                    derechaMeta = `${pctRec}% Recibido`;
+                }
+            }
+
+            const cantTexto = oc && primerItem.cantidadPedida
+                ? ` (${primerItem.cantidadRecepcionada.toLocaleString('es-CL')} / ${primerItem.cantidadPedida.toLocaleString('es-CL')})`
+                : (primerItem.cantidadSolicitada ? ` (${primerItem.cantidadSolicitada.toLocaleString('es-CL')} ${primerItem.unidad || 'UN'})` : '');
+
+            const cardHTML = `
+                <article class="kanban-card" data-sdc-id="${sdc.id}" ${oc ? `data-oc-id="${oc.id}"` : ''}>
+                    <div class="kanban-card__header">
+                        <span class="kanban-card__id">${cardId}</span>
+                        <span class="badge ${badgeClass}">${badgeLabel}</span>
+                    </div>
+                    <h4 class="kanban-card__title">${tituloItem}${cantTexto}</h4>
+                    ${oc && pctRec > 0 ? `
+                        <div class="kanban-card__progress-track">
+                            <div class="kanban-card__progress-bar" style="width:${pctRec}%; background:${estadoRec === 'PARCIAL' ? 'var(--sar-orange)' : 'var(--sar-green)'};"></div>
+                        </div>
+                    ` : ''}
+                    <div class="kanban-card__meta">
+                        <span><i class="ph ${oc ? 'ph-buildings' : 'ph-user'}"></i> ${subMeta}</span>
+                        <span>${derechaMeta}</span>
+                    </div>
+                </article>
+            `;
+
+            if (sdc.estado === ESTADOS_KANBAN.SDC_CREADA) {
+                colSdc.insertAdjacentHTML('beforeend', cardHTML);
+                counts.SDC_CREADA++;
+            } else if (sdc.estado === ESTADOS_KANBAN.PUBLICADA || sdc.estado === ESTADOS_KANBAN.OC_ACEPTADA) {
+                colPub.insertAdjacentHTML('beforeend', cardHTML);
+                counts.PUBLICADA++;
+            } else if (sdc.estado === ESTADOS_KANBAN.EN_DESPACHO) {
+                colDesp.insertAdjacentHTML('beforeend', cardHTML);
+                counts.EN_DESPACHO++;
+            } else {
+                colRec.insertAdjacentHTML('beforeend', cardHTML);
+                counts.RECEPCIONADA++;
+            }
+        });
+
+        // Actualizar contadores de columnas
+        const setElText = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.textContent = String(val);
+        };
+
+        setElText('erp-col-count-sdc', counts.SDC_CREADA);
+        setElText('erp-col-count-publicada', counts.PUBLICADA);
+        setElText('erp-col-count-despacho', counts.EN_DESPACHO);
+        setElText('erp-col-count-recepcionada', counts.RECEPCIONADA);
+
+        // Actualizar KPIs del Kanban
+        setElText('erp-kanban-kpi-total', estadoMemoria.sdcList.length);
+        setElText('erp-kanban-kpi-parciales', totalParciales);
+        setElText('erp-kanban-kpi-vencidos', totalVencidos);
+
+        // Vincular eventos de clic a cada tarjeta generada
+        document.querySelectorAll('#erp-kanban-board .kanban-card').forEach(card => {
+            card.addEventListener('click', () => {
+                const sdcId = card.getAttribute('data-sdc-id');
+                const ocId = card.getAttribute('data-oc-id');
+                abrirDrawerDetalleKanban({ sdcId, ocId });
+            });
+        });
+    }
+
+    /**
+     * Renderiza la Tabla de Recepción Dinámica (#erp-recepcion-tbody)
+     */
+    function renderizarTablaRecepcionDinamica() {
+        const tbody = document.getElementById('erp-recepcion-tbody');
+        if (!tbody) return;
+
+        const searchInput = document.getElementById('erp-recepcion-search');
+        const query = ((searchInput ? searchInput.value : '') || estadoMemoria.busquedaGlobal || '').toLowerCase().trim();
+        const filtro = estadoMemoria.filtroRecepcionActivo || 'ALL';
+
+        let filasHTML = '';
+        let countConformes = 0;
+        let countDiscrepancias = 0;
+
+        estadoMemoria.ocList.forEach(oc => {
+            const estadoRec = oc.getEstadoRecepcion(); // 'PENDIENTE' | 'PARCIAL' | 'TOTAL'
+            if (estadoRec === 'TOTAL') countConformes++;
+            if (estadoRec === 'PARCIAL') countDiscrepancias++;
+
+            if (filtro !== 'ALL' && estadoRec !== filtro) return;
+
+            oc.items.forEach((item, itemIdx) => {
+                const textoFila = `${oc.id} ${oc.sdc_id} ${oc.proveedor} ${item.nombre} ${item.codigo}`.toLowerCase();
+                if (query && !textoFila.includes(query)) return;
+
+                let badgeHTML = '<span class="badge badge-sar-blue">Pendiente</span>';
+                if (item.cantidadRecepcionada >= item.cantidadPedida && item.cantidadPedida > 0) {
+                    badgeHTML = '<span class="badge badge-sar-green">Conforme 100%</span>';
+                } else if (item.cantidadRecepcionada > 0 && item.cantidadRecepcionada < item.cantidadPedida) {
+                    badgeHTML = '<span class="badge badge-sar-orange">Parcial / Discrepancia</span>';
+                }
+
+                filasHTML += `
+                    <tr>
+                        <td>
+                            <div style="font-family:monospace; font-weight:800; color:var(--sar-blue);">${oc.id}</div>
+                            <div style="font-size:11px; color:#64748B;">Origen: ${oc.sdc_id}</div>
+                        </td>
+                        <td>
+                            <div style="font-weight:700; color:#0F172A;">${oc.proveedor}</div>
+                            <div style="font-size:11px; color:#64748B;">Destino: ${item.centroDestino}</div>
+                        </td>
+                        <td>
+                            <div style="font-weight:700; color:#0F172A;">${item.nombre}</div>
+                            <div style="font-size:11px; color:#64748B; font-family:monospace;">SKU: ${item.codigo}</div>
+                        </td>
+                        <td style="text-align:right; font-weight:800; font-family:monospace;">
+                            ${item.cantidadPedida.toLocaleString('es-CL')}
+                        </td>
+                        <td style="text-align:right; font-weight:900; font-family:monospace; color:var(--sar-blue);">
+                            ${item.cantidadRecepcionada.toLocaleString('es-CL')}
+                        </td>
+                        <td style="text-align:center;">
+                            ${badgeHTML}
+                        </td>
+                        <td style="text-align:right;">
+                            <button type="button" class="erp-btn ${item.cantidadRecepcionada < item.cantidadPedida ? 'erp-btn--primary' : 'erp-btn--outline'}"
+                                style="padding:6px 12px; font-size:12px;"
+                                data-audit-oc="${oc.id}" data-audit-idx="${itemIdx}">
+                                <i class="ph-bold ph-clipboard-text"></i>
+                                ${item.cantidadRecepcionada < item.cantidadPedida ? 'Auditar' : 'Ver Acta'}
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+        });
+
+        if (!filasHTML) {
+            filasHTML = `
+                <tr>
+                    <td colspan="7" style="text-align:center; padding:32px; color:#64748B;">
+                        No se encontraron órdenes de compra para el criterio seleccionado.
+                    </td>
+                </tr>
+            `;
+        }
+
+        tbody.innerHTML = filasHTML;
+
+        // Actualizar KPIs de Recepción
+        const elPend = document.getElementById('erp-rec-kpi-pendientes');
+        const elConf = document.getElementById('erp-rec-kpi-conformes');
+        const elDisc = document.getElementById('erp-rec-kpi-discrepancias');
+        if (elPend) elPend.textContent = String(estadoMemoria.ocList.length);
+        if (elConf) elConf.textContent = String(countConformes);
+        if (elDisc) elDisc.textContent = String(countDiscrepancias);
+
+        // Vincular botones "Auditar" al Modal de Auditoría
+        tbody.querySelectorAll('[data-audit-oc]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const ocId = btn.getAttribute('data-audit-oc');
+                const itemIdx = Number(btn.getAttribute('data-audit-idx') || 0);
+                abrirModalAuditoriaRecepcion(ocId, itemIdx);
+            });
+        });
+    }
+
+    /**
+     * Abre el Modal de Auditoría de Recepción Dinámica (#erp-audit-modal-overlay)
+     * con cálculo de discrepancia y backorder en tiempo real.
+     */
+    function abrirModalAuditoriaRecepcion(ocId, itemIdx = 0) {
+        const modal = document.getElementById('erp-audit-modal-overlay');
+        if (!modal) return;
+
+        const oc = estadoMemoria.ocList.find(o => o.id === ocId) || estadoMemoria.ocList[0];
+        if (!oc) return;
+        const item = oc.items[itemIdx] || oc.items[0];
+        if (!item) return;
+
+        const titleEl = document.getElementById('erp-audit-modal-title');
+        const subEl = document.getElementById('erp-audit-modal-subtitle');
+        const nameEl = document.getElementById('erp-audit-item-name');
+        const skuEl = document.getElementById('erp-audit-item-sku');
+        const expEl = document.getElementById('erp-audit-expected-qty');
+        const prevEl = document.getElementById('erp-audit-prev-qty');
+        const destEl = document.getElementById('erp-audit-destino');
+        const inputQty = document.getElementById('erp-audit-input-qty');
+        const discBox = document.getElementById('erp-audit-discrepancy-box');
+        const discTitle = document.getElementById('erp-audit-discrepancy-title');
+        const discDesc = document.getElementById('erp-audit-discrepancy-desc');
+        const btnConfirm = document.getElementById('btn-erp-confirm-audit-modal');
+        const txtConfirm = document.getElementById('erp-audit-confirm-text');
+
+        if (titleEl) titleEl.textContent = `Auditoría de Recepción: ${oc.id}`;
+        if (subEl) subEl.textContent = `Proveedor: ${oc.proveedor} • SDC Origen: ${oc.sdc_id}`;
+        if (nameEl) nameEl.textContent = item.nombre;
+        if (skuEl) skuEl.textContent = `Código: ${item.codigo}`;
+        if (expEl) expEl.textContent = item.cantidadPedida.toLocaleString('es-CL');
+        if (prevEl) prevEl.textContent = item.cantidadRecepcionada.toLocaleString('es-CL');
+        if (destEl) destEl.textContent = item.centroDestino || 'SAR Central';
+
+        const actualizarCalculoDiscrepancia = () => {
+            const val = Math.max(0, Math.min(item.cantidadPedida, Number(inputQty.value) || 0));
+            const diff = item.cantidadPedida - val;
+
+            if (diff > 0) {
+                if (discBox) {
+                    discBox.style.borderLeftColor = 'var(--sar-orange)';
+                    discBox.style.background = 'rgba(232,93,30,0.08)';
+                }
+                if (discTitle) {
+                    discTitle.style.color = 'var(--sar-orange)';
+                    discTitle.textContent = `Recepción Parcial Detectada (-${diff.toLocaleString('es-CL')} u.)`;
+                }
+                if (discDesc) {
+                    discDesc.textContent = `Se generará acta parcial para ${oc.id} y se mantendrá abierto el saldo de ${diff.toLocaleString('es-CL')} unidades.`;
+                }
+                if (btnConfirm) {
+                    btnConfirm.className = 'erp-btn erp-btn--warning';
+                }
+                if (txtConfirm) txtConfirm.textContent = 'Confirmar Recepción Parcial';
+            } else {
+                if (discBox) {
+                    discBox.style.borderLeftColor = 'var(--sar-green)';
+                    discBox.style.background = 'rgba(140,198,63,0.12)';
+                }
+                if (discTitle) {
+                    discTitle.style.color = '#3f6212';
+                    discTitle.textContent = 'Conciliación Exacta 100% Conforme';
+                }
+                if (discDesc) {
+                    discDesc.textContent = `La cantidad verificada coincide con las ${item.cantidadPedida.toLocaleString('es-CL')} unidades solicitadas en la OC.`;
+                }
+                if (btnConfirm) {
+                    btnConfirm.className = 'erp-btn erp-btn--primary';
+                }
+                if (txtConfirm) txtConfirm.textContent = 'Confirmar Recepción Total (100%)';
+            }
+        };
+
+        if (inputQty) {
+            inputQty.max = String(item.cantidadPedida);
+            inputQty.value = String(item.cantidadRecepcionada > 0 ? item.cantidadRecepcionada : item.cantidadPedida);
+            inputQty.oninput = actualizarCalculoDiscrepancia;
+            actualizarCalculoDiscrepancia();
+        }
+
+        if (btnConfirm) {
+            btnConfirm.onclick = () => {
+                const nuevaCantidadAcum = Math.max(0, Math.min(item.cantidadPedida, Number(inputQty ? inputQty.value : 0) || 0));
+                const delta = Math.max(0, nuevaCantidadAcum - item.cantidadRecepcionada);
+                item.cantidadRecepcionada = nuevaCantidadAcum;
+                item.cantidadRecibida = nuevaCantidadAcum;
+
+                const esParcial = oc.getPorcentajeRecepcion() < 100;
+                const nuevaRec = new Recepcion({
+                    id: `REC-2026-${String(estadoMemoria.recepcionesList.length + 42).padStart(4, '0')}`,
+                    oc_id: oc.id,
+                    fecha: new Date().toISOString(),
+                    esParcial,
+                    actaConforme: true,
+                    detalleRecibido: [
+                        { codigo: item.codigo, nombre: item.nombre, cantidadIngresada: delta || nuevaCantidadAcum }
+                    ]
+                });
+                estadoMemoria.recepcionesList.unshift(nuevaRec);
+
+                const sdc = estadoMemoria.sdcList.find(s => s.id === oc.sdc_id);
+                if (sdc && nuevaCantidadAcum > 0) {
+                    sdc.estado = ESTADOS_KANBAN.RECEPCIONADA;
+                }
+
+                modal.classList.remove('active');
+                refrescarTodoElERP();
+                notificarERP(
+                    esParcial ? 'Auditoría Parcial Confirmada' : 'Acta Conforme 100% Emitida',
+                    `${oc.id}: ${item.nombre} actualizado a ${nuevaCantidadAcum.toLocaleString('es-CL')} / ${item.cantidadPedida.toLocaleString('es-CL')} u.`
+                );
+            };
+        }
+
+        modal.classList.add('active');
+    }
+
+    /**
+     * Renderiza el Catálogo Maestro de Insumos (#erp-catalog-grid)
+     */
+    function renderizarCatalogoInsumos() {
+        const grid = document.getElementById('erp-catalog-grid');
+        if (!grid) return;
+
+        const searchInput = document.getElementById('erp-catalog-search');
+        const catSelect = document.getElementById('erp-catalog-category-filter');
+        const statusSelect = document.getElementById('erp-catalog-status-filter');
+
+        const query = ((searchInput ? searchInput.value : '') || estadoMemoria.busquedaGlobal || '').toLowerCase().trim();
+        const catFilter = catSelect ? catSelect.value : 'ALL';
+        const statusFilter = statusSelect ? statusSelect.value : 'ALL';
+
+        const filtrados = estadoMemoria.catalogoList.filter(prod => {
+            if (catFilter !== 'ALL' && prod.categoria !== catFilter) return false;
+            if (statusFilter !== 'ALL' && prod.estadoStock !== statusFilter) return false;
+            if (query) {
+                const txt = `${prod.sku} ${prod.nombre} ${prod.descripcion} ${prod.lote} ${prod.ubicacion}`.toLowerCase();
+                if (!txt.includes(query)) return false;
+            }
+            return true;
+        });
+
+        if (filtrados.length === 0) {
+            grid.innerHTML = `
+                <div class="erp-card" style="grid-column: 1 / -1; text-align:center; padding:32px; color:#64748B;">
+                    No se encontraron insumos clínicos que coincidan con el filtro aplicado.
+                </div>
+            `;
+            return;
+        }
+
+        grid.innerHTML = filtrados.map(prod => {
+            let badgeClass = 'badge-sar-green';
+            let badgeText = 'Stock Óptimo';
+            let barColor = 'var(--sar-green)';
+
+            if (prod.estadoStock === 'CRITICO') {
+                badgeClass = 'badge-sar-red';
+                badgeText = 'Quiebre Crítico';
+                barColor = 'var(--sar-red)';
+            } else if (prod.estadoStock === 'BAJO') {
+                badgeClass = 'badge-sar-orange';
+                badgeText = 'Stock Bajo';
+                barColor = 'var(--sar-orange)';
+            }
+
+            const pct = Math.min(100, Math.round((prod.stockActual / Math.max(1, prod.stockMinimo * 2)) * 100));
+
+            return `
+                <article class="erp-catalog-card">
+                    <div class="erp-catalog-card__visual">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-family:monospace; font-size:11px; font-weight:800; background:#ffffff; color:var(--sar-blue); padding:3px 8px; border:1px solid #E2E8F0; border-radius:var(--shape-card);">
+                                ${prod.sku}
+                            </span>
+                            <span style="font-size:11px; font-weight:700; color:#475569;">
+                                <i class="ph-fill ph-map-pin" style="color:var(--sar-blue);"></i> ${prod.ubicacion}
+                            </span>
+                        </div>
+                        <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+                            <span style="font-size:10px; font-weight:800; text-transform:uppercase; color:var(--sar-blue); background:rgba(26,54,104,0.08); padding:3px 8px; border-radius:var(--shape-card);">
+                                ${prod.categoriaLabel}
+                            </span>
+                            <i class="ph-duotone ${prod.icono}" style="font-size:36px; color:rgba(26,54,104,0.35);"></i>
+                        </div>
+                    </div>
+
+                    <div class="erp-catalog-card__body">
+                        <div>
+                            <h4 style="margin:0; font-size:14px; font-weight:800; color:#0F172A; line-height:1.3;">${prod.nombre}</h4>
+                            <p style="margin:4px 0 0 0; font-size:12px; color:#64748B; line-height:1.4;">${prod.descripcion}</p>
+                        </div>
+
+                        <div class="erp-catalog-card__stock-box">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                <span style="font-size:10px; font-weight:800; text-transform:uppercase; color:#64748B;">Disponibilidad</span>
+                                <span class="badge ${badgeClass}">${badgeText}</span>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; align-items:baseline;">
+                                <span style="font-size:18px; font-weight:900; color:#0F172A;">
+                                    ${prod.stockActual.toLocaleString('es-CL')} <small style="font-size:11px; font-weight:600; color:#64748B;">${prod.unidad}</small>
+                                </span>
+                                <span style="font-size:11px; color:#64748B;">Mín: ${prod.stockMinimo.toLocaleString('es-CL')}</span>
+                            </div>
+                            <div class="kanban-card__progress-track" style="margin-top:8px;">
+                                <div class="kanban-card__progress-bar" style="width:${pct}%; background:${barColor};"></div>
+                            </div>
+                        </div>
+
+                        <div style="display:flex; justify-content:space-between; font-size:11px; color:#64748B;">
+                            <span>Lote: <strong style="font-family:monospace; color:#334155;">${prod.lote}</strong></span>
+                            <span>Vence: <strong style="color:#334155;">${prod.vencimiento}</strong></span>
+                        </div>
+                    </div>
+
+                    <div class="erp-catalog-card__footer">
+                        <button type="button" class="erp-btn ${prod.estadoStock === 'CRITICO' ? 'erp-btn--danger' : 'erp-btn--primary'}"
+                            style="width:100%;" data-catalog-solicitar="${prod.sku}">
+                            <i class="ph-bold ph-plus-circle"></i>
+                            ${prod.estadoStock === 'CRITICO' ? 'Generar SDC Urgente' : 'Incluir en Nueva SDC'}
+                        </button>
+                    </div>
+                </article>
+            `;
+        }).join('');
+
+        // Vincular botones para crear SDC desde el catálogo
+        grid.querySelectorAll('[data-catalog-solicitar]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const sku = btn.getAttribute('data-catalog-solicitar');
+                const prod = estadoMemoria.catalogoList.find(p => p.sku === sku);
+                if (!prod) return;
+                crearNuevaSDCDesdeCatalogo(prod);
+            });
+        });
+    }
+
+    /**
+     * Renderiza la Tabla de Despachos a Red Asistencial (Cross-Docking)
+     */
+    function renderizarTablaDespachosRed() {
+        const tbody = document.getElementById('erp-despachos-tbody');
+        if (!tbody) return;
+
+        let html = '';
+        estadoMemoria.ocList.forEach(oc => {
+            oc.items.forEach(item => {
+                const disponible = item.cantidadRecepcionada;
+                const listo = disponible > 0;
+                html += `
+                    <tr>
+                        <td>
+                            <div style="font-family:monospace; font-weight:800; color:var(--sar-blue);">${oc.id}</div>
+                            <div style="font-size:11px; color:#64748B;">SDC: ${oc.sdc_id}</div>
+                        </td>
+                        <td>
+                            <div style="font-weight:700; color:#0F172A;">${item.nombre}</div>
+                            <div style="font-size:11px; color:#64748B; font-family:monospace;">${item.codigo}</div>
+                        </td>
+                        <td>
+                            <span style="font-weight:700; color:var(--sar-blue);">
+                                <i class="ph-fill ph-hospital"></i> ${item.centroDestino}
+                            </span>
+                        </td>
+                        <td style="text-align:right; font-weight:800; font-family:monospace;">
+                            ${item.cantidadPedida.toLocaleString('es-CL')}
+                        </td>
+                        <td style="text-align:right; font-weight:900; font-family:monospace; color:${listo ? 'var(--sar-green)' : '#94A3B8'};">
+                            ${disponible.toLocaleString('es-CL')}
+                        </td>
+                        <td style="text-align:center;">
+                            <span class="badge ${listo ? 'badge-sar-green' : 'badge-sar-yellow'}">
+                                ${listo ? 'Listo para Despacho' : 'En Espera Recepción'}
+                            </span>
+                        </td>
+                        <td style="text-align:right;">
+                            <button type="button" class="erp-btn ${listo ? 'erp-btn--primary' : 'erp-btn--outline'}"
+                                style="padding:6px 12px; font-size:12px;"
+                                data-despachar-oc="${oc.id}" data-despachar-destino="${item.centroDestino}">
+                                <i class="ph-bold ph-paper-plane-tilt"></i> Despachar
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            });
+        });
+
+        tbody.innerHTML = html;
+
+        tbody.querySelectorAll('[data-despachar-oc]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const ocId = btn.getAttribute('data-despachar-oc');
+                const dest = btn.getAttribute('data-despachar-destino');
+                notificarERP(
+                    'Guía Cross-Docking Emitida',
+                    `Despacho en ruta hacia ${dest} (Ref: ${ocId}).`
+                );
+            });
+        });
+    }
+
+    /**
+     * Crea una nueva Solicitud de Compra (SDC) y la agrega a la Columna 1 del Kanban.
+     */
+    function crearNuevaSDCDesdeCatalogo(prod = null) {
+        const correlativo = estadoMemoria.sdcList.length + 102;
+        const nuevoId = `SDC-2026-${correlativo}`;
+        const item = prod
+            ? {
+                codigo: prod.sku,
+                nombre: prod.nombre.toUpperCase(),
+                cantidadSolicitada: Math.max(500, prod.stockMinimo * 2),
+                unidad: prod.unidad,
+                centroDestino: 'SAR Santiago Norte'
+            }
+            : {
+                codigo: 'SAR-2040',
+                nombre: 'CATÉTER VENOSO PERIFÉRICO 20G',
+                cantidadSolicitada: 1000,
+                unidad: 'UN',
+                centroDestino: 'SAR Urgencias'
+            };
+
+        const nuevaSdc = new SDC({
+            id: nuevoId,
+            fecha: new Date().toISOString(),
+            creador: 'Admin SAR (Abastecimiento)',
+            estado: ESTADOS_KANBAN.SDC_CREADA,
+            itemsSolicitados: [item]
+        });
+
+        estadoMemoria.sdcList.unshift(nuevaSdc);
+        refrescarTodoElERP();
+        activarPanelERP('erp-panel-tablero');
+        notificarERP(
+            'Nueva SDC Creada',
+            `${nuevoId} incorporada a la columna "SDC Creada" (${item.nombre}).`
+        );
+    }
+
+    // =========================================================================
+    // 5. DRAWER LATERAL DE DETALLE Y RECEPCIÓN PARCIAL
+    // =========================================================================
     function abrirDrawerDetalleKanban({ sdcId, ocId }) {
         const overlay = document.getElementById('erp-kanban-drawer-overlay');
         const bodyContainer = document.getElementById('erp-drawer-body');
@@ -560,42 +1236,44 @@
                 <h4 class="erp-drawer__section-title">
                     <i class="ph-fill ph-package"></i> Detalle de Productos y Recepción Parcial
                 </h4>
-                <table class="erp-items-table">
-                    <thead>
-                        <tr>
-                            <th>Insumo / Destino</th>
-                            <th>Pedido</th>
-                            <th>Recibido</th>
-                            <th>Nuevo Ingreso</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${itemsMostrar.map((item, idx) => {
-                            const pendiente = Math.max(0, item.cantidadPedida - item.cantidadRecepcionada);
-                            return `
-                                <tr>
-                                    <td>
-                                        <div style="font-weight:700; color:#0f172a;">${item.nombre}</div>
-                                        <div style="font-size:11px; color:#64748b;">${item.codigo} • Destino: <strong>${item.centroDestino || 'SAR Central'}</strong></div>
-                                    </td>
-                                    <td style="font-weight:700;">${item.cantidadPedida.toLocaleString('es-CL')}</td>
-                                    <td style="font-weight:700; color:var(--sar-blue);">${item.cantidadRecepcionada.toLocaleString('es-CL')}</td>
-                                    <td>
-                                        ${oc ? `
-                                            <input type="number"
-                                                class="erp-input-qty"
-                                                data-item-index="${idx}"
-                                                min="0"
-                                                max="${pendiente}"
-                                                value="${pendiente}"
-                                                ${pendiente === 0 ? 'disabled' : ''}>
-                                        ` : '<span style="font-size:11px; color:#94a3b8;">Sin OC aún</span>'}
-                                    </td>
-                                </tr>
-                            `;
-                        }).join('')}
-                    </tbody>
-                </table>
+                <div class="erp-table-scroll">
+                    <table class="erp-items-table">
+                        <thead>
+                            <tr>
+                                <th>Insumo / Destino</th>
+                                <th>Pedido</th>
+                                <th>Recibido</th>
+                                <th>Nuevo Ingreso</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${itemsMostrar.map((item, idx) => {
+                                const pendiente = Math.max(0, item.cantidadPedida - item.cantidadRecepcionada);
+                                return `
+                                    <tr>
+                                        <td>
+                                            <div style="font-weight:700; color:#0f172a;">${item.nombre}</div>
+                                            <div style="font-size:11px; color:#64748b;">${item.codigo} • Destino: <strong>${item.centroDestino || 'SAR Central'}</strong></div>
+                                        </td>
+                                        <td style="font-weight:700;">${item.cantidadPedida.toLocaleString('es-CL')}</td>
+                                        <td style="font-weight:700; color:var(--sar-blue);">${item.cantidadRecepcionada.toLocaleString('es-CL')}</td>
+                                        <td>
+                                            ${oc ? `
+                                                <input type="number"
+                                                    class="erp-input-qty"
+                                                    data-item-index="${idx}"
+                                                    min="0"
+                                                    max="${pendiente}"
+                                                    value="${pendiente}"
+                                                    ${pendiente === 0 ? 'disabled' : ''}>
+                                            ` : '<span style="font-size:11px; color:#94a3b8;">Sin OC aún</span>'}
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
 
                 ${oc ? `
                     <div style="margin-top: 14px; display:flex; align-items:center; justify-content:space-between; gap:12px; background:#f8fafc; padding:10px 12px; border-radius:var(--shape-card); border:1px solid #e2e8f0;">
@@ -639,10 +1317,6 @@
         overlay.classList.add('active');
     }
 
-    /**
-     * Procesa el formulario del Drawer Lateral, crea una instancia `Recepcion`,
-     * actualiza `cantidadRecepcionada` en la `OC` y refresca ambos tableros Kanban.
-     */
     function registrarRecepcionDesdeDrawer(oc, sdc) {
         const overlay = document.getElementById('erp-kanban-drawer-overlay');
         const inputs = overlay ? overlay.querySelectorAll('.erp-input-qty') : [];
@@ -689,65 +1363,176 @@
             sdc.estado = ESTADOS_KANBAN.RECEPCIONADA;
         }
 
-        // Refrescar vistas Kanban y reabrir el drawer actualizado
-        renderizarTableroKanban5Cols();
-        sincronizarTarjetasKanbanCorporativo();
+        refrescarTodoElERP();
         abrirDrawerDetalleKanban({ sdcId: sdc ? sdc.id : null, ocId: oc.id });
 
-        if (typeof window.showToast === 'function') {
-            window.showToast(
-                esParcial ? 'Recepción Parcial Registrada' : 'Recepción Total Conforme',
-                `${nuevaRecepcion.id} vinculada a ${oc.id} (${oc.getPorcentajeRecepcion()}% recibido).`,
-                'success'
-            );
-        }
-    }
-
-    /**
-     * Vincula eventos de clic a las tarjetas del Kanban Corporativo (#view-erp-adquisiciones)
-     * y su navegación lateral.
-     */
-    function sincronizarTarjetasKanbanCorporativo() {
-        const erpSection = document.getElementById('view-erp-adquisiciones');
-        if (!erpSection) return;
-
-        const cards = erpSection.querySelectorAll('.kanban-card');
-        cards.forEach(card => {
-            if (card.dataset.boundClick === 'true') return;
-            card.dataset.boundClick = 'true';
-            card.style.cursor = 'pointer';
-            card.addEventListener('click', () => {
-                const idText = card.querySelector('.kanban-card__id')?.textContent?.trim() || '';
-                if (idText.startsWith('OC-')) {
-                    abrirDrawerDetalleKanban({ ocId: idText });
-                } else {
-                    abrirDrawerDetalleKanban({ sdcId: idText });
-                }
-            });
-        });
-
-        // Navegación del menú lateral de #view-erp-adquisiciones
-        const navBtns = erpSection.querySelectorAll('.erp-sidebar__item');
-        const panels = erpSection.querySelectorAll('.erp-main-view-panel');
-        navBtns.forEach(btn => {
-            if (btn.dataset.boundNav === 'true') return;
-            btn.dataset.boundNav = 'true';
-            btn.addEventListener('click', () => {
-                const targetId = btn.getAttribute('data-erp-panel');
-                navBtns.forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-
-                if (panels.length > 0 && targetId) {
-                    panels.forEach(p => {
-                        p.style.display = p.id === targetId ? 'block' : 'none';
-                    });
-                }
-            });
-        });
+        notificarERP(
+            esParcial ? 'Recepción Parcial Registrada' : 'Recepción Total Conforme',
+            `${nuevaRecepcion.id} vinculada a ${oc.id} (${oc.getPorcentajeRecepcion()}% recibido).`
+        );
     }
 
     // =========================================================================
-    // 5. COMPATIBILIDAD CON TABLERO DE 5 COLUMNAS (#view-adquisiciones)
+    // 6. NAVEGACIÓN INTERNA, MENÚ HAMBURGUESA MÓVIL Y FILTROS
+    // =========================================================================
+    function cerrarMenuMovilERP() {
+        const sidebar = document.getElementById('erp-sidebar-nav');
+        const backdrop = document.getElementById('erp-mobile-backdrop');
+        if (sidebar) sidebar.classList.remove('mobile-open');
+        if (backdrop) backdrop.classList.remove('active');
+    }
+
+    function activarPanelERP(targetPanelId) {
+        const erpSection = document.getElementById('view-erp-adquisiciones');
+        if (!erpSection || !targetPanelId) return;
+
+        const navBtns = erpSection.querySelectorAll('.erp-sidebar__item');
+        const panels = erpSection.querySelectorAll('.erp-main-view-panel');
+        const breadcrumbCurrent = document.getElementById('erp-breadcrumb-current');
+
+        navBtns.forEach(btn => {
+            const isMatch = btn.getAttribute('data-erp-panel') === targetPanelId;
+            btn.classList.toggle('active', isMatch);
+            if (isMatch && breadcrumbCurrent) {
+                breadcrumbCurrent.textContent = btn.getAttribute('data-erp-title') || btn.textContent.trim();
+            }
+        });
+
+        panels.forEach(panel => {
+            panel.style.display = panel.id === targetPanelId ? 'block' : 'none';
+        });
+
+        cerrarMenuMovilERP();
+    }
+
+    function inicializarControlesERP() {
+        const erpSection = document.getElementById('view-erp-adquisiciones');
+        if (!erpSection || erpSection.dataset.erpInitialized === 'true') return;
+        erpSection.dataset.erpInitialized = 'true';
+
+        // 1. Navegación Sidebar
+        erpSection.querySelectorAll('.erp-sidebar__item').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetId = btn.getAttribute('data-erp-panel');
+                activarPanelERP(targetId);
+            });
+        });
+
+        // 2. Accesos rápidos que cambian de sub-panel
+        erpSection.querySelectorAll('[data-erp-goto-panel]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const targetId = btn.getAttribute('data-erp-goto-panel');
+                activarPanelERP(targetId);
+            });
+        });
+
+        // 3. Botones de Acción Inmediata en Dashboard que abren el Modal de Auditoría
+        erpSection.querySelectorAll('[data-erp-open-audit]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const ocId = btn.getAttribute('data-erp-open-audit');
+                abrirModalAuditoriaRecepcion(ocId, 0);
+            });
+        });
+
+        // 4. Menú Hamburguesa Móvil
+        const btnOpenMobile = document.getElementById('btn-erp-mobile-menu');
+        const btnCloseMobile = document.getElementById('btn-erp-close-mobile-menu');
+        const backdrop = document.getElementById('erp-mobile-backdrop');
+        const sidebar = document.getElementById('erp-sidebar-nav');
+
+        if (btnOpenMobile && sidebar) {
+            btnOpenMobile.addEventListener('click', () => {
+                sidebar.classList.add('mobile-open');
+                if (backdrop) backdrop.classList.add('active');
+            });
+        }
+        if (btnCloseMobile) btnCloseMobile.addEventListener('click', cerrarMenuMovilERP);
+        if (backdrop) backdrop.addEventListener('click', cerrarMenuMovilERP);
+
+        // 5. Filtros del Kanban
+        erpSection.querySelectorAll('.erp-kanban-filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                erpSection.querySelectorAll('.erp-kanban-filter-btn').forEach(b => {
+                    b.classList.remove('erp-btn--primary');
+                    b.classList.add('erp-btn--outline');
+                });
+                btn.classList.remove('erp-btn--outline');
+                btn.classList.add('erp-btn--primary');
+                estadoMemoria.filtroKanbanActivo = btn.getAttribute('data-kanban-filter') || 'ALL';
+                renderizarKanbanCorporativo4Cols();
+            });
+        });
+
+        // 6. Filtros de Recepción Dinámica
+        erpSection.querySelectorAll('.erp-rec-filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                erpSection.querySelectorAll('.erp-rec-filter-btn').forEach(b => {
+                    b.classList.remove('erp-btn--primary');
+                    b.classList.add('erp-btn--outline');
+                });
+                btn.classList.remove('erp-btn--outline');
+                btn.classList.add('erp-btn--primary');
+                estadoMemoria.filtroRecepcionActivo = btn.getAttribute('data-rec-filter') || 'ALL';
+                renderizarTablaRecepcionDinamica();
+            });
+        });
+
+        const recSearch = document.getElementById('erp-recepcion-search');
+        if (recSearch) {
+            recSearch.addEventListener('input', renderizarTablaRecepcionDinamica);
+        }
+
+        // 7. Búsqueda y Filtros del Catálogo de Insumos
+        const catSearch = document.getElementById('erp-catalog-search');
+        const catCategory = document.getElementById('erp-catalog-category-filter');
+        const catStatus = document.getElementById('erp-catalog-status-filter');
+        if (catSearch) catSearch.addEventListener('input', renderizarCatalogoInsumos);
+        if (catCategory) catCategory.addEventListener('change', renderizarCatalogoInsumos);
+        if (catStatus) catStatus.addEventListener('change', renderizarCatalogoInsumos);
+
+        // 8. Buscador Global en Topbar ERP
+        const globalSearch = document.getElementById('erp-global-search');
+        if (globalSearch) {
+            globalSearch.addEventListener('input', () => {
+                estadoMemoria.busquedaGlobal = globalSearch.value || '';
+                renderizarKanbanCorporativo4Cols();
+                renderizarTablaRecepcionDinamica();
+                renderizarCatalogoInsumos();
+            });
+        }
+
+        // 9. Botón "+ Nueva SDC" y "Actualizar Datos"
+        const btnNuevaSdc = document.getElementById('btn-erp-nueva-sdc');
+        if (btnNuevaSdc) {
+            btnNuevaSdc.addEventListener('click', () => crearNuevaSDCDesdeCatalogo(null));
+        }
+
+        const btnRefreshDash = document.getElementById('btn-erp-refresh-dashboard');
+        if (btnRefreshDash) {
+            btnRefreshDash.addEventListener('click', () => {
+                refrescarTodoElERP();
+                notificarERP('Nodo SAR Sincronizado', 'Indicadores de abastecimiento y SLA actualizados.');
+            });
+        }
+
+        // 10. Cerrar Modal de Auditoría
+        const modalAudit = document.getElementById('erp-audit-modal-overlay');
+        const btnCloseAudit = document.getElementById('btn-erp-close-audit-modal');
+        const btnCancelAudit = document.getElementById('btn-erp-cancel-audit-modal');
+        const cerrarAudit = () => {
+            if (modalAudit) modalAudit.classList.remove('active');
+        };
+        if (btnCloseAudit) btnCloseAudit.addEventListener('click', cerrarAudit);
+        if (btnCancelAudit) btnCancelAudit.addEventListener('click', cerrarAudit);
+        if (modalAudit) {
+            modalAudit.addEventListener('click', (e) => {
+                if (e.target === modalAudit) cerrarAudit();
+            });
+        }
+    }
+
+    // =========================================================================
+    // 7. COMPATIBILIDAD CON TABLERO DE 5 COLUMNAS (#view-adquisiciones)
     // =========================================================================
     function crearCardKanban5ColsHTML(sdc, ocAsociada) {
         const ahora = new Date();
@@ -853,7 +1638,6 @@
             }
         });
 
-        // Permitir clic en tarjetas de #view-adquisiciones para abrir el mismo Drawer
         document.querySelectorAll('#view-adquisiciones .kanban-card').forEach(card => {
             card.addEventListener('click', () => {
                 abrirDrawerDetalleKanban({
@@ -903,11 +1687,19 @@
         }
     }
 
+    function refrescarTodoElERP() {
+        renderizarTableroKanban5Cols();
+        renderizarKanbanCorporativo4Cols();
+        renderizarTablaRecepcionDinamica();
+        renderizarCatalogoInsumos();
+        renderizarTablaDespachosRed();
+    }
+
     function initModuloAdquisiciones() {
         inicializarSubTabsAdquisiciones();
-        renderizarTableroKanban5Cols();
-        sincronizarTarjetasKanbanCorporativo();
+        inicializarControlesERP();
         inicializarEventosDrawer();
+        refrescarTodoElERP();
     }
 
     if (document.readyState === 'loading') {
@@ -921,16 +1713,16 @@
         ESTADOS_KANBAN,
         SLA_LIMITS_HOURS,
         BACKEND_SCHEMAS,
-        // Clases oficiales del Backend Schema (PRD/TRD)
         SDC,
         OC,
         Recepcion,
-        // Alias de retrocompatibilidad Fase 1
         ModeloSDC: SDC,
         ModeloOC: OC,
         estadoMemoria,
         abrirDrawerDetalleKanban,
-        renderizarTableroKanban: renderizarTableroKanban5Cols,
+        abrirModalAuditoriaRecepcion,
+        activarPanelERP,
+        renderizarTableroKanban: refrescarTodoElERP,
         initModuloAdquisiciones
     };
 

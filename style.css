@@ -2661,3 +2661,736 @@ main.erp-content {
 .btn-sar-primary:hover {
     opacity: 0.94;
 }
+
+
+/* ==========================================================================
+   AUDITORÍA UI/UX SENIOR & MAQUETACIÓN PIXEL-PERFECT ERP "VISOR LOGÍSTICO"
+   Vistas: 1. Dashboard | 2. Kanban SDC/OC | 3. Recepción + Audit Modal | 4. Catálogo
+   Geometría Estricta: --shape-card: 8px 8px 8px 0px | Sistema 8px / 16px / 24px
+   ========================================================================== */
+
+/* 1. Regla Geométrica Estricta (--shape-card: 8px 8px 8px 0px) */
+#view-erp-adquisiciones .erp-card,
+#view-erp-adquisiciones .erp-kpi-card,
+#view-erp-adquisiciones .erp-widget,
+#view-erp-adquisiciones .kanban-col,
+#view-erp-adquisiciones .kanban-card,
+#view-erp-adquisiciones .erp-btn,
+#view-erp-adquisiciones .btn-sar-primary,
+#view-erp-adquisiciones .erp-input,
+#view-erp-adquisiciones .erp-select,
+#view-erp-adquisiciones .erp-badge,
+#view-erp-adquisiciones span.badge,
+#view-erp-adquisiciones .erp-modal-dialog,
+#view-erp-adquisiciones .erp-drawer,
+#view-erp-adquisiciones .erp-catalog-card,
+#view-erp-adquisiciones .erp-shortcut-card,
+#view-erp-adquisiciones .erp-alert-item,
+#view-erp-adquisiciones .erp-table-container,
+#view-erp-adquisiciones .erp-filter-bar,
+#view-erp-adquisiciones .erp-sidebar__item {
+    border-radius: var(--shape-card) !important;
+}
+
+/* 2. Micro-interacciones Premium: Transiciones Suaves, Hover y Scrollbars */
+#view-erp-adquisiciones button,
+#view-erp-adquisiciones a,
+#view-erp-adquisiciones .erp-btn,
+#view-erp-adquisiciones .erp-sidebar__item,
+#view-erp-adquisiciones .erp-filter-chip {
+    transition: all 0.3s ease;
+}
+
+#view-erp-adquisiciones .erp-card,
+#view-erp-adquisiciones .erp-kpi-card,
+#view-erp-adquisiciones .kanban-card,
+#view-erp-adquisiciones .erp-catalog-card,
+#view-erp-adquisiciones .erp-shortcut-card {
+    transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+#view-erp-adquisiciones .erp-kpi-card:hover,
+#view-erp-adquisiciones .kanban-card:hover,
+#view-erp-adquisiciones .erp-catalog-card:hover,
+#view-erp-adquisiciones .erp-shortcut-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px -4px rgba(26, 54, 104, 0.12), 0 4px 10px -2px rgba(15, 23, 42, 0.06);
+}
+
+/* Scrollbars Minimalistas Corporativos */
+#view-erp-adquisiciones ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+#view-erp-adquisiciones ::-webkit-scrollbar-track {
+    background: #F1F5F9;
+}
+
+#view-erp-adquisiciones ::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 3px;
+}
+
+#view-erp-adquisiciones ::-webkit-scrollbar-thumb:hover {
+    background: var(--sar-blue);
+}
+
+/* 3. Estructura Global del ERP y Topbar Interna */
+#view-erp-adquisiciones.erp-layout {
+    position: relative;
+    background-color: var(--sar-bg-app);
+    color: #0F172A;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
+
+.erp-sidebar-backdrop {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(3px);
+    z-index: 998;
+}
+
+.erp-sidebar-backdrop.active {
+    display: block;
+}
+
+.erp-sidebar__item.active {
+    background-color: rgba(255, 255, 255, 0.16) !important;
+    color: #ffffff !important;
+    border-left: 4px solid var(--sar-red) !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.14);
+}
+
+.erp-sidebar__footer {
+    margin-top: auto;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.erp-sidebar__node-box {
+    background: rgba(0, 0, 0, 0.22);
+    padding: 12px;
+    border-radius: var(--shape-card);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Topbar del Área Principal ERP */
+.erp-topbar {
+    background: #ffffff;
+    border: 1px solid #E2E8F0;
+    border-radius: var(--shape-card);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+
+.erp-topbar__left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.erp-hamburger-btn {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    background: var(--sar-blue);
+    color: #ffffff;
+    border: none;
+    border-radius: var(--shape-card);
+    cursor: pointer;
+    font-size: 20px;
+}
+
+.erp-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #64748B;
+    flex-wrap: wrap;
+}
+
+.erp-breadcrumb__current {
+    font-weight: 700;
+    color: var(--sar-blue);
+}
+
+.erp-topbar__right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.erp-search-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.erp-search-box i {
+    position: absolute;
+    left: 12px;
+    color: #94A3B8;
+    font-size: 16px;
+    pointer-events: none;
+}
+
+.erp-input {
+    padding: 8px 12px 8px 36px;
+    background: var(--sar-bg-app);
+    border: 1px solid #CBD5E1;
+    font-size: 13px;
+    color: #0F172A;
+    outline: none;
+    min-width: 240px;
+    transition: all 0.3s ease;
+}
+
+.erp-input:focus,
+.erp-select:focus {
+    background: #ffffff;
+    border-color: var(--sar-blue);
+    box-shadow: 0 0 0 3px rgba(26, 54, 104, 0.12);
+}
+
+.erp-select {
+    padding: 8px 12px;
+    background: #ffffff;
+    border: 1px solid #CBD5E1;
+    font-size: 13px;
+    font-weight: 600;
+    color: #334155;
+    outline: none;
+    cursor: pointer;
+}
+
+/* Botones Corporativos ERP (Sistema 8px/16px) */
+.erp-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    border: 1px solid transparent;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.erp-btn--primary {
+    background-color: var(--sar-blue);
+    color: #ffffff;
+}
+
+.erp-btn--primary:hover {
+    background-color: #12274d;
+    box-shadow: 0 4px 12px rgba(26, 54, 104, 0.22);
+}
+
+.erp-btn--danger {
+    background-color: var(--sar-red);
+    color: #ffffff;
+}
+
+.erp-btn--danger:hover {
+    background-color: #a8141b;
+}
+
+.erp-btn--warning {
+    background-color: var(--sar-orange);
+    color: #ffffff;
+}
+
+.erp-btn--warning:hover {
+    background-color: #c94c14;
+}
+
+.erp-btn--success {
+    background-color: var(--sar-green);
+    color: #ffffff;
+}
+
+.erp-btn--outline {
+    background-color: #ffffff;
+    color: #334155;
+    border-color: #CBD5E1;
+}
+
+.erp-btn--outline:hover {
+    border-color: var(--sar-blue);
+    color: var(--sar-blue);
+    background-color: #F8FAFC;
+}
+
+/* 4. Grillas de KPIs y Tarjetas (8px / 16px / 24px) */
+.erp-kpi-grid-4 {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.erp-kpi-grid-3 {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.erp-kpi-card {
+    background: #ffffff;
+    border: 1px solid #E2E8F0;
+    padding: 16px 24px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 8px;
+    position: relative;
+    overflow: hidden;
+}
+
+.erp-kpi-card--blue { border-left: 4px solid var(--sar-blue); }
+.erp-kpi-card--red { border-left: 4px solid var(--sar-red); }
+.erp-kpi-card--orange { border-left: 4px solid var(--sar-orange); }
+.erp-kpi-card--yellow { border-left: 4px solid var(--sar-yellow); }
+.erp-kpi-card--green { border-left: 4px solid var(--sar-green); }
+
+.erp-kpi-card__top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.erp-kpi-card__label {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #64748B;
+}
+
+.erp-kpi-card__value {
+    font-size: 28px;
+    font-weight: 900;
+    color: #0F172A;
+    line-height: 1.1;
+}
+
+.erp-kpi-card__meta {
+    font-size: 12px;
+    color: #64748B;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* 5. VISTA 1: DASHBOARD PRINCIPAL (Gráfico + Acción Inmediata + Accesos Rápidos) */
+.erp-dashboard-mid-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+}
+
+.erp-card {
+    background: #ffffff;
+    border: 1px solid #E2E8F0;
+    padding: 24px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.erp-alert-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.erp-alert-item {
+    padding: 16px;
+    border: 1px solid #E2E8F0;
+    background: #F8FAFC;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.erp-alert-item--red {
+    background: rgba(204, 27, 35, 0.05);
+    border-color: rgba(204, 27, 35, 0.22);
+}
+
+.erp-alert-item--orange {
+    background: rgba(232, 93, 30, 0.06);
+    border-color: rgba(232, 93, 30, 0.25);
+}
+
+.erp-shortcuts-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+}
+
+.erp-shortcut-card {
+    background: #ffffff;
+    border: 1px solid #E2E8F0;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    cursor: pointer;
+    text-align: left;
+    width: 100%;
+}
+
+.erp-shortcut-card:hover {
+    border-color: var(--sar-blue);
+}
+
+.erp-shortcut-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--shape-card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    flex-shrink: 0;
+}
+
+/* 6. VISTA 2: TABLERO KANBAN DE ADQUISICIONES (4 Columnas Responsivas) */
+.erp-filter-bar {
+    background: #ffffff;
+    border: 1px solid #E2E8F0;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+#view-erp-adquisiciones .kanban-board {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(260px, 1fr));
+    gap: 16px;
+    align-items: start;
+    overflow-x: auto;
+    padding-bottom: 16px;
+}
+
+#view-erp-adquisiciones .kanban-col {
+    width: 100%;
+    flex: initial;
+    background: #F1F5F9;
+    border: 1px solid #E2E8F0;
+    max-height: none;
+}
+
+/* 7. VISTA 3: RECEPCIÓN DINÁMICA Y TABLA CON OVERFLOW-X AUTO */
+.erp-table-container {
+    background: #ffffff;
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    overflow: hidden;
+}
+
+.erp-table-scroll {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.erp-reception-table {
+    width: 100%;
+    min-width: 820px;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.erp-reception-table thead th {
+    background: #F8FAFC;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 14px 16px;
+    border-bottom: 1px solid #E2E8F0;
+}
+
+.erp-reception-table tbody td {
+    padding: 14px 16px;
+    border-bottom: 1px solid #F1F5F9;
+    font-size: 13px;
+    color: #1E293B;
+    vertical-align: middle;
+}
+
+.erp-reception-table tbody tr {
+    transition: background-color 0.2s ease;
+}
+
+.erp-reception-table tbody tr:hover {
+    background-color: #F8FAFC;
+}
+
+/* 8. VISTA 4: CATÁLOGO MAESTRO DE INSUMOS (Grilla 4 -> 2 -> 1) */
+.erp-catalog-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+}
+
+.erp-catalog-card {
+    background: #ffffff;
+    border: 1px solid #E2E8F0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    overflow: hidden;
+}
+
+.erp-catalog-card__visual {
+    height: 120px;
+    background: linear-gradient(135deg, #F8FAFC 0%, #EEF2F6 100%);
+    border-bottom: 1px solid #F1F5F9;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    position: relative;
+}
+
+.erp-catalog-card__body {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+}
+
+.erp-catalog-card__stock-box {
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: var(--shape-card);
+    padding: 12px;
+}
+
+.erp-catalog-card__footer {
+    padding: 0 16px 16px 16px;
+}
+
+/* 9. MODAL DE AUDITORÍA DE RECEPCIÓN CON BACKDROP-FILTER BLUR(3PX) */
+.erp-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    z-index: 100000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+}
+
+.erp-modal-overlay.active {
+    display: flex;
+}
+
+.erp-modal-dialog {
+    background: #ffffff;
+    width: 100%;
+    max-width: 760px;
+    max-height: 92vh;
+    overflow-y: auto;
+    border: 1px solid #CBD5E1;
+    box-shadow: 0 24px 48px -12px rgba(15, 23, 42, 0.32);
+    display: flex;
+    flex-direction: column;
+    animation: fadeIn 0.22s ease-out;
+}
+
+.erp-modal-header {
+    background: var(--sar-blue);
+    color: #ffffff;
+    padding: 16px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+
+.erp-modal-body {
+    padding: 24px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    background: #ffffff;
+}
+
+.erp-modal-footer {
+    padding: 16px 24px;
+    background: #F8FAFC;
+    border-top: 1px solid #E2E8F0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+/* ==========================================================================
+   MEDIA QUERIES ESTRICTAS: DESKTOP / TABLET (MODO BODEGA) / MÓVIL
+   ========================================================================== */
+
+/* Escritorio Estándar (1025px a 1360px): 3 columnas en catálogo para densidad limpia */
+@media (min-width: 1025px) and (max-width: 1360px) {
+    .erp-catalog-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* Tablets (Modo Bodega: 768px a 1024px) */
+@media (min-width: 768px) and (max-width: 1024px) {
+    #view-erp-adquisiciones.erp-layout {
+        grid-template-columns: 220px 1fr;
+    }
+
+    /* Optimización táctil de botones e inputs en Modo Bodega */
+    #view-erp-adquisiciones .erp-btn,
+    #view-erp-adquisiciones .btn-sar-primary,
+    #view-erp-adquisiciones .erp-sidebar__item,
+    #view-erp-adquisiciones .erp-select,
+    #view-erp-adquisiciones .erp-input {
+        min-height: 44px;
+        padding-top: 10px;
+        padding-bottom: 10px;
+        font-size: 13.5px;
+    }
+
+    /* Grilla del Catálogo pasa de 4 columnas a 2 columnas */
+    .erp-catalog-grid {
+        grid-template-columns: repeat(2, 1fr) !important;
+        gap: 16px;
+    }
+
+    .erp-kpi-grid-4 {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    #view-erp-adquisiciones .kanban-board {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .erp-dashboard-mid-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .erp-shortcuts-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* Móviles y Terminales Portátiles (< 768px) */
+@media (max-width: 767px) {
+    #view-erp-adquisiciones.erp-layout {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* Barra lateral colapsable (Off-Canvas con menú hamburguesa) */
+    #view-erp-adquisiciones aside.erp-sidebar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        bottom: 0;
+        width: 270px;
+        z-index: 999;
+        transform: translateX(-105%);
+        transition: transform 0.3s ease;
+        box-shadow: 8px 0 24px rgba(15, 23, 42, 0.35);
+    }
+
+    #view-erp-adquisiciones aside.erp-sidebar.mobile-open {
+        transform: translateX(0);
+    }
+
+    .erp-hamburger-btn {
+        display: inline-flex !important;
+    }
+
+    main.erp-content {
+        padding: 16px !important;
+    }
+
+    .erp-input {
+        min-width: 100%;
+        width: 100%;
+    }
+
+    .erp-topbar__right {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    /* KPIs apilados en 1 columna en móvil */
+    .erp-kpi-grid-4,
+    .erp-kpi-grid-3,
+    .erp-dashboard-mid-grid,
+    .erp-shortcuts-grid,
+    .erp-catalog-grid {
+        grid-template-columns: 1fr !important;
+        gap: 12px;
+    }
+
+    /* Columnas del Kanban se apilan verticalmente en móvil */
+    #view-erp-adquisiciones .kanban-board {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 16px !important;
+        overflow-x: visible !important;
+    }
+
+    #view-erp-adquisiciones .kanban-col {
+        width: 100% !important;
+        flex: 1 1 auto !important;
+    }
+
+    /* Tablas de recepción con overflow-x: auto garantizado */
+    .erp-table-scroll {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Modales ocupan el 95% del ancho en móvil */
+    .erp-modal-overlay {
+        padding: 8px;
+    }
+
+    .erp-modal-dialog,
+    .erp-drawer {
+        width: 95% !important;
+        max-width: 95vw !important;
+    }
+
+    .erp-modal-body {
+        grid-template-columns: 1fr !important;
+        padding: 16px;
+        gap: 16px;
+    }
+}

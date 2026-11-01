@@ -209,6 +209,9 @@ const activeListeners = {
     dashboard_bandejas: null,
     dashboard_flujo: null,
     dashboard_sdc: null,
+    dashboard_erp_sdc: null,
+    dashboard_oc: null,
+    dashboard_rec: null,
     expirations: null,
     historial: null,
     bodegas: null,
@@ -1307,6 +1310,9 @@ document.addEventListener('DOMContentLoaded', () => {
             clearListener('dashboard_bandejas');
             clearListener('dashboard_flujo');
             clearListener('dashboard_sdc');
+            clearListener('dashboard_erp_sdc');
+            clearListener('dashboard_oc');
+            clearListener('dashboard_rec');
             clearListener('expirations');
             clearListener('historial');
             clearListener('bodegas');
@@ -1487,18 +1493,65 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (e) { console.warn('[Dashboard] Conteos no disponibles:', e.message); }
         })();
 
-        // Solicitudes de compra pendientes (solo administrador)
-        if (rolDash === 'admin' || rolDash === 'administrador' || rolDash === 'global' || rolDash === 'superadmin') {
+        clearListener('dashboard_erp_sdc'); clearListener('dashboard_oc'); clearListener('dashboard_rec');
+        const esAdminDash = ['admin', 'administrador', 'global', 'superadmin'].includes(rolDash);
+        const esStaffDash = esAdminDash || rolDash === 'operador';
+
+        // Solicitudes de compra pendientes (solo administrador): borradores + solicitudes del módulo de compras
+        if (esAdminDash) {
+            const cuenta = { borr: 0, otras: 0, erp: 0 };
+            const pintarSdc = () => {
+                const pend = cuenta.borr + cuenta.erp;
+                const n = document.getElementById('dash-sdc-pend'); if (n) n.textContent = pend;
+                const m = document.getElementById('dash-sdc-meta');
+                if (m) m.innerHTML = `<i class="ph-bold ph-shopping-cart"></i> ${cuenta.borr} borrador${cuenta.borr === 1 ? '' : 'es'} • ${cuenta.erp} en curso`;
+            };
             try {
                 activeListeners.dashboard_sdc = onSnapshot(collection(db, 'Solicitudes_Compra'), (snap) => {
                     const cerrados = ['COMPLETADA', 'CERRADA', 'RECHAZADA', 'ANULADA', 'RECIBIDA'];
-                    let pend = 0, borr = 0;
-                    snap.forEach(d => { const e = String(d.data().estado || '').toUpperCase(); if (!cerrados.includes(e)) { pend++; if (e === 'BORRADOR') borr++; } });
-                    const n = document.getElementById('dash-sdc-pend'); if (n) n.textContent = pend;
-                    const m = document.getElementById('dash-sdc-meta');
-                    if (m) m.innerHTML = `<i class="ph-bold ph-shopping-cart"></i> ${borr} borrador${borr === 1 ? '' : 'es'} por revisar`;
+                    cuenta.borr = 0;
+                    snap.forEach(d => { const e = String(d.data().estado || '').toUpperCase(); if (!cerrados.includes(e)) cuenta.borr++; });
+                    pintarSdc();
                 }, (err) => console.warn('[Dashboard] Solicitudes no disponibles:', err.message));
+                activeListeners.dashboard_erp_sdc = onSnapshot(collection(db, 'ERP_SDC'), (snap) => {
+                    cuenta.erp = 0;
+                    snap.forEach(d => { const e = String(d.data().estado || ''); if (e !== 'RECEPCIONADA' && e !== 'CANCELLED') cuenta.erp++; });
+                    pintarSdc();
+                }, (err) => console.warn('[Dashboard] ERP_SDC no disponible:', err.message));
             } catch (e) { console.warn('[Dashboard] SDC:', e); }
+        }
+
+        // Despachos fuera de fecha y recepciones (administrador y administrador de bodega)
+        if (esStaffDash) {
+            try {
+                activeListeners.dashboard_oc = onSnapshot(collection(db, 'ERP_OC'), (snap) => {
+                    const ahora = Date.now();
+                    let tarde = 0, activas = 0;
+                    snap.forEach(d => {
+                        const o = d.data();
+                        const est = String(o.estado || o.estadoRecepcion || '');
+                        if (est === 'TOTAL' || est === 'CANCELLED') return;
+                        activas++;
+                        const lim = new Date(o.deadlineDespacho).getTime();
+                        if (!isNaN(lim) && lim < ahora) tarde++;
+                    });
+                    const n = document.getElementById('dash-desp-count'); if (n) n.textContent = tarde;
+                    const m = document.getElementById('dash-desp-meta'); if (m) m.innerHTML = `<i class="ph-bold ph-truck"></i> ${activas} órden${activas === 1 ? '' : 'es'} esperando entrega`;
+                    const card = n && n.closest('.erp-kpi-card'); if (card) card.classList.toggle('erp-kpi-card--red', tarde > 0);
+                }, (err) => console.warn('[Dashboard] ERP_OC no disponible:', err.message));
+                activeListeners.dashboard_rec = onSnapshot(collection(db, 'ERP_Recepciones'), (snap) => {
+                    const mes = new Date(); mes.setDate(1); mes.setHours(0, 0, 0, 0);
+                    let total = 0, conf = 0, obs = 0;
+                    snap.forEach(d => {
+                        const r = d.data(); const f = new Date(r.fecha);
+                        if (!isNaN(f.getTime()) && f < mes) return;
+                        total++;
+                        if (r.actaConforme === false) obs++; else conf++;
+                    });
+                    const n = document.getElementById('dash-recep-count'); if (n) n.textContent = total;
+                    const m = document.getElementById('dash-recep-meta'); if (m) m.innerHTML = `<i class="ph-bold ph-package"></i> Este mes • Conformes: ${conf} • Con observación: ${obs}`;
+                }, (err) => console.warn('[Dashboard] ERP_Recepciones no disponible:', err.message));
+            } catch (e) { console.warn('[Dashboard] Compras:', e); }
         }
         if (rolDash === 'enfermero') return; // el enfermero no ve flujo ni movimientos
         try {
@@ -9717,6 +9770,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
 window.firebaseAuth = { createUserWithEmailAndPassword };
 window.firebaseFirestore = { setDoc, doc, serverTimestamp, query, collection, orderBy, getDocs, updateDoc, runTransaction, increment, getDoc, where, limit, onSnapshot, startAt, endAt };
+window.firebaseDb = db;
+window.firebaseAuth = auth;
 
 
 

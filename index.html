@@ -5,12 +5,12 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=18.29"
+                "./script.js": "./script.js?v=18.30"
             }
         }
     </script>
     <script>
-        const APP_VERSION = '18.29';
+        const APP_VERSION = '18.30';
         if (localStorage.getItem('APP_VERSION') !== APP_VERSION) {
             localStorage.setItem('APP_VERSION', APP_VERSION);
             if ('serviceWorker' in navigator) {
@@ -50,7 +50,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=18.29-predictive">
+    <link rel="stylesheet" href="style.css?v=18.30-predictive">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -364,23 +364,23 @@
                             <div class="search-input-wrapper" style="width: 350px;">
                                 <i class="ph ph-magnifying-glass"></i>
                                 <input type="text" id="inventory-search-input" class="form-control"
-                                    placeholder="Buscar medicamento por nombre o código...">
+                                    placeholder="Buscar medicamento por nombre o código..." aria-label="Buscar medicamento por nombre o código..." title="Buscar medicamento por nombre o código...">
                             </div>
 
                             <!-- Filtros Avanzados -->
                             <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-                                <select id="inv-filter-location" class="form-control" style="width:auto; font-weight:500;">
+                                <select id="inv-filter-location" class="form-control" style="width:auto; font-weight:500;" aria-label="inv filter location" title="inv filter location">
                                     <option value="all">Todas las Ubicaciones</option>
                                     <option value="Bodega Central">Bodega Central</option>
                                     <option value="Bodega Transitoria">Bodegas Transitorias</option>
                                     <option value="Bandeja">Bandejas en Turno</option>
                                 </select>
-                                <select id="inv-filter-category" class="form-control" style="width:auto; font-weight:500;">
+                                <select id="inv-filter-category" class="form-control" style="width:auto; font-weight:500;" aria-label="inv filter category" title="inv filter category">
                                     <option value="all">Todas las Categorías</option>
                                     <option value="Insumo Médico">Insumos Médicos</option>
                                     <option value="Medicamento">Medicamentos</option>
                                 </select>
-                                <select id="inv-filter-status" class="form-control" style="width:auto; font-weight:500;">
+                                <select id="inv-filter-status" class="form-control" style="width:auto; font-weight:500;" aria-label="inv filter status" title="inv filter status">
                                     <option value="all">Todos los Estados</option>
                                     <option value="critical">Stock Crítico</option>
                                     <option value="normal">Stock Normal</option>
@@ -661,7 +661,7 @@
                                     <label class="section-label text-primary" style="margin-bottom:6px; font-size:10px;">ESCANEO RÁPIDO (PISTOLA / LECTOR)</label>
                                     <div class="scan-input-group">
                                         <i class="ph ph-barcode"></i>
-                                        <input type="text" id="toma-quick-scan" placeholder="Escanee código o presione enter..." autocomplete="off">
+                                        <input type="text" id="toma-quick-scan" placeholder="Escanee código o presione enter..." autocomplete="off" aria-label="Escanee código o presione enter..." title="Escanee código o presione enter...">
                                         <button type="button" class="btn btn-outline" id="toma-btn-cam-scan" title="Escanear con cámara" style="padding:4px 8px; font-size:12px;"><i class="ph ph-camera"></i></button>
                                     </div>
                                 </div>
@@ -846,13 +846,13 @@
                                     </div>
                                     <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
                                         <!-- Filtro Categoría en Tabla -->
-                                        <select id="toma-filter-cat" class="form-control" style="width:auto; font-size:12px; padding:6px 12px; height:auto;">
+                                        <select id="toma-filter-cat" class="form-control" style="width:auto; font-size:12px; padding:6px 12px; height:auto;" aria-label="toma filter cat" title="toma filter cat">
                                             <option value="all">Todas las Categorías</option>
                                         </select>
                                         <!-- Buscador en Tabla -->
                                         <div class="search-input-wrapper" style="width:200px; margin:0;">
                                             <i class="ph ph-magnifying-glass" style="font-size:14px;"></i>
-                                            <input type="text" id="toma-table-search" class="form-control" placeholder="Filtrar medicamentos..." style="font-size:12px; padding-top:6px; padding-bottom:6px; height:auto;">
+                                            <input type="text" id="toma-table-search" class="form-control" placeholder="Filtrar medicamentos..." style="font-size:12px; padding-top:6px; padding-bottom:6px; height:auto;" aria-label="Filtrar medicamentos..." title="Filtrar medicamentos...">
                                         </div>
                                     </div>
                                 </div>
@@ -938,7 +938,7 @@
                                     <div>
                                         <div style="font-size:10px; text-transform:uppercase; letter-spacing:0.5px; color:#94a3b8; font-weight:700;">PERIODO DE AUDITORÍA</div>
                                         <div style="display:flex; gap:8px; align-items:center; margin-top:2px;">
-                                            <select id="semanal-select-mes" style="background:#334155; color:white; border:1px solid #475569; border-radius:6px; padding:4px 10px; font-weight:700; font-size:13px;">
+                                            <select id="semanal-select-mes" style="background:#334155; color:white; border:1px solid #475569; border-radius:6px; padding:4px 10px; font-weight:700; font-size:13px;" aria-label="semanal select mes" title="semanal select mes">
                                                 <option value="0">Enero</option>
                                                 <option value="1">Febrero</option>
                                                 <option value="2">Marzo</option>
@@ -952,7 +952,7 @@
                                                 <option value="10">Noviembre</option>
                                                 <option value="11">Diciembre</option>
                                             </select>
-                                            <select id="semanal-select-ano" style="background:#334155; color:white; border:1px solid #475569; border-radius:6px; padding:4px 10px; font-weight:700; font-size:13px;">
+                                            <select id="semanal-select-ano" style="background:#334155; color:white; border:1px solid #475569; border-radius:6px; padding:4px 10px; font-weight:700; font-size:13px;" aria-label="semanal select ano" title="semanal select ano">
                                                 <option value="2025">2025</option>
                                                 <option value="2026" selected>2026</option>
                                                 <option value="2027">2027</option>
@@ -970,7 +970,7 @@
                                     </span>
                                     <div style="display:flex; align-items:center; gap:6px;">
                                         <span style="font-size:10px; color:#94a3b8; font-weight:700; text-transform:uppercase;">ESTADO:</span>
-                                        <select id="semanal-select-estado-ciclo" style="background:#334155; color:white; border:1px solid #475569; border-radius:6px; padding:3px 8px; font-weight:700; font-size:11.5px; cursor:pointer;">
+                                        <select id="semanal-select-estado-ciclo" style="background:#334155; color:white; border:1px solid #475569; border-radius:6px; padding:3px 8px; font-weight:700; font-size:11.5px; cursor:pointer;" aria-label="semanal select estado ciclo" title="semanal select estado ciclo">
                                             <option value="borrador">📝 En Conteo (Borrador)</option>
                                             <option value="pendiente">⏳ Pendiente</option>
                                             <option value="cerrado">🔒 Cerrada</option>
@@ -1060,7 +1060,7 @@
                         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; gap:12px; flex-wrap:wrap;">
                             <div class="search-input-wrapper" style="max-width:320px; margin:0;">
                                 <i class="ph ph-magnifying-glass"></i>
-                                <input type="text" id="semanal-table-search" class="form-control" placeholder="Buscar medicamento o código en la semana...">
+                                <input type="text" id="semanal-table-search" class="form-control" placeholder="Buscar medicamento o código en la semana..." aria-label="Buscar medicamento o código en la semana..." title="Buscar medicamento o código en la semana...">
                             </div>
                             <div style="display:flex; gap:10px; align-items:center;">
                                 <button type="button" class="btn btn-outline" id="btn-autocompletar-teorico" style="font-size:12px; font-weight:600; color:#475569;" title="Rellenar conteo de todos los no contados con su stock teórico">
@@ -1194,7 +1194,7 @@
                                 <label class="section-label text-primary">ESCANEO RÁPIDO (PISTOLA)</label>
                                 <div class="scan-input-group">
                                     <i class="ph ph-barcode"></i>
-                                    <input type="text" placeholder="Escanee el código de barras del producto...">
+                                    <input type="text" placeholder="Escanee el código de barras del producto..." aria-label="Escanee el código de barras del producto..." title="Escanee el código de barras del producto...">
                                     <span class="badge-gray">AUTO-DETECCIÓN</span>
                                 </div>
                             </div>
@@ -1299,7 +1299,7 @@
                                             FACTURA)</label>
                                         <div class="scan-input-group doc-input">
                                             <i class="ph ph-file-text"></i>
-                                            <input type="file" name="supportDocument" id="ingreso-archivo-respaldo" class="form-control" accept=".pdf, image/png, image/jpeg" required>
+                                            <input type="file" name="supportDocument" id="ingreso-archivo-respaldo" class="form-control" accept=".pdf, image/png, image/jpeg" required aria-label="ingreso archivo respaldo" title="ingreso archivo respaldo">
                                         </div>
                                     </div>
                                     <div class="form-group">
@@ -1384,7 +1384,7 @@
             <div style="display: flex; gap: 25px; margin-bottom: 30px; flex-wrap: wrap;">
                 <div style="flex: 1; min-width: 220px;">
                     <label style="font-weight: 600; color: #495057; display: block; margin-bottom: 8px; font-size: 0.95em;">1. Bandeja a Cargar</label>
-                    <select id="select-numero-bandeja" class="form-control" style="font-size: 1em; padding: 12px; border-radius: 6px;">
+                    <select id="select-numero-bandeja" class="form-control" style="font-size: 1em; padding: 12px; border-radius: 6px;" aria-label="select numero bandeja" title="select numero bandeja">
                         <option value="">Seleccione Bandeja...</option>
                         <option value="Bandeja 1">Bandeja 1</option>
                         <option value="Bandeja 2">Bandeja 2</option>
@@ -1394,7 +1394,7 @@
                 <div style="flex: 1; min-width: 220px;">
                     <label style="font-weight: 600; color: #495057; display: block; margin-bottom: 8px; font-size: 0.95em;">2. Set de Fármacos (Kit)</label>
                     <div style="display: flex; gap: 10px;">
-                        <select id="select-tipo-plantilla" class="form-control" style="font-size: 1em; padding: 12px; border-radius: 6px; flex: 1;">
+                        <select id="select-tipo-plantilla" class="form-control" style="font-size: 1em; padding: 12px; border-radius: 6px; flex: 1;" aria-label="select tipo plantilla" title="select tipo plantilla">
                             <option value="">Cargando plantillas...</option>
                         </select>
                     </div>
@@ -1402,7 +1402,7 @@
                 <div style="flex: 1.5; min-width: 280px;">
                     <label style="font-weight: 600; color: #495057; display: block; margin-bottom: 8px; font-size: 0.95em;">3. Asignar a (Enfermero)</label>
                     <div style="display: flex; gap: 10px;">
-                        <select id="select-enfermero-asignado" class="form-control" style="font-size: 1em; padding: 12px; border-radius: 6px; flex: 1;">
+                        <select id="select-enfermero-asignado" class="form-control" style="font-size: 1em; padding: 12px; border-radius: 6px; flex: 1;" aria-label="select enfermero asignado" title="select enfermero asignado">
                             <option value="">Cargando enfermeros...</option>
                         </select>
                         <button type="button" class="btn btn-outline-primary" id="btn-crear-reemplazo-modal" style="padding: 0 15px;" title="Crear enfermero temporal">
@@ -1471,12 +1471,12 @@
                     <label class="form-label" style="font-size: 0.85em; font-weight: bold; color: #495057;">Búsqueda por Tracking o ID Físico</label>
                     <div class="search-input-wrapper" style="position: relative;">
                         <i class="ph ph-magnifying-glass" style="position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #6c757d;"></i>
-                        <input type="text" id="input-search-historial" class="form-control" placeholder="Ej: BAN-1406-0345..." style="padding-left: 35px;" oninput="window.renderHistorialBandejas()">
+                        <input type="text" id="input-search-historial" class="form-control" placeholder="Ej: BAN-1406-0345..." style="padding-left: 35px;" oninput="window.renderHistorialBandejas()" aria-label="Ej: BAN-1406-0345..." title="Ej: BAN-1406-0345...">
                     </div>
                 </div>
                 <div style="flex: 1;">
                     <label class="form-label" style="font-size: 0.85em; font-weight: bold; color: #495057;">Filtro de Tiempo</label>
-                    <select id="select-filtro-tiempo-historial" class="form-control" onchange="window.renderHistorialBandejas()">
+                    <select id="select-filtro-tiempo-historial" class="form-control" onchange="window.renderHistorialBandejas()" aria-label="select filtro tiempo historial" title="select filtro tiempo historial">
                         <option value="all">Mostrar Todo el Histórico</option>
                         <option value="30days" selected>Últimos 30 días</option>
                         <option value="7days">Últimos 7 días</option>
@@ -1521,21 +1521,21 @@
                 <input type="hidden" id="plantilla-id-actual">
                 <div class="form-group mb-24">
                     <label style="font-weight: bold;">Nombre del Pack / Plantilla</label>
-                    <input type="text" id="plantilla-nombre-input" class="form-control" placeholder="Ej: Kit Estándar Urgencias">
+                    <input type="text" id="plantilla-nombre-input" class="form-control" placeholder="Ej: Kit Estándar Urgencias" aria-label="Ej: Kit Estándar Urgencias" title="Ej: Kit Estándar Urgencias">
                 </div>
                 
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 5px;">
                     <h4 style="margin: 0;">Contenido de la Plantilla</h4>
                     <div>
-                        <input type="file" id="input-excel-pack" accept=".xlsx, .xls" style="display: none;">
+                        <input type="file" id="input-excel-pack" accept=".xlsx, .xls" style="display: none;" aria-label="input excel pack" title="input excel pack">
                         <button class="btn btn-sm btn-outline-info" id="btn-descargar-base-pack"><i class="ph ph-download-simple"></i> Descargar Excel</button>
                         <button class="btn btn-sm btn-outline-success" id="btn-subir-excel-pack" onclick="document.getElementById('input-excel-pack').click()"><i class="ph ph-upload-simple"></i> Subir Excel</button>
                     </div>
                 </div>
                 <div style="display: flex; gap: 10px; margin-bottom: 15px;">
-                    <input type="text" id="plantilla-buscar-insumo" class="form-control" placeholder="Buscar fármaco/insumo..." list="plantillas-insumos-list" autocomplete="off" style="flex: 1;">
+                    <input type="text" id="plantilla-buscar-insumo" class="form-control" placeholder="Buscar fármaco/insumo..." list="plantillas-insumos-list" autocomplete="off" style="flex: 1;" aria-label="Buscar fármaco/insumo..." title="Buscar fármaco/insumo...">
                     <datalist id="plantillas-insumos-list"></datalist>
-                    <input type="number" id="plantilla-cantidad-insumo" class="form-control" placeholder="Cant." style="width: 80px;" min="1" value="1">
+                    <input type="number" id="plantilla-cantidad-insumo" class="form-control" placeholder="Cant." style="width: 80px;" min="1" value="1" aria-label="Cant." title="Cant.">
                     <button class="btn btn-outline-primary" id="btn-add-insumo-plantilla"><i class="ph ph-plus"></i> Añadir</button>
                 </div>
                 
@@ -1605,7 +1605,7 @@
         <div style="background: white; padding: 30px; border-radius: 8px; width: 450px; text-align: center; box-shadow: 0 5px 15px rgba(0,0,0,0.3);">
             <h3 style="color: #dc3545; margin-top: 0;"><i class="ph ph-warning-circle"></i> Anular Bandeja</h3>
             <p style="font-size: 1.1em; color: #495057; margin-top: 15px;">Por favor ingrese el motivo de anulación para esta bandeja:</p>
-            <input type="text" id="input-motivo-anulacion" class="form-control" placeholder="Motivo de anulación..." style="margin-top: 10px; margin-bottom: 20px;">
+            <input type="text" id="input-motivo-anulacion" class="form-control" placeholder="Motivo de anulación..." style="margin-top: 10px; margin-bottom: 20px;" aria-label="Motivo de anulación..." title="Motivo de anulación...">
             <div style="display: flex; gap: 15px; justify-content: center;">
                 <button class="btn btn-secondary" onclick="document.getElementById('modal-anular-bandeja').style.display='none'">Cancelar</button>
                 <button id="btn-confirmar-anular-bandeja" class="btn btn-danger" style="font-weight: bold;">Sí, Anular Bandeja</button>
@@ -1636,7 +1636,7 @@
             <p style="font-size: 1.1em; color: #495057; margin-top: 15px;">Suba el archivo Excel (Consolidado de Fármacos) descargado de RAYEN para realizar el cruce automático con la <strong><span id="cuadratura-bandeja-nombre"></span></strong>.</p>
             
             <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; border: 1px dashed #adb5bd; margin-bottom: 25px;">
-                <input type="file" id="input-excel-rayen" class="form-control" accept=".csv, .xlsx, .xls" style="font-size: 1.1em; padding: 10px;">
+                <input type="file" id="input-excel-rayen" class="form-control" accept=".csv, .xlsx, .xls" style="font-size: 1.1em; padding: 10px;" aria-label="input excel rayen" title="input excel rayen">
             </div>
             
             <div id="contenedor-resultado-cruce" style="display: none;">
@@ -1834,7 +1834,7 @@
                         <div class="search-input-wrapper">
                             <i class="ph ph-magnifying-glass"></i>
                             <input type="text" id="historial-search-input" class="form-control"
-                                placeholder="Buscar por producto u operador...">
+                                placeholder="Buscar por producto u operador..." aria-label="Buscar por producto u operador..." title="Buscar por producto u operador...">
                         </div>
                         <div class="search-input-wrapper date-picker" style="display:flex; align-items:center; padding-left:0; overflow:hidden;">
                             <input type="date" id="historial-date-filter" class="form-control" title="Filtrar por fecha" style="padding-left:12px; border:none; background:transparent;">
@@ -1950,7 +1950,7 @@
                                 global.</p>
                         </div>
                         <div class="search-input-wrapper"><i class="ph ph-magnifying-glass"></i><input type="text"
-                                id="report-search-input" class="form-control" placeholder="Filtrar datos..."></div>
+                                id="report-search-input" class="form-control" placeholder="Filtrar datos..." aria-label="Filtrar datos..." title="Filtrar datos..."></div>
                     </div>
                     <div class="table-wrapper">
                         <table>
@@ -2117,7 +2117,7 @@
                     <div class="template-selector" style="margin-bottom: 20px;">
                         <label><strong>Cargar Plantilla de Insumos:</strong></label>
                         <select id="select-plantilla" class="form-control"
-                            style="width: 300px; display: inline-block; margin-left: 10px;">
+                            style="width: 300px; display: inline-block; margin-left: 10px;" aria-label="select plantilla" title="select plantilla">
                             <option value="">Seleccione una plantilla base...</option>
                             <option value="urgencias">Bandeja Urgencias Estándar</option>
                             <option value="noche">Bandeja Turno Noche</option>
@@ -2306,12 +2306,12 @@
                                         <div class="form-group">
                                             <label class="form-label">Nombre del Centro / SAR</label>
                                             <input type="text" name="institutionName" id="config-institution-name"
-                                                class="form-control" placeholder="Ej. SAR Concón">
+                                                class="form-control" placeholder="Ej. SAR Concón" aria-label="Ej. SAR Concón" title="Ej. SAR Concón">
                                         </div>
                                         <div class="form-group">
                                             <label class="form-label">Email de Notificaciones</label>
                                             <input type="email" name="contactEmail" id="config-contact-email"
-                                                class="form-control" placeholder="logistica@sar.cl">
+                                                class="form-control" placeholder="logistica@sar.cl" aria-label="logistica@sar.cl" title="logistica@sar.cl">
                                         </div>
                                     </div>
                                     <div class="maintenance-box mt-24"
@@ -2339,14 +2339,14 @@
                                         <div class="form-group">
                                             <label class="form-label">Días para Alerta "Urgente" (Zona Roja)</label>
                                             <input type="number" name="daysUrgent" id="config-days-urgent"
-                                                class="form-control" value="30">
+                                                class="form-control" value="30" aria-label="config days urgent" title="config days urgent">
                                             <p class="text-sm text-muted mt-8">Insumos que vencen en menos de estos días
                                                 aparecerán en rojo.</p>
                                         </div>
                                         <div class="form-group">
                                             <label class="form-label">Días para Alerta "Precaución" (Zona Naranja)</label>
                                             <input type="number" name="daysCaution" id="config-days-caution"
-                                                class="form-control" value="180">
+                                                class="form-control" value="180" aria-label="config days caution" title="config days caution">
                                             <p class="text-sm text-muted mt-8">Insumos que vencen entre el período urgente y
                                                 este valor.</p>
                                         </div>
@@ -2357,10 +2357,10 @@
                                 <div id="tab-seguridad" class="tab-content-item" style="display:none;">
                                     <div class="form-group mb-24">
                                         <label class="form-label">Tiempo de Expiración de Sesión (Minutos)</label>
-                                        <input type="number" name="sessionTimeout" class="form-control" value="60">
+                                        <input type="number" name="sessionTimeout" class="form-control" value="60" aria-label="sessionTimeout" title="sessionTimeout">
                                     </div>
                                     <div class="checkbox-group mb-16" style="display:flex; align-items:center; gap:8px;">
-                                        <input type="checkbox" name="requireTwoFactor" checked>
+                                        <input type="checkbox" name="requireTwoFactor" checked aria-label="requireTwoFactor" title="requireTwoFactor">
                                         <label class="form-label" style="margin-bottom:0;">Requerir Validación Dual para
                                             Eliminaciones</label>
                                     </div>
@@ -2447,12 +2447,12 @@
                                     <div class="input-with-icon">
                                         <span class="input-icon">@</span>
                                         <input type="text" class="form-control with-icon" name="username"
-                                            id="input-nuevo-usuario-email" placeholder="ejemplo" required>
+                                            id="input-nuevo-usuario-email" placeholder="ejemplo" required aria-label="ejemplo" title="ejemplo">
                                     </div>
                                 </div>
                                 <div class="form-group">
                                     <label class="form-label" for="usuario-rol">Rol</label>
-                                    <select class="form-control" name="role" id="select-nuevo-usuario-rol" required>
+                                    <select class="form-control" name="role" id="select-nuevo-usuario-rol" required aria-label="select nuevo usuario rol" title="select nuevo usuario rol">
                                         <option value="" disabled>Seleccione...</option>
                                         <option value="superadmin">Superadmin (Acceso Total)</option>
                                         <option value="admin">Administrador</option>
@@ -2487,7 +2487,7 @@
                                 
                                 <div class="search-input-wrapper"><i class="ph ph-magnifying-glass"></i><input
                                         type="text" id="users-search-input" class="form-control"
-                                        placeholder="Buscar por nombre o email..."></div>
+                                        placeholder="Buscar por nombre o email..." aria-label="Buscar por nombre o email..." title="Buscar por nombre o email..."></div>
                             </div>
                         </div>
                         <div class="table-wrapper">
@@ -2787,7 +2787,7 @@
                         <div class="erp-topbar__right">
                             <div class="erp-search-box">
                                 <i class="ph-bold ph-magnifying-glass"></i>
-                                <input type="text" id="erp-global-search" class="erp-input" placeholder="Buscar OC, SDC, SKU o Lote...">
+                                <input type="text" id="erp-global-search" class="erp-input" placeholder="Buscar OC, SDC, SKU o Lote..." aria-label="Buscar OC, SDC, SKU o Lote..." title="Buscar OC, SDC, SKU o Lote...">
                             </div>
                             <button type="button" id="btn-erp-nueva-sdc" class="erp-btn erp-btn--primary">
                                 <i class="ph-bold ph-plus"></i>
@@ -3229,7 +3229,7 @@
                             </div>
                             <div class="erp-search-box">
                                 <i class="ph-bold ph-magnifying-glass"></i>
-                                <input type="text" id="erp-recepcion-search" class="erp-input" placeholder="Filtrar por OC, proveedor o insumo...">
+                                <input type="text" id="erp-recepcion-search" class="erp-input" placeholder="Filtrar por OC, proveedor o insumo..." aria-label="Filtrar por OC, proveedor o insumo..." title="Filtrar por OC, proveedor o insumo...">
                             </div>
                         </div>
 
@@ -3303,17 +3303,17 @@
                         <div class="erp-filter-bar">
                             <div class="erp-search-box" style="flex:1; min-width:240px;">
                                 <i class="ph-bold ph-magnifying-glass"></i>
-                                <input type="text" id="erp-catalog-search" class="erp-input" style="width:100%;" placeholder="Buscar por código SAR, principio activo, lote o categoría...">
+                                <input type="text" id="erp-catalog-search" class="erp-input" style="width:100%;" placeholder="Buscar por código SAR, principio activo, lote o categoría..." aria-label="Buscar por código SAR, principio activo, lote o categoría..." title="Buscar por código SAR, principio activo, lote o categoría...">
                             </div>
                             <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
-                                <select id="erp-catalog-category-filter" class="erp-select">
+                                <select id="erp-catalog-category-filter" class="erp-select" aria-label="erp catalog category filter" title="erp catalog category filter">
                                     <option value="ALL">Categoría: Todas</option>
                                     <option value="FARMACOS">Fármacos Clínicos</option>
                                     <option value="INSUMOS">Insumos Médicos / EPP</option>
                                     <option value="SUEROS">Soluciones y Sueros</option>
                                     <option value="CRITICOS">Urgencia / Reanimación</option>
                                 </select>
-                                <select id="erp-catalog-status-filter" class="erp-select">
+                                <select id="erp-catalog-status-filter" class="erp-select" aria-label="erp catalog status filter" title="erp catalog status filter">
                                     <option value="ALL">Estado Stock: Todos</option>
                                     <option value="OPTIMO">En Stock Óptimo</option>
                                     <option value="BAJO">Stock Bajo / Reorden</option>
@@ -3447,7 +3447,7 @@
                                 </div>
 
                                 <label style="display:flex; align-items:center; gap:8px; font-size:12px; font-weight:700; color:#334155; cursor:pointer;">
-                                    <input type="checkbox" id="erp-audit-chk-conforme" checked>
+                                    <input type="checkbox" id="erp-audit-chk-conforme" checked aria-label="erp audit chk conforme" title="erp audit chk conforme">
                                     Emitir Acta Digital de Recepción y actualizar Kanban
                                 </label>
                             </div>
@@ -3508,12 +3508,12 @@
             
             <div class="form-group" style="margin-bottom: 15px;">
                 <label class="form-label">Correo Institucional</label>
-                <input type="text" class="form-control" id="profile-email" disabled style="background-color: #e9ecef; cursor: not-allowed;">
+                <input type="text" class="form-control" id="profile-email" disabled style="background-color: #e9ecef; cursor: not-allowed;" aria-label="profile email" title="profile email">
             </div>
             
             <div class="form-group" style="margin-bottom: 25px;">
                 <label class="form-label" id="profile-nombre-label">Nombre Completo</label>
-                <input type="text" class="form-control" id="profile-nombre" placeholder="Ej. Juan Pérez">
+                <input type="text" class="form-control" id="profile-nombre" placeholder="Ej. Juan Pérez" aria-label="Ej. Juan Pérez" title="Ej. Juan Pérez">
             </div>
 
             <div style="display: flex; flex-direction: column; gap: 10px;">
@@ -3541,11 +3541,11 @@
                 </p>
                 <div class="form-group mb-16">
                     <label class="form-label" style="font-weight: bold;">Archivo a cargar:</label>
-                    <input type="file" id="inventory-excel-input" class="form-control" accept=".xlsx, .xls" required>
+                    <input type="file" id="inventory-excel-input" class="form-control" accept=".xlsx, .xls" required aria-label="inventory excel input" title="inventory excel input">
                 </div>
                 <div class="form-group mb-24">
                     <label style="font-weight: bold; margin-top: 10px;">Bodega de Recepción:</label>
-                    <select id="carga-masiva-bodega" class="form-control" style="margin-bottom: 15px;" required>
+                    <select id="carga-masiva-bodega" class="form-control" style="margin-bottom: 15px;" required aria-label="carga masiva bodega" title="carga masiva bodega">
                         <option value="">Seleccione destino del inventario...</option>
                         <option value="Bodega Central">Bodega Central</option>
                     </select>
@@ -3767,7 +3767,7 @@
                         palabra <strong>CONFIRMAR</strong>.
                     </p>
                     <div class="form-group mb-24">
-                        <input type="text" id="wipe-confirm-text" class="form-control" placeholder="Escriba CONFIRMAR">
+                        <input type="text" id="wipe-confirm-text" class="form-control" placeholder="Escriba CONFIRMAR" aria-label="Escriba CONFIRMAR" title="Escriba CONFIRMAR">
                     </div>
                     <div style="display:flex; justify-content:flex-end; gap:12px;">
                         <button type="button" class="btn btn-outline close-modal-btn">Cancelar</button>
@@ -3784,7 +3784,7 @@
                     </p>
                     <div class="form-group mb-24">
                         <label class="form-label">Contraseña de Administrador:</label>
-                        <input type="password" id="wipe-password-input" class="form-control">
+                        <input type="password" id="wipe-password-input" class="form-control" aria-label="wipe password input" title="wipe password input">
                     </div>
                     <div style="display:flex; justify-content:flex-end; gap:12px;">
                         <button type="button" class="btn btn-outline" id="btn-wipe-back-1">Atrás</button>
@@ -3818,7 +3818,7 @@
 
                     <div class="form-group mb-24">
                         <label class="form-label" style="color:var(--danger);">Ingrese el Código de Seguridad:</label>
-                        <input type="text" id="wipe-code-input" class="form-control" placeholder="Ej. DELETE-XXXX">
+                        <input type="text" id="wipe-code-input" class="form-control" placeholder="Ej. DELETE-XXXX" aria-label="Ej. DELETE-XXXX" title="Ej. DELETE-XXXX">
                     </div>
 
                     <!-- NUEVO CAMPO: PIN de Autorización Dual -->
@@ -3827,7 +3827,7 @@
                         <label class="form-label" style="color:var(--danger); font-weight: bold;"><i
                                 class="ph ph-key"></i> PIN de Segunda Aprobación (Global Admin):</label>
                         <input type="password" id="wipe-pin-input" class="form-control"
-                            placeholder="Ingrese el PIN de 6 dígitos">
+                            placeholder="Ingrese el PIN de 6 dígitos" aria-label="Ingrese el PIN de 6 dígitos" title="Ingrese el PIN de 6 dígitos">
                     </div>
 
                     <div style="display:flex; justify-content:flex-end; gap:12px;">
@@ -3857,15 +3857,15 @@
                 <div class="grid-3-col mb-16">
                     <div class="form-group">
                         <label class="form-label">Código (SKU)</label>
-                        <input type="text" id="edit-code" name="code" class="form-control" required>
+                        <input type="text" id="edit-code" name="code" class="form-control" required aria-label="edit code" title="edit code">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Categoría</label>
-                        <input type="text" id="edit-category" name="category" class="form-control">
+                        <input type="text" id="edit-category" name="category" class="form-control" aria-label="edit category" title="edit category">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Estado Clínico</label>
-                        <select id="edit-status" name="status" class="form-control" style="font-weight:bold;">
+                        <select id="edit-status" name="status" class="form-control" style="font-weight:bold;" aria-label="edit status" title="edit status">
                             <option value="ACTIVO" style="color:var(--success);">ACTIVO</option>
                             <option value="CUARENTENA" style="color:var(--danger);">CUARENTENA (Alerta ISP)</option>
                         </select>
@@ -3874,36 +3874,36 @@
                 <div class="form-group mb-16">
                     <label class="form-label">Nombre / Descripción del Producto</label>
                     <input type="text" id="edit-name" name="name" class="form-control" required
-                        style="font-weight:700;">
+                        style="font-weight:700;" aria-label="edit name" title="edit name">
                 </div>
                 <div class="grid-3-col mb-16">
                     <div class="form-group">
                         <label class="form-label">Cantidad</label>
-                        <input type="number" id="edit-quantity" name="quantity" class="form-control" required>
+                        <input type="number" id="edit-quantity" name="quantity" class="form-control" required aria-label="edit quantity" title="edit quantity">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Costo Unit.</label>
-                        <input type="number" id="edit-unitPrice" name="unitPrice" class="form-control">
+                        <input type="number" id="edit-unitPrice" name="unitPrice" class="form-control" aria-label="edit unitPrice" title="edit unitPrice">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Stock Crítico</label>
                         <input type="number" id="edit-criticalLimit" name="criticalLimit" class="form-control"
-                            value="50">
+                            value="50" aria-label="edit criticalLimit" title="edit criticalLimit">
                     </div>
                 </div>
                 <div class="grid-2-col-even mb-16">
                     <div class="form-group">
                         <label class="form-label">Lote</label>
-                        <input type="text" id="edit-batch" name="batch" class="form-control">
+                        <input type="text" id="edit-batch" name="batch" class="form-control" aria-label="edit batch" title="edit batch">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Vencimiento</label>
-                        <input type="date" id="edit-expirationDate" name="expirationDate" class="form-control">
+                        <input type="date" id="edit-expirationDate" name="expirationDate" class="form-control" aria-label="edit expirationDate" title="edit expirationDate">
                     </div>
                 </div>
                 <div class="form-group mb-24">
                     <label class="form-label">Ubicación (Pasillo/Estante)</label>
-                    <input type="text" id="edit-location" name="location" class="form-control">
+                    <input type="text" id="edit-location" name="location" class="form-control" aria-label="edit location" title="edit location">
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:12px;">
                     <button type="button" class="btn btn-outline close-modal-btn">Cancelar</button>
@@ -3921,7 +3921,7 @@
             <h2 style="color: #dc3545; text-transform: uppercase;">ZONA DE RIESGO: Borrado de Base de Datos</h2>
             <p style="font-weight: bold;">⚠️ ATENCIÓN: Solo el usuario 'superadmin' puede autorizar esto.</p>
             <p>Se enviará una solicitud al Super-Administrador para confirmar el borrado total de las colecciones.</p>
-            <input type="text" id="confirmacion-wipe" class="form-control" placeholder="Escriba ELIMINAR para habilitar solicitud" style="width: 100%; margin: 20px 0; text-align: center; text-transform: uppercase;">
+            <input type="text" id="confirmacion-wipe" class="form-control" placeholder="Escriba ELIMINAR para habilitar solicitud" style="width: 100%; margin: 20px 0; text-align: center; text-transform: uppercase;" aria-label="Escriba ELIMINAR para habilitar solicitud" title="Escriba ELIMINAR para habilitar solicitud">
             <button class="btn btn-danger" id="btn-solicitar-wipe" disabled>Solicitar Autorización SuperAdmin</button>
             <button class="btn btn-secondary" style="margin-top: 10px;" onclick="document.getElementById('modal-borrado-total').style.display='none'">Cancelar</button>
         </div>
@@ -3940,19 +3940,19 @@
                 <input type="hidden" id="edit-user-id">
                 <div class="form-group mb-16">
                     <label class="form-label">Nombre Completo</label>
-                    <input type="text" id="edit-user-fullname" class="form-control" required>
+                    <input type="text" id="edit-user-fullname" class="form-control" required aria-label="edit user fullname" title="edit user fullname">
                 </div>
                 <div class="form-group mb-16">
                     <label class="form-label">Usuario / Email</label>
-                    <input type="text" id="edit-user-email" class="form-control" disabled>
+                    <input type="text" id="edit-user-email" class="form-control" disabled aria-label="edit user email" title="edit user email">
                 </div>
                 <div class="form-group mb-16">
                     <label class="form-label">Sede / Center</label>
-                    <input type="text" id="edit-user-center" class="form-control" required>
+                    <input type="text" id="edit-user-center" class="form-control" required aria-label="edit user center" title="edit user center">
                 </div>
                 <div class="form-group mb-24">
                     <label class="form-label">Rol del Sistema</label>
-                    <select id="edit-user-role" class="form-control" required>
+                    <select id="edit-user-role" class="form-control" required aria-label="edit user role" title="edit user role">
                         <option value="superadmin">Superadmin (Acceso Total)</option>
                         <option value="admin">Administrador</option>
                         <option value="auditor">Auditor</option>
@@ -3976,42 +3976,42 @@
             <form id="form-transferencia">
                 <div class="form-group">
                     <label class="form-label">Bodega Origen</label>
-                    <input type="text" id="transfer-from-name" class="form-control" readonly>
+                    <input type="text" id="transfer-from-name" class="form-control" readonly aria-label="transfer from name" title="transfer from name">
                     <input type="hidden" id="transfer-from-id">
                 </div>
                 <div class="form-group">
                     <label class="form-label">Insumo a Dispensar / Mover</label>
-                    <select id="transfer-insumo-id" class="form-control" required></select>
+                    <select id="transfer-insumo-id" class="form-control" required aria-label="transfer insumo id" title="transfer insumo id"></select>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Tipo de Egreso</label>
-                    <select id="transfer-type" class="form-control">
+                    <select id="transfer-type" class="form-control" aria-label="transfer type" title="transfer type">
                         <option value="BODEGA">Transferencia a Bodega Periférica</option>
                         <option value="PACIENTE">Dispensación Nominal a Paciente</option>
                     </select>
                 </div>
                 <div class="form-group" id="group-bodega-destino">
                     <label class="form-label">Bodega Destino</label>
-                    <select id="transfer-to-id" class="form-control"></select>
+                    <select id="transfer-to-id" class="form-control" aria-label="transfer to id" title="transfer to id"></select>
                 </div>
                 <!-- Campos Paciente (Ocultos por defecto) -->
                 <div id="group-paciente-destino" style="display:none; padding:12px; background:#f8fafc; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:16px;">
                     <div class="form-group mb-12">
                         <label class="form-label">RUT Paciente</label>
-                        <input type="text" id="transfer-rut-paciente" class="form-control" placeholder="Ej: 12.345.678-9">
+                        <input type="text" id="transfer-rut-paciente" class="form-control" placeholder="Ej: 12.345.678-9" aria-label="Ej: 12.345.678-9" title="Ej: 12.345.678-9">
                     </div>
                     <div class="form-group mb-12">
                         <label class="form-label">Nombre del Paciente</label>
-                        <input type="text" id="transfer-nombre-paciente" class="form-control" placeholder="Nombre completo">
+                        <input type="text" id="transfer-nombre-paciente" class="form-control" placeholder="Nombre completo" aria-label="Nombre completo" title="Nombre completo">
                     </div>
                     <div class="form-group">
                         <label class="form-label">N° Cama / Box</label>
-                        <input type="text" id="transfer-cama-paciente" class="form-control" placeholder="Ej: Box 3 / Cama 12">
+                        <input type="text" id="transfer-cama-paciente" class="form-control" placeholder="Ej: Box 3 / Cama 12" aria-label="Ej: Box 3 / Cama 12" title="Ej: Box 3 / Cama 12">
                     </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Cantidad</label>
-                    <input type="number" id="transfer-qty" class="form-control" value="1" min="1" required>
+                    <input type="number" id="transfer-qty" class="form-control" value="1" min="1" required aria-label="transfer qty" title="transfer qty">
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:12px; margin-top:24px;">
                     <button type="button" class="btn btn-outline close-modal-btn">Cancelar</button>
@@ -4074,11 +4074,11 @@
                 <h4 id="merma-farmaco-nombre" style="margin-bottom: 16px; color: var(--text);">Fármaco</h4>
                 <div class="form-group mb-16">
                     <label class="form-label font-bold">Cantidad a mermar</label>
-                    <input type="number" class="form-control" id="merma-popup-cantidad" min="1" value="1">
+                    <input type="number" class="form-control" id="merma-popup-cantidad" min="1" value="1" aria-label="merma popup cantidad" title="merma popup cantidad">
                 </div>
                 <div class="form-group mb-24">
                     <label class="form-label font-bold">Motivo de Merma (Obligatorio)</label>
-                    <input type="text" class="form-control" id="merma-popup-motivo" placeholder="Ej: Ampolla quebrada, precipitado...">
+                    <input type="text" class="form-control" id="merma-popup-motivo" placeholder="Ej: Ampolla quebrada, precipitado..." aria-label="Ej: Ampolla quebrada, precipitado..." title="Ej: Ampolla quebrada, precipitado...">
                 </div>
                 <div style="display: flex; gap: 15px; justify-content: flex-end;">
                     <button class="btn btn-outline" onclick="document.getElementById('modal-merma-popup').classList.remove('active')">Cancelar</button>
@@ -4099,22 +4099,22 @@
                 <h4 id="arqueo-farmaco-nombre" style="margin-bottom: 16px; color: var(--text);">Fármaco</h4>
                 <div class="form-group mb-16">
                     <label class="form-label font-bold">Cantidad a registrar (Use signo menos para restar)</label>
-                    <input type="number" class="form-control" id="arqueo-popup-cantidad" value="1">
+                    <input type="number" class="form-control" id="arqueo-popup-cantidad" value="1" aria-label="arqueo popup cantidad" title="arqueo popup cantidad">
                 </div>
                 <div class="form-group mb-16">
                     <label class="form-label font-bold">RUT Paciente (Obligatorio)</label>
-                    <input type="text" class="form-control" id="arqueo-popup-rut" placeholder="Ej: 12.345.678-9" required>
+                    <input type="text" class="form-control" id="arqueo-popup-rut" placeholder="Ej: 12.345.678-9" required aria-label="Ej: 12.345.678-9" title="Ej: 12.345.678-9">
                 </div>
                 <div class="form-group mb-16">
                     <label class="form-label font-bold">¿Presenta incidencia con el medicamento?</label>
-                    <select class="form-control" id="arqueo-popup-tiene-incidencia">
+                    <select class="form-control" id="arqueo-popup-tiene-incidencia" aria-label="arqueo popup tiene incidencia" title="arqueo popup tiene incidencia">
                         <option value="no">No (Consumo normal)</option>
                         <option value="si">Sí (Reportar incidencia)</option>
                     </select>
                 </div>
                 <div class="form-group mb-24" id="arqueo-popup-motivo-container" style="display: none;">
                     <label class="form-label font-bold">Incidencia (Obligatorio)</label>
-                    <select class="form-control" id="arqueo-popup-motivo">
+                    <select class="form-control" id="arqueo-popup-motivo" aria-label="arqueo popup motivo" title="arqueo popup motivo">
                         <option value="" disabled selected>Seleccione incidencia...</option>
                         <option value="Precipitado">Precipitado</option>
                         <option value="Quiebre por conteo">Quiebre por conteo</option>
@@ -4147,7 +4147,7 @@
 
                 <div class="form-group mb-24">
                     <label class="form-label font-bold">Subir Excel (.xlsx)</label>
-                    <input type="file" id="input-excel-cierre" accept=".xlsx" class="form-control" style="padding:10px;">
+                    <input type="file" id="input-excel-cierre" accept=".xlsx" class="form-control" style="padding:10px;" aria-label="input excel cierre" title="input excel cierre">
                 </div>
 
                 <div id="resultado-cuadratura" style="display:none; margin-bottom: 24px;"></div>
@@ -4177,12 +4177,12 @@
                 </p>
                 <div class="form-group mb-16">
                     <label class="form-label" style="font-weight: bold;">Seleccionar Producto:</label>
-                    <input type="text" id="manual-oc-search" class="form-control" placeholder="Escribe para buscar (ej. Paracetamol)" list="oc-product-list" required autocomplete="off">
+                    <input type="text" id="manual-oc-search" class="form-control" placeholder="Escribe para buscar (ej. Paracetamol)" list="oc-product-list" required autocomplete="off" aria-label="Escribe para buscar (ej. Paracetamol)" title="Escribe para buscar (ej. Paracetamol)">
                     <datalist id="oc-product-list"></datalist>
                 </div>
                 <div class="form-group mb-24">
                     <label class="form-label" style="font-weight: bold;">Cantidad a Solicitar:</label>
-                    <input type="number" id="manual-oc-qty" class="form-control" min="1" value="1" required>
+                    <input type="number" id="manual-oc-qty" class="form-control" min="1" value="1" required aria-label="manual oc qty" title="manual oc qty">
                 </div>
                 <div style="display:flex; justify-content:flex-end; gap:12px;">
                     <button type="button" class="btn btn-outline close-modal-btn">Cancelar</button>
@@ -4259,15 +4259,15 @@
             <h3 style="margin-top: 0;">Crear Enfermero (Temporal)</h3>
             <div class="form-group">
                 <label>Nombre Completo</label>
-                <input type="text" id="reemplazo-nombre" class="form-control" placeholder="Ej: Juan Pérez">
+                <input type="text" id="reemplazo-nombre" class="form-control" placeholder="Ej: Juan Pérez" aria-label="Ej: Juan Pérez" title="Ej: Juan Pérez">
             </div>
             <div class="form-group" style="margin-top: 15px;">
                 <label>Correo (Puede ser ficticio)</label>
-                <input type="email" id="reemplazo-email" class="form-control" placeholder="juan.perez@sar.cl">
+                <input type="email" id="reemplazo-email" class="form-control" placeholder="juan.perez@sar.cl" aria-label="juan.perez@sar.cl" title="juan.perez@sar.cl">
             </div>
             <div class="form-group" style="margin-top: 15px;">
                 <label>Contraseña</label>
-                <input type="text" id="reemplazo-pass" class="form-control" value="SA2026*">
+                <input type="text" id="reemplazo-pass" class="form-control" value="SA2026*" aria-label="reemplazo pass" title="reemplazo pass">
                 <small>Clave por defecto para el turno</small>
             </div>
             <div style="display: flex; gap: 15px; margin-top: 25px;">
@@ -4292,7 +4292,7 @@
             
             <div id="div-reasignar-bandeja">
                 <label>Seleccionar Nuevo Responsable</label>
-                <select id="select-reasignar-enfermero" class="form-control" style="margin-bottom: 20px;"></select>
+                <select id="select-reasignar-enfermero" class="form-control" style="margin-bottom: 20px;" aria-label="select reasignar enfermero" title="select reasignar enfermero"></select>
                 <button class="btn btn-success w-100" id="btn-confirmar-reasignacion">Confirmar Reasignación</button>
             </div>
             
@@ -4301,7 +4301,7 @@
                     <strong>Atención:</strong> Esta acción devolverá todos los insumos al Inventario Central y dejará la bandeja como ANULADA.
                 </div>
                 <label>Justificación Obligatoria</label>
-                <textarea id="input-anular-obs" class="form-control" rows="3" placeholder="Ej: El enfermero no se presentó al turno..." style="margin-bottom: 20px;"></textarea>
+                <textarea id="input-anular-obs" class="form-control" rows="3" placeholder="Ej: El enfermero no se presentó al turno..." style="margin-bottom: 20px;" aria-label="Ej: El enfermero no se presentó al turno..." title="Ej: El enfermero no se presentó al turno..."></textarea>
                 <button class="btn btn-danger w-100" id="btn-confirmar-anulacion">Anular Definitivamente</button>
             </div>
         </div>
@@ -4378,7 +4378,7 @@
             <div class="form-group mb-20">
                 <label class="form-label" style="font-weight: 700;">URL DEL WEB APP DE GOOGLE APPS SCRIPT (WEBHOOK)</label>
                 <div style="display: flex; gap: 10px;">
-                    <input type="url" id="input-sheets-url" class="form-control" placeholder="https://script.google.com/macros/s/AKfycb.../exec" style="font-family: monospace; font-size: 13px;">
+                    <input type="url" id="input-sheets-url" class="form-control" placeholder="https://script.google.com/macros/s/AKfycb.../exec" style="font-family: monospace; font-size: 13px;" aria-label="https://script.google.com/macros/s/AKfycb.../exec" title="https://script.google.com/macros/s/AKfycb.../exec">
                     <button type="button" id="btn-test-sheets-conn" class="btn btn-outline" style="border-color: var(--primary); color: var(--primary); font-weight: 600; white-space: nowrap;">
                         <i class="ph ph-plugs"></i> Probar Conexión
                     </button>
@@ -4448,17 +4448,17 @@
 
                 <div class="form-group mb-12">
                     <label class="form-label" style="font-weight: 700;">MEDICAMENTO / FÁRMACO <span style="color:var(--danger)">*</span></label>
-                    <input type="text" id="edit-toma-med" class="form-control font-bold" required placeholder="Nombre del fármaco">
+                    <input type="text" id="edit-toma-med" class="form-control font-bold" required placeholder="Nombre del fármaco" aria-label="Nombre del fármaco" title="Nombre del fármaco">
                 </div>
 
                 <div class="grid-2-col-even mb-12" style="gap: 12px;">
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">DOSIS / CONCENTRACIÓN</label>
-                        <input type="text" id="edit-toma-dosis" class="form-control font-bold" placeholder="Ej: 200mg/5ml">
+                        <input type="text" id="edit-toma-dosis" class="form-control font-bold" placeholder="Ej: 200mg/5ml" aria-label="Ej: 200mg/5ml" title="Ej: 200mg/5ml">
                     </div>
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">CATEGORÍA (PESTAÑA EN SHEETS) <span style="color:var(--danger)">*</span></label>
-                        <select id="edit-toma-cat" class="form-control font-bold" required>
+                        <select id="edit-toma-cat" class="form-control font-bold" required aria-label="edit toma cat" title="edit toma cat">
                             <optgroup label="⭐ Formas Farmacéuticas Principales">
                                 <option value="JARABES">JARABES</option>
                                 <option value="SALES REHIDRATACIONES">SALES REHIDRATACIONES</option>
@@ -4497,7 +4497,7 @@
                 <div class="grid-2-col-even mb-12" style="gap: 12px;">
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">FASE DE CONTEO / TOMA</label>
-                        <select id="edit-toma-fase" class="form-control font-bold" style="color:var(--primary);">
+                        <select id="edit-toma-fase" class="form-control font-bold" style="color:var(--primary);" aria-label="edit toma fase" title="edit toma fase">
                             <option value="1ra Toma (Inicial)">1ra Toma (Inicial)</option>
                             <option value="2da Toma (2da Bodega / Suma)">2da Toma (2da Bodega / Suma)</option>
                             <option value="Reconteo / Ajuste">Reconteo / Ajuste</option>
@@ -4505,7 +4505,7 @@
                     </div>
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">CANTIDAD DE ESTA TOMA (UNIDADES) <span style="color:var(--danger)">*</span></label>
-                        <input type="number" id="edit-toma-cant" class="form-control font-bold" min="0" step="1" required>
+                        <input type="number" id="edit-toma-cant" class="form-control font-bold" min="0" step="1" required aria-label="edit toma cant" title="edit toma cant">
                         <div id="edit-toma-delta" style="font-size: 11px; margin-top: 3px; font-weight: 700;"></div>
                     </div>
                 </div>
@@ -4513,17 +4513,17 @@
                 <div class="grid-2-col-even mb-12" style="gap: 12px;">
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">LOTE FABRICANTE</label>
-                        <input type="text" id="edit-toma-lote" class="form-control font-bold" placeholder="Ej: L-2024-X o S/L">
+                        <input type="text" id="edit-toma-lote" class="form-control font-bold" placeholder="Ej: L-2024-X o S/L" aria-label="Ej: L-2024-X o S/L" title="Ej: L-2024-X o S/L">
                     </div>
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">VENCIMIENTO (MES / AÑO)</label>
-                        <input type="month" id="edit-toma-vto" class="form-control font-bold" placeholder="AAAA-MM">
+                        <input type="month" id="edit-toma-vto" class="form-control font-bold" placeholder="AAAA-MM" aria-label="AAAA-MM" title="AAAA-MM">
                     </div>
                 </div>
 
                 <div class="form-group mb-12">
                     <label class="form-label" style="font-weight: 700;">UBICACIÓN / BODEGA</label>
-                    <select id="edit-toma-ubic" class="form-control font-bold">
+                    <select id="edit-toma-ubic" class="form-control font-bold" aria-label="edit toma ubic" title="edit toma ubic">
                         <option value="Bodega Central">Bodega Central</option>
                         <option value="Bodega Transitoria">Bodega Transitoria</option>
                         <option value="Botiquín Urgencia">Botiquín Urgencia</option>
@@ -4534,7 +4534,7 @@
 
                 <div class="form-group mb-16">
                     <label class="form-label" style="font-weight: 700;">MOTIVO DE LA MODIFICACIÓN (AUDITORÍA) <span style="color:var(--danger)">*</span></label>
-                    <input type="text" id="edit-toma-motivo" class="form-control" placeholder="Ej: Error en nombre / Reclasificación de categoría / Corrección de conteo..." required>
+                    <input type="text" id="edit-toma-motivo" class="form-control" placeholder="Ej: Error en nombre / Reclasificación de categoría / Corrección de conteo..." required aria-label="Ej: Error en nombre / Reclasificación de categoría / Corrección de conteo..." title="Ej: Error en nombre / Reclasificación de categoría / Corrección de conteo...">
                 </div>
 
                 <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #f1f5f9; padding-top: 14px;">
@@ -4576,11 +4576,11 @@
                 <div class="grid-2-col-even mb-12" style="gap: 10px;">
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">UNIDADES MERMADAS / DESCONTAR <span style="color:var(--danger)">*</span></label>
-                        <input type="number" id="inc-toma-cantidad" class="form-control font-bold" min="1" step="1" value="1" required style="font-size: 16px; color: #dc2626;">
+                        <input type="number" id="inc-toma-cantidad" class="form-control font-bold" min="1" step="1" value="1" required style="font-size: 16px; color: #dc2626;" aria-label="inc toma cantidad" title="inc toma cantidad">
                     </div>
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">TIPO DE INCIDENCIA <span style="color:var(--danger)">*</span></label>
-                        <select id="inc-toma-tipo" class="form-control font-bold" required>
+                        <select id="inc-toma-tipo" class="form-control font-bold" required aria-label="inc toma tipo" title="inc toma tipo">
                             <option value="Quiebre Físico (Frasco/Ampolla)">Quiebre Físico (Frasco/Ampolla)</option>
                             <option value="Precipitación / Cristalización">Precipitación / Cristalización</option>
                             <option value="Empaque Roto / Contaminado">Empaque Roto / Contaminado</option>
@@ -4594,17 +4594,17 @@
                 <div class="grid-2-col-even mb-12" style="gap: 10px;">
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">LOTE AFECTADO</label>
-                        <input type="text" id="inc-toma-lote" class="form-control" placeholder="Lote">
+                        <input type="text" id="inc-toma-lote" class="form-control" placeholder="Lote" aria-label="Lote" title="Lote">
                     </div>
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">UBICACIÓN / BODEGA</label>
-                        <input type="text" id="inc-toma-ubic" class="form-control" readonly style="background:#f1f5f9;">
+                        <input type="text" id="inc-toma-ubic" class="form-control" readonly style="background:#f1f5f9;" aria-label="inc toma ubic" title="inc toma ubic">
                     </div>
                 </div>
 
                 <div class="form-group mb-16">
                     <label class="form-label" style="font-weight: 700;">DETALLE DE LA INCIDENCIA (OBSERVACIONES) <span style="color:var(--danger)">*</span></label>
-                    <textarea id="inc-toma-detalle" class="form-control" rows="2" placeholder="Ej: Se cayó una ampolla al suelo durante el conteo / Frasco con solución turbia con sedimentos..." required></textarea>
+                    <textarea id="inc-toma-detalle" class="form-control" rows="2" placeholder="Ej: Se cayó una ampolla al suelo durante el conteo / Frasco con solución turbia con sedimentos..." required aria-label="Ej: Se cayó una ampolla al suelo durante el conteo / Frasco con solución turbia con sedimentos..." title="Ej: Se cayó una ampolla al suelo durante el conteo / Frasco con solución turbia con sedimentos..."></textarea>
                 </div>
 
                 <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #fee2e2; padding-top: 14px;">
@@ -4650,7 +4650,7 @@
             <div class="form-group mb-20">
                 <label class="form-label" style="font-weight: 700;">URL DEL WEB APP DE GOOGLE APPS SCRIPT (INVENTARIO SEMANAL)</label>
                 <div style="display: flex; gap: 10px;">
-                    <input type="url" id="input-sheets-semanal-url" class="form-control" placeholder="https://script.google.com/macros/s/AKfycb.../exec" style="font-family: monospace; font-size: 13px;">
+                    <input type="url" id="input-sheets-semanal-url" class="form-control" placeholder="https://script.google.com/macros/s/AKfycb.../exec" style="font-family: monospace; font-size: 13px;" aria-label="https://script.google.com/macros/s/AKfycb.../exec" title="https://script.google.com/macros/s/AKfycb.../exec">
                     <button type="button" id="btn-test-sheets-semanal-conn" class="btn btn-outline" style="border-color: #0284c7; color: #0284c7; font-weight: 600; white-space: nowrap;">
                         <i class="ph ph-plugs"></i> Probar Conexión
                     </button>
@@ -4718,13 +4718,13 @@
                 <div class="grid-2-col-even mb-12" style="gap: 12px;">
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">NOMBRE DEL RACK / GRUPO <span style="color:var(--danger)">*</span></label>
-                        <input type="text" id="rack-nombre-input" class="form-control font-bold" placeholder="Ej: Rack 1 - Antibióticos / Estante Urgencias" required>
+                        <input type="text" id="rack-nombre-input" class="form-control font-bold" placeholder="Ej: Rack 1 - Antibióticos / Estante Urgencias" required aria-label="Ej: Rack 1 - Antibióticos / Estante Urgencias" title="Ej: Rack 1 - Antibióticos / Estante Urgencias">
                     </div>
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">COLOR DISTINTIVO</label>
                         <div style="display:flex; gap:8px; align-items:center;">
-                            <input type="color" id="rack-color-input" value="#0284c7" style="width:45px; height:38px; border:none; border-radius:6px; cursor:pointer; padding:0;">
-                            <input type="text" id="rack-descripcion-input" class="form-control" placeholder="Ubicación (Ej: Pasillo A, Nivel 2)">
+                            <input type="color" id="rack-color-input" value="#0284c7" style="width:45px; height:38px; border:none; border-radius:6px; cursor:pointer; padding:0;" aria-label="rack color input" title="rack color input">
+                            <input type="text" id="rack-descripcion-input" class="form-control" placeholder="Ubicación (Ej: Pasillo A, Nivel 2)" aria-label="Ubicación (Ej: Pasillo A, Nivel 2)" title="Ubicación (Ej: Pasillo A, Nivel 2)">
                         </div>
                     </div>
                 </div>
@@ -4737,7 +4737,7 @@
                     </label>
                     <div class="search-input-wrapper mb-8" style="margin:0 0 8px 0;">
                         <i class="ph ph-magnifying-glass"></i>
-                        <input type="text" id="rack-buscar-medicamento" class="form-control" placeholder="Buscar medicamento para añadir al rack...">
+                        <input type="text" id="rack-buscar-medicamento" class="form-control" placeholder="Buscar medicamento para añadir al rack..." aria-label="Buscar medicamento para añadir al rack..." title="Buscar medicamento para añadir al rack...">
                     </div>
 
                     <div id="rack-medicamentos-checklist" style="max-height: 220px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; background: #f8fafc;">
@@ -4782,22 +4782,22 @@
                 <div class="grid-2-col-even mb-12" style="gap: 10px;">
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">NUEVO CONTEO FÍSICO (UNIDADES) <span style="color:var(--danger)">*</span></label>
-                        <input type="number" id="ajuste-semanal-nuevo-conteo" class="form-control font-bold" min="0" step="1" required style="font-size:16px; color:#0284c7;">
+                        <input type="number" id="ajuste-semanal-nuevo-conteo" class="form-control font-bold" min="0" step="1" required style="font-size:16px; color:#0284c7;" aria-label="ajuste semanal nuevo conteo" title="ajuste semanal nuevo conteo">
                     </div>
                     <div class="form-group">
                         <label class="form-label" style="font-weight: 700;">LOTE CORREGIDO</label>
-                        <input type="text" id="ajuste-semanal-lote" class="form-control" placeholder="Lote">
+                        <input type="text" id="ajuste-semanal-lote" class="form-control" placeholder="Lote" aria-label="Lote" title="Lote">
                     </div>
                 </div>
 
                 <div class="form-group mb-12">
                     <label class="form-label" style="font-weight: 700;">FECHA DE VENCIMIENTO (MES / AÑO)</label>
-                    <input type="month" id="ajuste-semanal-vto" class="form-control">
+                    <input type="month" id="ajuste-semanal-vto" class="form-control" aria-label="ajuste semanal vto" title="ajuste semanal vto">
                 </div>
 
                 <div class="form-group mb-16">
                     <label class="form-label" style="font-weight: 700;">JUSTIFICACIÓN DE LA MODIFICACIÓN (AUDITORÍA) <span style="color:var(--danger)">*</span></label>
-                    <input type="text" id="ajuste-semanal-motivo" class="form-control" placeholder="Ej: Recuento físico posterior / Error en digitación inicial..." required>
+                    <input type="text" id="ajuste-semanal-motivo" class="form-control" placeholder="Ej: Recuento físico posterior / Error en digitación inicial..." required aria-label="Ej: Recuento físico posterior / Error en digitación inicial..." title="Ej: Recuento físico posterior / Error en digitación inicial...">
                 </div>
 
                 <div style="display: flex; justify-content: flex-end; gap: 10px; border-top: 1px solid #f1f5f9; padding-top: 14px;">
@@ -4859,11 +4859,11 @@
                     </div>
                     <div style="display: flex; align-items: center; gap: 16px;">
                         <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-weight: 600; color: #16a34a;">
-                            <input type="radio" name="triaje-box-condition" value="cerrada" checked id="radio-caja-cerrada">
+                            <input type="radio" name="triaje-box-condition" value="cerrada" checked id="radio-caja-cerrada" aria-label="radio caja cerrada" title="radio caja cerrada">
                             <i class="ph-fill ph-package"></i> Caja Cerrada (Automática)
                         </label>
                         <label style="display: inline-flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px; font-weight: 600; color: #d97706;">
-                            <input type="radio" name="triaje-box-condition" value="abierta" id="radio-caja-abierta">
+                            <input type="radio" name="triaje-box-condition" value="abierta" id="radio-caja-abierta" aria-label="radio caja abierta" title="radio caja abierta">
                             <i class="ph-fill ph-package-open"></i> Caja Abierta (Conteo Manual)
                         </label>
                     </div>
@@ -4882,12 +4882,12 @@
             <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 16px; margin-bottom: 16px;">
                 <div class="form-group" style="margin-bottom: 0;">
                     <label class="form-label" style="font-weight: 700; font-size: 12px;">INSUMO / MEDICAMENTO <span style="color:var(--danger)">*</span></label>
-                    <input type="text" id="triaje-input-insumo" class="form-control" placeholder="Nombre clínico del producto extraído...">
+                    <input type="text" id="triaje-input-insumo" class="form-control" placeholder="Nombre clínico del producto extraído..." aria-label="Nombre clínico del producto extraído..." title="Nombre clínico del producto extraído...">
                 </div>
                 <div class="form-group" style="margin-bottom: 0;">
                     <label class="form-label" style="font-weight: 700; font-size: 12px;" id="lbl-triaje-cantidad">CANTIDAD TOTAL <span style="color:var(--danger)">*</span></label>
                     <div style="position: relative;">
-                        <input type="number" id="triaje-input-cantidad" class="form-control" placeholder="Ej: 500" min="1">
+                        <input type="number" id="triaje-input-cantidad" class="form-control" placeholder="Ej: 500" min="1" aria-label="Ej: 500" title="Ej: 500">
                         <span id="badge-triaje-tipo-conteo" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 11px; background: #e0f2fe; color: #0369a1; padding: 2px 6px; border-radius: 4px; font-weight: 700;">AUTO</span>
                     </div>
                 </div>
@@ -4896,22 +4896,22 @@
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
                 <div class="form-group" style="margin-bottom: 0;">
                     <label class="form-label" style="font-weight: 700; font-size: 12px;">LOTE (LOT / LOTE N°)</label>
-                    <input type="text" id="triaje-input-lote" class="form-control" placeholder="Ej: LOT 4600002701">
+                    <input type="text" id="triaje-input-lote" class="form-control" placeholder="Ej: LOT 4600002701" aria-label="Ej: LOT 4600002701" title="Ej: LOT 4600002701">
                 </div>
                 <div class="form-group" style="margin-bottom: 0;">
                     <label class="form-label" style="font-weight: 700; font-size: 12px;">FECHA VENCIMIENTO (EXP)</label>
-                    <input type="text" id="triaje-input-vencimiento" class="form-control" placeholder="MM-YYYY (Ej: 08-2027)">
+                    <input type="text" id="triaje-input-vencimiento" class="form-control" placeholder="MM-YYYY (Ej: 08-2027)" aria-label="MM-YYYY (Ej: 08-2027)" title="MM-YYYY (Ej: 08-2027)">
                 </div>
             </div>
 
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 22px;">
                 <div class="form-group" style="margin-bottom: 0;">
                     <label class="form-label" style="font-weight: 700; font-size: 12px;">FECHA FABRICACIÓN (MFG / FAB)</label>
-                    <input type="text" id="triaje-input-fabricacion" class="form-control" placeholder="MM-YYYY (Opcional)">
+                    <input type="text" id="triaje-input-fabricacion" class="form-control" placeholder="MM-YYYY (Opcional)" aria-label="MM-YYYY (Opcional)" title="MM-YYYY (Opcional)">
                 </div>
                 <div class="form-group" style="margin-bottom: 0;">
                     <label class="form-label" style="font-weight: 700; font-size: 12px;">FABRICANTE / LABORATORIO</label>
-                    <input type="text" id="triaje-input-fabricante" class="form-control" placeholder="Ej: Laboratorio Chile / Braun">
+                    <input type="text" id="triaje-input-fabricante" class="form-control" placeholder="Ej: Laboratorio Chile / Braun" aria-label="Ej: Laboratorio Chile / Braun" title="Ej: Laboratorio Chile / Braun">
                 </div>
             </div>
 
@@ -4973,9 +4973,9 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=18.29"></script>
-    <script type="module" src="patch-plantillas.js?v=18.29"></script>
-    <script src="visor-triaje.js?v=18.29"></script>
-    <script src="visor-adquisiciones.js?v=18.29"></script>
+    <script type="module" src="script.js?v=18.30"></script>
+    <script type="module" src="patch-plantillas.js?v=18.30"></script>
+    <script src="visor-triaje.js?v=18.30"></script>
+    <script src="visor-adquisiciones.js?v=18.30"></script>
 </body>
 </html>

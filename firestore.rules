@@ -90,6 +90,12 @@ service cloud.firestore {
     }
 
     // Estantes y ubicaciones de cada bodega (códigos como BS-A01). No se borran: se archivan.
+    // Qué cantidad de cada producto hay en cada ubicación (el stock total sigue en Insumos).
+    match /Asignaciones_Ubicacion/{id} {
+      allow read: if hasRole();
+      allow create, update, delete: if isStaff();
+    }
+
     match /Bodegas/{bodegaId}/Ubicaciones/{codigo} {
       allow read: if hasRole();
       allow create, update: if isAdmin();

@@ -232,6 +232,42 @@
     }
 
     // ---------------------------------------------------------------
+    // Asignaciones: cuánto de cada producto hay en cada ubicación
+    // (el stock total sigue en Insumos; lo no asignado queda "sin ubicar")
+    // ---------------------------------------------------------------
+    const slug = (t) => String(t || '').toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'SIN_NOMBRE';
+    const idAsignacion = (bodegaId, codigo, nombre) => `${bodegaId}__${codigo}__${slug(nombre)}`;
+
+    async function cargarAsignaciones(bodegaId) {
+        const f = fs();
+        const q = bodegaId
+            ? f.query(f.collection(db(), 'Asignaciones_Ubicacion'), f.where('bodegaId', '==', bodegaId), f.limit(3000))
+            : f.query(f.collection(db(), 'Asignaciones_Ubicacion'), f.limit(3000));
+        const snap = await f.getDocs(q);
+        const out = [];
+        snap.forEach(d => out.push({ id: d.id, ...d.data() }));
+        return out;
+    }
+
+    /** Puro: cuánto queda sin ubicar de un producto (total - asignado), sin contar la asignación que se está editando. */
+    function sinUbicar(total, asignaciones, nombre, excluirId) {
+        const asignado = asignaciones.filter(a => slug(a.insumoName) === slug(nombre) && a.id !== excluirId).reduce((s, a) => s + (Number(a.cantidad) || 0), 0);
+        return Math.max(0, (Number(total) || 0) - asignado);
+    }
+
+    async function guardarAsignacion(bodegaId, codigo, nombre, cantidad) {
+        const f = fs();
+        const id = idAsignacion(bodegaId, codigo, nombre);
+        const ref = f.doc(f.collection(db(), 'Asignaciones_Ubicacion'), id);
+        if (!(cantidad > 0)) { await f.deleteDoc(ref); return; }
+        await f.setDoc(ref, {
+            bodegaId, codigo, insumoName: nombre, cantidad: Number(cantidad),
+            actualizadoPor: (window.firebaseAuth && window.firebaseAuth.currentUser && window.firebaseAuth.currentUser.email) || '',
+            actualizadoEn: new Date().toISOString()
+        });
+    }
+
+    // ---------------------------------------------------------------
     // Pantalla de acceso rápido (QR de bodega o de ubicación), pensada para el celular
     // ---------------------------------------------------------------
     const AccesoBodega = (() => {
@@ -257,15 +293,24 @@
                 // Stock de la bodega (hasta 600 lotes, agrupados por producto)
                 let lineas = [];
                 if (ctx.tipo === 'u' && ctx.codigo) {
-                    const q = f.query(f.collection(db(), 'Insumos'), f.where('ubicacionCodigo', '==', ctx.codigo), f.limit(300));
-                    lineas = agrupar(await f.getDocs(q));
+                    lineas = [];
                 } else {
                     const q = f.query(f.collection(db(), 'Insumos'), f.where('location', '==', bodega.name), f.limit(600));
                     lineas = agrupar(await f.getDocs(q));
                 }
                 let ubic = [];
                 if (bodega.usaEstantes === true) { try { ubic = (await cargarUbicaciones(bodega.id)).filter(u => u.activo !== false); } catch (e) { /* sin permiso o sin datos */ } }
-                datos = { bodega, lineas, ubic, ctx };
+                let asign = [];
+                if (bodega.usaEstantes === true) { try { asign = await cargarAsignaciones(bodega.id); } catch (e) { /* sin permiso */ } }
+                if (ctx.tipo === 'u' && ctx.codigo) {
+                    // en la pantalla de un estante, la lista es lo asignado a ese estante (el stock total se toma de la bodega)
+                    const qb = f.query(f.collection(db(), 'Insumos'), f.where('location', '==', bodega.name), f.limit(600));
+                    const totales = agrupar(await f.getDocs(qb));
+                    lineas = asign.filter(a => a.codigo === ctx.codigo).map(a => ({ name: a.insumoName, cantidad: Number(a.cantidad) || 0, limite: 0 })).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+                    datos = { bodega, lineas, ubic, ctx, asign, totales };
+                } else {
+                    datos = { bodega, lineas, ubic, ctx, asign, totales: lineas };
+                }
                 pintar();
             } catch (e) {
                 console.warn('[Acceso rápido]', e);
@@ -289,7 +334,7 @@
 
         function pintar() {
             const cont = document.getElementById('acceso-bodega-contenido');
-            const { bodega, lineas, ubic, ctx } = datos;
+            const { bodega, lineas, ubic, ctx, asign, totales } = datos;
             const r = rol();
             const esStaff = ['admin', 'administrador', 'global', 'superadmin', 'operador'].includes(r);
             const esUbic = ctx.tipo === 'u' && ctx.codigo;
@@ -314,6 +359,7 @@
                 </div>
                 <div class="acceso-bodega__buscar"><input type="search" id="acceso-buscar" placeholder="Buscar producto…" aria-label="Buscar producto"></div>
                 <div class="erp-card acceso-bodega__lista" id="acceso-lista"></div>
+                <div id="acceso-ubicar"></div>
                 ${bodega.usaEstantes === true ? `<div class="erp-card acceso-bodega__ubic" id="acceso-ubic"><h3>Ubicaciones de la bodega</h3>${ubic.length ? ubic.map(u => `<a class="bodega-estantes__chip" href="#u/${encodeURIComponent(bodega.id)}/${encodeURIComponent(u.codigo)}">${esc(u.codigo)}</a>`).join(' ') : '<p class="bodega-estantes__hint">Aún no hay estantes creados.</p>'}</div>` : ''}
                 <p class="acceso-bodega__pie"><a href="#view-panel">Ver el sitio completo</a></p>`;
             const lista = cont.querySelector('#acceso-lista');
@@ -322,22 +368,162 @@
                 const filas = lineas.filter(l => !f || l.name.toLowerCase().includes(f));
                 lista.innerHTML = filas.length ? filas.map(l => {
                     const crit = l.limite > 0 && l.cantidad <= l.limite;
-                    return `<div class="acceso-bodega__fila${crit ? ' acceso-bodega__fila--crit' : ''}"><span>${esc(l.name)}</span><strong>${l.cantidad}</strong></div>`;
+                    let extra = '';
+                    if (bodega.usaEstantes === true && !esUbic) {
+                        const su = sinUbicar(l.cantidad, asign, l.name);
+                        if (su > 0) extra = `<small class="acceso-bodega__sinubicar">${su} sin ubicar</small>`;
+                    }
+                    const quitar = esUbic && esStaff ? `<button type="button" class="acceso-bodega__quitar" data-quitar="${esc(l.name)}" aria-label="Quitar de esta ubicación">Quitar</button>` : '';
+                    return `<div class="acceso-bodega__fila${crit ? ' acceso-bodega__fila--crit' : ''}"><span>${esc(l.name)}${extra}</span><span class="acceso-bodega__cant"><strong>${l.cantidad}</strong>${quitar}</span></div>`;
                 }).join('') : `<div class="home-empty">${lineas.length ? 'Sin resultados.' : (esUbic ? 'Aún no hay productos asignados a esta ubicación.' : 'Esta bodega no tiene productos registrados.')}</div>`;
+                lista.querySelectorAll('[data-quitar]').forEach(b => b.addEventListener('click', async () => {
+                    try { await guardarAsignacion(bodega.id, ctx.codigo, b.dataset.quitar, 0); toast('Listo', 'Quitado de esta ubicación.', 'success'); abrir(ctx); }
+                    catch (e) { toast('Error', 'No se pudo quitar: ' + e.message, 'error'); }
+                }));
             };
             pintarLista('');
             cont.querySelector('#acceso-buscar').addEventListener('input', (e) => pintarLista(e.target.value));
             cont.querySelectorAll('[data-acc]').forEach(btn => btn.addEventListener('click', () => {
                 const id = btn.dataset.acc;
                 if (id === 'stock') { lista.scrollIntoView({ behavior: 'smooth', block: 'start' }); const i = cont.querySelector('#acceso-buscar'); if (i) i.focus(); }
-                else if (id === 'ubicar') { const u = cont.querySelector('#acceso-ubic'); if (u) u.scrollIntoView({ behavior: 'smooth' }); else toast('Sin estantes', 'Esta bodega no usa estantes.', 'info'); }
+                else if (id === 'ubicar') {
+                    if (bodega.usaEstantes !== true) { toast('Sin estantes', 'Esta bodega no usa estantes.', 'info'); return; }
+                    if (!ubic.length) { toast('Sin estantes', 'Primero crea los estantes en Bodegas.', 'info'); return; }
+                    panelUbicar(cont.querySelector('#acceso-ubicar'), esUbic ? ctx.codigo : null);
+                }
                 else window.location.hash = id;
             }));
+        }
+
+        function panelUbicar(host, codigoFijo) {
+            const { bodega, ubic, ctx, asign, totales } = datos;
+            const productos = totales.slice().sort((a, b) => (sinUbicar(b.cantidad, asign, b.name) > 0) - (sinUbicar(a.cantidad, asign, a.name) > 0) || a.name.localeCompare(b.name, 'es'));
+            host.innerHTML = `
+                <div class="erp-card acceso-bodega__form">
+                    <h3>Ubicar un producto</h3>
+                    <label>Producto
+                        <select id="ub-prod">${productos.map(p => `<option value="${esc(p.name)}">${esc(p.name)} (${sinUbicar(p.cantidad, asign, p.name)} sin ubicar)</option>`).join('')}</select>
+                    </label>
+                    <label>Ubicación
+                        <select id="ub-cod" ${codigoFijo ? 'disabled' : ''}>${ubic.map(u => `<option value="${esc(u.codigo)}" ${u.codigo === codigoFijo ? 'selected' : ''}>${esc(u.codigo)}</option>`).join('')}</select>
+                    </label>
+                    <label>Cantidad en esa ubicación
+                        <input type="number" id="ub-cant" min="0" step="1" inputmode="numeric">
+                    </label>
+                    <p class="bodega-estantes__hint" id="ub-ayuda"></p>
+                    <div class="acceso-bodega__acciones"><button type="button" class="btn btn-primary" id="ub-guardar">Guardar</button> <button type="button" class="btn btn-outline" id="ub-cerrar">Cerrar</button></div>
+                </div>`;
+            const sel = host.querySelector('#ub-prod'), cod = host.querySelector('#ub-cod'), cant = host.querySelector('#ub-cant'), ayuda = host.querySelector('#ub-ayuda');
+            const refrescar = () => {
+                const p = productos.find(x => x.name === sel.value); if (!p) return;
+                const existente = asign.find(a => a.id === idAsignacion(bodega.id, cod.value, p.name));
+                const libre = sinUbicar(p.cantidad, asign, p.name, existente && existente.id) ;
+                cant.max = libre; cant.value = existente ? existente.cantidad : libre;
+                ayuda.textContent = `Stock total: ${p.cantidad}. Se puede ubicar hasta ${libre} aquí.${existente ? ' Ya hay ' + existente.cantidad + ' en esta ubicación; el número reemplaza esa cantidad (0 la quita).' : ''}`;
+            };
+            sel.addEventListener('change', refrescar); cod.addEventListener('change', refrescar); refrescar();
+            host.querySelector('#ub-cerrar').addEventListener('click', () => { host.innerHTML = ''; });
+            host.querySelector('#ub-guardar').addEventListener('click', async () => {
+                const p = productos.find(x => x.name === sel.value); if (!p) return;
+                const existente = asign.find(a => a.id === idAsignacion(bodega.id, cod.value, p.name));
+                const libre = sinUbicar(p.cantidad, asign, p.name, existente && existente.id);
+                const n = Math.floor(Number(cant.value));
+                if (!(n >= 0)) { toast('Cantidad no válida', 'Ingresa un número de 0 o más.', 'warning'); return; }
+                if (n > libre) { toast('Supera el stock', `Solo hay ${libre} sin ubicar de este producto.`, 'warning'); return; }
+                try { await guardarAsignacion(bodega.id, cod.value, p.name, n); toast('Guardado', `${p.name}: ${n} en ${cod.value}.`, 'success'); abrir(ctx); }
+                catch (e) { toast('Error', 'No se pudo guardar: ' + e.message, 'error'); }
+            });
+            host.scrollIntoView({ behavior: 'smooth' });
         }
 
         return { abrir };
     })();
 
+    // ---------------------------------------------------------------
+    // ¿Dónde está?: producto -> bodega -> estante
+    // ---------------------------------------------------------------
+    const DondeEsta = (() => {
+        let cache = null; // { t, insumos, bodegas, asign }
+        let iniciado = false;
+
+        async function cargar() {
+            if (cache && Date.now() - cache.t < 120000) return cache;
+            const f = fs();
+            const [ins, bod, asg] = await Promise.all([
+                f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(3000))),
+                f.getDocs(f.collection(db(), 'Bodegas')),
+                cargarAsignaciones(null).catch(() => [])
+            ]);
+            const insumos = []; ins.forEach(d => insumos.push(d.data()));
+            const bodegas = []; bod.forEach(d => bodegas.push({ id: d.id, ...d.data() }));
+            cache = { t: Date.now(), insumos, bodegas, asign: asg };
+            return cache;
+        }
+
+        function resultados(q, { insumos, bodegas, asign }) {
+            const t = slug(q).replace(/_/g, ' ');
+            const porProducto = new Map(); // nombre -> Map(bodegaNombre -> cantidad)
+            insumos.forEach(i => {
+                const n = String(i.name || ''); if (!n) return;
+                if (!slug(n).replace(/_/g, ' ').includes(t)) return;
+                const loc = String(i.location || 'Sin bodega');
+                const m = porProducto.get(n) || new Map();
+                m.set(loc, (m.get(loc) || 0) + (Number(i.quantity) || 0));
+                porProducto.set(n, m);
+            });
+            return Array.from(porProducto.entries()).sort((a, b) => a[0].localeCompare(b[0], 'es')).slice(0, 25).map(([nombre, m]) => ({
+                nombre,
+                bodegas: Array.from(m.entries()).map(([loc, cant]) => {
+                    const b = bodegas.find(x => x.name === loc);
+                    const ub = b ? asign.filter(a => a.bodegaId === b.id && slug(a.insumoName) === slug(nombre)).sort((x, y) => String(x.codigo).localeCompare(String(y.codigo))) : [];
+                    const asignado = ub.reduce((s, a) => s + (Number(a.cantidad) || 0), 0);
+                    return { bodega: loc, bodegaId: b && b.id, usaEstantes: b && b.usaEstantes === true, cantidad: cant, ubicaciones: ub, sinUbicar: Math.max(0, cant - asignado) };
+                }).sort((x, y) => y.cantidad - x.cantidad)
+            }));
+        }
+
+        function pintar(res) {
+            const cont = document.getElementById('donde-resultados');
+            if (!res.length) { cont.innerHTML = '<div class="home-empty">No encontré productos con ese nombre.</div>'; return; }
+            cont.innerHTML = res.map(r => `
+                <div class="erp-card donde__prod">
+                    <h3>${esc(r.nombre)}</h3>
+                    ${r.bodegas.map(b => `
+                        <div class="donde__bodega">
+                            <div class="donde__bodega-top"><strong>${esc(b.bodega)}</strong><span>${b.cantidad}</span></div>
+                            ${b.usaEstantes ? `<div class="donde__ubic">
+                                ${b.ubicaciones.map(u => `<a class="bodega-estantes__chip" href="#u/${encodeURIComponent(b.bodegaId)}/${encodeURIComponent(u.codigo)}">${esc(u.codigo)} · ${u.cantidad}</a>`).join(' ')}
+                                ${b.sinUbicar > 0 ? `<span class="acceso-bodega__sinubicar">${b.sinUbicar} sin ubicar</span>` : ''}
+                            </div>` : '<div class="donde__ubic"><span class="acceso-bodega__sinubicar">Bodega sin estantes</span></div>'}
+                        </div>`).join('')}
+                </div>`).join('');
+        }
+
+        async function abrir() {
+            const inp = document.getElementById('donde-buscar'); if (!inp) return;
+            if (!iniciado) {
+                iniciado = true;
+                let tmr = null;
+                inp.addEventListener('input', () => {
+                    clearTimeout(tmr);
+                    tmr = setTimeout(async () => {
+                        const q = inp.value.trim();
+                        const cont = document.getElementById('donde-resultados');
+                        if (q.length < 3) { cont.innerHTML = '<div class="home-empty">Escribe al menos 3 letras.</div>'; return; }
+                        cont.innerHTML = '<div class="home-empty">Buscando…</div>';
+                        try { pintar(resultados(q, await cargar())); }
+                        catch (e) { cont.innerHTML = `<div class="home-empty">No se pudo buscar (${esc(e.message)}).</div>`; }
+                    }, 250);
+                });
+            }
+            cache = null; // al entrar a la vista se refresca la próxima búsqueda
+            inp.focus();
+        }
+
+        return { abrir, resultados };
+    })();
+
     window.SAR_AccesoBodega = AccesoBodega;
-    window.SAR_Estantes = { renderSeccion, planificarUbicaciones, codigoUbicacion, prefijoValido, imprimirEtiquetas };
+    window.SAR_DondeEsta = DondeEsta;
+    window.SAR_Estantes = { renderSeccion, planificarUbicaciones, codigoUbicacion, prefijoValido, imprimirEtiquetas, sinUbicar, slug };
 })(window, document);

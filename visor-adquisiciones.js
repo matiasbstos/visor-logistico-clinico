@@ -1054,6 +1054,17 @@
                 ERPCacheManager.set('ERP_CATALOGO_MAESTRO', catalogoList);
             }
 
+            // Datos de ejemplo ocultos por defecto: todavía no hay datos reales de compras.
+            // Para verlos en una prueba: localStorage.setItem('sar_demo','1') y recargar.
+            let mostrarEjemplos = false;
+            try { mostrarEjemplos = window.localStorage.getItem('sar_demo') === '1'; } catch (e) { /* sin storage */ }
+            if (!mostrarEjemplos) {
+                sdcList.length = 0;
+                ocList.length = 0;
+                recepcionesList.length = 0;
+                catalogoList.length = 0;
+            }
+
             // Construir índices en memoria para búsquedas instantáneas
             ERPIndexEngine.rebuildCatalogIndex(catalogoList);
             ERPIndexEngine.rebuildKanbanIndex(sdcList, ocList);
@@ -3090,7 +3101,7 @@
         const erpSection = document.getElementById('view-erp-adquisiciones');
         if (!erpSection || erpSection.dataset.erpInitialized === 'true') return;
         erpSection.dataset.erpInitialized = 'true';
-        estadoMemoria.panelERPActivo = estadoMemoria.panelERPActivo || 'erp-panel-dashboard';
+        estadoMemoria.panelERPActivo = estadoMemoria.panelERPActivo || 'erp-panel-tablero';
 
         // 1. Navegación Global Sidebar Unificada + Sub-navegación rápida
         document.querySelectorAll('.erp-sidebar__item[data-erp-panel]').forEach(btn => {
@@ -3105,7 +3116,7 @@
         window.addEventListener('hashchange', () => {
             const hash = window.location.hash.substring(1) || 'view-panel';
             if (hash === 'view-erp-adquisiciones') {
-                const panelToOpen = estadoMemoria.panelERPActivo || 'erp-panel-dashboard';
+                const panelToOpen = estadoMemoria.panelERPActivo || 'erp-panel-tablero';
                 setTimeout(() => sincronizarEstadoSidebarUnificado(panelToOpen), 20);
             } else {
                 document.querySelectorAll('#app-sidebar .erp-sidebar__item').forEach(btn => {

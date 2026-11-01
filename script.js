@@ -1669,23 +1669,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const topbarTitle = document.querySelector('.topbar-title');
 
         const viewTitles = {
-            'view-panel': 'Visor Logístico',
-            'view-inventario': 'Visor Logístico',
+            'view-panel': 'Inicio',
+            'view-inventario': 'Existencias',
             'view-toma-inventario': 'Toma de Inventario',
             'view-inventario-semanal': 'Inventario Semanal por Racks',
             'view-compras': 'Gestión de Abastecimiento',
-            'view-movimientos': 'Visor Logístico',
-            'view-historial': 'Historial de Transacciones',
+            'view-movimientos': 'Ingresos',
+            'view-historial': 'Historial',
             'view-informes': 'Informes Logísticos',
             'view-analitico': 'Inteligencia Operativa',
-            'view-bodegas': 'Gestión de Bodegas',
+            'view-bodegas': 'Bodegas',
             'view-usuarios': 'Gestión de Usuarios',
             'view-configuracion': 'Configuración del Sistema',
             'view-compras': 'Solicitudes de Compra',
-            'view-transferencias': 'Transferencias y Auditoría Clínica',
-            'view-ajustes': 'Ajustes Críticos de Inventario',
-            'view-bandejas': 'Gestión de Bandejas de Turno',
-            'view-usuarios': 'Directorio de Personal y Roles'
+            'view-transferencias': 'Transferencias',
+            'view-ajustes': 'Ajustes de Stock',
+            'view-bandejas': 'Bandejas de Turno',
+            'view-usuarios': 'Usuarios'
         };
 
         // Función unificada que lee el hash y actualiza la UI
@@ -1739,6 +1739,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 section.classList.remove('active');
             });
 
+            document.body.dataset.view = hash;
             const activeView = document.getElementById(hash);
             if (activeView) {
                 activeView.style.display = 'block';

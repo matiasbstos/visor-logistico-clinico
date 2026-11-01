@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=20.12",
+                "./script.js": "./script.js?v=20.14",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -62,7 +62,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=20.12">
+    <link rel="stylesheet" href="style.css?v=20.14">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -164,47 +164,20 @@
             </div>
 
             <div class="sidebar-menu-wrapper">
-                <!-- BLOQUE DESTACADO: ADQUISICIONES SAR (ERP) -->
-                <div class="sidebar-box sidebar-featured-erp">
-                    <div class="sidebar-group-title">
-                        <i class="ph-fill ph-seal-check"></i>
-                        <span class="menu-label">ADQUISICIONES SAR</span>
-                    </div>
-                    <a href="#" class="menu-item normal erp-sidebar__item" data-target="view-erp-adquisiciones" data-erp-panel="erp-panel-dashboard" data-erp-title="Inicio" data-title="Inicio">
-                        <i class="ph-bold ph-house-line"></i>
-                        <span class="menu-label">Inicio</span>
-                    </a>
-                    <a href="#" class="menu-item normal erp-sidebar__item" data-target="view-erp-adquisiciones" data-erp-panel="erp-panel-tablero" data-erp-title="Tablero Kanban SDC/OC" data-title="Tablero SDC/OC">
-                        <i class="ph-bold ph-kanban"></i>
-                        <span class="menu-label" style="flex:1;">Tablero SDC/OC</span>
-                        <span class="badge badge-sar-orange sidebar-item-badge">12</span>
-                    </a>
-                    <a href="#" class="menu-item normal erp-sidebar__item" data-target="view-erp-adquisiciones" data-erp-panel="erp-panel-recepcion" data-erp-title="Recepción Dinámica y Auditoría" data-title="Recepción Dinámica">
-                        <i class="ph-bold ph-package"></i>
-                        <span class="menu-label" style="flex:1;">Recepción Dinámica</span>
-                        <span class="badge badge-sar-red sidebar-item-badge">5</span>
-                    </a>
-                    <a href="#" class="menu-item normal erp-sidebar__item" data-target="view-erp-adquisiciones" data-erp-panel="erp-panel-catalogo" data-erp-title="Catálogo Maestro de Insumos" data-title="Catálogo de Insumos">
-                        <i class="ph-bold ph-pill"></i>
-                        <span class="menu-label">Catálogo de Insumos</span>
-                    </a>
-                    <a href="#" class="menu-item normal erp-sidebar__item" data-target="view-erp-adquisiciones" data-erp-panel="erp-panel-despachos" data-erp-title="Despachos a Red (Cross-Docking)" data-title="Despachos a Red">
-                        <i class="ph-bold ph-truck"></i>
-                        <span class="menu-label">Despachos a Red</span>
+                <!-- MENÚ ÚNICO: cada pantalla aparece una sola vez (sin subbarras que repitan el menú) -->
+                <div class="sidebar-box">
+                    <a href="#" class="menu-item active" data-target="view-panel" data-title="Inicio">
+                        <i class="ph-bold ph-house-line"></i><span class="menu-label">Inicio</span>
                     </a>
                 </div>
 
-                <!-- BLOQUE: OPERACIONES CLÍNICAS E INVENTARIO -->
                 <div class="sidebar-box">
                     <div class="sidebar-group-title">
-                        <i class="ph-bold ph-first-aid-kit"></i>
-                        <span class="menu-label">OPERACIONES CLÍNICAS</span>
+                        <i class="ph-bold ph-archive-box"></i>
+                        <span class="menu-label">INVENTARIO</span>
                     </div>
-                    <a href="#" class="menu-item active" data-target="view-panel" data-title="Panel de Control">
-                        <i class="ph-bold ph-gauge"></i><span class="menu-label">Panel de Control</span>
-                    </a>
-                    <a href="#" class="menu-item normal" data-target="view-inventario" data-title="Inventario">
-                        <i class="ph-bold ph-archive-box"></i><span class="menu-label">Inventario</span>
+                    <a href="#" class="menu-item normal" data-target="view-inventario" data-title="Existencias">
+                        <i class="ph-bold ph-archive-box"></i><span class="menu-label">Existencias</span>
                     </a>
                     <a href="#" class="menu-item normal" data-target="view-toma-inventario" data-title="Toma de Inventario">
                         <i class="ph-bold ph-clipboard-text"></i><span class="menu-label">Toma de Inventario</span>
@@ -212,40 +185,72 @@
                     <a href="#" class="menu-item normal" data-target="view-inventario-semanal" data-title="Inventario Semanal">
                         <i class="ph-bold ph-calendar-check"></i><span class="menu-label">Inventario Semanal</span>
                     </a>
+                    <a href="#" class="menu-item normal admin-only" data-target="view-bodegas" data-title="Bodegas">
+                        <i class="ph-bold ph-buildings"></i><span class="menu-label">Bodegas</span>
+                    </a>
+                </div>
+
+                <div class="sidebar-box">
+                    <div class="sidebar-group-title">
+                        <i class="ph-bold ph-arrows-left-right"></i>
+                        <span class="menu-label">MOVIMIENTOS</span>
+                    </div>
                     <a href="#" class="menu-item normal" data-target="view-movimientos" data-title="Ingresos">
-                        <i class="ph-bold ph-arrows-left-right"></i><span class="menu-label">Ingresos</span>
-                    </a>
-                    <a href="#" class="menu-item normal" data-target="view-historial" data-title="Historial">
-                        <i class="ph-bold ph-clock-counter-clockwise"></i><span class="menu-label">Historial</span>
-                    </a>
-                    <a href="#" class="menu-item normal" data-target="view-ajustes" data-title="Ajustes de Stock">
-                        <i class="ph-bold ph-sliders"></i><span class="menu-label">Ajustes de Stock</span>
+                        <i class="ph-bold ph-arrow-line-down"></i><span class="menu-label">Ingresos</span>
                     </a>
                     <a href="#" class="menu-item normal" data-target="view-transferencias" data-title="Transferencias">
                         <i class="ph-bold ph-truck"></i><span class="menu-label">Transferencias</span>
                     </a>
+                    <a href="#" class="menu-item normal" data-target="view-ajustes" data-title="Ajustes de Stock">
+                        <i class="ph-bold ph-sliders"></i><span class="menu-label">Ajustes de Stock</span>
+                    </a>
+                    <a href="#" class="menu-item normal" data-target="view-historial" data-title="Historial">
+                        <i class="ph-bold ph-clock-counter-clockwise"></i><span class="menu-label">Historial</span>
+                    </a>
+                </div>
+
+                <div class="sidebar-box">
+                    <div class="sidebar-group-title">
+                        <i class="ph-bold ph-first-aid-kit"></i>
+                        <span class="menu-label">TURNO CLÍNICO</span>
+                    </div>
                     <a href="#" class="menu-item normal" data-target="view-bandejas" data-title="Bandejas de Turno">
                         <i class="ph-bold ph-briefcase-medical"></i><span class="menu-label">Bandejas de Turno</span>
                     </a>
                 </div>
 
-                <!-- BLOQUE: ABASTECIMIENTO Y ADMINISTRACIÓN -->
                 <div class="sidebar-box">
                     <div class="sidebar-group-title">
-                        <i class="ph-bold ph-buildings"></i>
-                        <span class="menu-label">GESTIÓN Y RED</span>
+                        <i class="ph-bold ph-seal-check"></i>
+                        <span class="menu-label">COMPRAS · ADQUISICIONES SAR</span>
                     </div>
-                    <a href="#" class="menu-item normal" data-target="view-compras" data-title="Gestión de Compras">
-                        <i class="ph-bold ph-shopping-cart"></i><span class="menu-label">Gestión de Compras</span>
+                    <a href="#" class="menu-item normal" data-target="view-compras" data-title="Solicitudes de Compra">
+                        <i class="ph-bold ph-shopping-cart"></i><span class="menu-label">Solicitudes de Compra</span>
                     </a>
-                    <a href="#" class="menu-item normal" data-target="view-adquisiciones" data-title="Adquisiciones y Seguimiento" style="display:none;">
+                    <a href="#" class="menu-item normal" data-target="view-adquisiciones" data-title="Seguimiento SLA (5 Col)" style="display:none;">
                         <i class="ph-bold ph-columns"></i><span class="menu-label">Seguimiento SLA (5 Col)</span>
                     </a>
+                    <a href="#" class="menu-item normal erp-sidebar__item" data-erp-panel="erp-panel-tablero" data-erp-title="Tablero Kanban SDC/OC" data-target="view-erp-adquisiciones" data-title="Tablero SDC/OC">
+                        <i class="ph-bold ph-kanban"></i><span class="menu-label">Tablero SDC/OC</span>
+                    </a>
+                    <a href="#" class="menu-item normal erp-sidebar__item" data-erp-panel="erp-panel-recepcion" data-erp-title="Recepción Dinámica y Auditoría" data-target="view-erp-adquisiciones" data-title="Recepción Dinámica">
+                        <i class="ph-bold ph-package"></i><span class="menu-label">Recepción Dinámica</span>
+                    </a>
+                    <a href="#" class="menu-item normal erp-sidebar__item" data-erp-panel="erp-panel-catalogo" data-erp-title="Catálogo Maestro de Insumos" data-target="view-erp-adquisiciones" data-title="Catálogo de Insumos">
+                        <i class="ph-bold ph-pill"></i><span class="menu-label">Catálogo de Insumos</span>
+                    </a>
+                    <a href="#" class="menu-item normal erp-sidebar__item" data-erp-panel="erp-panel-despachos" data-erp-title="Despachos a Red (Cross-Docking)" data-target="view-erp-adquisiciones" data-title="Despachos a Red">
+                        <i class="ph-bold ph-truck"></i><span class="menu-label">Despachos a Red</span>
+                    </a>
+                </div>
+
+                <div class="sidebar-box">
+                    <div class="sidebar-group-title">
+                        <i class="ph-bold ph-gear-six"></i>
+                        <span class="menu-label">ADMINISTRACIÓN</span>
+                    </div>
                     <a href="#" class="menu-item normal admin-only" data-target="view-informes" data-title="Informes">
                         <i class="ph-bold ph-chart-bar"></i><span class="menu-label">Informes</span>
-                    </a>
-                    <a href="#" class="menu-item normal admin-only" data-target="view-bodegas" data-title="Bodegas">
-                        <i class="ph-bold ph-buildings"></i><span class="menu-label">Bodegas</span>
                     </a>
                     <a href="#" class="menu-item normal admin-only" data-target="view-usuarios" data-title="Usuarios">
                         <i class="ph-bold ph-users"></i><span class="menu-label">Usuarios</span>
@@ -261,8 +266,8 @@
                             <span style="width:7px; height:7px; border-radius:50%; background:var(--sar-green); display:inline-block;"></span> Online
                         </span>
                     </div>
-                    <div style="font-size:11.5px; font-weight:700; color:#ffffff;">SAR Santiago Norte</div>
-                    <div style="font-size:10px; color:rgba(255,255,255,0.55); margin-top:1px;">v20.0 Enterprise Node</div>
+                    <div style="font-size:11.5px; font-weight:700; color:#ffffff;">SAR Elsa Romo Aravena</div>
+                    <div style="font-size:10px; color:rgba(255,255,255,0.55); margin-top:1px;">Corp. Municipal de Melipilla</div>
                 </div>
                 <a href="#" class="menu-item normal admin-only" data-target="view-configuracion" id="menu-config" data-title="Configuración">
                     <i class="ph-bold ph-gear"></i><span class="menu-label">Configuración</span>
@@ -327,12 +332,12 @@
                     <div class="dashboard-container">
                         <div class="page-header">
                         <div class="page-title">
-                            <h1>Panel de Control</h1>
+                            <h1>Inicio</h1>
                             <p>Resumen ejecutivo del inventario clínico y alertas críticas.</p>
                         </div>
                         <div style="display:flex; gap:12px; align-items:center;">
                             <button type="button" class="btn" id="btn-goto-erp-adquisiciones" onclick="const item = document.querySelector('.menu-item[data-target=\'view-erp-adquisiciones\']'); if(item) item.click();" style="background-color:#1A3668; color:#ffffff; font-weight:700; border-radius:8px 8px 8px 0px; border:none; padding:10px 16px; display:inline-flex; align-items:center; gap:8px; cursor:pointer; box-shadow:0 4px 12px rgba(26,54,104,0.22);">
-                                <i class="ph-bold ph-kanban"></i> Abrir Visor ERP (Nuevo)
+                                <i class="ph-bold ph-kanban"></i> Ir a Compras
                             </button>
                             <button class="btn btn-primary" id="btn-ia-analisis">
                                 <i class="ph-fill ph-sparkle"></i>Análisis IA
@@ -2870,29 +2875,10 @@
             <section id="view-erp-adquisiciones" style="display:none;" class="erp-layout view-section">
                 <!-- Área Principal ERP Unificada (Gobernada por la Barra Lateral Maestra Única) -->
                 <div class="dashboard-container erp-content">
-                    <!-- Barra de Sub-navegación Rápida Adquisiciones SAR (Visible en Tablet/Móvil o como conmutador compacto) -->
-                    <div class="erp-subnav-bar" aria-label="Subvistas de Adquisiciones SAR">
-                        <button type="button" class="erp-btn erp-btn--primary erp-sidebar__item active" data-erp-panel="erp-panel-dashboard" data-erp-title="Inicio">
-                            <i class="ph-bold ph-house-line"></i> Inicio
-                        </button>
-                        <button type="button" class="erp-btn erp-btn--outline erp-sidebar__item" data-erp-panel="erp-panel-tablero" data-erp-title="Tablero Kanban SDC/OC">
-                            <i class="ph-bold ph-kanban"></i> Tablero SDC/OC <span class="badge badge-sar-orange" style="font-size:10px; padding:1px 6px;">12</span>
-                        </button>
-                        <button type="button" class="erp-btn erp-btn--outline erp-sidebar__item" data-erp-panel="erp-panel-recepcion" data-erp-title="Recepción Dinámica y Auditoría">
-                            <i class="ph-bold ph-package"></i> Recepción Dinámica <span class="badge badge-sar-red" style="font-size:10px; padding:1px 6px;">5</span>
-                        </button>
-                        <button type="button" class="erp-btn erp-btn--outline erp-sidebar__item" data-erp-panel="erp-panel-catalogo" data-erp-title="Catálogo Maestro de Insumos">
-                            <i class="ph-bold ph-pill"></i> Catálogo de Insumos
-                        </button>
-                        <button type="button" class="erp-btn erp-btn--outline erp-sidebar__item" data-erp-panel="erp-panel-despachos" data-erp-title="Despachos a Red (Cross-Docking)">
-                            <i class="ph-bold ph-truck"></i> Despachos a Red
-                        </button>
-                    </div>
-
                     <!-- ================================================================= -->
                     <!-- VISTA 1: INICIO (VISOR LOGÍSTICO & CENTRO DE OPERACIONES)         -->
                     <!-- ================================================================= -->
-                    <div id="erp-panel-dashboard" class="erp-main-view-panel" style="display:block;">
+                    <div id="erp-panel-dashboard" class="erp-main-view-panel" style="display:none;">
                         <!-- Barra de Estado del Nodo -->
                         <div class="erp-filter-bar" style="margin-bottom:16px;">
                             <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
@@ -3275,7 +3261,7 @@
                     <!-- ================================================================= -->
                     <!-- VISTA 2: TABLERO KANBAN DE ADQUISICIONES (SDC / OC)               -->
                     <!-- ================================================================= -->
-                    <div id="erp-panel-tablero" class="erp-main-view-panel" style="display:none;">
+                    <div id="erp-panel-tablero" class="erp-main-view-panel" style="display:block;">
                         <!-- KPIs Superiores del Tablero Kanban -->
                         <div class="erp-kpi-grid-3">
                             <div class="erp-kpi-card erp-kpi-card--blue">
@@ -5623,8 +5609,8 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=20.12"></script>
-    <script type="module" src="patch-plantillas.js?v=20.12"></script>
+    <script type="module" src="script.js?v=20.14"></script>
+    <script type="module" src="patch-plantillas.js?v=20.14"></script>
     <script src="visor-triaje.js?v=20.11"></script>
     <script src="visor-adquisiciones.js?v=20.11"></script>
 </body>

@@ -4543,3 +4543,13 @@ table.table thead th {
         width: 220px;
     }
 }
+
+/* ==========================================================================
+   NAVEGACIÓN CONTEXTUAL (v20.14)
+   El buscador y "Nueva SDC" pertenecen a Compras: solo se muestran ahí.
+   body[data-view] lo fija el enrutador en script.js.
+   ========================================================================== */
+body:not([data-view="view-erp-adquisiciones"]):not([data-view="view-compras"]) .topbar-global-search,
+body:not([data-view="view-erp-adquisiciones"]):not([data-view="view-compras"]) #btn-erp-nueva-sdc {
+    display: none !important;
+}

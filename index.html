@@ -3,7 +3,7 @@
 
 <head>
     <script>
-        const APP_VERSION = '18.25';
+        const APP_VERSION = '18.26';
         if (localStorage.getItem('APP_VERSION') !== APP_VERSION) {
             localStorage.setItem('APP_VERSION', APP_VERSION);
             if ('serviceWorker' in navigator) {
@@ -23,7 +23,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=18.25-predictive">
+    <link rel="stylesheet" href="style.css?v=18.26-predictive">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -2695,7 +2695,7 @@
                         </button>
                         <button type="button" class="erp-sidebar__item" data-erp-panel="erp-panel-recepcion">
                             <i class="ph-bold ph-package"></i>
-                            <span>Recepción Logística</span>
+                            <span>Recepción Dinámica</span>
                         </button>
                         <button type="button" class="erp-sidebar__item" data-erp-panel="erp-panel-despachos">
                             <i class="ph-bold ph-truck"></i>
@@ -2713,8 +2713,10 @@
                         </div>
                     </header>
 
-                    <!-- Contenedor Horizontal con Scroll (.kanban-board) y 4 Columnas Fijas (.kanban-col) -->
-                    <div class="kanban-board" id="erp-kanban-board">
+                    <!-- Submódulo 1: Tablero SDC/OC -->
+                    <div id="erp-panel-tablero" class="erp-main-view-panel" style="display:block;">
+                        <!-- Contenedor Horizontal con Scroll (.kanban-board) y 4 Columnas Fijas (.kanban-col) -->
+                        <div class="kanban-board" id="erp-kanban-board">
                         <!-- Columna 1: SDC Creada -->
                         <div class="kanban-col">
                             <div class="kanban-col__header">
@@ -2822,6 +2824,23 @@
                                     </div>
                                 </article>
                             </div>
+                        </div>
+                    </div>
+                    </div>
+
+                    <!-- Submódulo 2: Recepción Dinámica -->
+                    <div id="erp-panel-recepcion" class="erp-main-view-panel" style="display:none;">
+                        <div class="card" style="border-radius: var(--shape-card);">
+                            <h3 style="color: var(--sar-blue); margin-top: 0;"><i class="ph-fill ph-package"></i> Recepción Dinámica (Parcial / Total)</h3>
+                            <p class="text-muted text-sm">Seleccione una tarjeta del Tablero SDC/OC o ingrese el número de Orden de Compra para registrar actas de recepción parcial o conforme.</p>
+                        </div>
+                    </div>
+
+                    <!-- Submódulo 3: Despachos a Red -->
+                    <div id="erp-panel-despachos" class="erp-main-view-panel" style="display:none;">
+                        <div class="card" style="border-radius: var(--shape-card);">
+                            <h3 style="color: var(--sar-blue); margin-top: 0;"><i class="ph-fill ph-truck"></i> Despachos a Red (Cross-Docking)</h3>
+                            <p class="text-muted text-sm">Módulo de distribución directa hacia centros de salud de la red comunal (CESFAM / CECOSF / SAR).</p>
                         </div>
                     </div>
                 </main>
@@ -4329,9 +4348,9 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=18.25"></script>
-    <script type="module" src="patch-plantillas.js?v=18.25"></script>
-    <script src="visor-triaje.js?v=18.25"></script>
-    <script src="visor-adquisiciones.js?v=18.25"></script>
+    <script type="module" src="script.js?v=18.26"></script>
+    <script type="module" src="patch-plantillas.js?v=18.26"></script>
+    <script src="visor-triaje.js?v=18.26"></script>
+    <script src="visor-adquisiciones.js?v=18.26"></script>
 </body>
 </html>

@@ -172,5 +172,25 @@ service cloud.firestore {
     match /Respaldos_Toma_Inventario/{backupId} {
       allow read, write: if isAuthenticated();
     }
+
+    // -----------------------------------------------------
+    // COLECCIONES USADAS POR EL CLIENTE QUE NO TENÍAN REGLA
+    // (sin regla Firestore deniega todo, por lo que fallaban)
+    // -----------------------------------------------------
+    match /Roles/{roleId} {
+      allow read: if hasRole();      // matriz RBAC en la UI
+      allow write: if isAdmin();
+    }
+
+    match /Solicitudes_Compra/{id} {
+      allow read, create: if isOperadorOrAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    match /Incidencias/{id} {
+      allow read, create: if isOperadorOrAdmin();
+      allow update: if false;        // bitácora inmutable
+      allow delete: if isSuperAdmin();
+    }
   }
 }

@@ -9037,6 +9037,10 @@ document.addEventListener('DOMContentLoaded', () => {
     window.anularBandejaCreada = async function(id) {
         const snap = await window.firebaseFirestore.getDoc(window.firebaseFirestore.doc(window.firebaseFirestore.db || window.db || db, 'Bandejas_Turno', id));
         if (!snap.exists()) return;
+        if (snap.data().estado !== 'CREADA') {
+            window.showAlertCenter("Notificación", "Solo se pueden anular bandejas en estado CREADA.");
+            return;
+        }
         
         window._bandejaParaAnular = snap.data();
         window._bandejaParaAnular.id = id;
@@ -9344,76 +9348,17 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { console.error(e); }
     });
 
+    // Anular desde "Gestionar Bandeja": reutiliza el flujo de anularBandejaCreada (devuelve el stock a 'Insumos')
     document.getElementById('btn-confirmar-anulacion')?.addEventListener('click', async () => {
         const docId = window._gestionBandejaId;
         const obs = document.getElementById('input-anular-obs').value.trim();
         if (!docId) return;
         if (!obs) { window.showAlertCenter("Notificación", "La justificación es obligatoria para anular."); return; }
-
-        if (!confirm("¿Anular definitivamente esta bandeja y devolver el stock?")) return;
-
-        try {
-            const docRef = window.firebaseFirestore.doc(db, 'Bandejas_Turno', docId);
-            const invRef = window.firebaseFirestore.collection(db, 'Inventario_Central');
-
-            // PRE-FETCH PARA ATOMICIDAD
-            const snapPre = await window.firebaseFirestore.getDoc(docRef);
-            if (!snapPre.exists()) throw new Error("No existe");
-            const dataPre = snapPre.data();
-            let docIdsMap = {};
-            for (const med of dataPre.medicamentos) {
-                const nombreItem = med.nombreInsumo || med.nombre;
-                const key = nombreItem.toLowerCase().trim();
-                const q1 = window.firebaseFirestore.query(invRef, window.firebaseFirestore.where('nombreInsumo', '==', nombreItem), window.firebaseFirestore.limit(1));
-                const snap1 = await window.firebaseFirestore.getDocs(q1);
-                if (!snap1.empty) {
-                    docIdsMap[key] = snap1.docs[0].id;
-                } else {
-                    const q2 = window.firebaseFirestore.query(invRef, window.firebaseFirestore.where('nombre', '==', nombreItem), window.firebaseFirestore.limit(1));
-                    const snap2 = await window.firebaseFirestore.getDocs(q2);
-                    if (!snap2.empty) docIdsMap[key] = snap2.docs[0].id;
-                }
-            }
-
-            await window.firebaseFirestore.runTransaction(db, async (transaction) => {
-                const snap = await transaction.get(docRef);
-                if (!snap.exists()) throw new Error("No existe");
-                const data = snap.data();
-                if (data.estado !== 'CREADA') throw new Error("Solo se pueden anular bandejas CREADAS");
-
-                for (const med of data.medicamentos) {
-                    const key = (med.nombreInsumo || med.nombre).toLowerCase().trim();
-                    const cant = Number(med.cantidadAsignada || 0);
-                    if (cant > 0 && docIdsMap[key]) {
-                        transaction.update(window.firebaseFirestore.doc(db, 'Inventario_Central', docIdsMap[key]), {
-                            cantidadRecibida: window.firebaseFirestore.increment(cant)
-                        });
-
-                        // Historial
-                        transaction.set(window.firebaseFirestore.doc(window.firebaseFirestore.collection(db, 'Historial_Movimientos')), {
-                            tipoAccion: 'ENTRADA',
-                            detalle: 'Anulación de Bandeja de Turno - ' + obs,
-                            cantidad: cant,
-                            nombreInsumo: med.nombreInsumo || med.nombre,
-                            usuario: auth.currentUser.email,
-                            fecha: window.firebaseFirestore.serverTimestamp(),
-                            origen: 'Anulación',
-                            destino: 'Inventario_Central'
-                        });
-                    }
-                }
-
-                transaction.update(docRef, {
-                    estado: 'ANULADA',
-                    justificacionAnulacion: obs,
-                    anuladaPor: auth.currentUser.email,
-                    fechaAnulacion: window.firebaseFirestore.serverTimestamp()
-                });
-            });
-
-            document.getElementById('modal-gestionar-bandeja').style.display = 'none';
-            window.showToast("Bandeja Anulada", "El stock ha regresado a bodega", "success");
-        } catch (e) { window.showAlertCenter("Error", e.message, true); }
+        const modalGestion = document.getElementById('modal-gestionar-bandeja');
+        if (modalGestion) modalGestion.style.display = 'none';
+        await window.anularBandejaCreada(docId);
+        const inputMotivo = document.getElementById('input-motivo-anulacion');
+        if (inputMotivo) inputMotivo.value = obs;
     });
 
 });

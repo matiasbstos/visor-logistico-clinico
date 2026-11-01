@@ -3505,7 +3505,10 @@
     }
 
     function cargarEventosCalendario() {
-        const base = obtenerEventosCalendarioBase();
+        // Eventos de ejemplo ocultos por defecto (localStorage sar_demo=1 para verlos); quedan solo los que crea el usuario
+        let mostrarEjemplos = false;
+        try { mostrarEjemplos = window.localStorage.getItem('sar_demo') === '1'; } catch (e) { /* sin storage */ }
+        const base = mostrarEjemplos ? obtenerEventosCalendarioBase() : [];
         try {
             const raw = localStorage.getItem(STORAGE_KEY_CAL_EVENTS);
             if (!raw) return base;

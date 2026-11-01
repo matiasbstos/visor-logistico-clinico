@@ -206,6 +206,8 @@ const SAR_Utils = {
 // Tracking de Listeners para prevenir Memory Leaks
 const activeListeners = {
     dashboard: null,
+    dashboard_bandejas: null,
+    dashboard_flujo: null,
     expirations: null,
     historial: null,
     bodegas: null,
@@ -1319,9 +1321,147 @@ document.addEventListener('DOMContentLoaded', () => {
     // =========================================================================
     window.globalDashboardCriticalItems = [];
 
+    // ---- Inicio: bandejas activas, flujo semanal y acción inmediata (datos reales) ----
+    window.globalDashboardBandejas = { CREADA: 0, EN_USO: 0, EN_RECEPCION: 0 };
+
+    window.renderDashboardAcciones = function () {
+        const list = document.getElementById('dash-acciones-list');
+        const badge = document.getElementById('dash-acciones-badge');
+        if (!list) return;
+        const esc = window.escapeHTML;
+        const acciones = [];
+
+        (window.globalDashboardUrgenciasItems || []).slice().sort((a, b) => a.diffDays - b.diffDays).slice(0, 3).forEach(u => {
+            const vencido = u.diffDays < 0;
+            acciones.push({
+                nivel: vencido ? 'red' : 'orange',
+                codigo: vencido ? 'VENCIDO' : 'POR VENCER',
+                tag: vencido ? `${Math.abs(u.diffDays)} d vencido` : `Vence en ${u.diffDays} d`,
+                titulo: u.name || 'Insumo',
+                sub: `Lote ${u.batch || 'S/L'} • ${u.location || 'Bodega Central'}`,
+                boton: 'Ver', scroll: 'card-dash-urgencias'
+            });
+        });
+        (window.globalDashboardCriticalItems || []).slice().sort((a, b) => (a.quantity / (a.criticalLimit || 1)) - (b.quantity / (b.criticalLimit || 1))).slice(0, 3).forEach(c => {
+            acciones.push({
+                nivel: 'orange', codigo: 'STOCK CRÍTICO', tag: `${c.quantity} / ${c.criticalLimit}`,
+                titulo: c.name || 'Insumo', sub: `Bajo su límite crítico • ${c.location || 'Bodega Central'}`,
+                boton: 'Reponer', go: 'view-inventario'
+            });
+        });
+        const b = window.globalDashboardBandejas || {};
+        if (b.EN_RECEPCION > 0) {
+            acciones.push({ nivel: 'orange', codigo: 'BANDEJAS', tag: `${b.EN_RECEPCION} por cerrar`,
+                titulo: 'Bandejas esperando cierre en bodega', sub: 'Retornaron del turno y falta cuadrarlas', boton: 'Cerrar', go: 'view-bandejas' });
+        }
+        const visibles = acciones.slice(0, 5);
+        if (badge) {
+            badge.textContent = `${acciones.length} pendiente${acciones.length === 1 ? '' : 's'}`;
+            badge.className = acciones.length > 0 ? 'badge badge-sar-red' : 'badge badge-sar-green';
+        }
+        if (visibles.length === 0) {
+            list.innerHTML = '<div class="home-empty"><i class="ph-fill ph-check-circle" style="color:var(--sar-green); font-size:24px;"></i><br>Sin acciones pendientes.</div>';
+            return;
+        }
+        list.innerHTML = visibles.map(a => {
+            const attr = a.go ? `data-go="${a.go}"` : `data-scroll="${a.scroll}"`;
+            const cls = a.nivel === 'red' ? 'erp-alert-item erp-alert-item--red' : 'erp-alert-item erp-alert-item--orange';
+            const btn = a.nivel === 'red' ? 'erp-btn--danger' : 'erp-btn--warning';
+            return `<div class="${cls}">
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
+                    <span style="font-size:11px; font-weight:800; color:${a.nivel === 'red' ? 'var(--sar-red)' : 'var(--sar-orange-strong)'};">${esc(a.codigo)}</span>
+                    <span class="badge ${a.nivel === 'red' ? 'badge-sar-red' : 'badge-sar-orange'}">${esc(a.tag)}</span>
+                </div>
+                <div style="font-size:13px; font-weight:800; color:#0F172A;">${esc(a.titulo)}</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:4px;">
+                    <span style="font-size:11.5px; color:#64748B;">${esc(a.sub)}</span>
+                    <button type="button" class="erp-btn ${btn}" style="padding:4px 10px; font-size:11px;" ${attr}>${esc(a.boton)}</button>
+                </div>
+            </div>`;
+        }).join('');
+    };
+
+    function renderDashboardFlujo(movs) {
+        const cont = document.getElementById('dash-flow-chart');
+        if (!cont) return;
+        const dias = [];
+        const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+        for (let i = 6; i >= 0; i--) { const d = new Date(hoy); d.setDate(hoy.getDate() - i); dias.push({ d, ing: 0, sal: 0 }); }
+        let hoyIng = 0, hoySal = 0;
+        movs.forEach(m => {
+            const tipo = String(m.type || m.tipoAccion || '').toLowerCase();
+            const cant = Math.abs(Number(m.quantity ?? m.cantidad ?? 0)) || 0;
+            let f = m.date && typeof m.date.toDate === 'function' ? m.date.toDate() : new Date(m.date || m.fechaHora || NaN);
+            if (!f || isNaN(f.getTime())) return;
+            f.setHours(0, 0, 0, 0);
+            const idx = dias.findIndex(x => x.d.getTime() === f.getTime());
+            if (idx < 0) return;
+            if (/ingreso|entrada/.test(tipo)) { dias[idx].ing += cant; if (idx === 6) hoyIng += cant; }
+            else if (/salida|consumo|merma|traspaso|transfer|despacho/.test(tipo)) { dias[idx].sal += cant; if (idx === 6) hoySal += cant; }
+        });
+        const movsHoy = movs.filter(m => {
+            let f = m.date && typeof m.date.toDate === 'function' ? m.date.toDate() : new Date(m.date || m.fechaHora || NaN);
+            return f && !isNaN(f.getTime()) && f.toDateString() === new Date().toDateString();
+        }).length;
+        const elN = document.getElementById('dash-movs-hoy'); if (elN) elN.textContent = movsHoy;
+        const elM = document.getElementById('dash-movs-meta');
+        if (elM) elM.innerHTML = movsHoy > 0
+            ? `<i class="ph-bold ph-arrows-left-right"></i> Ingresos ${hoyIng.toLocaleString('es-CL')} • Salidas ${hoySal.toLocaleString('es-CL')} un.`
+            : '<i class="ph-bold ph-arrows-left-right"></i> Sin movimientos hoy';
+        const max = Math.max(1, ...dias.map(x => Math.max(x.ing, x.sal)));
+        if (dias.every(x => x.ing === 0 && x.sal === 0)) {
+            cont.innerHTML = '<div class="home-empty">Sin movimientos registrados en los últimos 7 días.</div>';
+            return;
+        }
+        const W = 700, H = 220, L = 44, R = 20, T = 20, B = 36;
+        const x = i => L + i * ((W - L - R) / 6);
+        const y = v => T + (H - T - B) * (1 - v / max);
+        const linea = k => dias.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(p[k]).toFixed(1)}`).join(' ');
+        const area = k => `${linea(k)} L${x(6).toFixed(1)},${y(0)} L${x(0).toFixed(1)},${y(0)} Z`;
+        const nombres = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+        cont.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Ingresos y salidas de los últimos 7 días" style="width:100%; height:220px; min-width:480px; display:block;">
+            ${[0, 0.5, 1].map(f => `<line x1="${L}" y1="${y(max * f)}" x2="${W - R}" y2="${y(max * f)}" stroke="#E2E8F0"/><text x="6" y="${y(max * f) + 4}" fill="#94A3B8" font-size="10">${Math.round(max * f).toLocaleString('es-CL')}</text>`).join('')}
+            <path d="${area('ing')}" fill="#1A3668" opacity="0.12"/><path d="${linea('ing')}" fill="none" stroke="#1A3668" stroke-width="2.5"/>
+            <path d="${area('sal')}" fill="#8CC63F" opacity="0.15"/><path d="${linea('sal')}" fill="none" stroke="#8CC63F" stroke-width="2.5" stroke-dasharray="5 4"/>
+            ${dias.map((p, i) => `<circle cx="${x(i)}" cy="${y(p.ing)}" r="3.5" fill="#fff" stroke="#1A3668" stroke-width="2"><title>${nombres[p.d.getDay()]}: ingresos ${p.ing}, salidas ${p.sal}</title></circle><text x="${x(i)}" y="${H - 12}" text-anchor="middle" fill="${i === 6 ? '#1A3668' : '#64748B'}" font-size="11" font-weight="${i === 6 ? 800 : 600}">${i === 6 ? 'Hoy' : nombres[p.d.getDay()]}</text>`).join('')}
+        </svg>`;
+    }
+
+    function startDashboardExtras() {
+        clearListener('dashboard_bandejas');
+        clearListener('dashboard_flujo');
+        try {
+            const qB = query(collection(db, 'Bandejas_Turno'), where('estado', 'in', ['CREADA', 'EN_USO', 'EN_RECEPCION']));
+            activeListeners.dashboard_bandejas = onSnapshot(qB, (snap) => {
+                const c = { CREADA: 0, EN_USO: 0, EN_RECEPCION: 0 };
+                snap.forEach(d => { const e = d.data().estado; if (c[e] !== undefined) c[e]++; });
+                window.globalDashboardBandejas = c;
+                const total = c.CREADA + c.EN_USO + c.EN_RECEPCION;
+                const n = document.getElementById('dash-bandejas-count'); if (n) n.textContent = total;
+                const m = document.getElementById('dash-bandejas-meta');
+                if (m) m.innerHTML = total > 0
+                    ? `<i class="ph-bold ph-briefcase-medical"></i> ${c.EN_USO} en uso • ${c.CREADA} sin recibir • ${c.EN_RECEPCION} por cerrar`
+                    : '<i class="ph-bold ph-briefcase-medical"></i> Sin bandejas en curso';
+                window.renderDashboardAcciones();
+            }, (err) => console.warn('[Dashboard] Bandejas no disponibles:', err.message));
+        } catch (e) { console.warn('[Dashboard] Bandejas:', e); }
+        try {
+            const desde = new Date(); desde.setHours(0, 0, 0, 0); desde.setDate(desde.getDate() - 6);
+            const qH = query(collection(db, 'Historial_Movimientos'), where('date', '>=', desde));
+            activeListeners.dashboard_flujo = onSnapshot(qH, (snap) => {
+                renderDashboardFlujo(snap.docs.map(d => d.data()));
+            }, (err) => {
+                console.warn('[Dashboard] Historial no disponible:', err.message);
+                const cont = document.getElementById('dash-flow-chart');
+                if (cont) cont.innerHTML = '<div class="home-empty">Movimientos no disponibles para tu rol.</div>';
+            });
+        } catch (e) { console.warn('[Dashboard] Flujo:', e); }
+    }
+
     window.startRealTimeDashboard = function () {
         if (!auth.currentUser) return;
         clearListener('dashboard');
+        startDashboardExtras();
 
         const totalInsumosEl = document.getElementById('dash-total-insumos');
         const criticalCountEl = document.getElementById('dash-critical-count');
@@ -1427,7 +1567,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             }
-            if (expiringCountEl) expiringCountEl.textContent = (urgencias.length + precauciones.length);
+            if (expiringCountEl) expiringCountEl.textContent = urgencias.length;
+            const precMetaEl = document.getElementById('dash-precaucion-meta');
+            if (precMetaEl) {
+                precMetaEl.innerHTML = precauciones.length > 0
+                    ? `<i class="ph-bold ph-clock"></i> ${precauciones.length} más en precaución (1 a 6 meses)`
+                    : `<i class="ph-bold ph-clock"></i> Sin lotes en precaución`;
+            }
+            window.globalDashboardLocations = locationMap;
+            if (typeof window.renderDashboardAcciones === 'function') window.renderDashboardAcciones();
             if (capitalValueEl) {
                 capitalValueEl.textContent = capitalTotal > 0 ? ('$' + Math.round(capitalTotal).toLocaleString('es-CL')) : '$0';
             }
@@ -1792,10 +1940,32 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        // Accesos rápidos de Inicio
-        document.querySelectorAll('[data-go]').forEach(btn => {
-            btn.addEventListener('click', () => { window.location.hash = btn.dataset.go; });
+        // Accesos del Inicio (tarjetas, botones y alertas): delegados para cubrir contenido dinámico
+        const activarAcceso = (el) => {
+            if (el.dataset.go) { window.location.hash = el.dataset.go; return true; }
+            if (el.dataset.goErp) {
+                const item = document.querySelector(`.sidebar .menu-item[data-erp-panel="${el.dataset.goErp}"]`);
+                if (item) item.click();
+                return true;
+            }
+            if (el.dataset.scroll) {
+                const alvo = document.getElementById(el.dataset.scroll);
+                if (alvo) alvo.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                return true;
+            }
+            return false;
+        };
+        document.addEventListener('click', (e) => {
+            const el = e.target.closest('[data-go],[data-go-erp],[data-scroll]');
+            if (el && activarAcceso(el)) e.preventDefault();
         });
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter') return;
+            const el = e.target.closest('[role="link"][data-go],[role="link"][data-go-erp],[role="link"][data-scroll]');
+            if (el) activarAcceso(el);
+        });
+        const btnRefrescar = document.getElementById('btn-dash-refresh');
+        if (btnRefrescar) btnRefrescar.addEventListener('click', () => { if (typeof window.startRealTimeDashboard === 'function') window.startRealTimeDashboard(); });
 
         // Navegación inferior (tablet/celular)
         document.querySelectorAll('#bottom-nav [data-nav]').forEach(btn => {

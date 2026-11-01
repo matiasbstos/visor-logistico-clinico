@@ -4669,3 +4669,20 @@ body[data-view="view-inventario-semanal"] .page-tab[data-go="view-inventario-sem
     background: var(--sar-blue); color: #ffffff; border-color: var(--sar-blue); box-shadow: inset 0 -3px 0 var(--sar-red);
 }
 @media (max-width: 560px) { .page-tabs__spacer { display: none; } .page-tabs .btn { flex: 1; } }
+
+/* Inicio como dashboard (v20.18) */
+.home-status { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: #ffffff; border: 1px solid #E2E8F0; border-radius: var(--shape-card); padding: 12px 16px; margin-bottom: 16px; font-size: 13px; color: #334155; }
+.home-status__text { font-weight: 600; }
+.home-status__meta { margin-left: auto; color: #64748B; }
+.home-status__meta strong { color: var(--sar-blue); }
+.home-link { cursor: pointer; transition: border-color 0.2s ease, box-shadow 0.2s ease; }
+.home-link:hover { box-shadow: 0 4px 12px rgba(26, 54, 104, 0.12); }
+.home-empty { text-align: center; padding: 28px 12px; color: #64748B; font-size: 13px; }
+.home-shortcuts--4 { grid-template-columns: repeat(4, 1fr); margin-bottom: 24px; }
+@media (max-width: 1100px) { .home-shortcuts--4 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .home-status__meta { margin-left: 0; width: 100%; } }
+
+/* Inicio: la grilla del gráfico y las alertas se apila en tablet/celular */
+.erp-dashboard-mid-grid { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); }
+.erp-dashboard-mid-grid > .erp-card { min-width: 0; }
+@media (max-width: 1024px) { .erp-dashboard-mid-grid { grid-template-columns: minmax(0, 1fr); } }

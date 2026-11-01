@@ -1,96 +1,153 @@
-# 🏥 Visor Logístico Clínico
+<div align="center">
 
-¡Bienvenido al repositorio del **Visor Logístico Clínico**! Esta es una aplicación web de alto rendimiento diseñada para la gestión integral de inventarios médicos, insumos y el control de flujos logísticos dentro de un entorno hospitalario. El sistema está construido para operar en tiempo real, garantizando la trazabilidad exacta de los fármacos desde la Bodega Central hasta las distintas áreas clínicas (Bandejas).
+<img src="assets/logo-sar.png" alt="Logo SAR" height="96">
 
-Aquí encontrarás todo el código fuente del frontend, las reglas de seguridad de la base de datos y los scripts administrativos.
+# Visor Logístico Clínico
+
+**Sistema web para controlar insumos médicos y su movimiento dentro de la red de bodegas, bandejas y carros de paro del SAR.**
+
+![Versión](https://img.shields.io/badge/versi%C3%B3n-20.11-blue)
+![JavaScript](https://img.shields.io/badge/JavaScript-ES%20Modules-F7DF1E?logo=javascript&logoColor=black)
+![Firebase](https://img.shields.io/badge/Firebase-Auth%20%7C%20Firestore%20%7C%20Hosting-FFCA28?logo=firebase&logoColor=black)
+![PWA](https://img.shields.io/badge/PWA-instalable-5A0FC8)
+![Licencia](https://img.shields.io/badge/licencia-propietaria-red)
+
+[Decisiones de diseño](docs/DECISIONES.md) · [Guía para agentes y desarrolladores](AGENTS.md) · [Hoja de ruta](#-hoja-de-ruta)
+
+</div>
 
 ---
 
-## 🛠️ Tecnologías Utilizadas
+## 🌟 Acerca del proyecto
 
-Para garantizar un rendimiento rápido, seguro y escalable, el proyecto se construyó sobre un stack tecnológico moderno y serverless:
+El Visor Logístico Clínico responde a una pregunta simple: **¿dónde está cada insumo, cuánto hay, cuándo vence y quién lo movió?**
 
-- **Frontend:** HTML5, CSS3 (Diseño responsivo y animaciones fluidas), JavaScript (Vanilla JS - sin frameworks pesados para máxima velocidad).
-- **Backend & Base de Datos:** Firebase (Firestore Database, Firebase Authentication, Firebase Hosting).
-- **Librerías Auxiliares:** SheetJS (Procesamiento de Excel), Phosphor Icons (Iconografía moderna), SweetAlert2 (Alertas interactivas).
-- **Control de Versiones:** Git y Node.js.
+Nació para ordenar la cadena de suministro de un servicio de urgencia: desde que el insumo llega del proveedor hasta que queda en una bandeja de turno o en el carro de paro, incluyendo los traspasos a otros centros. Funciona en tiempo real: todos los operadores ven los cambios de stock al instante.
+
+> **Es un sistema logístico, no clínico.** Registra ubicaciones, lotes, cantidades y responsables. No guarda datos de pacientes (ver [Datos personales](#-seguridad-y-datos-personales)).
+
+### Cadena de movimiento
+
+```
+Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia → Bandeja / Carro de Paro
+                  └──→ Otros centros (traspaso externo)
+```
+
+### Principios
+
+- 🎯 **Trazabilidad:** cada movimiento queda registrado con origen, destino, lote, cantidad y responsable.
+- 🛡️ **Integridad:** el stock y su historial se modifican juntos; nada se pierde por un corte de conexión.
+- 🔒 **Mínimo dato necesario:** se guarda solo lo que la operación logística requiere.
+- ⚡ **Velocidad:** JavaScript puro, sin frameworks pesados, pensado para uso en turno.
 
 ---
 
-## 📂 Estructura del Repositorio
+## ✨ Funcionalidades
 
-El proyecto mantiene una arquitectura limpia y enfocada en la mantenibilidad:
+| Módulo | Qué permite |
+|---|---|
+| **Panel de control** | Stock total, insumos críticos, próximos vencimientos y alertas |
+| **Inventario** | Catálogo por categoría, lotes, vencimientos y precio unitario |
+| **Bodegas** | Alta y gestión de recintos, stock por ubicación y comparativa entre bodegas |
+| **Transferencias** | Traspasos entre bodegas con registro de auditoría |
+| **Bandejas de turno** | Armado, despacho, recepción, arqueo y reasignación; plantillas (packs) reutilizables |
+| **Toma de inventario** | Conteo físico, conteo semanal por racks y respaldos de cada toma |
+| **Ajustes** | Solicitudes de ajuste con flujo de aprobación del administrador |
+| **Adquisiciones** | Solicitudes de compra, seguimiento, backorders y división de órdenes de compra |
+| **Informes** | Reportes logísticos y exportación a Excel y PDF |
+| **Triaje con IA** | Lectura de etiquetas de insumos desde una fotografía |
+| **Usuarios y roles** | Acceso por rol, con permisos distintos para administración, operación y enfermería |
+| **Historial** | Bitácora de movimientos con responsable y fecha |
+
+Además: cargas masivas desde Excel, escaneo de códigos, modo instalable (PWA) y caché local para trabajar con conexión intermitente.
+
+---
+
+## 🧰 Stack tecnológico
+
+- **Cliente:** HTML5, CSS3 y JavaScript (módulos ES), sin framework.
+- **Backend como servicio:** Firebase Authentication, Cloud Firestore y Firebase Hosting.
+- **Librerías:** SheetJS (Excel), jsPDF y jsPDF-AutoTable (PDF), Chart.js (gráficos), html5-qrcode (escáner), Phosphor Icons.
+- **PWA:** service worker con estrategia *network-first* y versionado de caché.
+- **Funciones en la nube:** `functions/` contiene un servicio de OCR con Google Cloud Vision (aún no conectado a la aplicación).
+
+---
+
+## 📂 Estructura del repositorio
 
 ```text
 visor-logistico-clinico/
-├── index.html               # Interfaz principal de la aplicación (Vista única)
-├── style.css                # Sistema de diseño, variables, temas y animaciones
-├── script.js                # Lógica central del sistema (Motor RBAC, Listeners, UI)
-├── excelUtils.js            # Lógica para importación y exportación masiva de Excel
-├── firebase.json            # Configuración de despliegue en Firebase Hosting
-├── firestore.rules          # Reglas de seguridad estrictas para la base de datos
-├── firestore.indexes.json   # Índices compuestos de Firestore para consultas rápidas
-├── package.json             # Dependencias del proyecto de Node.js (Admin SDK)
-└── backups/                 # Historial de versiones y changelogs detallados
+├── index.html                  # Interfaz (aplicación de una sola página)
+├── style.css                   # Sistema de diseño y temas
+├── script.js                   # Lógica central: autenticación, roles, inventario, bandejas
+├── excelUtils.js               # Importación y exportación masiva con Excel
+├── visor-adquisiciones.js      # Módulo de adquisiciones y seguimiento
+├── visor-triaje.js             # Escáner inteligente de etiquetas
+├── patch-plantillas.js         # Plantillas (packs) de bandejas
+├── sw.js · manifest.json       # Service worker y manifiesto PWA
+├── firebase.json               # Hosting: qué se publica y cabeceras de caché
+├── firestore.rules             # Reglas de seguridad de la base de datos
+├── firestore.indexes.json      # Índices compuestos
+├── functions/                  # Cloud Functions (OCR)
+├── docs/DECISIONES.md         # Decisiones de diseño y plan por fases
+└── AGENTS.md                   # Reglas de trabajo para desarrolladores y agentes
 ```
 
----
-
-## ✨ Características Principales
-
-- 🔐 **Control de Acceso Basado en Roles (RBAC):** Perfiles definidos (Super Administrador, Logística, Bodega, Enfermería y Solo Lectura) con jerarquía de permisos estrictos en la interfaz y en la base de datos.
-- 📦 **Gestión de Stock Multiestado:** Control exacto y segregado de los medicamentos entre Bodega Central, stock en Tránsito y Bandejas activas.
-- 📊 **Auditoría y Trazabilidad (Cruce RAYEN):** Registro histórico inmutable de todos los movimientos logísticos (quién movió qué, cuándo y hacia dónde).
-- 📥 **Cargas Masivas:** Integración robusta con archivos Excel para inicializar, cruzar o actualizar el inventario masivamente en cuestión de segundos.
-- ⚡ **Sincronización en Tiempo Real:** Todos los operadores ven los cambios de stock instantáneamente gracias a la arquitectura reactiva de Firestore.
+> El repositorio conserva además copias históricas (`backups/`, `.rollbacks/`) y scripts de mantenimiento puntuales. Están **excluidos de la publicación** en `firebase.json` y se retirarán progresivamente (ver hoja de ruta).
 
 ---
 
-## 🚀 Cómo Configurar tu Entorno Local
+## 🚀 Puesta en marcha
 
-Si deseas probar el proyecto, explorar el código o continuar con el desarrollo de forma local, sigue estos sencillos pasos:
+### Requisitos
+- Node.js 18 o superior
+- [Firebase CLI](https://firebase.google.com/docs/cli): `npm install -g firebase-tools`
+- Acceso al proyecto de Firebase (solicitar al administrador)
 
-### 1. Clonar el repositorio
-Abre tu terminal y descarga el código a tu equipo:
+### Pasos
+
 ```bash
-git clone https://github.com/Paris309150/visor-logistico-clinico.git
+git clone https://github.com/matiasbstos/visor-logistico-clinico.git
 cd visor-logistico-clinico
-```
-
-### 2. Instalar dependencias del proyecto
-El proyecto utiliza dependencias de Node.js para las herramientas de administración locales:
-```bash
 npm install
-```
-
-### 3. Instalar Firebase CLI
-Para poder emular y desplegar el proyecto, necesitas las herramientas globales de Firebase instaladas en tu máquina:
-```bash
-npm install -g firebase-tools
-```
-
-### 4. Autorizar la cuenta
-Esto vinculará tu terminal con los permisos necesarios del proyecto en la nube:
-```bash
 firebase login
+firebase emulators:start --only hosting     # http://localhost:5000
 ```
 
-### 5. Ejecutar el Servidor Local de Desarrollo
-Levanta el proyecto localmente. Esto te permitirá visualizar los cambios en vivo en tu navegador en `http://localhost:5000`:
-```bash
-firebase serve
-```
+> ⚠️ **Atención:** hoy la aplicación se conecta directamente al proyecto de Firebase de producción, también cuando se sirve en local. **No pruebes cambios de datos contra el sistema real.** Conectar la aplicación a los emuladores de Firebase y crear un proyecto de pruebas (*staging*) están en la hoja de ruta.
+
+### Cómo trabajar los cambios
+1. Crear una rama: `git checkout -b feat/<tema>`.
+2. Verificar sintaxis y los puntos del protocolo de [AGENTS.md](AGENTS.md).
+3. Abrir un *Pull Request* hacia `main`.
+4. El responsable del proyecto revisa, aprueba y despliega a producción.
 
 ---
 
-## ✍️ Créditos y Propósito
+## 🔒 Seguridad y datos personales
 
-Este sistema ha sido desarrollado a medida para optimizar la cadena de suministro logístico-clínico, priorizando la **velocidad de operación**, la **integridad y seguridad de los datos sensibles**, y ofreciendo una **experiencia de usuario interactiva y sumamente moderna**. Un recurso diseñado para salvar tiempo administrativo y evitar fugas de información.
+- **Acceso por roles**, aplicado en la interfaz y en las reglas de Firestore.
+- **Sin datos de pacientes:** el sistema no almacena RUT, nombre, domicilio ni cama. Para medicamentos controlados se prevé guardar únicamente el **folio DAU**, en un registro separado de acceso restringido (ver [decisiones de diseño](docs/DECISIONES.md)).
+- **Datos de funcionarios** (correo, nombre, rol y bitácora de acciones): tratados con finalidad logística y acceso por rol. Se está adecuando el sistema a la Ley 21.719 de protección de datos personales.
+- **Credenciales:** no deben existir contraseñas ni claves en el repositorio. Si encuentras alguna, avisa al responsable de inmediato.
+
+Para reportar una vulnerabilidad, escribe directamente al responsable del proyecto; no abras un *issue* público.
 
 ---
 
-## 📄 Propiedad y Derechos de Uso
+## 🧭 Hoja de ruta
 
-⚠️ **Aviso Importante**: Este repositorio y todo su código fuente son de **propiedad exclusiva y uso restringido** (Código Cerrado / Proprietary). 
+- [ ] **Fase 0 · Seguridad inmediata:** rotación de credenciales, reglas de usuarios, escape de datos en pantalla, restricción de lectura del historial.
+- [ ] **Fase 1 · Ubicaciones por identificador:** renombrar, archivar y crear bodegas transitorias sin perder historial; vista «¿Dónde está?».
+- [ ] **Fase 2 · Medicamentos controlados:** folio DAU en registro separado y eliminación de datos de pacientes ya guardados.
+- [ ] **Fase 3 · Movimientos en dos pasos:** despacho y recepción con stock en tránsito; transiciones válidas entre tipos de ubicación.
+- [ ] **Fase 4 · Reglas por rol y por campo**, pruebas con el emulador y entorno de pruebas.
+- [ ] **Fase 5 · Modularización** del código, actualización de dependencias y retiro de respaldos duplicados.
 
-El código expuesto aquí tiene como **único propósito mostrar el avance y el trabajo en desarrollo** del proyecto. **NO está permitido** su copia, distribución, modificación, ni uso comercial o personal sin la autorización expresa de los autores. Todos los derechos reservados.
+Detalle y justificación en [docs/DECISIONES.md](docs/DECISIONES.md).
+
+---
+
+## 📄 Propiedad y derechos de uso
+
+⚠️ Este repositorio y su código fuente son de **propiedad exclusiva y uso restringido** (código propietario). Su único propósito es mostrar el avance del proyecto. **No está permitida** su copia, distribución, modificación ni uso comercial o personal sin autorización expresa de los autores. Todos los derechos reservados.

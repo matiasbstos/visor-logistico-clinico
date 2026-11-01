@@ -1,89 +1,118 @@
 # 🛡️ GUARDIÁN DE INTEGRIDAD Y REGLAS DE ORO — VISOR LOGÍSTICO CLÍNICO
 
-Este archivo actúa como la directiva maestra (`AGENTS.md`) para cualquier agente o desarrollador que trabaje en el repositorio **Visor Logístico Clínico**. Establece las reglas inquebrantables, contratos de datos y protocolos de verificación de integridad antes, durante y después de cualquier actualización.
+Directiva maestra para cualquier agente o desarrollador que trabaje en este repositorio. Las decisiones de diseño y su justificación están en `docs/DECISIONES.md`: **léelo antes de proponer cambios de modelo de datos, reglas o flujos.**
 
 ---
 
-## 🏛️ 1. PILARES ARQUITECTÓNICOS DEL SISTEMA
+## 0. REGLAS NO NEGOCIABLES
 
-1. **Persistencia Híbrida y Sincronizada**:
-   - **Firebase Firestore**: Base de datos NoSQL transaccional en tiempo real (Colecciones: `Insumos`, `Historial_Movimientos`, `Incidencias`, `Usuarios_Roles`, `Bandejas_Turno`, `Configuracion`).
-   - **Google Sheets**: Libro maestro de categorías individuales (`COMPRIMIDOS`, `JARABES`, etc.), `CONSOLIDADO_GENERAL` y la hoja ejecutiva `📊 DASHBOARD`.
-   - **Bóveda Local (Cache / LocalStorage / IndexedDB)**: Resguardo de contingencia ante cortes de conectividad.
-
-2. **Regla de No Regresión (Zero Regression)**:
-   - Ninguna modificación a un módulo (ej. Bandejas o Compras) puede alterar o romper las funciones ya estabilizadas (Toma de Inventario, Panel de Control, Sincronizador de Sheets, Descarte de Vencidos).
+1. **Nada llega a producción sin revisión humana.** Un agente NO ejecuta `git push origin main` ni `firebase deploy` por iniciativa propia. Flujo obligatorio: rama → cambios → Pull Request → prueba en emulador/staging → merge y despliegue **hechos por el usuario**.
+   - **Tampoco** se ejecutan `node publish-release.js`, `npm run release` ni `npm run deploy`: hacen `git add .`, push a `main` y despliegan Hosting **y las reglas de Firestore** de una sola vez. Las reglas del repositorio pueden diferir de las desplegadas; solo el usuario los corre, a mano. (`.agents/rules/guardian_integridad.md` replica esta regla para Antigravity.)
+2. **Cero credenciales en el repositorio.** Prohibido escribir contraseñas, claves de API, tokens o `serviceAccountKey.json`. Los scripts administrativos leen credenciales de variables de entorno o de un archivo fuera del repo.
+3. **Hosting publica solo lo necesario.** `firebase.json` excluye (`hosting.ignore`) scripts administrativos, parches, respaldos, documentación y `functions/`. Todo archivo nuevo que NO sea parte de la app debe quedar excluido; todo archivo nuevo de la app debe cargarse desde `index.html`.
+4. **No se guardan datos de pacientes en este sistema** (ni RUT, nombre, domicilio, cama). Única excepción: el folio DAU de medicamentos controlados, en `Registro_Controlados` (ver sección 2, Regla 4).
+5. **Toda colección nueva exige regla en `firestore.rules`** y prueba con el emulador. Firestore deniega por defecto: una colección sin regla deja la función rota.
+6. **Todo dato proveniente de Firestore que se inserte en HTML** pasa por `window.escapeHTML(...)` o se asigna con `textContent`. Prohibido interpolarlo crudo en `innerHTML`.
+7. **Una mutación de stock y su registro en historial ocurren en una sola transacción** (`runTransaction` o `writeBatch`). Prohibido descontar en origen y acreditar en destino en pasos separados.
 
 ---
 
-## 🔒 2. REGLAS DE ORO DE INTEGRIDAD DE DATOS
+## 1. PILARES ARQUITECTÓNICOS
 
-### Regla 1: Contrato de Datos del Insumo / Medicamento
-Todo objeto de insumo DEBE cumplir con los campos estándar:
+1. **Persistencia**:
+   - **Firebase Firestore**: base transaccional en tiempo real (`Insumos`, `Bodegas`, `Historial_Movimientos`, `Bandejas_Turno`, `Usuarios`, `Registro_Controlados`, entre otras).
+   - **Google Sheets** *(pendiente de verificar: la integración descrita en versiones anteriores de este archivo no se encontró en el código actual)*.
+   - **Caché local de Firestore (IndexedDB)**: resguardo ante cortes de conectividad. **No se borra automáticamente al cambiar de versión**: contiene escrituras pendientes de sincronizar.
+2. **Zero Regression**: ninguna modificación puede romper funciones estabilizadas (Toma de Inventario, Panel de Control, Bandejas, Descarte de Vencidos, Transferencias).
+
+---
+
+## 2. REGLAS DE ORO DE DATOS
+
+### Regla 1: Contrato del Insumo
 ```typescript
 interface InsumoRecord {
-  code: string;              // Código único (ej: "SAR-1002" o "S/I")
-  name: string;              // Nombre clínico en mayúsculas (ej: "PARACETAMOL 500 MG")
-  name_lowercase: string;    // Búsqueda insensible a mayúsculas
-  category: string;          // Categoría exacta (COMPRIMIDOS, JARABES, GOTAS, etc.)
-  quantity: number;          // Stock contable físico actual
-  totalAcumulado?: number;   // Stock acumulado entre tomas
-  batch: string;             // Número de lote
-  expirationDate: string;    // Fecha formateada (MM/AAAA o YYYY-MM-DD)
-  location: string;          // Bodega o servicio (ej: "Bodega Central")
-  unitPrice: number;         // Costo unitario en CLP ($)
-  criticalLimit: number;     // Stock mínimo para alarma (default: 50)
-  isCritical?: boolean;      // quantity <= criticalLimit
-  fase?: string;             // "1ra Toma (Inicial)", "2da Toma", etc.
-  user?: string;             // Email del operador responsable
-  observations?: string;     // Notas clínicas o motivo de ajuste
-  updatedAt?: Timestamp;     // Fecha de última modificación
+  code: string;              // Código único
+  name: string;              // Nombre en mayúsculas
+  name_lowercase: string;
+  category: string;          // COMPRIMIDOS, JARABES, ... o ASEO (insumos no clínicos)
+  controlado?: 'estupefaciente' | 'psicotropico' | null; // null = no controlado
+  quantity: number;          // Nunca negativo
+  batch: string;
+  expirationDate: string;
+  bodegaId: string;          // ID de la ubicación (referencia PRINCIPAL)
+  bodegaNombre: string;      // Nombre denormalizado, solo para mostrar
+  unitPrice: number;
+  criticalLimit: number;
+  updatedAt?: Timestamp;
 }
 ```
+`location` (nombre en texto) está en desuso: durante la migración se escriben ambos campos; la lectura migra a `bodegaId`.
 
-### Regla 2: Eliminación e Inserción Transaccional
-- **Al Insertar**: Se registra en Firestore (`Insumos`), se agrega en `Historial_Movimientos`, se envía a la pestaña de categoría en Google Sheets, a `CONSOLIDADO_GENERAL` y se refresca `📊 DASHBOARD`.
-- **Al Eliminar**: Se descuenta o borra el doc en Firestore, se registra evento negativo en `Historial_Movimientos`, se elimina la fila en Google Sheets y se recalcula `📊 DASHBOARD`.
-- **Al Limpiar Sesión**: Se vacía Firestore conservando la estructura, se borran filas de Google Sheets conservando los encabezados (Fila 1) y se limpia la sesión local.
+### Regla 2: Ubicaciones (Bodegas)
+- Cada ubicación tiene **ID inmutable**; el nombre puede cambiar cuantas veces se quiera sin afectar stock ni historial.
+- Tipos: `central`, `transitoria`, `farmacia_transitoria`, `bandeja`, `carro_paro`, `externa` (otro centro).
+- Las bodegas **transitorias** (p. ej. por falta de espacio) las crea, renombra y cierra el administrador.
+- **Eliminar solo si no tiene stock.** Con stock: asistente "Cerrar bodega" que devuelve todo a la Central en un solo movimiento. Si tuvo movimientos: se **archiva**, no se borra.
+- Los medicamentos controlados solo pueden estar en ubicaciones con `aptaControlados: true` (guardado bajo llave).
 
-### Regla 3: Parseo Universal de Fechas Clínicas
-- Todas las fechas deben ser procesadas a través del motor `window.SAR_Utils.parseDate` o `parseDateGAS`, tolerando formatos `MM/AAAA`, `YYYY-MM-DD`, `DD/MM/YYYY`, `YYYY-MM` y timestamps ISO.
+### Regla 3: Movimientos
+- Cadena operativa: Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia → Bandeja / Carro de Paro; además, Bodega Central → otros centros.
+- Cada movimiento guarda `origenId`, `origenNombre`, `destinoId`, `destinoNombre`, insumo, lote, vencimiento, cantidad, responsable, documento asociado y estado (`despachado` → `recibido`; en tránsito no es stock disponible).
+- `Historial_Movimientos` **no contiene datos de pacientes** y es inmutable (sin update; delete solo superadmin).
+
+### Regla 4: Medicamentos controlados y folio DAU
+- Cuando un insumo con `controlado != null` se **consume** (bandeja o carro de paro), el formulario exige el **folio DAU**. Los traspasos entre ubicaciones no lo piden.
+- El folio se guarda **solo** en `Registro_Controlados` (append-only, lectura restringida a roles autorizados, con registro de consultas). El historial general guarda únicamente la referencia al registro.
+
+### Regla 5: Fechas
+Todas las fechas pasan por `window.SAR_Utils.parseDate` o `parseDateGAS` (formatos `MM/AAAA`, `YYYY-MM-DD`, `DD/MM/YYYY`, `YYYY-MM`, ISO).
 
 ---
 
-## 📋 3. PROTOCOLO DE VERIFICACIÓN OBLIGATORIO ANTE ACTUALIZACIONES
-
-Antes de dar por completado cualquier cambio o despliegue:
+## 3. PROTOCOLO DE VERIFICACIÓN ANTES DE PEDIR REVISIÓN
 
 ```bash
-# 1. Validación de sintaxis JS
-node -c script.js
-node -c patch-plantillas.js
+# 1. Sintaxis
+node --check script.js
+node --check excelUtils.js
+node --check visor-adquisiciones.js
+node --check visor-triaje.js
+node --check patch-plantillas.js
+node --check sw.js
 
-# 2. Comprobar que los selectores del DOM sigan existiendo en index.html
-# IDs críticos:
-# - dash-urgencias-tbody, dash-precaucion-tbody, total-stock, total-insumos, stock-critico-badge
-# - toma-table-body, toma-quick-scan, form-toma-inventario, btn-sync-sheets-dashboard
-# - btn-clear-toma-session, btn-pull-from-sheets, btn-open-config-sheets
+# 2. IDs críticos del DOM siguen existiendo en index.html
+#    dash-urgencias-tbody, dash-precaucion-tbody, total-stock, total-insumos,
+#    stock-critico-badge, toma-table-body, toma-quick-scan, form-toma-inventario
 
-# 3. Bump de versión para Cache Busting
-# - Actualizar CACHE_NAME en sw.js (ej: v18.8 -> v18.9)
-# - Actualizar referencias ?v=X.X en index.html
+# 3. Reglas de Firestore (si se tocaron): probar con el emulador
+firebase emulators:start --only firestore,auth
 
-# 4. Sincronización y Muro de Actualizaciones en GitHub
-git add .
-git commit -m "feat/fix: descripción detallada del cambio o elemento agregado"
-git push origin main
+# 4. Versión (las TRES deben coincidir)
+#    - CACHE_NAME en sw.js
+#    - APP_VERSION en index.html
+#    - parámetros ?v=X.X en index.html y sw.js
 
-# 5. Despliegue a Producción en Firebase Hosting
-npx firebase-tools deploy --only hosting
+# 5. Qué se publicaría en Hosting: desplegar primero a un canal de vista previa
+#    (no toca producción) y comprobar que NO se sirvan scripts internos
+#    ni documentación, p. ej. <url-del-canal>/reset-pwd.js debe responder
+#    como página inexistente, no con el contenido del archivo.
+firebase hosting:channel:deploy prueba
 ```
+
+**Flujo de trabajo:**
+1. Crear rama: `git checkout -b feat/<tema>`.
+2. Commits pequeños y descriptivos; abrir Pull Request hacia `main`.
+3. Probar en emulador o proyecto de staging.
+4. El **usuario** hace el merge y ejecuta el despliegue a producción.
+
+Antes de desplegar reglas por primera vez, **exportar las reglas actualmente desplegadas y compararlas** con `firestore.rules` del repo: pueden diferir.
 
 ---
 
-## 🛡️ 4. ACCIONES ANTE NUEVAS FUNCIONES
-Si el usuario solicita una nueva función (ej: reportes PDF avanzados, módulo de farmacia de turno, control de lotes múltiples):
-1. **Analizar Dependencias**: Identificar si interactúa con `script.js`, `index.html` o Google Apps Script.
-2. **Aislar Componentes**: Utilizar funciones modulares o scripts complementarios sin sobreescribir lógica de sincronización central.
-3. **Verificar Integridad**: Ejecutar el checklist del punto 3.
-4. **Respaldo de Emergencia**: Registrar los cambios con trazabilidad en el control de versiones.
+## 4. ACCIONES ANTE NUEVAS FUNCIONES
+1. **Analizar dependencias**: qué archivos toca (`script.js`, `index.html`, reglas, índices).
+2. **Aislar**: preferir módulos nuevos antes que ampliar `script.js`.
+3. **Reglas y datos**: ¿colección nueva? ¿regla? ¿migración con respaldo previo y modo de prueba (dry-run)?
+4. **Datos personales**: ¿la función captura algún dato de personas? Si es de pacientes, no se implementa; consultar antes.
+5. **Verificar** con el protocolo de la sección 3.

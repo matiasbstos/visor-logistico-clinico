@@ -4798,6 +4798,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     const docRefOrigin = doc(db, 'Insumos', insumoId);
                     const snapOrigin = await getDoc(docRefOrigin);
+                    if (!snapOrigin.exists()) {
+                        showToast('Error', 'El insumo de origen no existe.', 'error');
+                        return;
+                    }
                     const data = snapOrigin.data();
 
                     if (data.status === 'CUARENTENA') {
@@ -4805,111 +4809,22 @@ document.addEventListener('DOMContentLoaded', () => {
                         return;
                     }
 
-                    if (qtyToMove > data.quantity) {
+                    if (!Number.isFinite(qtyToMove) || qtyToMove > data.quantity) {
                         showToast('Error', 'Stock insuficiente en la bodega de origen.', 'error');
+                        return;
+                    }
+
+                    if (transferType === 'BODEGA' && toName === (data.location || fromName)) {
+                        showToast('Error', 'La bodega de destino debe ser distinta a la de origen.', 'error');
                         return;
                     }
 
                     showToast('Procesando', transferType === 'PACIENTE' ? `Dispensando ${qtyToMove} unidades...` : `Moviendo ${qtyToMove} unidades...`, 'info');
 
-                    await runTransaction(db, async (transaction) => {
-                        const snapOrigin = await transaction.get(docRefOrigin);
-                        if (!snapOrigin.exists()) throw new Error("Insumo origen no existe.");
-                        const dataActual = snapOrigin.data();
-
-                        if (qtyToMove > (dataActual.quantity || 0)) {
-                            throw new Error('Stock insuficiente en la bodega de origen.');
-                        }
-
-                        // Aplicar FEFO al Origen
-                        let currentBatches = dataActual.batches || [];
-                        if (currentBatches.length === 0 && dataActual.batch) {
-                            currentBatches.push({ batch: dataActual.batch, quantity: dataActual.quantity, expirationDate: dataActual.expirationDate || '' });
-                        }
-
-                        let qtyToReduce = qtyToMove;
-                        let usedBatchesForLog = []; // Trazabilidad de lotes despachados
-
-                        currentBatches.sort(window.fefoCompare);
-
-                        for (let i = 0; i < currentBatches.length && qtyToReduce > 0; i++) {
-                            if (currentBatches[i].quantity > 0) {
-                                const available = currentBatches[i].quantity;
-                                const usedQty = Math.min(available, qtyToReduce);
-
-                                currentBatches[i].quantity -= usedQty;
-                                qtyToReduce -= usedQty;
-
-                                usedBatchesForLog.push({ batch: currentBatches[i].batch, used: usedQty });
-                            }
-                        }
-
-                        // 1. Actualizar Origen
-                        transaction.update(docRefOrigin, {
-                            quantity: increment(-qtyToMove),
-                            batches: currentBatches,
-                            updatedAt: serverTimestamp()
-                        });
-
-                        // 2. Upsert en Destino (Solo si es a Bodega)
-                        if (transferType === 'BODEGA') {
-                            const qDest = query(collection(db, 'Insumos'),
-                                where('name', '==', dataActual.name),
-                                where('location', '==', toName),
-                                limit(1)
-                            );
-                            // Las transacciones requieren reads antes de writes, pero Firestore en web sdk transacciones sobre queries es complicado.
-                            // Aquí la forma correcta en Firebase es leer el destino. Como getDocs dentro de transaction puede fallar si no referenciamos doc,
-                            // Lo haremos seguro: el destino es un nuevo doc o existente.
-                            // Por limitación de query en transaction web, haremos updateDoc regular post-transacción o asumiendo id. 
-                            // Sin embargo, para mantener seguridad, creamos un documento nuevo en destino siempre si no podemos consultar seguro,
-                            // o dejamos el write de destino fuera de la atomicidad del descuento.
-                        }
-                    });
-
-                    // 2. Upsert Destino fuera de transacción (ya descontamos seguro del origen)
-                    if (transferType === 'BODEGA') {
-                        const qDest = query(collection(db, 'Insumos'), where('name', '==', data.name), where('location', '==', toName), limit(1));
-                        const snapDest = await getDocs(qDest);
-
-                        if (!snapDest.empty) {
-                            const destDoc = snapDest.docs[0];
-                            const dData = destDoc.data();
-                            let dBatches = dData.batches || [];
-                            // (Simplificación de migración destino)
-                            if (dBatches.length === 0 && dData.batch) dBatches.push({ batch: dData.batch, quantity: dData.quantity, expirationDate: dData.expirationDate || '' });
-
-                            dBatches.push({ batch: `TRAS-${data.batch || 'S/L'}`, quantity: qtyToMove, expirationDate: data.expirationDate || '' });
-
-                            const dOldQty = Number(dData.quantity) || 0;
-                            const dLimit = Number(dData.criticalLimit || dData.stock_minimo || 50);
-                            const dFinalQty = dOldQty + qtyToMove;
-
-                            await updateDoc(doc(db, 'Insumos', destDoc.id), {
-                                quantity: increment(qtyToMove),
-                                isCritical: dFinalQty <= dLimit,
-                                batches: dBatches,
-                                updatedAt: serverTimestamp()
-                            });
-                        } else {
-                            const dLimit = Number(data.criticalLimit || data.stock_minimo || 50);
-                            await addDoc(collection(db, 'Insumos'), {
-                                ...data,
-                                location: toName,
-                                quantity: qtyToMove,
-                                isCritical: qtyToMove <= dLimit,
-                                criticalLimit: dLimit,
-                                batches: [{ batch: `TRAS-${data.batch || 'S/L'}`, quantity: qtyToMove, expirationDate: data.expirationDate || '' }],
-                                updatedAt: serverTimestamp()
-                            });
-                        }
-                    }
-
-                    // 3. Log en Historial
+                    // Datos del registro de historial (se escribe dentro de la misma transacción)
                     let docName = '';
                     let actionType = '';
                     let actionDetails = {};
-
                     if (transferType === 'PACIENTE') {
                         actionType = 'salida';
                         docName = `RECETA-${rutPaciente || 'S/R'}`;
@@ -4924,23 +4839,142 @@ document.addEventListener('DOMContentLoaded', () => {
                         docName = `TRASP-${fromName.substring(0, 3)}-${toName.substring(0, 3)}`;
                     }
 
-                    await addDoc(collection(db, 'Historial_Movimientos'), {
-                        insumoName: data.name,
-                        quantity: qtyToMove,
-                        type: actionType,
-                        user: auth.currentUser?.email || 'Admin',
-                        date: serverTimestamp(),
-                        document: docName,
-                        batch: data.batch || 'MULTI-LOTE',
-                        ...actionDetails
-                    });
+                    // Resolver el destino fuera de la transacción (no se permiten consultas dentro).
+                    // Si no existe, se usa un ID determinista: así dos traspasos simultáneos no crean documentos duplicados.
+                    let docRefDest = null;
+                    if (transferType === 'BODEGA') {
+                        const snapDest = await getDocs(query(collection(db, 'Insumos'),
+                            where('name', '==', data.name), where('location', '==', toName), limit(1)));
+                        if (!snapDest.empty) {
+                            docRefDest = snapDest.docs[0].ref;
+                        } else {
+                            const slug = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '')
+                                .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+                            docRefDest = doc(db, 'Insumos', `tras_${slug(data.name)}__${slug(toName)}`);
+                        }
+                    }
+                    const docRefHist = doc(collection(db, 'Historial_Movimientos'));
 
+                    // UNA sola transacción: origen (FEFO) + destino + historial
+                    await runTransaction(db, async (transaction) => {
+                        // --- Lecturas ---
+                        const snapO = await transaction.get(docRefOrigin);
+                        if (!snapO.exists()) throw new Error('Insumo origen no existe.');
+                        const dataActual = snapO.data();
+                        const snapD = docRefDest ? await transaction.get(docRefDest) : null;
+
+                        if (dataActual.status === 'CUARENTENA') {
+                            throw new Error('El producto está en CUARENTENA.');
+                        }
+                        if (qtyToMove > (Number(dataActual.quantity) || 0)) {
+                            throw new Error('Stock insuficiente en la bodega de origen.');
+                        }
+
+                        // --- FEFO en el origen ---
+                        let currentBatches = (dataActual.batches || []).map(b => ({ ...b }));
+                        if (currentBatches.length === 0 && dataActual.batch) {
+                            currentBatches.push({ batch: dataActual.batch, quantity: Number(dataActual.quantity) || 0, expirationDate: dataActual.expirationDate || '' });
+                        }
+                        currentBatches.sort(window.fefoCompare);
+
+                        let qtyToReduce = qtyToMove;
+                        const lotesMovidos = []; // trazabilidad real de lotes y vencimientos movidos
+                        for (let i = 0; i < currentBatches.length && qtyToReduce > 0; i++) {
+                            const available = Number(currentBatches[i].quantity) || 0;
+                            if (available > 0) {
+                                const usedQty = Math.min(available, qtyToReduce);
+                                currentBatches[i].quantity = available - usedQty;
+                                qtyToReduce -= usedQty;
+                                lotesMovidos.push({
+                                    batch: currentBatches[i].batch || 'S/L',
+                                    used: usedQty,
+                                    expirationDate: currentBatches[i].expirationDate || ''
+                                });
+                            }
+                        }
+                        // Si los lotes no cubren la cantidad (stock sin lote registrado), el resto va como "S/L"
+                        if (qtyToReduce > 0) {
+                            lotesMovidos.push({ batch: 'S/L', used: qtyToReduce, expirationDate: '' });
+                        }
+
+                        // --- Escrituras ---
+                        // 1. Origen
+                        transaction.update(docRefOrigin, {
+                            quantity: (Number(dataActual.quantity) || 0) - qtyToMove,
+                            batches: currentBatches,
+                            updatedAt: serverTimestamp()
+                        });
+
+                        // 2. Destino (solo traspaso a bodega): conserva el código y vencimiento reales de cada lote
+                        if (docRefDest) {
+                            const moved = lotesMovidos.map(l => ({ batch: l.batch, quantity: l.used, expirationDate: l.expirationDate }));
+                            const mergeInto = (arr) => {
+                                for (const m of moved) {
+                                    const ex = arr.find(b => b.batch === m.batch && (b.expirationDate || '') === (m.expirationDate || ''));
+                                    if (ex) ex.quantity = (Number(ex.quantity) || 0) + m.quantity;
+                                    else arr.push({ ...m });
+                                }
+                                return arr;
+                            };
+                            const dLimit = Number(dataActual.criticalLimit || dataActual.stock_minimo || 50);
+
+                            if (snapD && snapD.exists()) {
+                                const dData = snapD.data();
+                                const dBatches = (dData.batches || []).map(b => ({ ...b }));
+                                if (dBatches.length === 0 && dData.batch) {
+                                    dBatches.push({ batch: dData.batch, quantity: Number(dData.quantity) || 0, expirationDate: dData.expirationDate || '' });
+                                }
+                                mergeInto(dBatches);
+                                const dFinalQty = (Number(dData.quantity) || 0) + qtyToMove;
+                                const dLimitReal = Number(dData.criticalLimit || dData.stock_minimo || 50);
+                                transaction.update(docRefDest, {
+                                    quantity: dFinalQty,
+                                    isCritical: dFinalQty <= dLimitReal,
+                                    batches: dBatches,
+                                    updatedAt: serverTimestamp()
+                                });
+                            } else {
+                                const nuevosLotes = mergeInto([]);
+                                const masProximo = [...nuevosLotes].sort(window.fefoCompare)[0];
+                                transaction.set(docRefDest, {
+                                    ...dataActual,
+                                    location: toName,
+                                    quantity: qtyToMove,
+                                    isCritical: qtyToMove <= dLimit,
+                                    criticalLimit: dLimit,
+                                    batches: nuevosLotes,
+                                    batch: masProximo ? masProximo.batch : (dataActual.batch || ''),
+                                    expirationDate: masProximo && masProximo.expirationDate ? masProximo.expirationDate : (dataActual.expirationDate || ''),
+                                    updatedAt: serverTimestamp()
+                                });
+                            }
+                        }
+
+                        // 3. Historial con origen, destino y lotes (mismo commit que el stock)
+                        transaction.set(docRefHist, {
+                            insumoName: dataActual.name,
+                            quantity: qtyToMove,
+                            type: actionType,
+                            user: auth.currentUser?.email || 'Admin',
+                            date: serverTimestamp(),
+                            document: docName,
+                            batch: lotesMovidos.length === 1 ? lotesMovidos[0].batch : 'MULTI-LOTE',
+                            origin: fromName || dataActual.location || '',
+                            dest: transferType === 'BODEGA' ? toName : 'Paciente',
+                            lotes: lotesMovidos,
+                            idInsumoOrigen: insumoId,
+                            idInsumoDestino: docRefDest ? docRefDest.id : null,
+                            ...actionDetails
+                        });
+                    });
                     showToast('Éxito', transferType === 'PACIENTE' ? 'Dispensación registrada correctamente.' : 'Transferencia completada correctamente.', 'success');
                     document.getElementById('modal-transferencia').classList.remove('active');
 
                 } catch (err) {
                     console.error("Transfer Error:", err);
-                    showToast('Error', 'Fallo en la sincronización del traspaso.', 'error');
+                    const em = String((err && err.message) || '');
+                    const conocido = em.includes('Stock insuficiente') || em.includes('CUARENTENA') || em.includes('no existe');
+                    showToast('Error', conocido ? em : 'Fallo en la sincronización del traspaso. No se movió stock.', 'error');
                 }
             });
         }
@@ -7996,6 +8030,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!snap.exists()) throw new Error("La bandeja no existe.");
 
                     const data = snap.data();
+                    // Evita reintegrar dos veces: una bandeja ya cerrada, anulada o en recepción no se vuelve a cerrar
+                    if (['CERRADA_FINAL', 'CERRADA_BODEGA', 'ANULADA', 'EN_RECEPCION'].includes(data.estado)) {
+                        throw new Error('La bandeja ya fue cerrada o está en recepción (estado: ' + data.estado + '). No se modificó el stock.');
+                    }
                     const medicamentosActualizados = data.medicamentos.map(med => {
                         const recibida = med.cantidadRecibida || 0;
                         const consumida = med.cantidadConsumida || 0;
@@ -8003,6 +8041,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         const sobrante = recibida - consumida - merma;
 
                         if (sobrante > 0) {
+                            if (!insumosRefsMap[med.nombreInsumo]) {
+                                throw new Error('No se encontró en inventario el insumo "' + med.nombreInsumo + '". No se cerró la bandeja ni se reintegró stock.');
+                            }
                             // Generar Movimiento de Retorno en el Historial
                             const histRef = window.firebaseFirestore.doc(window.firebaseFirestore.collection(db, 'Historial_Movimientos'));
                             transaction.set(histRef, {
@@ -8014,6 +8055,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                 cantidadNueva: sobrante,
                                 cantidadDiferencia: sobrante,
                                 observaciones: 'Retorno tras Cuadratura Excel de Bandeja ' + (data.identificador || docId),
+                                type: 'RETORNO_BANDEJA',
+                                item: med.nombreInsumo,
+                                quantity: sobrante,
+                                user: auth.currentUser.email,
+                                date: window.firebaseFirestore.serverTimestamp(),
+                                origin: 'Bandeja: ' + (data.identificador || docId),
+                                dest: 'Bodega Central',
                                 idBandeja: docId
                             });
 
@@ -9116,96 +9164,93 @@ document.addEventListener('DOMContentLoaded', () => {
 
             try {
                 const activeAuth = window.firebaseAuth || window.auth || auth;
-                
-                // Si la bandeja tiene medicamentos asignados, debemos restaurar el stock
-            if (bandeja.medicamentos && bandeja.medicamentos.length > 0) {
-                const itemsAProcesarNombres = [...new Set(bandeja.medicamentos.map(m => m.nombreInsumo || m.nombre))];
-                
-                const fetchPromises = itemsAProcesarNombres.map(async (nombre) => {
-                    const q = window.firebaseFirestore.query(
-                        window.firebaseFirestore.collection(window.firebaseFirestore.db || window.db || db, 'Insumos'),
-                        window.firebaseFirestore.where('name', '==', nombre),
-                        window.firebaseFirestore.limit(1)
-                    );
-                    const snap = await window.firebaseFirestore.getDocs(q);
-                    if (snap.empty) {
-                        console.warn(`Fármaco "${nombre}" no encontrado para reponer stock, se saltará.`);
-                        return null;
-                    }
-                    return { ref: snap.docs[0].ref, name: nombre };
-                });
-                const refsMap = (await Promise.all(fetchPromises)).filter(r => r !== null);
+                const FS = window.firebaseFirestore;
+                const safeDb = FS.db || window.db || db;
+                const bandejaRef = FS.doc(safeDb, 'Bandejas_Turno', id);
+                const usuario = activeAuth.currentUser ? activeAuth.currentUser.email : 'Sistema';
 
-                await window.firebaseFirestore.runTransaction(window.firebaseFirestore.db || window.db || db, async (transaction) => {
+                // 1) Resolver (fuera de la transacción) el Insumo de cada medicamento actual de la bandeja
+                const previa = await FS.getDoc(bandejaRef);
+                if (!previa.exists()) throw new Error('La bandeja no existe.');
+                const nombres = [...new Set((previa.data().medicamentos || []).map(m => m.nombreInsumo || m.nombre))];
+                const insumoRefs = {};
+                for (const nombre of nombres) {
+                    const s = await FS.getDocs(FS.query(FS.collection(safeDb, 'Insumos'), FS.where('name', '==', nombre), FS.limit(1)));
+                    if (!s.empty) insumoRefs[nombre] = s.docs[0].ref;
+                }
+
+                // 2) Una sola transacción: verifica estado, repone stock, historial y marca ANULADA
+                await FS.runTransaction(safeDb, async (transaction) => {
+                    const bSnap = await transaction.get(bandejaRef);
+                    if (!bSnap.exists()) throw new Error('La bandeja no existe.');
+                    const bData = bSnap.data();
+                    if (bData.estado !== 'CREADA') {
+                        throw new Error('ESTADO_INVALIDO:' + bData.estado);
+                    }
+
+                    // Cantidad a devolver por insumo (suma si el mismo insumo está repetido)
+                    const porInsumo = {};
+                    for (const m of (bData.medicamentos || [])) {
+                        const nombre = m.nombreInsumo || m.nombre;
+                        const qty = Number(m.cantidadAsignada || m.cantidad) || 0;
+                        if (qty > 0) porInsumo[nombre] = (porInsumo[nombre] || 0) + qty;
+                    }
+
+                    // Lecturas primero
                     const updates = [];
-                    for (const mapObj of refsMap) {
-                        const insumoDoc = await transaction.get(mapObj.ref);
-                        if (!insumoDoc.exists()) continue;
-                        const currentStock = Number(insumoDoc.data().quantity) || 0;
-                        
-                        const oldItem = bandeja.medicamentos.find(m => (m.nombreInsumo || m.nombre) === mapObj.name);
-                        const oldQty = oldItem ? (Number(oldItem.cantidadAsignada || oldItem.cantidad) || 0) : 0;
-                        
-                        if (oldQty > 0) {
-                            updates.push({
-                                ref: mapObj.ref,
-                                newStock: currentStock + oldQty,
-                                name: mapObj.name,
-                                qty: oldQty
-                            });
-                        }
+                    for (const [nombre, qty] of Object.entries(porInsumo)) {
+                        const ref = insumoRefs[nombre];
+                        if (!ref) throw new Error('INSUMO_NO_ENCONTRADO:' + nombre);
+                        const iSnap = await transaction.get(ref);
+                        if (!iSnap.exists()) throw new Error('INSUMO_NO_ENCONTRADO:' + nombre);
+                        updates.push({ ref, nombre, qty, stock: Number(iSnap.data().quantity) || 0 });
                     }
 
-                    for (const update of updates) {
-                        transaction.update(update.ref, {
-                            quantity: update.newStock,
-                            lastUpdated: window.firebaseFirestore.serverTimestamp()
+                    // Escrituras
+                    for (const u of updates) {
+                        transaction.update(u.ref, {
+                            quantity: u.stock + u.qty,
+                            lastUpdated: FS.serverTimestamp()
                         });
-
-                        const historyRef = window.firebaseFirestore.doc(window.firebaseFirestore.collection(window.firebaseFirestore.db || window.db || db, 'Historial_Movimientos'));
-                        transaction.set(historyRef, {
+                        transaction.set(FS.doc(FS.collection(safeDb, 'Historial_Movimientos')), {
                             type: 'DEVOLUCION_ANULACION_BANDEJA',
-                            item: update.name,
-                            quantity: update.qty,
-                            user: activeAuth.currentUser ? activeAuth.currentUser.email : 'Sistema',
-                            date: window.firebaseFirestore.serverTimestamp(),
-                            origin: `Bandeja Anulada: ${id}`,
+                            item: u.nombre,
+                            quantity: u.qty,
+                            user: usuario,
+                            date: FS.serverTimestamp(),
+                            origin: `Bandeja Anulada: ${bData.identificador || id}`,
                             dest: 'Bodega Central',
-                            observacion: motivo
+                            observacion: motivo,
+                            idBandeja: id
+                        });
+                    }
+                    if (updates.length === 0) {
+                        transaction.set(FS.doc(FS.collection(safeDb, 'Historial_Movimientos')), {
+                            type: 'ANULACION_BANDEJA',
+                            item: bData.identificador || id,
+                            quantity: 0,
+                            accion: motivo,
+                            user: usuario,
+                            date: FS.serverTimestamp(),
+                            idBandeja: id
                         });
                     }
 
-                    transaction.update(window.firebaseFirestore.doc(window.firebaseFirestore.db || window.db || db, 'Bandejas_Turno', id), {
+                    transaction.update(bandejaRef, {
                         estado: 'ANULADA',
                         justificacionAnulacion: motivo,
-                        fechaAnulacion: window.firebaseFirestore.serverTimestamp(),
-                        anuladoPor: activeAuth.currentUser ? activeAuth.currentUser.email : 'Operador'
+                        fechaAnulacion: FS.serverTimestamp(),
+                        anuladoPor: usuario
                     });
                 });
-
-            } else {
-                // Si no hay medicamentos, solo anular la bandeja directamente
-                await window.firebaseFirestore.updateDoc(window.firebaseFirestore.doc(window.firebaseFirestore.db || window.db || db, 'Bandejas_Turno', id), {
-                    estado: 'ANULADA',
-                    justificacionAnulacion: motivo,
-                    fechaAnulacion: window.firebaseFirestore.serverTimestamp(),
-                    anuladoPor: activeAuth.currentUser ? activeAuth.currentUser.email : 'Operador'
-                });
-                
-                await window.firebaseFirestore.addDoc(window.firebaseFirestore.collection(window.firebaseFirestore.db || window.db || db, 'Historial_Movimientos'), {
-                    type: 'ANULACION_BANDEJA',
-                    item: id,
-                    quantity: 0,
-                    accion: motivo,
-                    user: activeAuth.currentUser ? activeAuth.currentUser.email : 'Sistema',
-                    date: window.firebaseFirestore.serverTimestamp()
-                });
-            }
-
             if (window.showToast) window.showToast('Éxito', 'Bandeja anulada y stock devuelto correctamente', 'success');
         } catch (error) {
             console.error("Error al anular:", error);
-            if (window.showToast) window.showToast('Error', 'No se pudo anular la bandeja', 'error');
+            let msgAnul = 'No se pudo anular la bandeja';
+            const em = String(error && error.message || '');
+            if (em.startsWith('ESTADO_INVALIDO:')) msgAnul = 'La bandeja ya no está en estado CREADA (estado actual: ' + em.split(':')[1] + '). No se modificó el stock.';
+            else if (em.startsWith('INSUMO_NO_ENCONTRADO:')) msgAnul = 'No se encontró en inventario el insumo "' + em.split(':').slice(1).join(':') + '". No se anuló nada.';
+            if (window.showToast) window.showToast('Error', msgAnul, 'error');
         } finally {
             const modal = document.getElementById('modal-anular-bandeja');
             if (modal) modal.style.display = 'none';
@@ -9477,8 +9522,20 @@ document.addEventListener('click', async (e) => {
             const safeDb = window.firebaseFirestore.db || window.db || db;
             const docRef = window.firebaseFirestore.doc(safeDb, 'Bandejas_Turno', docId);
 
-            // Ejecutamos transaccion
-            await window.firebaseFirestore.runTransaction(safeDb, async (transaction) => {
+            const FS = window.firebaseFirestore;
+
+            // 1) Resolver (fuera de la transacción) el Insumo de cada medicamento por nombre
+            const previa = await FS.getDoc(docRef);
+            if (!previa.exists()) throw new Error("La bandeja no existe.");
+            const nombresInsumo = [...new Set((previa.data().medicamentos || []).map(m => m.nombreInsumo || m.nombre))];
+            const insumoRefs = {};
+            for (const nombre of nombresInsumo) {
+                const s = await FS.getDocs(FS.query(FS.collection(safeDb, 'Insumos'), FS.where('name', '==', nombre), FS.limit(1)));
+                if (!s.empty) insumoRefs[nombre] = s.docs[0].ref;
+            }
+
+            // 2) Una sola transacción: estado, reintegro de stock en Insumos, historial y cierre de la bandeja
+            await FS.runTransaction(safeDb, async (transaction) => {
                 const snap = await transaction.get(docRef);
                 if (!snap.exists()) throw new Error("La bandeja no existe.");
 
@@ -9488,6 +9545,7 @@ document.addEventListener('click', async (e) => {
                 let hayAjusteNoJustificado = false;
                 const inputsReal = document.querySelectorAll('[id^="op-recibido-"]');
                 const inputsObs = document.querySelectorAll('[id^="op-obs-"]');
+                const porInsumo = {}; // nombre -> cantidad total a reintegrar
 
                 const medicamentosActualizados = data.medicamentos.map((med, idx) => {
                     const recibida = med.cantidadRecibida || 0;
@@ -9498,24 +9556,18 @@ document.addEventListener('click', async (e) => {
                     const inputVal = inputsReal[idx] ? Number(inputsReal[idx].value) : reportado;
                     const obsVal = inputsObs[idx] ? inputsObs[idx].value.trim() : '';
 
+                    if (!Number.isFinite(inputVal) || inputVal < 0) {
+                        throw new Error('CANTIDAD_INVALIDA:' + (med.nombreInsumo || med.nombre));
+                    }
+                    if (inputVal > (Number(med.cantidadAsignada) || 0)) {
+                        throw new Error('CANTIDAD_EXCEDE:' + (med.nombreInsumo || med.nombre));
+                    }
                     if (inputVal !== reportado && obsVal === '') {
                         hayAjusteNoJustificado = true;
                     }
-
                     if (inputVal > 0) {
-                        // Generar Movimiento de Retorno
-                        const histRef = window.firebaseFirestore.doc(window.firebaseFirestore.collection(safeDb, 'Historial_Movimientos'));
-                        transaction.set(histRef, {
-                            tipoAccion: 'RETORNO_BANDEJA',
-                            fechaHora: window.firebaseFirestore.serverTimestamp(),
-                            usuario: auth.currentUser.email,
-                            nombreInsumo: med.nombreInsumo || med.nombre,
-                            cantidadAnterior: 0,
-                            cantidadNueva: inputVal,
-                            cantidadDiferencia: inputVal,
-                            observaciones: 'Retorno desde Bandeja ' + (data.identificador || docId) + (inputVal !== reportado ? '. AJUSTE OPERADOR: ' + obsVal : ''),
-                            idBandeja: docId
-                        });
+                        const nombre = med.nombreInsumo || med.nombre;
+                        porInsumo[nombre] = (porInsumo[nombre] || 0) + inputVal;
                     }
 
                     return {
@@ -9529,37 +9581,62 @@ document.addEventListener('click', async (e) => {
                     throw new Error("AJUSTE_SIN_OBS");
                 }
 
+                // Lecturas primero (stock actual de cada insumo)
+                const reintegros = [];
+                for (const [nombre, qty] of Object.entries(porInsumo)) {
+                    const ref = insumoRefs[nombre];
+                    if (!ref) throw new Error('INSUMO_NO_ENCONTRADO:' + nombre);
+                    const iSnap = await transaction.get(ref);
+                    if (!iSnap.exists()) throw new Error('INSUMO_NO_ENCONTRADO:' + nombre);
+                    reintegros.push({ ref, nombre, qty, stock: Number(iSnap.data().quantity) || 0 });
+                }
+
+                // Escrituras
+                for (const r of reintegros) {
+                    transaction.update(r.ref, {
+                        quantity: r.stock + r.qty,
+                        lastUpdated: FS.serverTimestamp()
+                    });
+                    transaction.set(FS.doc(FS.collection(safeDb, 'Historial_Movimientos')), {
+                        type: 'RETORNO_BANDEJA',
+                        tipoAccion: 'RETORNO_BANDEJA',
+                        item: r.nombre,
+                        nombreInsumo: r.nombre,
+                        quantity: r.qty,
+                        cantidadAnterior: r.stock,
+                        cantidadNueva: r.stock + r.qty,
+                        cantidadDiferencia: r.qty,
+                        user: auth.currentUser.email,
+                        usuario: auth.currentUser.email,
+                        date: FS.serverTimestamp(),
+                        fechaHora: FS.serverTimestamp(),
+                        origin: 'Bandeja: ' + (data.identificador || docId),
+                        dest: 'Bodega Central',
+                        observaciones: 'Retorno desde Bandeja ' + (data.identificador || docId),
+                        idBandeja: docId
+                    });
+                }
+
                 transaction.update(docRef, {
                     estado: 'CERRADA_FINAL',
-                    fechaRecepcionBodega: window.firebaseFirestore.serverTimestamp(),
+                    fechaRecepcionBodega: FS.serverTimestamp(),
                     operadorReceptor: auth.currentUser.email,
                     medicamentos: medicamentosActualizados
                 });
             });
-
-            // Actualizar Stock General post-transaccion
-            const docSnapResult = await window.firebaseFirestore.getDoc(docRef);
-            const dataResult = docSnapResult.data();
-            for (let med of dataResult.medicamentos) {
-                if (med.cantidadRetornadaOperador > 0) {
-                    const insumosSnapshot = await window.firebaseFirestore.getDocs(window.firebaseFirestore.query(window.firebaseFirestore.collection(db, 'Insumos'), window.firebaseFirestore.where('nombre', '==', med.nombreInsumo || med.nombre)));
-                    if (!insumosSnapshot.empty) {
-                        const insumoDoc = insumosSnapshot.docs[0];
-                        const insumoRef = window.firebaseFirestore.doc(db, 'Insumos', insumoDoc.id);
-                        await window.firebaseFirestore.updateDoc(insumoRef, {
-                            cantidad: window.firebaseFirestore.increment(med.cantidadRetornadaOperador)
-                        });
-                    }
-                }
-            }
-
             document.getElementById('modal-recepcion-operador').style.display = 'none';
             window.showToast('Recepción Exitosa', 'El stock ha sido devuelto a bodega.', 'success');
             if (window.cargarHistorialBandejas) window.cargarHistorialBandejas();
         } catch (error) {
             console.error(error);
-            if (error.message === "AJUSTE_SIN_OBS") {
+            const em = String(error && error.message || '');
+            if (em === "AJUSTE_SIN_OBS") {
                 window.showToast('Error', 'Debe justificar las diferencias que ajustó.', 'warning');
+            } else if (em.startsWith('INSUMO_NO_ENCONTRADO:')) {
+                window.showToast('Error', 'No se encontró en inventario el insumo "' + em.split(':').slice(1).join(':') + '". No se reintegró nada.', 'error');
+            } else if (em.startsWith('CANTIDAD_INVALIDA:') || em.startsWith('CANTIDAD_EXCEDE:')) {
+                const exc = em.startsWith('CANTIDAD_EXCEDE:');
+                window.showToast('Error', (exc ? 'La cantidad a reintegrar supera lo asignado: ' : 'Cantidad inválida en: ') + em.split(':').slice(1).join(':'), 'warning');
             } else {
                 window.showToast('Error', 'No se pudo recepcionar: ' + error.message, 'error');
             }

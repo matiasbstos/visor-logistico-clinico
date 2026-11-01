@@ -1786,6 +1786,11 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        // Accesos rápidos de Inicio
+        document.querySelectorAll('[data-go]').forEach(btn => {
+            btn.addEventListener('click', () => { window.location.hash = btn.dataset.go; });
+        });
+
         // Navegación inferior (tablet/celular)
         document.querySelectorAll('#bottom-nav [data-nav]').forEach(btn => {
             btn.addEventListener('click', () => {

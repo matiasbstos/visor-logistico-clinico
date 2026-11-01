@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=20.15",
+                "./script.js": "./script.js?v=20.16",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -62,7 +62,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=20.15">
+    <link rel="stylesheet" href="style.css?v=20.16">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -354,12 +354,21 @@
                         </div>
                     </div>
 
-                    <h3 style="margin: 20px 0 15px 0; color: var(--text-main); font-size: 1.2rem;">Resumen Global</h3>
+                    <h3 class="home-section-title">Accesos rápidos</h3>
+                    <div class="home-shortcuts">
+                        <button type="button" class="home-shortcut" data-go="view-movimientos"><span class="home-shortcut__icon" style="background:#EEF2F9; color:var(--sar-blue);"><i class="ph-bold ph-arrow-line-down"></i></span><span><strong>Registrar ingreso</strong><small>Recepción de insumos a bodega</small></span></button>
+                        <button type="button" class="home-shortcut" data-go="view-transferencias"><span class="home-shortcut__icon" style="background:#FFF1E8; color:var(--sar-orange-strong);"><i class="ph-bold ph-truck"></i></span><span><strong>Transferir stock</strong><small>Entre bodegas o a otros centros</small></span></button>
+                        <button type="button" class="home-shortcut" data-go="view-toma-inventario"><span class="home-shortcut__icon" style="background:#F1F8E6; color:#4D7C0F;"><i class="ph-bold ph-clipboard-text"></i></span><span><strong>Tomar inventario</strong><small>Conteo físico de existencias</small></span></button>
+                        <button type="button" class="home-shortcut" data-go="view-bandejas"><span class="home-shortcut__icon" style="background:#FDECEC; color:var(--sar-red);"><i class="ph-bold ph-briefcase-medical"></i></span><span><strong>Bandejas de turno</strong><small>Preparar, cuadrar y cerrar</small></span></button>
+                        <button type="button" class="home-shortcut" data-go="view-ajustes"><span class="home-shortcut__icon" style="background:#FEF9C3; color:#854D0E;"><i class="ph-bold ph-sliders"></i></span><span><strong>Ajustar stock</strong><small>Correcciones con justificación</small></span></button>
+                        <button type="button" class="home-shortcut" data-go="view-historial"><span class="home-shortcut__icon" style="background:#F1F5F9; color:#475569;"><i class="ph-bold ph-clock-counter-clockwise"></i></span><span><strong>Ver historial</strong><small>Todos los movimientos</small></span></button>
+                    </div>
+
+                    <h3 class="home-section-title">Resumen global</h3>
                     <div class="cards-grid" id="global-cards-grid">
                         <div class="card">
                             <div class="card-header">
                                 <div class="card-icon blue"><i class="ph ph-clipboard-text"></i></div>
-                                <span class="card-badge green">+2.4%</span>
                             </div>
                             <div class="card-title">INSUMOS ÚNICOS</div>
                             <div class="card-value" id="dash-total-insumos">0</div>
@@ -445,7 +454,7 @@
                         </div>
                     </div> <!-- END tables-grid -->
 
-                    <h3 style="margin: 30px 0 15px 0; color: var(--text-main); font-size: 1.2rem;">Estado por Ubicación</h3>
+                    <h3 class="home-section-title">Estado por ubicación</h3>
                     <div id="dashboard-locations-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-bottom: 20px;">
                         <!-- Mini-cards por ubicación inyectadas vía JS -->
                     </div>
@@ -5619,8 +5628,8 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=20.15"></script>
-    <script type="module" src="patch-plantillas.js?v=20.15"></script>
+    <script type="module" src="script.js?v=20.16"></script>
+    <script type="module" src="patch-plantillas.js?v=20.16"></script>
     <script src="visor-triaje.js?v=20.11"></script>
     <script src="visor-adquisiciones.js?v=20.14"></script>
 </body>

@@ -3867,6 +3867,7 @@
             return;
         }
 
+        const escCal = (v) => (typeof window.escapeHTML === 'function' ? window.escapeHTML(v) : String(v == null ? '' : v).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])));
         feedList.innerHTML = eventosMostrar.map(ev => {
             const itemClass = ev.status === 'ATRASADO'
                 ? 'erp-cal-event-item--alert'
@@ -3889,17 +3890,17 @@
                             <span style="font-family:monospace; font-size:11px; font-weight:800; background:#E2E8F0; color:#1E293B; padding:2px 6px; border-radius:4px;">
                                 <i class="ph-bold ph-calendar"></i> ${fechaCorta}
                             </span>
-                            ${ev.refId ? `<span style="font-family:monospace; font-size:11px; font-weight:800; color:var(--sar-blue);">${ev.refId}</span>` : ''}
+                            ${ev.refId ? `<span style="font-family:monospace; font-size:11px; font-weight:800; color:var(--sar-blue);">${escCal(ev.refId)}</span>` : ''}
                             <span class="badge ${badgeClass}" style="font-size:9.5px; padding:2px 7px;">${badgeLabel}</span>
                         </div>
-                        <div style="font-size:13px; font-weight:800; color:#0F172A;">${ev.title}</div>
+                        <div style="font-size:13px; font-weight:800; color:#0F172A;">${escCal(ev.title)}</div>
                         <div style="font-size:11.5px; color:#64748B;">
-                            <strong>Responsable:</strong> ${ev.responsable || 'Bodega SAR'} ${ev.notes ? `• ${ev.notes}` : ''}
+                            <strong>Responsable:</strong> ${escCal(ev.responsable || 'Bodega SAR')} ${ev.notes ? `• ${escCal(ev.notes)}` : ''}
                         </div>
                     </div>
                     <div>
                         ${ev.sdcId ? `
-                            <button type="button" class="erp-btn erp-btn--outline" style="padding:5px 10px; font-size:11px;" data-cal-open-sdc="${ev.sdcId}" ${ev.refId && ev.refId.startsWith('OC-') ? `data-cal-open-oc="${ev.refId}"` : ''}>
+                            <button type="button" class="erp-btn erp-btn--outline" style="padding:5px 10px; font-size:11px;" data-cal-open-sdc="${escCal(ev.sdcId)}" ${ev.refId && ev.refId.startsWith('OC-') ? `data-cal-open-oc="${escCal(ev.refId)}"` : ''}>
                                 Ver Flujo
                             </button>
                         ` : `

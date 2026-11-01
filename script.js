@@ -1303,6 +1303,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Limpieza estricta de listeners para evitar "permission-denied" de Firebase
             clearListener('dashboard');
+            clearListener('dashboard_bandejas');
+            clearListener('dashboard_flujo');
             clearListener('expirations');
             clearListener('historial');
             clearListener('bodegas');
@@ -1354,9 +1356,13 @@ document.addEventListener('DOMContentLoaded', () => {
             acciones.push({ nivel: 'orange', codigo: 'BANDEJAS', tag: `${b.EN_RECEPCION} por cerrar`,
                 titulo: 'Bandejas esperando cierre en bodega', sub: 'Retornaron del turno y falta cuadrarlas', boton: 'Cerrar', go: 'view-bandejas' });
         }
-        const visibles = acciones.slice(0, 5);
+        const totalUrg = (window.globalDashboardUrgenciasItems || []).length;
+        const totalCrit = (window.globalDashboardCriticalItems || []).length;
+        const ocultos = Math.max(0, totalUrg - 3) + Math.max(0, totalCrit - 3);
+        const visibles = acciones.slice(0, 7);
         if (badge) {
-            badge.textContent = `${acciones.length} pendiente${acciones.length === 1 ? '' : 's'}`;
+            const totalPend = acciones.length + ocultos;
+            badge.textContent = `${totalPend} pendiente${totalPend === 1 ? '' : 's'}`;
             badge.className = acciones.length > 0 ? 'badge badge-sar-red' : 'badge badge-sar-green';
         }
         if (visibles.length === 0) {
@@ -1378,8 +1384,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     <button type="button" class="erp-btn ${btn}" style="padding:4px 10px; font-size:11px;" ${attr}>${esc(a.boton)}</button>
                 </div>
             </div>`;
-        }).join('');
+        }).join('') + (ocultos > 0 ? `<div class="home-more"><button type="button" class="erp-btn erp-btn--outline" style="padding:6px 12px; font-size:12px;" data-scroll="card-dash-urgencias">+${ocultos} más: ver listado completo</button></div>` : '');
     };
+
+    // Fecha de un registro del Historial (dos formatos: date | fechaHora; Timestamp, ISO o Date)
+    function fechaDeMovimiento(m) {
+        const v = m.date || m.fechaHora;
+        if (!v) return null;
+        const f = (typeof v.toDate === 'function') ? v.toDate() : new Date(v);
+        return isNaN(f.getTime()) ? null : f;
+    }
+    // 'ingreso' | 'salida' | null (ajustes, tomas y traspasos internos no cuentan como flujo)
+    function claseMovimiento(m) {
+        const tipo = String(m.type || m.tipoAccion || '').toLowerCase();
+        if (/ingreso|entrada|retorno|devolucion/.test(tipo)) return 'ingreso';
+        if (/salida|consumo|merma|despacho/.test(tipo)) return 'salida';
+        return null;
+    }
 
     function renderDashboardFlujo(movs) {
         const cont = document.getElementById('dash-flow-chart');
@@ -1387,22 +1408,18 @@ document.addEventListener('DOMContentLoaded', () => {
         const dias = [];
         const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
         for (let i = 6; i >= 0; i--) { const d = new Date(hoy); d.setDate(hoy.getDate() - i); dias.push({ d, ing: 0, sal: 0 }); }
-        let hoyIng = 0, hoySal = 0;
+        let hoyIng = 0, hoySal = 0, movsHoy = 0;
         movs.forEach(m => {
-            const tipo = String(m.type || m.tipoAccion || '').toLowerCase();
+            const clase = claseMovimiento(m);
             const cant = Math.abs(Number(m.quantity ?? m.cantidad ?? 0)) || 0;
-            let f = m.date && typeof m.date.toDate === 'function' ? m.date.toDate() : new Date(m.date || m.fechaHora || NaN);
-            if (!f || isNaN(f.getTime())) return;
+            const f = fechaDeMovimiento(m);
+            if (!clase || !f || cant <= 0) return;
             f.setHours(0, 0, 0, 0);
             const idx = dias.findIndex(x => x.d.getTime() === f.getTime());
             if (idx < 0) return;
-            if (/ingreso|entrada/.test(tipo)) { dias[idx].ing += cant; if (idx === 6) hoyIng += cant; }
-            else if (/salida|consumo|merma|traspaso|transfer|despacho/.test(tipo)) { dias[idx].sal += cant; if (idx === 6) hoySal += cant; }
+            if (clase === 'ingreso') { dias[idx].ing += cant; if (idx === 6) { hoyIng += cant; movsHoy++; } }
+            else { dias[idx].sal += cant; if (idx === 6) { hoySal += cant; movsHoy++; } }
         });
-        const movsHoy = movs.filter(m => {
-            let f = m.date && typeof m.date.toDate === 'function' ? m.date.toDate() : new Date(m.date || m.fechaHora || NaN);
-            return f && !isNaN(f.getTime()) && f.toDateString() === new Date().toDateString();
-        }).length;
         const elN = document.getElementById('dash-movs-hoy'); if (elN) elN.textContent = movsHoy;
         const elM = document.getElementById('dash-movs-meta');
         if (elM) elM.innerHTML = movsHoy > 0
@@ -1445,6 +1462,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.renderDashboardAcciones();
             }, (err) => console.warn('[Dashboard] Bandejas no disponibles:', err.message));
         } catch (e) { console.warn('[Dashboard] Bandejas:', e); }
+        const rolDash = String(document.body.dataset.userRole || '').toLowerCase();
+        if (rolDash === 'enfermero') return; // el enfermero no ve flujo ni movimientos
         try {
             const desde = new Date(); desde.setHours(0, 0, 0, 0); desde.setDate(desde.getDate() - 6);
             const qH = query(collection(db, 'Historial_Movimientos'), where('date', '>=', desde));
@@ -1458,8 +1477,10 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) { console.warn('[Dashboard] Flujo:', e); }
     }
 
-    window.startRealTimeDashboard = function () {
+    window.startRealTimeDashboard = function (forzar) {
         if (!auth.currentUser) return;
+        // Evita reabrir el listener completo de Insumos cada vez que se entra a Inicio
+        if (!forzar && activeListeners.dashboard) return;
         clearListener('dashboard');
         startDashboardExtras();
 
@@ -1513,10 +1534,11 @@ document.addEventListener('DOMContentLoaded', () => {
             let capitalTotal = 0;
             let locationMap = {};
 
+            const aNumero = (v, def) => (v === undefined || v === null || v === '' || !Number.isFinite(Number(v))) ? def : Number(v);
             items.forEach(item => {
-                const qty = item.quantity !== undefined ? Number(item.quantity) : (Number(item.totalAcumulado) || 0);
-                const limitVal = Number(item.criticalLimit || item.stock_minimo) || 50;
-                const price = Number(item.unitPrice) || 0;
+                const qty = aNumero(item.quantity !== undefined ? item.quantity : item.totalAcumulado, 0);
+                const limitVal = aNumero(item.criticalLimit !== undefined && item.criticalLimit !== null && item.criticalLimit !== '' ? item.criticalLimit : item.stock_minimo, 50);
+                const price = aNumero(item.unitPrice, 0);
                 capitalTotal += (qty * price);
 
                 // 1. Stock Crítico
@@ -1524,19 +1546,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     criticos.push({ ...item, quantity: qty, criticalLimit: limitVal });
                 }
 
-                // 2. Vencimientos
-                const expDate = SAR_Utils.parseDate(item.expirationDate);
-                if (expDate && !isNaN(expDate.getTime())) {
+                // 2. Vencimientos: por lote (batches[]) cuando existe; si no, el dato del insumo. Lotes en 0 no cuentan.
+                const lotes = (Array.isArray(item.batches) && item.batches.length > 0)
+                    ? item.batches.map(l => ({ batch: l.batch, expirationDate: l.expirationDate, quantity: aNumero(l.quantity, 0) }))
+                    : [{ batch: item.batch, expirationDate: item.expirationDate, quantity: qty }];
+                lotes.forEach(lote => {
+                    if (!(lote.quantity > 0)) return;
+                    const expDate = window.SAR_Utils.parseDate(lote.expirationDate);
+                    if (!expDate || isNaN(expDate.getTime())) return;
                     const diffDays = Math.ceil((expDate - hoy) / (1000 * 60 * 60 * 24));
-                    if (diffDays <= 180) {
-                        proximosVencer.push({ ...item, quantity: qty, diffDays });
-                    }
-                    if (diffDays <= 30) {
-                        urgencias.push({ ...item, quantity: qty, diffDays });
-                    } else if (diffDays <= 180) {
-                        precauciones.push({ ...item, quantity: qty, diffDays });
-                    }
-                }
+                    const fila = { ...item, batch: lote.batch, expirationDate: lote.expirationDate, quantity: lote.quantity, diffDays };
+                    if (diffDays <= 180) proximosVencer.push(fila);
+                    if (diffDays <= 30) urgencias.push(fila);
+                    else if (diffDays <= 180) precauciones.push(fila);
+                });
 
                 // 3. Agrupación por Ubicaciones
                 const loc = item.location || 'Bodega Central';
@@ -1855,7 +1878,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Control de acceso por rol (espejo de las reglas CSS del menú; la barrera real son las reglas de Firestore)
             const VISTAS_BLOQUEADAS = {
                 enfermero: ['view-historial', 'view-ajustes', 'view-compras', 'view-informes', 'view-bodegas',
-                            'view-usuarios', 'view-configuracion', 'view-transferencias'],
+                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones'],
                 operador: ['view-compras', 'view-usuarios', 'view-configuracion']
             };
             const rolActual = String(document.body.dataset.userRole || '').toLowerCase();
@@ -1955,17 +1978,20 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             return false;
         };
-        document.addEventListener('click', (e) => {
-            const el = e.target.closest('[data-go],[data-go-erp],[data-scroll]');
-            if (el && activarAcceso(el)) e.preventDefault();
-        });
-        document.addEventListener('keydown', (e) => {
-            if (e.key !== 'Enter') return;
-            const el = e.target.closest('[role="link"][data-go],[role="link"][data-go-erp],[role="link"][data-scroll]');
-            if (el) activarAcceso(el);
-        });
+        if (!window.__accesosInicioListos) {
+            window.__accesosInicioListos = true;
+            document.addEventListener('click', (e) => {
+                const el = e.target.closest('[data-go],[data-go-erp],[data-scroll]');
+                if (el && activarAcceso(el)) e.preventDefault();
+            });
+            document.addEventListener('keydown', (e) => {
+                if (e.key !== 'Enter') return;
+                const el = e.target.closest('[role="link"][data-go],[role="link"][data-go-erp],[role="link"][data-scroll]');
+                if (el) activarAcceso(el);
+            });
+        }
         const btnRefrescar = document.getElementById('btn-dash-refresh');
-        if (btnRefrescar) btnRefrescar.addEventListener('click', () => { if (typeof window.startRealTimeDashboard === 'function') window.startRealTimeDashboard(); });
+        if (btnRefrescar) btnRefrescar.addEventListener('click', () => { if (typeof window.startRealTimeDashboard === 'function') window.startRealTimeDashboard(true); });
 
         // Navegación inferior (tablet/celular)
         document.querySelectorAll('#bottom-nav [data-nav]').forEach(btn => {
@@ -7521,6 +7547,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         const histRef = window.firebaseFirestore.doc(window.firebaseFirestore.collection(db, 'Historial_Movimientos'));
                         transaction.set(histRef, {
                             tipoAccion: 'MERMA_DESPACHO',
+                            type: 'merma_despacho',
+                            date: window.firebaseFirestore.serverTimestamp(),
+                            quantity: diferencia,
+                            insumoName: med.nombreInsumo,
                             fechaHora: window.firebaseFirestore.serverTimestamp(),
                             usuario: auth.currentUser.email,
                             nombreInsumo: med.nombreInsumo,
@@ -8473,6 +8503,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         const histRef = doc(collection(db, 'Historial_Movimientos'));
                         transaction.set(histRef, {
                             tipoAccion: 'ENTRADA',
+                            type: 'entrada',
+                            date: serverTimestamp(),
+                            insumoName: item.nombre,
                             detalle: 'Devolución de Bandeja de Turno (Recepción Física Bodega)',
                             cantidad: item.cantidad,
                             quantity: item.cantidad,

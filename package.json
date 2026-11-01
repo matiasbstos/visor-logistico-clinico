@@ -1,4 +1,13 @@
 {
+  "name": "visor-logistico-clinico",
+  "version": "19.0.0",
+  "description": "Sistema de Gestión y Visor Logístico Clínico SAR (Mini-ERP Adquisiciones e Inventario)",
+  "scripts": {
+    "sync": "node sync-deploy.js 19.00",
+    "build": "node sync-deploy.js 19.00",
+    "deploy": "node sync-deploy.js 19.00 && npx firebase-tools deploy --only hosting",
+    "release": "node publish-release.js"
+  },
   "dependencies": {
     "firebase-admin": "^14.0.0"
   }

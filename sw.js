@@ -1,13 +1,13 @@
-const CACHE_NAME = 'visor-logistico-v18.30';
+const CACHE_NAME = 'visor-logistico-v19.00';
 const urlsToCache = [
   './',
   './index.html',
-  './style.css?v=18.30',
-  './script.js?v=18.30',
-  './patch-plantillas.js?v=18.30',
-  './visor-triaje.js?v=18.30',
-  './visor-adquisiciones.js?v=18.30',
-  './excelUtils.js',
+  './style.css?v=19.00',
+  './script.js?v=19.00',
+  './patch-plantillas.js?v=19.00',
+  './visor-triaje.js?v=19.00',
+  './visor-adquisiciones.js?v=19.00',
+  './excelUtils.js?v=19.00',
   'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap',
   'https://unpkg.com/@phosphor-icons/web',
   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
@@ -15,65 +15,72 @@ const urlsToCache = [
   'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js'
 ];
 
-// Instalar el Service Worker y almacenar en caché los recursos estáticos
+// Instalar el Service Worker y activar inmediatamente la nueva versión
 self.addEventListener('install', event => {
+  self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
-        console.log('[Service Worker] Archivos cacheados exitosamente');
+        console.log('[Service Worker v19.00] Archivos cacheados exitosamente');
         return cache.addAll(urlsToCache);
       })
   );
-  self.skipWaiting();
 });
 
-// Activar el Service Worker y limpiar cachés antiguas si existen
+// Activar el Service Worker y purgar todas las cachés anteriores (< v19.00)
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
         cacheNames.map(cacheName => {
           if (cacheName !== CACHE_NAME) {
-            console.log('[Service Worker] Limpiando caché antigua:', cacheName);
+            console.log('[Service Worker v19.00] Purgando caché antigua:', cacheName);
             return caches.delete(cacheName);
           }
         })
       );
-    })
+    }).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
-// Estrategia Stale-While-Revalidate para recursos estáticos
+// Estrategia Híbrida:
+// 1. Network-First (Red Primero) para index.html y navegación SPA (evita versión estancada).
+// 2. Network-First con fallback a caché para JS/CSS versionados.
 self.addEventListener('fetch', event => {
-  // Ignorar esquemas que no sean HTTP/HTTPS (como blob: o data:)
   if (!event.request.url.startsWith('http')) return;
-  // Ignorar peticiones que no sean GET (como las de Firestore)
   if (event.request.method !== 'GET') return;
-  // Ignorar peticiones a la API de Firestore para dejar que el SDK maneje su propia persistencia
-  if (event.request.url.includes('firestore.googleapis.com')) return;
+  if (event.request.url.includes('firestore.googleapis.com') || event.request.url.includes('identitytoolkit.googleapis.com')) return;
 
-  event.respondWith(
-    caches.match(event.request)
-      .then(cachedResponse => {
-        const fetchPromise = fetch(event.request).then(networkResponse => {
-          // Solo cachear respuestas válidas
-          if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
-            const responseToCache = networkResponse.clone();
-            caches.open(CACHE_NAME)
-              .then(cache => {
-                cache.put(event.request, responseToCache);
-              });
+  const isHTMLNavigation =
+    event.request.mode === 'navigate' ||
+    (event.request.headers.get('accept') && event.request.headers.get('accept').includes('text/html')) ||
+    event.request.url.endsWith('/index.html') ||
+    event.request.url.endsWith('/');
+
+  if (isHTMLNavigation) {
+    event.respondWith(
+      fetch(event.request, { cache: 'no-store' })
+        .then(networkResponse => {
+          if (networkResponse && networkResponse.status === 200) {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
           }
           return networkResponse;
-        }).catch(() => {
-            // Si la red falla y no hay caché, retornar el index.html (PWA Fallback)
-            if (event.request.mode === 'navigate' || (event.request.method === 'GET' && event.request.headers.get('accept').includes('text/html'))) {
-                return caches.match('./index.html');
-            }
-        });
-        
-        return cachedResponse || fetchPromise;
+        })
+        .catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
+
+  event.respondWith(
+    fetch(event.request)
+      .then(networkResponse => {
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const responseToCache = networkResponse.clone();
+          caches.open(CACHE_NAME).then(cache => cache.put(event.request, responseToCache));
+        }
+        return networkResponse;
       })
+      .catch(() => caches.match(event.request))
   );
 });

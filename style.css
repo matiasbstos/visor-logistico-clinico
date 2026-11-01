@@ -4432,3 +4432,113 @@ table.table thead th {
         display: none;
     }
 }
+
+/* ==========================================================================
+   CORRECCIONES UX / RESPONSIVO (móvil y tablet)
+   ========================================================================== */
+
+/* La barra superior vive en un contenedor flex en columna: sin esto se encogía
+   a su min-height y su contenido (buscador, botones) tapaba el título. */
+.topbar {
+    flex-shrink: 0;
+}
+
+/* Rejilla de escáneres: las columnas 1fr crecían con su contenido y se cortaban. */
+.ingreso-scanners-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.ingreso-scanners-grid > * {
+    min-width: 0;
+}
+.smart-scanner-box {
+    flex-wrap: wrap;
+}
+
+@media (max-width: 1024px) {
+    .ingreso-scanners-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}
+
+@media (max-width: 767px) {
+    /* "Nueva SDC" solo con icono y sin botones secundarios para ganar espacio */
+    #btn-erp-nueva-sdc span {
+        display: none;
+    }
+    .topbar-right > button[title="Ayuda"] {
+        display: none;
+    }
+    .topbar-right {
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+
+    /* iOS hace zoom al enfocar campos con fuente < 16px */
+    input:not([type="checkbox"]):not([type="radio"]),
+    select,
+    textarea {
+        font-size: 16px !important;
+    }
+
+    /* Objetivos táctiles mínimos de ~40px */
+    .btn,
+    .erp-btn,
+    .btn-icon,
+    .menu-item {
+        min-height: 40px;
+    }
+}
+
+@media (max-width: 767px) {
+    /* Historial: filtros apilados y tarjeta "Registros hoy" a todo el ancho */
+    .historial-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .filters-group {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+    .filters-group .search-input-wrapper:not(.date-picker) {
+        flex: 1 1 100%;
+    }
+    .filters-group .date-picker {
+        flex: 1 1 100%;
+        width: auto;
+    }
+    .filters-group .btn {
+        flex: 1 1 calc(50% - 5px);
+    }
+    .registros-hoy {
+        width: auto;
+    }
+}
+
+@media (max-width: 1024px) {
+    /* Bodegas y Usuarios: formulario arriba, listado abajo (antes la tabla quedaba fuera de pantalla) */
+    .grid-2-col-users {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .grid-2-col-users > * {
+        min-width: 0;
+    }
+    .toma-layout-grid {
+        grid-template-columns: minmax(0, 1fr) !important;
+    }
+    .toma-layout-grid > * {
+        min-width: 0;
+    }
+}
+
+@media (min-width: 1025px) and (max-width: 1500px) {
+    /* Laptops: barra superior en una sola fila */
+    .erp-breadcrumb__root,
+    .erp-breadcrumb__sep,
+    .status-badge span {
+        display: none;
+    }
+    .topbar-global-search .erp-input {
+        min-width: 180px;
+        width: 220px;
+    }
+}

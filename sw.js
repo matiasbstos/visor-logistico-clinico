@@ -1,10 +1,10 @@
-const CACHE_NAME = 'visor-logistico-v20.14';
+const CACHE_NAME = 'visor-logistico-v20.15';
 const urlsToCache = [
   './',
   './index.html',
-  './style.css?v=20.14',
-  './script.js?v=20.14',
-  './patch-plantillas.js?v=20.14',
+  './style.css?v=20.15',
+  './script.js?v=20.15',
+  './patch-plantillas.js?v=20.15',
   './visor-triaje.js?v=20.11',
   './visor-adquisiciones.js?v=20.11',
   './excelUtils.js?v=20.11',

@@ -80,6 +80,7 @@
                 </label>
                 ${admin ? '<button type="button" class="btn btn-outline" id="be-guardar">Guardar</button>' : ''}
             </div>
+            <p class="bodega-estantes__hint"><strong>Guardado:</strong> prefijo ${bodega.prefijo ? esc(bodega.prefijo) : '(ninguno)'} • ${usa ? 'usa estantes' : 'sin estantes'}</p>
             <p class="bodega-estantes__hint">${usa ? 'Los productos de esta bodega se ubican por estante, nivel y espacio. Puede haber productos "sin ubicar" mientras se asignan.' : 'Modo simple: los productos se asignan a la bodega, sin estantes.'}</p>
             <div id="be-contenido"></div>`;
 
@@ -87,13 +88,22 @@
         if (guardar) guardar.addEventListener('click', async () => {
             const prefijo = sec.querySelector('#be-prefijo').value.trim().toUpperCase();
             const usaNuevo = sec.querySelector('#be-usa').checked;
-            if (usaNuevo && !prefijoValido(prefijo)) { toast('Prefijo no válido', 'Usa de 1 a 4 letras o números, sin guiones (ej. BS).', 'warning'); return; }
+            if (prefijo && !prefijoValido(prefijo)) { toast('Prefijo no válido', 'Usa de 1 a 4 letras o números, sin guiones (ej. BS).', 'warning'); return; }
+            if (usaNuevo && !prefijo) { toast('Falta el prefijo', 'Para usar estantes la bodega necesita un prefijo (ej. BS).', 'warning'); return; }
+            guardar.disabled = true; guardar.textContent = 'Guardando…';
             try {
-                await fs().setDoc(fs().doc(fs().collection(db(), 'Bodegas'), bodega.id), { usaEstantes: usaNuevo, prefijo: prefijo || '' }, { merge: true });
+                const ref = fs().doc(fs().collection(db(), 'Bodegas'), bodega.id);
+                await fs().setDoc(ref, { usaEstantes: usaNuevo, prefijo }, { merge: true });
+                // Verificación: se vuelve a leer el documento y se compara
+                const leido = (await fs().getDoc(ref)).data() || {};
+                if ((leido.prefijo || '') !== prefijo || (leido.usaEstantes === true) !== usaNuevo) throw new Error('el dato no quedó guardado');
                 bodega.usaEstantes = usaNuevo; bodega.prefijo = prefijo;
-                toast('Guardado', usaNuevo ? 'La bodega usa estantes.' : 'La bodega queda en modo simple.', 'success');
+                toast('Guardado y verificado', `Prefijo ${prefijo || '(ninguno)'} • ${usaNuevo ? 'usa estantes' : 'sin estantes'}.`, 'success');
                 renderSeccion(bodega);
-            } catch (e) { toast('Error', 'No se pudo guardar: ' + e.message, 'error'); }
+            } catch (e) {
+                toast('No se guardó', `${e.code || 'error'}: ${e.message}`, 'error');
+                guardar.disabled = false; guardar.textContent = 'Guardar';
+            }
         });
 
         const cont = sec.querySelector('#be-contenido');
@@ -182,7 +192,9 @@
  .hoja { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6mm; padding: 8mm; }
  .etq { border: 1.5px solid #1A3668; border-radius: 3mm 3mm 3mm 0; padding: 4mm; display: grid; grid-template-columns: 1fr 34mm; gap: 3mm; align-items: center; break-inside: avoid; }
  .etq--general { border-color: #CC1B23; }
- .etq small { display: block; font-size: 9pt; color: #475569; margin-bottom: 1mm; }
+ .etq-top { display: flex; align-items: center; gap: 2.5mm; margin-bottom: 1.5mm; }
+ .etq-top img { height: 10mm; width: auto; }
+ .etq small { display: block; font-size: 9pt; color: #475569; margin: 0; }
  .etq .cod { font-size: 30pt; font-weight: 800; letter-spacing: 1px; line-height: 1; color: #1A3668; }
  .etq--general .cod { color: #CC1B23; }
  .etq svg.bar { width: 100%; height: 14mm; margin-top: 2mm; }
@@ -209,7 +221,9 @@
    items.forEach((it, i) => {
      const d = document.createElement('div'); d.className = 'etq' + (it.general ? ' etq--general' : '');
      const izq = document.createElement('div');
-     const s = document.createElement('small'); s.textContent = (it.general ? 'BODEGA • ' : '') + it.titulo; izq.appendChild(s);
+     const top = document.createElement('div'); top.className = 'etq-top';
+     const logo = document.createElement('img'); logo.src = '${URL_BASE}assets/logo-sar.png'; logo.alt = 'SAR'; top.appendChild(logo);
+     const s = document.createElement('small'); s.textContent = (it.general ? 'BODEGA • ' : '') + (it.titulo || ''); top.appendChild(s); izq.appendChild(top);
      const c = document.createElement('div'); c.className = 'cod'; c.textContent = it.codigo; izq.appendChild(c);
      const q = document.createElement('div'); q.className = 'qr';
      d.appendChild(izq); d.appendChild(q); hoja.appendChild(d);

@@ -1970,6 +1970,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'view-informes': 'Informes Logísticos',
             'view-analitico': 'Inteligencia Operativa',
             'view-bodegas': 'Bodegas',
+            'view-acceso-bodega': 'Acceso rápido de bodega',
             'view-usuarios': 'Gestión de Usuarios',
             'view-configuracion': 'Configuración del Sistema',
             'view-compras': 'Solicitudes de Compra',
@@ -1993,6 +1994,14 @@ document.addEventListener('DOMContentLoaded', () => {
             // Obtenemos el hash sin el '#' y damos 'view-panel' por defecto
             let hash = window.location.hash.substring(1) || 'view-panel';
 
+            // QR de bodega (#b/ID) o de ubicación (#u/ID/CODIGO): abre la pantalla de acceso rápido
+            let accesoRapido = null;
+            const mAcc = hash.match(/^(b|u)\/([^/]+)(?:\/(.+))?$/);
+            if (mAcc) {
+                try { accesoRapido = { tipo: mAcc[1], bodegaId: decodeURIComponent(mAcc[2]), codigo: mAcc[3] ? decodeURIComponent(mAcc[3]) : null }; } catch (e) { accesoRapido = null; }
+                hash = accesoRapido ? 'view-acceso-bodega' : 'view-panel';
+            }
+
             let targetItem = document.querySelector(`.sidebar .menu-item[data-target="${hash}"]`);
 
             // Control de acceso por rol (espejo de las reglas CSS del menú; la barrera real son las reglas de Firestore)
@@ -2011,7 +2020,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             // Si el hash ingresado no existe (ej. error manual), lo reseteamos al home
-            if (!targetItem) {
+            if (!targetItem && hash !== 'view-acceso-bodega') {
                 hash = 'view-panel';
                 targetItem = document.querySelector(`.sidebar .menu-item[data-target="view-panel"]`);
             }
@@ -2043,7 +2052,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 activeView.style.display = 'block';
                 activeView.classList.add('active');
 
-                if (hash === 'view-panel') {
+                if (hash === 'view-acceso-bodega') {
+                    if (window.SAR_AccesoBodega) window.SAR_AccesoBodega.abrir(accesoRapido);
+                } else if (hash === 'view-panel') {
                     console.log("[Router] Vista Panel de Control activa.");
                     if (typeof window.startRealTimeDashboard === 'function') window.startRealTimeDashboard();
                 } else if (hash === 'view-informes') {

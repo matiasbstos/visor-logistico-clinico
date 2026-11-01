@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=20.25",
+                "./script.js": "./script.js?v=20.26",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -62,7 +62,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=20.25">
+    <link rel="stylesheet" href="style.css?v=20.26">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -2539,6 +2539,13 @@
             </section>
 
             <!-- VIEW: Bodegas -->
+            <!-- Acceso rápido de bodega (se abre al leer el QR de una bodega o ubicación: #b/ID o #u/ID/CODIGO) -->
+            <section id="view-acceso-bodega" class="view-section" style="display:none;">
+                <div class="dashboard-container" id="acceso-bodega-contenido">
+                    <div class="home-empty">Cargando…</div>
+                </div>
+            </section>
+
             <section id="view-bodegas" class="view-section">
                 <div class="dashboard-container">
                     <div class="page-header mb-24">
@@ -5751,10 +5758,10 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=20.25"></script>
-    <script type="module" src="patch-plantillas.js?v=20.25"></script>
+    <script type="module" src="script.js?v=20.26"></script>
+    <script type="module" src="patch-plantillas.js?v=20.26"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="bodegas-estantes.js?v=20.25"></script>
-    <script src="visor-adquisiciones.js?v=20.25"></script>
+    <script src="bodegas-estantes.js?v=20.26"></script>
+    <script src="visor-adquisiciones.js?v=20.26"></script>
 </body>
 </html>

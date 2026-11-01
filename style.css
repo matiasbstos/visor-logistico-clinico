@@ -4911,3 +4911,10 @@ body[data-user-role="operador"] .home-only-admin { display: none !important; }
 .donde__bodega { padding: 8px 0; border-top: 1px solid #F1F5F9; }
 .donde__bodega-top { display: flex; justify-content: space-between; font-size: 14px; }
 .donde__ubic { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+
+/* v20.30 historial de etiquetas */
+.bodega-estantes__historial { margin-top: 10px; border: 1px solid #DCE3EF; border-radius: 8px; padding: 8px 10px; }
+.bodega-estantes__historial summary { cursor: pointer; font-size: 13px; }
+.bodega-estantes__lote { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #EEF2F9; font-size: 13px; }
+.bodega-estantes__lote:first-of-type { margin-top: 8px; }
+.bodega-estantes__estante .btn-sm { padding: 2px 8px; font-size: 12px; }

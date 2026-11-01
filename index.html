@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=20.21",
+                "./script.js": "./script.js?v=20.22",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -62,7 +62,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=20.21">
+    <link rel="stylesheet" href="style.css?v=20.22">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -411,6 +411,29 @@
                             </div>
                             <div class="erp-kpi-card__value" id="dash-movs-hoy">0</div>
                             <div class="erp-kpi-card__meta" id="dash-movs-meta"><i class="ph-bold ph-arrows-left-right"></i> Sin movimientos hoy</div>
+                        </div>
+                                            <div class="erp-kpi-card erp-kpi-card--blue home-link home-only-admin" role="link" tabindex="0" data-go="view-compras" title="Ir a Solicitudes de Compra">
+                            <div class="erp-kpi-card__top"><span class="erp-kpi-card__label">Solicitudes de compra</span></div>
+                            <div class="erp-kpi-card__value" id="dash-sdc-pend">–</div>
+                            <div class="erp-kpi-card__meta" id="dash-sdc-meta"><i class="ph-bold ph-shopping-cart"></i> Pendientes de gestionar</div>
+                        </div>
+
+                        <div class="erp-kpi-card erp-kpi-card--green home-link home-only-staff" role="link" tabindex="0" data-go-erp="erp-panel-recepcion" title="Ir a Recepción">
+                            <div class="erp-kpi-card__top"><span class="erp-kpi-card__label">Recepciones de compra</span></div>
+                            <div class="erp-kpi-card__value" id="dash-recep-count">–</div>
+                            <div class="erp-kpi-card__meta" id="dash-recep-meta"><i class="ph-bold ph-package"></i> Conformes: – • Con observación: –</div>
+                        </div>
+
+                        <div class="erp-kpi-card erp-kpi-card--orange home-link home-only-staff" role="link" tabindex="0" data-go-erp="erp-panel-despachos" title="Ir a Despachos">
+                            <div class="erp-kpi-card__top"><span class="erp-kpi-card__label">Despachos fuera de fecha</span></div>
+                            <div class="erp-kpi-card__value" id="dash-desp-count">–</div>
+                            <div class="erp-kpi-card__meta" id="dash-desp-meta"><i class="ph-bold ph-truck"></i> Sin datos aún</div>
+                        </div>
+
+                        <div class="erp-kpi-card erp-kpi-card--yellow home-link" role="link" tabindex="0" data-go="view-toma-inventario" title="Ir a Conteos de Inventario">
+                            <div class="erp-kpi-card__top"><span class="erp-kpi-card__label">Conteo de inventario</span></div>
+                            <div class="erp-kpi-card__value" id="dash-inv-sem">–</div>
+                            <div class="erp-kpi-card__meta" id="dash-inv-meta"><i class="ph-bold ph-clipboard-text"></i> Semanal • General: sin fecha</div>
                         </div>
                     </div>
 
@@ -5693,9 +5716,9 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=20.21"></script>
-    <script type="module" src="patch-plantillas.js?v=20.21"></script>
+    <script type="module" src="script.js?v=20.22"></script>
+    <script type="module" src="patch-plantillas.js?v=20.22"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="visor-adquisiciones.js?v=20.21"></script>
+    <script src="visor-adquisiciones.js?v=20.22"></script>
 </body>
 </html>

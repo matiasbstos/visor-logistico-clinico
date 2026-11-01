@@ -1990,6 +1990,21 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (el) activarAcceso(el);
             });
         }
+        // Accesos rápidos de la barra superior
+        const qaBtn = document.getElementById('btn-quick-access');
+        const qaMenu = document.getElementById('quick-access-menu');
+        if (qaBtn && qaMenu && !qaBtn.dataset.listo) {
+            qaBtn.dataset.listo = '1';
+            const cerrarQA = () => { qaMenu.hidden = true; qaBtn.setAttribute('aria-expanded', 'false'); };
+            qaBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                qaMenu.hidden = !qaMenu.hidden;
+                qaBtn.setAttribute('aria-expanded', String(!qaMenu.hidden));
+            });
+            qaMenu.addEventListener('click', cerrarQA);
+            document.addEventListener('click', (e) => { if (!e.target.closest('#quick-access')) cerrarQA(); });
+            document.addEventListener('keydown', (e) => { if (e.key === 'Escape') cerrarQA(); });
+        }
         const btnRefrescar = document.getElementById('btn-dash-refresh');
         if (btnRefrescar) btnRefrescar.addEventListener('click', () => { if (typeof window.startRealTimeDashboard === 'function') window.startRealTimeDashboard(true); });
 

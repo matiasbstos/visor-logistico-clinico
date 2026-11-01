@@ -34,7 +34,8 @@ Mini-ERP/WMS clínico: inventario multi-ubicación con lotes y vencimientos, ban
 
 **Diseño propuesto:**
 - ID inmutable por ubicación; nombre editable; `bodegaId` + `bodegaNombre` en Insumos y movimientos (el historial conserva el nombre vigente al momento).
-- Tipos: `central`, `transitoria`, `farmacia_transitoria`, `bandeja`, `carro_paro`, `externa`.
+- Tipos de ubicación (confirmados por el usuario el 2026-11-01): `central`, `transitoria` (creadas por el usuario por falta de espacio, p. ej. una bodega en la Corporación), `stock_turno` (bodega pequeña con el stock de uso por turno, desde donde se repone si algo se acaba antes del fin del turno; **requiere un nombre definido por el usuario**), `farmacia`, `carro_paro` y `externa` (otros centros). Las **bandejas** no son bodegas: son una entidad aparte con su propio ciclo (sección 5.1).
+- **Stock global del centro** = Bodega Central + bodegas transitorias + stock de turno + farmacia + carro de paro + lo que va en bandejas y en tránsito. Cada unidad está en un solo lugar a la vez.
 - Campos: `motivo`, `descripcionUbicacion`, `responsableUid` (usuario real), `activa`, `archivada`, `aptaControlados`, `fechaRetornoEstimada`.
 - Eliminar solo sin stock; con stock, asistente "Cerrar bodega" → devuelve todo a Central en un movimiento; con historial, se archiva.
 - Vista "¿Dónde está?": búsqueda por insumo (incluye aseo) → bodegas y cantidades.
@@ -50,6 +51,15 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 - Movimiento en dos pasos (despacho → recepción); el stock en tránsito no está disponible.
 - Consumo en bandeja/carro: salida con motivo (uso clínico, merma, vencido, reposición). Trazabilidad por lote → ubicación → turno → funcionario.
 - Traspasos a otros centros: tipo propio, con catálogo de centros y documento de respaldo.
+
+### 5.1 Bandejas y carro de paro ✅ (decisiones del usuario, 2026-11-01)
+- Las bandejas **siempre se cargan desde la Bodega Central**; lo que sobra vuelve a la Bodega Central.
+- Se preparan 3 bandejas por turno, cada una asignada a un enfermero de turno. Contienen medicamentos inyectables, incluidos controlados.
+- Ciclo: la bodega crea la bandeja → el enfermero cuadra lo recibido → registra consumos y mermas durante el turno → al cierre carga el informe de Rayen APS «Informe de consumo de prestaciones» y el sistema cruza lo reportado en el Visor con lo de Rayen; cada diferencia exige justificación → pérdidas, quiebres y eliminaciones se reportan → la bandeja pasa a «enviada a bodega» (en tránsito) → el encargado de bodega cuadra nuevamente y recién ahí el sobrante vuelve al stock de la Bodega Central.
+- **El carro de paro funciona como una bandeja**: contenido fijo, se cuadra cada cierto tiempo y se repone cuando se usa. Se modelará con el mismo ciclo que las bandejas.
+- **Stock en tránsito:** mientras la bandeja está en uso o en camino, sus unidades deben verse en el stock global («en bandejas»). Los consumos y pérdidas reportados deben reflejarse en el historial y en el stock global en el momento del reporte, no solo al cerrar la bandeja.
+- Pendiente: muestra del informe de Rayen (sin datos de pacientes) para definir el cruce, y confirmar si trae folio DAU. El archivo se lee en el navegador y no se guardan datos de pacientes.
+- Pendiente técnico: eliminar el cierre antiguo («Entregar bandeja a bodega») que devuelve stock sin el cuadre del encargado de bodega.
 
 ## 6. Protección de datos personales 🟡
 - Con la eliminación de datos de pacientes, el tratamiento de datos de salud sale del sistema, excepto el folio DAU. Siguen siendo datos personales los de funcionarios (correo, nombre, rol, bitácora, firmantes en actas): finalidad, retención y acceso por rol.

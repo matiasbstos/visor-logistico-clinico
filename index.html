@@ -2,8 +2,15 @@
 <html lang="es">
 
 <head>
+    <script type="importmap">
+        {
+            "imports": {
+                "./script.js": "./script.js?v=18.29"
+            }
+        }
+    </script>
     <script>
-        const APP_VERSION = '18.28';
+        const APP_VERSION = '18.29';
         if (localStorage.getItem('APP_VERSION') !== APP_VERSION) {
             localStorage.setItem('APP_VERSION', APP_VERSION);
             if ('serviceWorker' in navigator) {
@@ -16,14 +23,34 @@
                     for (let key of keys) caches.delete(key);
                 });
             }
+            if ('indexedDB' in window) {
+                try {
+                    indexedDB.deleteDatabase('firestore/[DEFAULT]/sarinventario/main');
+                } catch (e) {}
+            }
             console.log('Actualización en caliente aplicada sin interrupción de inventario:', APP_VERSION);
         }
+
+        window.addEventListener('error', function (ev) {
+            const msg = String((ev && (ev.message || (ev.error && ev.error.message))) || '');
+            if (msg.includes('INTERNAL ASSERTION FAILED')) {
+                ev.stopImmediatePropagation();
+                ev.preventDefault();
+                if (!sessionStorage.getItem('SAR_FS_IDB_RECOVERED_18_29')) {
+                    sessionStorage.setItem('SAR_FS_IDB_RECOVERED_18_29', '1');
+                    try {
+                        indexedDB.deleteDatabase('firestore/[DEFAULT]/sarinventario/main');
+                    } catch (e) {}
+                    setTimeout(() => window.location.reload(), 150);
+                }
+            }
+        }, true);
     </script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=18.28-predictive">
+    <link rel="stylesheet" href="style.css?v=18.29-predictive">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -4946,9 +4973,9 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=18.28"></script>
-    <script type="module" src="patch-plantillas.js?v=18.28"></script>
-    <script src="visor-triaje.js?v=18.28"></script>
-    <script src="visor-adquisiciones.js?v=18.28"></script>
+    <script type="module" src="script.js?v=18.29"></script>
+    <script type="module" src="patch-plantillas.js?v=18.29"></script>
+    <script src="visor-triaje.js?v=18.29"></script>
+    <script src="visor-adquisiciones.js?v=18.29"></script>
 </body>
 </html>

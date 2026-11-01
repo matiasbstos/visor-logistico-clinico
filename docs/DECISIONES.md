@@ -34,12 +34,42 @@ Mini-ERP/WMS clínico: inventario multi-ubicación con lotes y vencimientos, ban
 
 **Diseño propuesto:**
 - ID inmutable por ubicación; nombre editable; `bodegaId` + `bodegaNombre` en Insumos y movimientos (el historial conserva el nombre vigente al momento).
-- Tipos: `central`, `transitoria`, `farmacia_transitoria`, `bandeja`, `carro_paro`, `externa`.
+- Tipos de ubicación (confirmados por el usuario el 2026-11-01): `central`, `transitoria` (creadas por el usuario por falta de espacio, p. ej. una bodega en la Corporación), `stock_turno` (bodega pequeña con el stock de uso por turno, desde donde se repone si algo se acaba antes del fin del turno; **requiere un nombre definido por el usuario**), `farmacia`, `carro_paro` y `externa` (otros centros). Las **bandejas** no son bodegas: son una entidad aparte con su propio ciclo (sección 5.1).
+- **Stock global del centro** = Bodega Central + bodegas transitorias + stock de turno + farmacia + carro de paro + lo que va en bandejas y en tránsito. Cada unidad está en un solo lugar a la vez.
 - Campos: `motivo`, `descripcionUbicacion`, `responsableUid` (usuario real), `activa`, `archivada`, `aptaControlados`, `fechaRetornoEstimada`.
 - Eliminar solo sin stock; con stock, asistente "Cerrar bodega" → devuelve todo a Central en un movimiento; con historial, se archiva.
 - Vista "¿Dónde está?": búsqueda por insumo (incluye aseo) → bodegas y cantidades.
 - Regla (a validar con el químico farmacéutico): los controlados solo en ubicaciones `aptaControlados`.
 - **Migración en etapas:** (1) agregar `bodegaId` junto a `location`; (2) migrar datos con respaldo; (3) cambiar la lectura; (4) retirar la dependencia del nombre.
+
+## 4.1 Estantes, códigos y etiquetas ✅ (decisiones del usuario, 2026-11-01)
+
+- Jerarquía: **Ubicación → Estante → Nivel → Espacio (opcional)**.
+- **Código**: `PREFIJO-LETRA+NÚMERO`, p. ej. `BS-A01`. Prefijo propio de cada bodega (se define al crearla; `BS` = Bodega Central). **Letra = nivel**, de abajo hacia arriba (A el más bajo, luego B, C, D, E). **Número = estante** correlativo (01, 02, 03…).
+- **Subdivisión**: un nivel de un estante puede subdividirse en espacios numerados (p. ej. una bandeja completa dividida por tipo de medicamento): `BS-A01-1`, `BS-A01-2`. Es opcional.
+- **Cada bodega decide si usa estantes**: al crearla (y luego, editándola) un interruptor "Usar estantes/ubicaciones" sí/no. Activarlo después deja los productos existentes como "sin ubicar"; desactivarlo archiva las ubicaciones (no las borra) y los productos quedan asignados a la bodega.
+- **Bodegas "sin estantes"** (modo simple): los productos se asignan a la bodega y se cuentan como una lista (p. ej. transitorias por espacio). Una bodega con estantes admite productos **"sin ubicar"** (pendientes) mientras se asignan.
+- Un producto puede estar repartido en varias ubicaciones, con cantidad por ubicación.
+- **Etiquetas**: el sistema las genera para imprimir, con código en letra grande, **código de barras (pistola lectora, que actúa como teclado)** y **QR** (celular). Al leer el código se abre esa ubicación: qué productos hay, cantidades, lotes por vencer y opción de contarla.
+- **Etiqueta general de bodega** (QR + código de barras, p. ej. `BS`): abre una pantalla de **acceso rápido** pensada para el celular, con el stock completo de esa bodega y botones grandes: *Ver stock · Ingresar · Sacar · Ajuste · Ubicar · Inventario*. Requiere iniciar sesión (el QR solo lleva el identificador de la bodega, nunca datos) y respeta los permisos por rol. Desde ahí se puede pasar a la vista completa del sitio. Si la sesión no está abierta, se inicia sesión y se vuelve a esa misma bodega.
+- Vista **"¿Dónde está?"**: bodega → estante → nivel → espacio de cada producto.
+- Ubicaciones por identificador inmutable; renombrar la bodega no cambia los códigos.
+
+## 4.2 Tomas de inventario ✅ (decisiones del usuario, 2026-11-01)
+
+| Tipo | Alcance | Frecuencia |
+|---|---|---|
+| Semanal | Parcial: se eligen categorías o estantes | Semanal |
+| Bimestral | Completo (obligatorio) | Cada 2 meses 🟡 |
+| Pre-campaña de invierno | Completo (obligatorio) | Antes de la campaña |
+| Post-campaña de invierno | Completo (obligatorio) | Al terminar la campaña |
+
+- Aplica por ubicación: Bodega Central, Bodega Transitoria, Farmacia, Carro de Paro y bodegas adicionales.
+- Los completos solo cierran con conteo de **todo** el catálogo de la ubicación (0 incluido). Cada inventario queda marcado con su tipo.
+- Fechas de campaña definidas por un administrador cada año. Consumo de campaña = stock pre + ingresos − stock post; respalda la solicitud de compra.
+- Conteo guiado: ruta ordenada por ubicación, confirmación escaneando la etiqueta, conteo de los productos de esa ubicación, aviso de lo no contado.
+- El cierre fija la cantidad contada (no suma) en una sola transacción, con lotes/vencimientos y historial por diferencia; las diferencias grandes exigen justificación 🟡 (umbral y aprobación por definir).
+- 🟡 Pendiente: si los bimestrales continúan además de los dos de campaña.
 
 ## 5. Flujo de movimientos ✅ (implementación 🟡)
 ```
@@ -50,6 +80,15 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 - Movimiento en dos pasos (despacho → recepción); el stock en tránsito no está disponible.
 - Consumo en bandeja/carro: salida con motivo (uso clínico, merma, vencido, reposición). Trazabilidad por lote → ubicación → turno → funcionario.
 - Traspasos a otros centros: tipo propio, con catálogo de centros y documento de respaldo.
+
+### 5.1 Bandejas y carro de paro ✅ (decisiones del usuario, 2026-11-01)
+- Las bandejas **siempre se cargan desde la Bodega Central**; lo que sobra vuelve a la Bodega Central.
+- Se preparan 3 bandejas por turno, cada una asignada a un enfermero de turno. Contienen medicamentos inyectables, incluidos controlados.
+- Ciclo: la bodega crea la bandeja → el enfermero cuadra lo recibido → registra consumos y mermas durante el turno → al cierre carga el informe de Rayen APS «Informe de consumo de prestaciones» y el sistema cruza lo reportado en el Visor con lo de Rayen; cada diferencia exige justificación → pérdidas, quiebres y eliminaciones se reportan → la bandeja pasa a «enviada a bodega» (en tránsito) → el encargado de bodega cuadra nuevamente y recién ahí el sobrante vuelve al stock de la Bodega Central.
+- **El carro de paro funciona como una bandeja**: contenido fijo, se cuadra cada cierto tiempo y se repone cuando se usa. Se modelará con el mismo ciclo que las bandejas.
+- **Stock en tránsito:** mientras la bandeja está en uso o en camino, sus unidades deben verse en el stock global («en bandejas»). Los consumos y pérdidas reportados deben reflejarse en el historial y en el stock global en el momento del reporte, no solo al cerrar la bandeja.
+- Pendiente: muestra del informe de Rayen (sin datos de pacientes) para definir el cruce, y confirmar si trae folio DAU. El archivo se lee en el navegador y no se guardan datos de pacientes.
+- Pendiente técnico: eliminar el cierre antiguo («Entregar bandeja a bodega») que devuelve stock sin el cuadre del encargado de bodega.
 
 ## 6. Protección de datos personales 🟡
 - Con la eliminación de datos de pacientes, el tratamiento de datos de salud sale del sistema, excepto el folio DAU. Siguen siendo datos personales los de funcionarios (correo, nombre, rol, bitácora, firmantes en actas): finalidad, retención y acceso por rol.

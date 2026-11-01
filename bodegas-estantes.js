@@ -167,7 +167,7 @@
         const items = [];
         const pre = (bodega.prefijo || '').toUpperCase();
         if (soloBodega || !ubicaciones.length) {
-            items.push({ titulo: bodega.name, codigo: pre || String(bodega.name).slice(0, 4).toUpperCase(), url: `${URL_BASE}#b/${encodeURIComponent(bodega.id)}`, general: true });
+            items.push({ titulo: bodega.name, codigo: pre || (String(bodega.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]/g, '').slice(0, 4).toUpperCase() || 'BOD'), url: `${URL_BASE}#b/${encodeURIComponent(bodega.id)}`, general: true });
         }
         if (!soloBodega) ubicaciones.forEach(u => items.push({ titulo: bodega.name, codigo: u.codigo, url: `${URL_BASE}#u/${encodeURIComponent(bodega.id)}/${encodeURIComponent(u.codigo)}`, general: false }));
         const w = window.open('', '_blank');
@@ -198,21 +198,34 @@
 <script>
  const items = ${datos};
  const hoja = document.getElementById('hoja');
+ const estado = document.getElementById('estado');
+ const fallos = [];
+ const msg = (e) => String((e && (e.message || e.name)) || e);
+ // Code128 solo admite ASCII: se limpia el texto para las barras (el texto grande queda tal cual)
+ const paraBarras = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\x20-\x7E]/g, '').trim() || 'SAR';
  window.addEventListener('load', () => {
-   try {
-     items.forEach(it => {
-       const d = document.createElement('div'); d.className = 'etq' + (it.general ? ' etq--general' : '');
-       const izq = document.createElement('div');
-       const s = document.createElement('small'); s.textContent = (it.general ? 'BODEGA • ' : '') + it.titulo; izq.appendChild(s);
-       const c = document.createElement('div'); c.className = 'cod'; c.textContent = it.codigo; izq.appendChild(c);
-       const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', 'bar'); izq.appendChild(svg);
-       JsBarcode(svg, it.codigo, { format: 'CODE128', displayValue: false, margin: 0, height: 50 });
-       const q = document.createElement('div'); q.className = 'qr';
-       const qr = qrcode(0, 'M'); qr.addData(it.url); qr.make(); q.innerHTML = qr.createImgTag(6, 0);
-       d.appendChild(izq); d.appendChild(q); hoja.appendChild(d);
-     });
-     document.getElementById('estado').textContent = 'Listo para imprimir';
-   } catch (e) { document.getElementById('estado').textContent = 'No se pudieron generar los códigos: ' + e.message; }
+   if (typeof JsBarcode === 'undefined') fallos.push('no cargó la librería de código de barras');
+   if (typeof qrcode === 'undefined') fallos.push('no cargó la librería de QR');
+   items.forEach((it, i) => {
+     const d = document.createElement('div'); d.className = 'etq' + (it.general ? ' etq--general' : '');
+     const izq = document.createElement('div');
+     const s = document.createElement('small'); s.textContent = (it.general ? 'BODEGA • ' : '') + it.titulo; izq.appendChild(s);
+     const c = document.createElement('div'); c.className = 'cod'; c.textContent = it.codigo; izq.appendChild(c);
+     const q = document.createElement('div'); q.className = 'qr';
+     d.appendChild(izq); d.appendChild(q); hoja.appendChild(d);
+     if (typeof JsBarcode !== 'undefined') {
+       try {
+         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); svg.setAttribute('class', 'bar'); izq.appendChild(svg);
+         JsBarcode(svg, paraBarras(it.codigo), { format: 'CODE128', displayValue: false, margin: 0, height: 50 });
+       } catch (e) { fallos.push('barras de ' + it.codigo + ': ' + msg(e)); }
+     }
+     if (typeof qrcode !== 'undefined') {
+       try {
+         const qr = qrcode(0, 'M'); qr.addData(it.url); qr.make(); q.innerHTML = qr.createImgTag(6, 0);
+       } catch (e) { fallos.push('QR de ' + it.codigo + ': ' + msg(e)); }
+     }
+   });
+   estado.textContent = fallos.length ? 'Atención: ' + fallos.slice(0, 3).join(' | ') : 'Listo para imprimir';
  });
 <\/script></body></html>`);
         w.document.close();

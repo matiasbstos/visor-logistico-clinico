@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=20.17",
+                "./script.js": "./script.js?v=20.19",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -62,7 +62,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=20.17">
+    <link rel="stylesheet" href="style.css?v=20.19">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -230,8 +230,8 @@
                     <a href="#" class="menu-item normal" data-target="view-adquisiciones" data-title="Seguimiento SLA (5 Col)" style="display:none;">
                         <i class="ph-bold ph-columns"></i><span class="menu-label">Seguimiento SLA (5 Col)</span>
                     </a>
-                    <a href="#" class="menu-item normal erp-sidebar__item" data-target="view-erp-adquisiciones" data-erp-panel="erp-panel-dashboard" data-erp-title="Resumen de Compras y Agenda" data-title="Resumen y Agenda">
-                        <i class="ph-bold ph-calendar-check"></i><span class="menu-label">Resumen y Agenda</span>
+                    <a href="#" class="menu-item normal erp-sidebar__item" data-target="view-erp-adquisiciones" data-erp-panel="erp-panel-dashboard" data-erp-title="Flujo y Plazos de Compras (SLA)" data-title="Flujo y Plazos (SLA)">
+                        <i class="ph-bold ph-calendar-check"></i><span class="menu-label">Flujo y Plazos (SLA)</span>
                     </a>
                     <a href="#" class="menu-item normal erp-sidebar__item" data-erp-panel="erp-panel-tablero" data-erp-title="Tablero Kanban SDC/OC" data-target="view-erp-adquisiciones" data-title="Tablero SDC/OC">
                         <i class="ph-bold ph-kanban"></i><span class="menu-label">Tablero SDC/OC</span>
@@ -345,11 +345,11 @@
                         <div class="page-header">
                         <div class="page-title">
                             <h1>Inicio</h1>
-                            <p>Resumen ejecutivo del inventario clínico y alertas críticas.</p>
+                            <p>Indicadores de la bodega, alertas y accesos a cada sección.</p>
                         </div>
-                        <div style="display:flex; gap:12px; align-items:center;">
-                            <button type="button" class="btn" id="btn-goto-erp-adquisiciones" onclick="const item = document.querySelector('.menu-item[data-target=\'view-erp-adquisiciones\']'); if(item) item.click();" style="background-color:#1A3668; color:#ffffff; font-weight:700; border-radius:8px 8px 8px 0px; border:none; padding:10px 16px; display:inline-flex; align-items:center; gap:8px; cursor:pointer; box-shadow:0 4px 12px rgba(26,54,104,0.22);">
-                                <i class="ph-bold ph-kanban"></i> Ir a Compras
+                        <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                            <button type="button" class="btn btn-outline" id="btn-dash-refresh">
+                                <i class="ph-bold ph-arrows-clockwise"></i> Actualizar datos
                             </button>
                             <button class="btn btn-primary" id="btn-ia-analisis">
                                 <i class="ph-fill ph-sparkle"></i>Análisis IA
@@ -357,39 +357,174 @@
                         </div>
                     </div>
 
-                    <h3 class="home-section-title">Resumen de inventario</h3>
-                    <div class="cards-grid" id="global-cards-grid">
-                        <div class="card">
-                            <div class="card-header">
-                                <div class="card-icon blue"><i class="ph ph-clipboard-text"></i></div>
+                    <div class="home-status">
+                        <span class="badge badge-sar-green"><i class="ph-fill ph-check-circle"></i> Nodo operativo activo</span>
+                        <span class="home-status__text">SAR Elsa Romo Aravena • Datos en tiempo real</span>
+                        <span class="home-status__meta">Insumos únicos: <strong id="dash-total-insumos">0</strong> &nbsp;•&nbsp; Capital estimado: <strong id="dash-capital-value">$0</strong></span>
+                    </div>
+
+                    <!-- Indicadores: cada tarjeta lleva a su sección -->
+                    <div class="erp-kpi-grid-4" id="global-cards-grid">
+                        <div class="erp-kpi-card erp-kpi-card--red home-link" id="card-stock-critico" role="link" tabindex="0" title="Ver detalle de stock crítico" onclick="if(window.openCriticalStockModal) window.openCriticalStockModal();" onkeydown="if(event.key==='Enter'&&window.openCriticalStockModal) window.openCriticalStockModal();">
+                            <div class="erp-kpi-card__top">
+                                <span class="erp-kpi-card__label">Stock crítico</span>
+                                <span class="card-badge green">ÓPTIMO</span>
                             </div>
-                            <div class="card-title">INSUMOS ÚNICOS</div>
-                            <div class="card-value" id="dash-total-insumos">0</div>
+                            <div class="erp-kpi-card__value" id="dash-critical-count">0</div>
+                            <div class="erp-kpi-card__meta"><i class="ph-fill ph-warning"></i> Insumos bajo su límite crítico</div>
                         </div>
-                        <div class="card" id="card-stock-critico" style="cursor: pointer; transition: transform 0.2s; box-shadow: 0 4px 10px rgba(0,0,0,0.1);" onclick="if(window.openCriticalStockModal) window.openCriticalStockModal();" onmouseover="this.style.transform='scale(1.02)'" onmouseout="this.style.transform='scale(1)'">
-                            <div class="card-header">
-                                <div class="card-icon red"><i class="ph ph-warning"></i></div>
-                                <span class="card-badge red">ACCIÓN REQUERIDA</span>
+
+                        <div class="erp-kpi-card erp-kpi-card--orange home-link" role="link" tabindex="0" data-scroll="card-dash-urgencias" title="Ir a la tabla de urgencias">
+                            <div class="erp-kpi-card__top">
+                                <span class="erp-kpi-card__label">Vencidos o &lt; 30 días</span>
+                                <span class="badge badge-sar-orange">Vencimientos</span>
                             </div>
-                            <div class="card-title">STOCK CRÍTICO</div>
-                            <div class="card-value red" id="dash-critical-count">0</div>
+                            <div class="erp-kpi-card__value" id="dash-expiring-count">0</div>
+                            <div class="erp-kpi-card__meta" id="dash-precaucion-meta"><i class="ph-bold ph-clock"></i> Sin lotes en precaución</div>
                         </div>
-                        <div class="card">
-                            <div class="card-header">
-                                <div class="card-icon orange"><i class="ph ph-calendar-blank"></i></div>
-                                <span class="card-badge orange">REVISIÓN SEMANAL</span>
+
+                        <div class="erp-kpi-card erp-kpi-card--blue home-link" role="link" tabindex="0" data-go="view-bandejas" title="Ir a Bandejas de Turno">
+                            <div class="erp-kpi-card__top">
+                                <span class="erp-kpi-card__label">Bandejas activas</span>
+                                <span class="badge badge-sar-blue">Turno clínico</span>
                             </div>
-                            <div class="card-title">PRÓX. A VENCER</div>
-                            <div class="card-value orange" id="dash-expiring-count">0</div>
+                            <div class="erp-kpi-card__value" id="dash-bandejas-count">0</div>
+                            <div class="erp-kpi-card__meta" id="dash-bandejas-meta"><i class="ph-bold ph-briefcase-medical"></i> Sin bandejas en curso</div>
                         </div>
-                        <div class="card">
-                            <div class="card-header">
-                                <div class="card-icon green"><i class="ph ph-money"></i></div>
+
+                        <div class="erp-kpi-card erp-kpi-card--green home-link" role="link" tabindex="0" data-go="view-historial" title="Ir al Historial">
+                            <div class="erp-kpi-card__top">
+                                <span class="erp-kpi-card__label">Movimientos hoy</span>
+                                <span class="badge badge-sar-green">Bodega</span>
                             </div>
-                            <div class="card-title">CAPITAL ESTIMADO</div>
-                            <div class="card-value" id="dash-capital-value">$0</div>
+                            <div class="erp-kpi-card__value" id="dash-movs-hoy">0</div>
+                            <div class="erp-kpi-card__meta" id="dash-movs-meta"><i class="ph-bold ph-arrows-left-right"></i> Sin movimientos hoy</div>
                         </div>
-                    </div> <!-- END stats-grid -->
+                    </div>
+
+                    <div class="erp-dashboard-mid-grid">
+                        <div class="erp-card">
+                            <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:12px;">
+                                <div>
+                                    <h3 style="margin:0; font-size:16px; font-weight:800; color:var(--sar-blue);">Flujo logístico semanal</h3>
+                                    <p style="margin:4px 0 0 0; font-size:12px; color:#64748B;">Unidades que entraron y salieron de bodega en los últimos 7 días</p>
+                                </div>
+                                <div style="display:flex; align-items:center; gap:16px; font-size:12px; font-weight:700;">
+                                    <span style="display:inline-flex; align-items:center; gap:6px; color:var(--sar-blue);"><span style="width:10px; height:10px; background:var(--sar-blue); display:inline-block;"></span> Ingresos</span>
+                                    <span style="display:inline-flex; align-items:center; gap:6px; color:#4D7C0F;"><span style="width:10px; height:10px; background:var(--sar-green); display:inline-block;"></span> Salidas</span>
+                                </div>
+                            </div>
+                            <div id="dash-flow-chart" style="width:100%; overflow-x:auto;"><div class="home-empty">Cargando movimientos…</div></div>
+                        </div>
+
+                        <div class="erp-card">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid #F1F5F9;">
+                                <div style="display:flex; align-items:center; gap:8px;">
+                                    <i class="ph-fill ph-bell-ringing" style="color:var(--sar-red); font-size:18px;"></i>
+                                    <h3 style="margin:0; font-size:15px; font-weight:800; color:var(--sar-blue);">Acción inmediata</h3>
+                                </div>
+                                <span class="badge badge-sar-green" id="dash-acciones-badge">0 pendientes</span>
+                            </div>
+                            <div class="erp-alert-list" id="dash-acciones-list"><div class="home-empty">Cargando alertas…</div></div>
+                        </div>
+                    </div>
+
+                    <!-- Agenda y calendario logístico (movido desde Compras) -->
+                    <div class="erp-inicio-calendar-grid">
+                            <!-- Columna Izquierda: Gestión de Calendario (Estilo Referencia 1) -->
+                            <div class="erp-card erp-calendar-widget">
+                                <div class="erp-calendar-widget__top">
+                                    <div>
+                                        <h3 style="margin:0; font-size:16px; font-weight:800; color:var(--sar-blue);">
+                                            <i class="ph-fill ph-calendar-check"></i> Gestión de Agenda y Calendario Logístico
+                                        </h3>
+                                        <p style="margin:3px 0 0 0; font-size:11.5px; color:#64748B;">Programación de envíos, vencimientos SLA y recordatorios</p>
+                                    </div>
+                                    <button type="button" class="erp-btn erp-btn--outline" id="btn-erp-cal-today" style="padding:5px 10px; font-size:11px;">
+                                        Ir a Hoy
+                                    </button>
+                                </div>
+
+                                <!-- Botones de Acción Rápida Píldora (Inspirados en Referencia 1: + Agendar Envío / + Recordatorio) -->
+                                <div class="erp-calendar-quick-actions">
+                                    <button type="button" class="erp-cal-pill-btn erp-cal-pill-btn--blue" id="btn-erp-open-modal-envio">
+                                        <i class="ph-bold ph-plus-circle"></i> Agendar Envío / Recepción
+                                    </button>
+                                    <button type="button" class="erp-cal-pill-btn erp-cal-pill-btn--amber" id="btn-erp-open-modal-recordatorio">
+                                        <i class="ph-bold ph-bell-plus"></i> Crear Recordatorio / Hito SLA
+                                    </button>
+                                </div>
+
+                                <!-- Barra Navegación de Mes -->
+                                <div class="erp-calendar-month-nav">
+                                    <button type="button" class="erp-cal-nav-arrow" id="btn-erp-cal-prev" title="Mes Anterior">
+                                        <i class="ph-bold ph-caret-left"></i>
+                                    </button>
+                                    <span class="erp-calendar-month-label" id="erp-calendar-month-label">Noviembre 2026</span>
+                                    <button type="button" class="erp-cal-nav-arrow" id="btn-erp-cal-next" title="Mes Siguiente">
+                                        <i class="ph-bold ph-caret-right"></i>
+                                    </button>
+                                </div>
+
+                                <!-- Cabecera Días de la Semana -->
+                                <div class="erp-calendar-weekdays">
+                                    <span>Lun</span>
+                                    <span>Mar</span>
+                                    <span>Mié</span>
+                                    <span>Jue</span>
+                                    <span>Vie</span>
+                                    <span>Sáb</span>
+                                    <span>Dom</span>
+                                </div>
+
+                                <!-- Días del Mes -->
+                                <div class="erp-calendar-days-grid" id="erp-calendar-days-grid">
+                                    <!-- Poblado dinámicamente -->
+                                </div>
+
+                                <!-- Leyenda Compacta -->
+                                <div class="erp-calendar-legend">
+                                    <span><i class="erp-dot erp-dot--blue"></i> Envío / OC</span>
+                                    <span><i class="erp-dot erp-dot--green"></i> En Fecha</span>
+                                    <span><i class="erp-dot erp-dot--red"></i> SLA Vencido</span>
+                                    <span><i class="erp-dot erp-dot--amber"></i> Recordatorio / Rack</span>
+                                </div>
+                            </div>
+
+                            <!-- Columna Derecha: Registro de Actividad, Envíos y Estado de Plazos del Día / Mes (Estilo Referencia 1) -->
+                            <div class="erp-card erp-calendar-feed-card">
+                                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid #F1F5F9;">
+                                    <div>
+                                        <h3 style="margin:0; font-size:15.5px; font-weight:800; color:var(--sar-blue);" id="erp-cal-selected-date-title">
+                                            Bitácora de Envíos, Plazos SDC y Recordatorios
+                                        </h3>
+                                        <p style="margin:2px 0 0 0; font-size:11.5px; color:#64748B;" id="erp-cal-selected-date-sub">
+                                            Mostrando hitos agendados y verificación de solicitudes en fecha
+                                        </p>
+                                    </div>
+                                    <div style="display:flex; gap:6px;">
+                                        <button type="button" class="erp-btn erp-btn--primary" id="btn-erp-cal-view-day" style="padding:5px 10px; font-size:11px;">
+                                            Día Seleccionado
+                                        </button>
+                                        <button type="button" class="erp-btn erp-btn--outline" id="btn-erp-cal-view-all" style="padding:5px 10px; font-size:11px;">
+                                            Ver Todo el Mes
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div class="erp-calendar-events-list" id="erp-calendar-events-list">
+                                    <!-- Poblado dinámicamente -->
+                                </div>
+                            </div>
+                        </div>
+
+                    <!-- Accesos a las demás secciones -->
+                    <div class="home-shortcuts home-shortcuts--4">
+                        <button type="button" class="home-shortcut" data-go-erp="erp-panel-tablero"><span class="home-shortcut__icon" style="background:#EEF2F9; color:var(--sar-blue);"><i class="ph-bold ph-kanban"></i></span><span><strong>Tablero SDC/OC</strong><small>Solicitudes y órdenes de compra</small></span></button>
+                        <button type="button" class="home-shortcut" data-go-erp="erp-panel-recepcion"><span class="home-shortcut__icon" style="background:#F1F8E6; color:#4D7C0F;"><i class="ph-bold ph-package"></i></span><span><strong>Recepción Dinámica</strong><small>Auditar guías y recepciones</small></span></button>
+                        <button type="button" class="home-shortcut" data-go-erp="erp-panel-catalogo"><span class="home-shortcut__icon" style="background:#FFF1E8; color:var(--sar-orange-strong);"><i class="ph-bold ph-pill"></i></span><span><strong>Catálogo de Insumos</strong><small>Explorar el catálogo maestro</small></span></button>
+                        <button type="button" class="home-shortcut" data-go="view-toma-inventario"><span class="home-shortcut__icon" style="background:#FEF9C3; color:#854D0E;"><i class="ph-bold ph-clipboard-text"></i></span><span><strong>Conteos de Inventario</strong><small>Toma de inventario y semanal</small></span></button>
+                    </div>
 
                     <div class="tables-grid">
                         <div class="data-table-card" id="card-dash-urgencias">
@@ -3194,96 +3329,7 @@
                             </div>
                         </div>
 
-                        <!-- ========================================================================= -->
-                        <!-- BLOQUE 2 (REF 1): CALENDARIO OPERATIVO, ENVÍOS Y RECORDATORIOS EN INICIO  -->
-                        <!-- ========================================================================= -->
-                        <div class="erp-inicio-calendar-grid">
-                            <!-- Columna Izquierda: Gestión de Calendario (Estilo Referencia 1) -->
-                            <div class="erp-card erp-calendar-widget">
-                                <div class="erp-calendar-widget__top">
-                                    <div>
-                                        <h3 style="margin:0; font-size:16px; font-weight:800; color:var(--sar-blue);">
-                                            <i class="ph-fill ph-calendar-check"></i> Gestión de Agenda y Calendario Logístico
-                                        </h3>
-                                        <p style="margin:3px 0 0 0; font-size:11.5px; color:#64748B;">Programación de envíos, vencimientos SLA y recordatorios</p>
-                                    </div>
-                                    <button type="button" class="erp-btn erp-btn--outline" id="btn-erp-cal-today" style="padding:5px 10px; font-size:11px;">
-                                        Ir a Hoy
-                                    </button>
-                                </div>
 
-                                <!-- Botones de Acción Rápida Píldora (Inspirados en Referencia 1: + Agendar Envío / + Recordatorio) -->
-                                <div class="erp-calendar-quick-actions">
-                                    <button type="button" class="erp-cal-pill-btn erp-cal-pill-btn--blue" id="btn-erp-open-modal-envio">
-                                        <i class="ph-bold ph-plus-circle"></i> Agendar Envío / Recepción
-                                    </button>
-                                    <button type="button" class="erp-cal-pill-btn erp-cal-pill-btn--amber" id="btn-erp-open-modal-recordatorio">
-                                        <i class="ph-bold ph-bell-plus"></i> Crear Recordatorio / Hito SLA
-                                    </button>
-                                </div>
-
-                                <!-- Barra Navegación de Mes -->
-                                <div class="erp-calendar-month-nav">
-                                    <button type="button" class="erp-cal-nav-arrow" id="btn-erp-cal-prev" title="Mes Anterior">
-                                        <i class="ph-bold ph-caret-left"></i>
-                                    </button>
-                                    <span class="erp-calendar-month-label" id="erp-calendar-month-label">Noviembre 2026</span>
-                                    <button type="button" class="erp-cal-nav-arrow" id="btn-erp-cal-next" title="Mes Siguiente">
-                                        <i class="ph-bold ph-caret-right"></i>
-                                    </button>
-                                </div>
-
-                                <!-- Cabecera Días de la Semana -->
-                                <div class="erp-calendar-weekdays">
-                                    <span>Lun</span>
-                                    <span>Mar</span>
-                                    <span>Mié</span>
-                                    <span>Jue</span>
-                                    <span>Vie</span>
-                                    <span>Sáb</span>
-                                    <span>Dom</span>
-                                </div>
-
-                                <!-- Días del Mes -->
-                                <div class="erp-calendar-days-grid" id="erp-calendar-days-grid">
-                                    <!-- Poblado dinámicamente -->
-                                </div>
-
-                                <!-- Leyenda Compacta -->
-                                <div class="erp-calendar-legend">
-                                    <span><i class="erp-dot erp-dot--blue"></i> Envío / OC</span>
-                                    <span><i class="erp-dot erp-dot--green"></i> En Fecha</span>
-                                    <span><i class="erp-dot erp-dot--red"></i> SLA Vencido</span>
-                                    <span><i class="erp-dot erp-dot--amber"></i> Recordatorio / Rack</span>
-                                </div>
-                            </div>
-
-                            <!-- Columna Derecha: Registro de Actividad, Envíos y Estado de Plazos del Día / Mes (Estilo Referencia 1) -->
-                            <div class="erp-card erp-calendar-feed-card">
-                                <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:14px; padding-bottom:12px; border-bottom:1px solid #F1F5F9;">
-                                    <div>
-                                        <h3 style="margin:0; font-size:15.5px; font-weight:800; color:var(--sar-blue);" id="erp-cal-selected-date-title">
-                                            Bitácora de Envíos, Plazos SDC y Recordatorios
-                                        </h3>
-                                        <p style="margin:2px 0 0 0; font-size:11.5px; color:#64748B;" id="erp-cal-selected-date-sub">
-                                            Mostrando hitos agendados y verificación de solicitudes en fecha
-                                        </p>
-                                    </div>
-                                    <div style="display:flex; gap:6px;">
-                                        <button type="button" class="erp-btn erp-btn--primary" id="btn-erp-cal-view-day" style="padding:5px 10px; font-size:11px;">
-                                            Día Seleccionado
-                                        </button>
-                                        <button type="button" class="erp-btn erp-btn--outline" id="btn-erp-cal-view-all" style="padding:5px 10px; font-size:11px;">
-                                            Ver Todo el Mes
-                                        </button>
-                                    </div>
-                                </div>
-
-                                <div class="erp-calendar-events-list" id="erp-calendar-events-list">
-                                    <!-- Poblado dinámicamente -->
-                                </div>
-                            </div>
-                        </div>
                     </div>
 
                     <!-- ================================================================= -->
@@ -5637,9 +5683,9 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=20.17"></script>
-    <script type="module" src="patch-plantillas.js?v=20.17"></script>
+    <script type="module" src="script.js?v=20.19"></script>
+    <script type="module" src="patch-plantillas.js?v=20.19"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="visor-adquisiciones.js?v=20.14"></script>
+    <script src="visor-adquisiciones.js?v=20.19"></script>
 </body>
 </html>

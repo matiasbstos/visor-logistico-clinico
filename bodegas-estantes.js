@@ -218,5 +218,113 @@
         w.document.close();
     }
 
+    // ---------------------------------------------------------------
+    // Pantalla de acceso rápido (QR de bodega o de ubicación), pensada para el celular
+    // ---------------------------------------------------------------
+    const AccesoBodega = (() => {
+        let datos = null; // { bodega, lineas }
+
+        function rol() { return String(document.body.dataset.userRole || '').toLowerCase(); }
+        function pintarError(msg) {
+            const c = document.getElementById('acceso-bodega-contenido');
+            if (c) c.innerHTML = `<div class="home-empty">${esc(msg)} <a href="#view-panel" class="home-link">Ir al Inicio</a></div>`;
+        }
+
+        async function abrir(ctx) {
+            const cont = document.getElementById('acceso-bodega-contenido');
+            if (!cont || !ctx) return;
+            cont.innerHTML = '<div class="home-empty">Cargando bodega…</div>';
+            const f = fs();
+            try {
+                const bSnap = await f.getDoc(f.doc(f.collection(db(), 'Bodegas'), ctx.bodegaId));
+                if (!bSnap.exists()) { pintarError('No encontré esa bodega. Puede que la etiqueta sea antigua.'); return; }
+                const bodega = { id: bSnap.id, ...bSnap.data() };
+                window.__bodegaContexto = { id: bodega.id, name: bodega.name };
+
+                // Stock de la bodega (hasta 600 lotes, agrupados por producto)
+                let lineas = [];
+                if (ctx.tipo === 'u' && ctx.codigo) {
+                    const q = f.query(f.collection(db(), 'Insumos'), f.where('ubicacionCodigo', '==', ctx.codigo), f.limit(300));
+                    lineas = agrupar(await f.getDocs(q));
+                } else {
+                    const q = f.query(f.collection(db(), 'Insumos'), f.where('location', '==', bodega.name), f.limit(600));
+                    lineas = agrupar(await f.getDocs(q));
+                }
+                let ubic = [];
+                if (bodega.usaEstantes === true) { try { ubic = (await cargarUbicaciones(bodega.id)).filter(u => u.activo !== false); } catch (e) { /* sin permiso o sin datos */ } }
+                datos = { bodega, lineas, ubic, ctx };
+                pintar();
+            } catch (e) {
+                console.warn('[Acceso rápido]', e);
+                pintarError('No pude cargar la bodega (' + (e.message || 'error') + ').');
+            }
+        }
+
+        function agrupar(snap) {
+            const m = new Map();
+            snap.forEach(d => {
+                const x = d.data();
+                const k = String(x.name || 'Sin nombre');
+                const cant = Number(x.quantity) || 0;
+                const lim = Number(x.criticalLimit) || 0;
+                const prev = m.get(k) || { name: k, cantidad: 0, limite: 0 };
+                prev.cantidad += cant; prev.limite = Math.max(prev.limite, lim);
+                m.set(k, prev);
+            });
+            return Array.from(m.values()).sort((a, b) => a.name.localeCompare(b.name, 'es'));
+        }
+
+        function pintar() {
+            const cont = document.getElementById('acceso-bodega-contenido');
+            const { bodega, lineas, ubic, ctx } = datos;
+            const r = rol();
+            const esStaff = ['admin', 'administrador', 'global', 'superadmin', 'operador'].includes(r);
+            const esUbic = ctx.tipo === 'u' && ctx.codigo;
+            const titulo = esUbic ? ctx.codigo : (bodega.prefijo || bodega.name);
+            const criticos = lineas.filter(l => l.limite > 0 && l.cantidad <= l.limite).length;
+            const botones = [
+                { id: 'stock', ico: 'ph-list-magnifying-glass', txt: 'Ver stock', todos: true },
+                { id: 'view-movimientos', ico: 'ph-arrow-square-down', txt: 'Ingresar', staff: true },
+                { id: 'view-transferencias', ico: 'ph-arrow-square-up', txt: 'Sacar', staff: true },
+                { id: 'view-ajustes', ico: 'ph-sliders', txt: 'Ajuste', staff: true },
+                { id: 'ubicar', ico: 'ph-map-pin', txt: 'Ubicar', staff: true },
+                { id: 'view-toma-inventario', ico: 'ph-clipboard-text', txt: 'Inventario', todos: true }
+            ].filter(b => b.todos || (b.staff && esStaff));
+            cont.innerHTML = `
+                <div class="acceso-bodega__head">
+                    <span class="acceso-bodega__tipo">${esUbic ? 'UBICACIÓN' : 'BODEGA'} • ${esc(bodega.name)}</span>
+                    <h1 class="acceso-bodega__codigo">${esc(titulo)}</h1>
+                    <span class="acceso-bodega__meta">${lineas.length} producto${lineas.length === 1 ? '' : 's'}${criticos ? ` • <strong class="acceso-bodega__alerta">${criticos} en stock crítico</strong>` : ''}</span>
+                </div>
+                <div class="acceso-bodega__botones">
+                    ${botones.map(b => `<button type="button" class="acceso-bodega__btn" data-acc="${esc(b.id)}"><i class="ph-bold ${b.ico}"></i><span>${b.txt}</span></button>`).join('')}
+                </div>
+                <div class="acceso-bodega__buscar"><input type="search" id="acceso-buscar" placeholder="Buscar producto…" aria-label="Buscar producto"></div>
+                <div class="erp-card acceso-bodega__lista" id="acceso-lista"></div>
+                ${bodega.usaEstantes === true ? `<div class="erp-card acceso-bodega__ubic" id="acceso-ubic"><h3>Ubicaciones de la bodega</h3>${ubic.length ? ubic.map(u => `<a class="bodega-estantes__chip" href="#u/${encodeURIComponent(bodega.id)}/${encodeURIComponent(u.codigo)}">${esc(u.codigo)}</a>`).join(' ') : '<p class="bodega-estantes__hint">Aún no hay estantes creados.</p>'}</div>` : ''}
+                <p class="acceso-bodega__pie"><a href="#view-panel">Ver el sitio completo</a></p>`;
+            const lista = cont.querySelector('#acceso-lista');
+            const pintarLista = (filtro) => {
+                const f = String(filtro || '').toLowerCase();
+                const filas = lineas.filter(l => !f || l.name.toLowerCase().includes(f));
+                lista.innerHTML = filas.length ? filas.map(l => {
+                    const crit = l.limite > 0 && l.cantidad <= l.limite;
+                    return `<div class="acceso-bodega__fila${crit ? ' acceso-bodega__fila--crit' : ''}"><span>${esc(l.name)}</span><strong>${l.cantidad}</strong></div>`;
+                }).join('') : `<div class="home-empty">${lineas.length ? 'Sin resultados.' : (esUbic ? 'Aún no hay productos asignados a esta ubicación.' : 'Esta bodega no tiene productos registrados.')}</div>`;
+            };
+            pintarLista('');
+            cont.querySelector('#acceso-buscar').addEventListener('input', (e) => pintarLista(e.target.value));
+            cont.querySelectorAll('[data-acc]').forEach(btn => btn.addEventListener('click', () => {
+                const id = btn.dataset.acc;
+                if (id === 'stock') { lista.scrollIntoView({ behavior: 'smooth', block: 'start' }); const i = cont.querySelector('#acceso-buscar'); if (i) i.focus(); }
+                else if (id === 'ubicar') { const u = cont.querySelector('#acceso-ubic'); if (u) u.scrollIntoView({ behavior: 'smooth' }); else toast('Sin estantes', 'Esta bodega no usa estantes.', 'info'); }
+                else window.location.hash = id;
+            }));
+        }
+
+        return { abrir };
+    })();
+
+    window.SAR_AccesoBodega = AccesoBodega;
     window.SAR_Estantes = { renderSeccion, planificarUbicaciones, codigoUbicacion, prefijoValido, imprimirEtiquetas };
 })(window, document);

@@ -4875,3 +4875,23 @@ body[data-user-role="operador"] .home-only-admin { display: none !important; }
 .bodega-estantes__lista { max-height: 220px; overflow-y: auto; display: grid; gap: 8px; }
 .bodega-estantes__estante { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
 .bodega-estantes__chip { background: #EEF2F9; color: var(--sar-blue); border-radius: 4px; padding: 2px 8px; font-weight: 700; font-size: 12px; }
+
+/* Acceso rápido de bodega (QR) — pensado para el celular (v20.26) */
+#view-acceso-bodega .dashboard-container { max-width: 720px; margin: 0 auto; padding: 12px 14px; }
+.acceso-bodega__head { background: var(--sar-blue); color: #fff; border-radius: var(--shape-card); padding: 14px 16px; margin-bottom: 12px; }
+.acceso-bodega__tipo { font-size: 11px; font-weight: 700; letter-spacing: .06em; opacity: .85; }
+.acceso-bodega__codigo { margin: 2px 0 4px; font-size: 34px; font-weight: 800; line-height: 1.05; color: #fff; }
+.acceso-bodega__meta { font-size: 13px; }
+.acceso-bodega__alerta { color: #FFD1D3; }
+.acceso-bodega__botones { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.acceso-bodega__btn { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 76px; border: 1px solid #CBD5E1; background: #fff; color: var(--sar-blue); border-radius: var(--shape-card); font: inherit; font-weight: 700; cursor: pointer; }
+.acceso-bodega__btn i { font-size: 26px; color: var(--sar-orange-strong); }
+.acceso-bodega__btn:active { background: #EEF2F9; }
+.acceso-bodega__buscar input { width: 100%; padding: 12px 14px; border: 1px solid #CBD5E1; border-radius: var(--shape-card); font: inherit; margin-bottom: 8px; }
+.acceso-bodega__lista, .acceso-bodega__ubic { padding: 4px 12px; margin-bottom: 12px; }
+.acceso-bodega__ubic { padding: 12px; }
+.acceso-bodega__ubic h3 { margin: 0 0 8px; font-size: 14px; color: var(--sar-blue); }
+.acceso-bodega__fila { display: flex; justify-content: space-between; gap: 12px; padding: 11px 0; border-bottom: 1px solid #F1F5F9; font-size: 14px; }
+.acceso-bodega__fila:last-child { border-bottom: 0; }
+.acceso-bodega__fila--crit strong { color: var(--sar-red); }
+.acceso-bodega__pie { text-align: center; font-size: 13px; }

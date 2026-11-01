@@ -7,7 +7,9 @@
     --sar-blue-dark: #12274D;
     --sar-blue-light: #EEF2F9;
     --sar-red: #CC1B23;
+    --sar-red-dark: #7F1D1D;
     --sar-orange: #E85D1E;
+    --sar-warning-orange: #E85D1E;
     --sar-yellow: #F3D015;
     --sar-green: #8CC63F;
     --sar-bg-app: #F8F9FA;
@@ -2733,6 +2735,39 @@ main.erp-content {
     color: #ffffff;
 }
 
+#view-erp-adquisiciones span.badge.badge-sar-partial {
+    background-color: var(--sar-warning-orange);
+    color: #ffffff;
+}
+
+#view-erp-adquisiciones span.badge.badge-sar-cancelled {
+    background-color: var(--sar-red-dark, #7F1D1D);
+    color: #ffffff;
+}
+
+/* Ghost Button de Excepción: Anular OC por Quiebre */
+#view-erp-adquisiciones .erp-btn--ghost-danger {
+    background-color: transparent;
+    color: var(--sar-red);
+    border: 1px dashed rgba(204, 27, 35, 0.45);
+    border-radius: var(--shape-card);
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    transition: all 0.2s ease;
+}
+
+#view-erp-adquisiciones .erp-btn--ghost-danger:hover {
+    background-color: var(--sar-red-dark, #7F1D1D);
+    border-color: var(--sar-red-dark, #7F1D1D);
+    color: #ffffff;
+}
+
 @media (max-width: 900px) {
     .erp-layout {
         grid-template-columns: 1fr;
@@ -3829,5 +3864,571 @@ table.table thead th {
     .modal-card {
         width: 95% !important;
         max-width: 95vw !important;
+    }
+}
+
+/* ==========================================================================
+   FASE 7: INICIO UNIFICADO, MAPA DE FLUJO CONECTADO (REF 2) & CALENDARIO (REF 1)
+   ========================================================================== */
+
+/* Puntos de estado universales */
+.erp-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    flex-shrink: 0;
+}
+.erp-dot--blue { background-color: var(--sar-blue); }
+.erp-dot--green { background-color: var(--sar-green); }
+.erp-dot--red { background-color: var(--sar-red); }
+.erp-dot--orange { background-color: var(--sar-orange); }
+.erp-dot--amber { background-color: var(--sar-yellow); }
+
+/* 1. Mapa de Flujo / Topología de Nodos Conectados (Inspirado en Referencia 2) */
+.erp-flow-topology-card {
+    background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%) !important;
+    border: 1px solid #CBD5E1 !important;
+    border-radius: var(--shape-card) !important;
+    padding: 22px !important;
+    position: relative;
+    overflow: hidden;
+}
+
+.erp-flow-topology__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 14px;
+    margin-bottom: 16px;
+}
+
+.erp-flow-shield-badge {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px 8px 8px 0px;
+    background: var(--sar-blue);
+    color: #FFFFFF;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+    box-shadow: 0 4px 10px rgba(26, 54, 104, 0.22);
+}
+
+.erp-flow-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+/* Barra Temporal Superior (Timeline Scrubber - Ref 2) */
+.erp-flow-timeline-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: var(--shape-card);
+    padding: 10px 16px;
+    margin-bottom: 18px;
+    overflow-x: auto;
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.erp-timeline-slot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 4px;
+    min-width: 95px;
+    padding: 4px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.2s ease, transform 0.2s ease;
+    position: relative;
+}
+
+.erp-timeline-slot:hover {
+    background: #F1F5F9;
+}
+
+.erp-timeline-slot.active {
+    background: rgba(26, 54, 104, 0.08);
+    border: 1px solid rgba(26, 54, 104, 0.25);
+}
+
+.erp-timeline-slot__date {
+    font-size: 10.5px;
+    font-weight: 800;
+    color: #334155;
+    font-family: monospace;
+}
+
+.erp-timeline-slot__label {
+    font-size: 10px;
+    color: #64748B;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* Canvas de 4 Columnas / Etapas Conectadas con Líneas de Flujo */
+.erp-node-flow-canvas {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(230px, 1fr));
+    gap: 22px;
+    position: relative;
+    overflow-x: auto;
+    padding: 8px 4px 14px 4px;
+}
+
+.erp-flow-stage {
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid #DCE4F0;
+    border-radius: 12px 12px 12px 0px;
+    padding: 14px;
+    box-shadow: 0 6px 18px -6px rgba(26, 54, 104, 0.08);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 220px;
+}
+
+/* Conector visual entre etapas (estilo diagrama de nodos Ref 2) */
+.erp-flow-stage:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    top: 46px;
+    right: -23px;
+    width: 22px;
+    height: 2px;
+    background: repeating-linear-gradient(90deg, var(--sar-blue) 0, var(--sar-blue) 5px, transparent 5px, transparent 9px);
+    z-index: 2;
+}
+
+.erp-flow-stage:not(:last-child)::before {
+    content: '▸';
+    position: absolute;
+    top: 37px;
+    right: -14px;
+    color: var(--sar-blue);
+    font-size: 13px;
+    z-index: 3;
+}
+
+.erp-flow-stage__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    border-bottom: 1px dashed #E2E8F0;
+}
+
+.erp-flow-stage__pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 11.5px;
+    font-weight: 800;
+    color: var(--sar-blue);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.erp-flow-stage__icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 6px 6px 6px 0px;
+    background: var(--sar-blue);
+    color: #FFFFFF;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+}
+
+.erp-flow-stage--green .erp-flow-stage__icon { background: var(--sar-green); }
+.erp-flow-stage--orange .erp-flow-stage__icon { background: var(--sar-orange); }
+.erp-flow-stage--red .erp-flow-stage__icon { background: var(--sar-red); }
+
+.erp-flow-node-card {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-left: 4px solid var(--sar-blue);
+    border-radius: 8px 8px 8px 0px;
+    padding: 11px 12px;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    box-shadow: 0 2px 5px rgba(15, 23, 42, 0.04);
+}
+
+.erp-flow-node-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 18px -4px rgba(26, 54, 104, 0.14);
+    border-color: var(--sar-blue);
+}
+
+.erp-flow-node-card--ok { border-left-color: var(--sar-green); }
+.erp-flow-node-card--warn { border-left-color: var(--sar-orange); background: #FFFBF7; }
+.erp-flow-node-card--alert { border-left-color: var(--sar-red); background: #FFF8F8; }
+
+.erp-flow-node-card__top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+}
+
+.erp-flow-node-card__code {
+    font-family: monospace;
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--sar-blue);
+}
+
+.erp-flow-node-card__title {
+    font-size: 12.5px;
+    font-weight: 800;
+    color: #0F172A;
+    line-height: 1.3;
+}
+
+.erp-flow-node-card__meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    color: #64748B;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+/* Panel Inferior Inspector / Service Overview (Ref 2) */
+.erp-flow-inspector-panel {
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #E2E8F0;
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 20px;
+    align-items: stretch;
+}
+
+#bandejas-flow-summary-bar.erp-flow-inspector-panel {
+    display: block;
+}
+
+.erp-flow-metric-box {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: var(--shape-card);
+    padding: 14px 16px;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.erp-flow-mini-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    height: 54px;
+    margin-top: 12px;
+    padding-top: 6px;
+    border-top: 1px dashed #F1F5F9;
+}
+
+.erp-flow-mini-bar-col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    height: 100%;
+    justify-content: flex-end;
+}
+
+.erp-flow-mini-bar-fill {
+    width: 100%;
+    max-width: 14px;
+    border-radius: 3px 3px 0 0;
+    background: linear-gradient(180deg, var(--sar-blue) 0%, var(--sar-green) 100%);
+}
+
+.erp-flow-overview-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+}
+
+.erp-flow-overview-table thead th {
+    background: #F8FAFC;
+    color: #475569;
+    font-size: 10.5px;
+    font-weight: 800;
+    text-transform: uppercase;
+    padding: 9px 12px;
+    border-bottom: 1px solid #E2E8F0;
+}
+
+.erp-flow-overview-table tbody td {
+    padding: 9px 12px;
+    border-bottom: 1px solid #F1F5F9;
+    color: #1E293B;
+    vertical-align: middle;
+}
+
+/* 2. Calendario Operativo y Bitácora de Envíos/Recordatorios (Inspirado en Referencia 1) */
+.erp-inicio-calendar-grid {
+    display: grid;
+    grid-template-columns: 420px 1fr;
+    gap: 24px;
+    align-items: stretch;
+}
+
+.erp-calendar-widget {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+}
+
+.erp-calendar-widget__top {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.erp-calendar-quick-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.erp-cal-pill-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 9px 12px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 800;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.erp-cal-pill-btn:hover {
+    transform: translateY(-1px);
+}
+
+.erp-cal-pill-btn--blue {
+    background: linear-gradient(135deg, #2563EB, #1A3668);
+    color: #FFFFFF;
+    box-shadow: 0 4px 12px rgba(26, 54, 104, 0.25);
+}
+
+.erp-cal-pill-btn--amber {
+    background: linear-gradient(135deg, #F5B335, #E8831E);
+    color: #1A3668;
+    box-shadow: 0 4px 12px rgba(245, 179, 53, 0.28);
+}
+
+.erp-calendar-month-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: var(--shape-card);
+    padding: 8px 12px;
+    margin-bottom: 12px;
+}
+
+.erp-calendar-month-label {
+    font-size: 13.5px;
+    font-weight: 800;
+    color: var(--sar-blue);
+    text-transform: capitalize;
+}
+
+.erp-cal-nav-arrow {
+    background: #FFFFFF;
+    border: 1px solid #CBD5E1;
+    border-radius: 6px;
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--sar-blue);
+}
+
+.erp-cal-nav-arrow:hover {
+    background: var(--sar-blue);
+    color: #FFFFFF;
+}
+
+.erp-calendar-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    text-align: center;
+    font-size: 11px;
+    font-weight: 800;
+    color: #64748B;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+}
+
+.erp-calendar-days-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 5px;
+}
+
+.erp-cal-day {
+    aspect-ratio: 1 / 0.92;
+    min-height: 40px;
+    border: 1px solid #F1F5F9;
+    border-radius: 6px;
+    background: #FFFFFF;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: #1E293B;
+    transition: all 0.15s ease;
+}
+
+.erp-cal-day:hover {
+    border-color: var(--sar-blue);
+    background: #F0F5FF;
+}
+
+.erp-cal-day--muted {
+    color: #CBD5E1;
+    background: #F8FAFC;
+    cursor: default;
+}
+
+.erp-cal-day--today {
+    border: 2px solid var(--sar-blue);
+    font-weight: 900;
+    color: var(--sar-blue);
+}
+
+.erp-cal-day--selected {
+    background: var(--sar-yellow) !important;
+    color: var(--sar-blue) !important;
+    border-color: var(--sar-orange) !important;
+    font-weight: 900;
+    box-shadow: 0 3px 10px rgba(245, 179, 53, 0.35);
+}
+
+.erp-cal-day__dots {
+    display: flex;
+    gap: 3px;
+    margin-top: 3px;
+}
+
+.erp-cal-day__dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+}
+
+.erp-calendar-legend {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid #F1F5F9;
+    font-size: 11px;
+    color: #64748B;
+    font-weight: 600;
+}
+
+.erp-calendar-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+/* Lista derecha de eventos del calendario (Ref 1) */
+.erp-calendar-events-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 360px;
+    overflow-y: auto;
+    padding-right: 4px;
+}
+
+.erp-cal-event-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 14px;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-left: 4px solid var(--sar-blue);
+    border-radius: var(--shape-card);
+    transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.erp-cal-event-item:hover {
+    background: #FFFFFF;
+    transform: translateX(2px);
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.05);
+}
+
+.erp-cal-event-item--ok { border-left-color: var(--sar-green); }
+.erp-cal-event-item--alert { border-left-color: var(--sar-red); background: #FFF5F5; }
+.erp-cal-event-item--warn { border-left-color: var(--sar-yellow); background: #FFFDF5; }
+
+/* Responsividad de Flujo y Calendario */
+@media (max-width: 1180px) {
+    .erp-inicio-calendar-grid,
+    .erp-flow-inspector-panel {
+        grid-template-columns: 1fr;
+    }
+    .erp-node-flow-canvas {
+        grid-template-columns: repeat(2, minmax(240px, 1fr));
+    }
+    .erp-flow-stage:nth-child(2)::after,
+    .erp-flow-stage:nth-child(2)::before {
+        display: none;
+    }
+}
+
+@media (max-width: 767px) {
+    .erp-node-flow-canvas,
+    .erp-calendar-quick-actions {
+        grid-template-columns: 1fr;
+    }
+    .erp-flow-stage::after,
+    .erp-flow-stage::before {
+        display: none;
     }
 }

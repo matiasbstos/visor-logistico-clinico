@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=20.24",
+                "./script.js": "./script.js?v=20.25",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -62,7 +62,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=20.24">
+    <link rel="stylesheet" href="style.css?v=20.25">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -2579,6 +2579,9 @@
                                         <option value="principal">Bodega Principal</option>
                                         <option value="despacho">Farmacia / Despacho</option>
                                         <option value="satelite">Bodega Satélite</option>
+                                        <option value="transitoria">Bodega Transitoria (stock de turno)</option>
+                                        <option value="carro_paro">Carro de paro</option>
+                                        <option value="externa">Centro externo</option>
                                     </select>
                                 </div>
                                 <div class="form-group">
@@ -2593,6 +2596,17 @@
                                     <label class="form-label" for="bodega-capacidad">Capacidad (Pallets / M2)</label>
                                     <input type="text" class="form-control" name="capacityMetrics" id="bodega-capacidad"
                                         placeholder="Ej. 120M2 / 50 P" required>
+                                </div>
+                                <div class="form-group">
+                                    <label class="form-label" for="bodega-prefijo">Prefijo de códigos (opcional)</label>
+                                    <input type="text" class="form-control" name="prefijo" id="bodega-prefijo" maxlength="4"
+                                        placeholder="Ej. BS" style="text-transform:uppercase;">
+                                </div>
+                                <div class="form-group checkbox-group"
+                                    style="display:flex; align-items:center; gap:8px;">
+                                    <input type="checkbox" name="usaEstantes" id="bodega-usa-estantes" value="true">
+                                    <label class="form-label" for="bodega-usa-estantes"
+                                        style="margin-bottom:0; cursor:pointer;">Usar estantes / ubicaciones</label>
                                 </div>
                                 <div class="form-group checkbox-group"
                                     style="display:flex; align-items:center; gap:8px;">
@@ -5737,9 +5751,10 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=20.24"></script>
-    <script type="module" src="patch-plantillas.js?v=20.24"></script>
+    <script type="module" src="script.js?v=20.25"></script>
+    <script type="module" src="patch-plantillas.js?v=20.25"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="visor-adquisiciones.js?v=20.24"></script>
+    <script src="bodegas-estantes.js?v=20.25"></script>
+    <script src="visor-adquisiciones.js?v=20.25"></script>
 </body>
 </html>

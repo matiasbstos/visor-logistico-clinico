@@ -4859,3 +4859,19 @@ body[data-user-role="enfermero"] .erp-dashboard-mid-grid { grid-template-columns
 body[data-user-role="enfermero"] .home-only-admin,
 body[data-user-role="operador"] .home-only-admin { display: none !important; }
 .erp-kpi-card--yellow { border-left-color: var(--sar-yellow); }
+
+/* Estantes y etiquetas en el detalle de bodega (v20.25) */
+.bodega-estantes { margin-top: 20px; border-top: 1px solid var(--border-color, #E2E8F0); padding-top: 14px; }
+.bodega-estantes__title { font-size: 14px; font-weight: 800; color: var(--sar-blue); margin: 0 0 10px; display: flex; gap: 6px; align-items: center; }
+.bodega-estantes__row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.bodega-estantes__switch { display: flex; gap: 8px; align-items: center; font-weight: 600; cursor: pointer; }
+.bodega-estantes__prefijo { display: flex; gap: 6px; align-items: center; font-weight: 600; }
+.bodega-estantes__prefijo input { width: 70px; text-transform: uppercase; padding: 6px 8px; border: 1px solid #CBD5E1; border-radius: 6px; }
+.bodega-estantes__hint { font-size: 12px; color: #64748B; margin: 6px 0; }
+.bodega-estantes__gen { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: var(--shape-card); padding: 10px 12px; margin: 10px 0; }
+.bodega-estantes__gen label { display: flex; gap: 6px; align-items: center; font-size: 12px; font-weight: 600; }
+.bodega-estantes__gen input { width: 64px; padding: 6px; border: 1px solid #CBD5E1; border-radius: 6px; }
+.bodega-estantes__acciones { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.bodega-estantes__lista { max-height: 220px; overflow-y: auto; display: grid; gap: 8px; }
+.bodega-estantes__estante { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
+.bodega-estantes__chip { background: #EEF2F9; color: var(--sar-blue); border-radius: 4px; padding: 2px 8px; font-weight: 700; font-size: 12px; }

@@ -5054,6 +5054,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Guardar ID actual para acciones
             modal.dataset.currentBodegaId = bodega.id;
             modal.dataset.currentBodegaName = bodega.name;
+
+            if (window.SAR_Estantes) window.SAR_Estantes.renderSeccion(bodega);
         }
 
         // BOTÓN: DISPARAR TRANSFERENCIA
@@ -5339,6 +5341,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     await addDoc(collection(db, 'Bodegas'), {
                         ...bodegaData,
                         isActive: bodegaData.isActive === 'true',
+                        usaEstantes: bodegaData.usaEstantes === 'true',
+                        prefijo: String(bodegaData.prefijo || '').trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4),
                         createdAt: serverTimestamp()
                     });
                     showToast('Éxito', 'Bodega creada correctamente.', 'success');

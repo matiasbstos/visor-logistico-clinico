@@ -1835,3 +1835,673 @@ gemini-analysis {
 
 
 
+
+/* ==========================================================================
+   MÓDULO DE ADQUISICIONES Y SEGUIMIENTO (MINI-ERP LOGÍSTICO - FASE 1)
+   ========================================================================== */
+
+/* Sub-menú de Pestañas (Tabs) */
+.adq-subtabs-nav {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #f1f5f9;
+    padding: 6px;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+    margin-bottom: 24px;
+    width: fit-content;
+    max-width: 100%;
+    overflow-x: auto;
+}
+
+.adq-subtab-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 18px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.adq-subtab-btn:hover {
+    color: var(--text-main);
+    background: rgba(255, 255, 255, 0.6);
+}
+
+.adq-subtab-btn.active {
+    background: #ffffff;
+    color: var(--primary);
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+    font-weight: 700;
+}
+
+.adq-subtab-panel {
+    display: none;
+    animation: fadeIn 0.25s ease;
+}
+
+.adq-subtab-panel.active {
+    display: block;
+}
+
+/* Leyenda de Indicadores SLA */
+.adq-sla-legend {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    background: #ffffff;
+    padding: 8px 14px;
+    border-radius: 8px;
+    border: 1px solid var(--border-color);
+}
+
+.adq-sla-legend-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Contenedor Horizontal con Scroll del Tablero Kanban */
+.kanban-board-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 16px;
+    scrollbar-width: thin;
+    scrollbar-color: #cbd5e1 #f8fafc;
+}
+
+.kanban-board-wrapper::-webkit-scrollbar {
+    height: 8px;
+}
+
+.kanban-board-wrapper::-webkit-scrollbar-track {
+    background: #f8fafc;
+    border-radius: 8px;
+}
+
+.kanban-board-wrapper::-webkit-scrollbar-thumb {
+    background-color: #cbd5e1;
+    border-radius: 8px;
+}
+
+.kanban-board {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    min-width: 1380px;
+}
+
+/* Columnas del Kanban (5 etapas) */
+.kanban-column {
+    flex: 1 0 265px;
+    max-width: 310px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    max-height: 70vh;
+}
+
+.kanban-column__header {
+    padding: 14px 16px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #ffffff;
+    border-radius: 12px 12px 0 0;
+}
+
+.kanban-column__title-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.kanban-column__title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-main);
+    margin: 0;
+}
+
+.kanban-column__sla-tag {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: #e0f2fe;
+    color: #0369a1;
+}
+
+.kanban-column__count {
+    background: #e2e8f0;
+    color: #334155;
+    font-size: 11px;
+    font-weight: 800;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 7px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.kanban-column__body {
+    padding: 12px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    min-height: 220px;
+}
+
+/* Tarjetas Compactas (Cards) dentro de las Columnas */
+.kanban-card {
+    background: #ffffff;
+    border-radius: 10px;
+    padding: 12px 14px;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #94a3b8;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.kanban-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 14px rgba(15, 23, 42, 0.09);
+}
+
+/* Indicador de Color en Tarjeta: VERDE (En Plazo) */
+.kanban-card--sla-ok {
+    border-left-color: #16a34a;
+}
+
+/* Indicador de Color en Tarjeta: ROJO (SLA / Tiempo Vencido) */
+.kanban-card--sla-vencido {
+    border-left-color: #dc2626;
+    background: linear-gradient(to right, rgba(254, 242, 242, 0.55), #ffffff 28%);
+}
+
+.kanban-card__top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 6px;
+}
+
+.kanban-card__code {
+    font-family: monospace;
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--primary);
+    background: #eff6ff;
+    padding: 2px 7px;
+    border-radius: 5px;
+}
+
+/* Píldora Semafórica SLA */
+.sla-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.sla-pill .sla-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.sla-pill--success {
+    background: #dcfce7;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+}
+
+.sla-pill--success .sla-dot {
+    background: #16a34a;
+}
+
+.sla-pill--danger {
+    background: #fee2e2;
+    color: #b91c1c;
+    border: 1px solid #fecaca;
+}
+
+.sla-pill--danger .sla-dot {
+    background: #dc2626;
+    box-shadow: 0 0 0 2px rgba(220, 38, 38, 0.25);
+}
+
+.kanban-card__title {
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--text-main);
+    line-height: 1.35;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.kanban-card__more-items {
+    font-size: 10px;
+    font-weight: 700;
+    background: #f1f5f9;
+    color: #475569;
+    padding: 2px 6px;
+    border-radius: 4px;
+    flex-shrink: 0;
+}
+
+/* Bloque compacto de OC vinculada dentro de la tarjeta */
+.kanban-card__oc-box {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 7px;
+    padding: 7px 9px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.kanban-card__oc-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.kanban-card__oc-id {
+    color: #0f172a;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.kanban-card__oc-status {
+    font-size: 10px;
+    color: #0369a1;
+    background: #e0f2fe;
+    padding: 1px 6px;
+    border-radius: 4px;
+}
+
+.kanban-card__provider {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.kanban-card__progress-track {
+    width: 100%;
+    height: 5px;
+    background: #e2e8f0;
+    border-radius: 999px;
+    overflow: hidden;
+    margin-top: 2px;
+}
+
+.kanban-card__progress-bar {
+    height: 100%;
+    background: #0284c7;
+    border-radius: 999px;
+    transition: width 0.3s ease;
+}
+
+.kanban-card__footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 6px;
+    border-top: 1px dashed #e2e8f0;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.kanban-card__meta,
+.kanban-card__date {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.kanban-empty-slot {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 28px 12px;
+    color: #94a3b8;
+    font-size: 12px;
+    text-align: center;
+    border: 1.5px dashed #e2e8f0;
+    border-radius: 8px;
+    gap: 6px;
+}
+
+.kanban-empty-slot i {
+    font-size: 22px;
+}
+
+
+/* ==========================================================================
+   IDENTIDAD CORPORATIVA SAR & LAYOUT ERP ADQUISICIONES (#view-erp-adquisiciones)
+   ========================================================================== */
+:root {
+    --sar-blue: #1A3668;       /* Navegación y títulos */
+    --sar-red: #CC1B23;        /* Alertas / Atrasos */
+    --sar-orange: #E85D1E;     /* Despachos Parciales */
+    --sar-yellow: #F3D015;     /* En Análisis */
+    --sar-green: #8CC63F;      /* Recepcionado / Conforme */
+    --sar-bg-app: #F8F9FA;     /* Fondo general del ERP para alto contraste */
+    --shape-card: 8px 8px 8px 0px; /* Patrón de esquinas de los cuadrados del logo SAR */
+}
+
+/* Estructura Layout ERP (CSS Grid) */
+.erp-layout {
+    display: none;
+    grid-template-columns: 250px 1fr;
+    min-height: calc(100vh - 65px);
+    width: 100%;
+    background-color: var(--sar-bg-app);
+}
+
+.erp-layout.active,
+#view-erp-adquisiciones[style*="display: block"],
+#view-erp-adquisiciones[style*="display: grid"] {
+    display: grid !important;
+}
+
+/* Barra Lateral Izquierda ERP */
+aside.erp-sidebar {
+    background-color: var(--sar-blue);
+    color: #ffffff;
+    padding: 24px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.erp-sidebar__brand {
+    padding: 0 8px 16px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.erp-sidebar__brand-title {
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: #ffffff;
+    margin: 0 0 4px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.erp-sidebar__brand-sub {
+    font-size: 11px;
+    color: rgba(255, 255, 255, 0.72);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+}
+
+.erp-sidebar__nav {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.erp-sidebar__item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 11px 14px;
+    border-radius: var(--shape-card);
+    color: rgba(255, 255, 255, 0.85);
+    text-decoration: none;
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
+    border: 1px solid transparent;
+    background: transparent;
+    width: 100%;
+    text-align: left;
+}
+
+.erp-sidebar__item:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    color: #ffffff;
+}
+
+.erp-sidebar__item.active {
+    background-color: #ffffff;
+    color: var(--sar-blue);
+    font-weight: 700;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Área Principal ERP */
+main.erp-content {
+    background-color: var(--sar-bg-app);
+    padding: 24px 28px;
+    overflow-x: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.erp-content__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.erp-content__title {
+    color: var(--sar-blue);
+    font-size: 22px;
+    font-weight: 700;
+    margin: 0;
+}
+
+.erp-content__subtitle {
+    color: #64748b;
+    font-size: 13px;
+    margin: 4px 0 0 0;
+}
+
+/* Tablero Kanban de Adquisiciones (4 Columnas Fijas con Scroll Horizontal) */
+#view-erp-adquisiciones .kanban-board {
+    display: flex;
+    align-items: flex-start;
+    gap: 18px;
+    overflow-x: auto;
+    padding-bottom: 16px;
+    min-width: 100%;
+    scrollbar-width: thin;
+    scrollbar-color: var(--sar-blue) #e2e8f0;
+}
+
+#view-erp-adquisiciones .kanban-col {
+    flex: 0 0 290px;
+    width: 290px;
+    background: #eef2f6;
+    border: 1px solid #dbe2ea;
+    border-radius: var(--shape-card);
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 210px);
+}
+
+#view-erp-adquisiciones .kanban-col__header {
+    padding: 14px 16px;
+    background: #ffffff;
+    border-bottom: 2px solid var(--sar-blue);
+    border-radius: 8px 8px 0 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+#view-erp-adquisiciones .kanban-col__title {
+    font-size: 13.5px;
+    font-weight: 700;
+    color: var(--sar-blue);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+#view-erp-adquisiciones .kanban-col__counter {
+    background: var(--sar-blue);
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: var(--shape-card);
+}
+
+#view-erp-adquisiciones .kanban-col__cards {
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+}
+
+/* Tarjeta Kanban con Identidad SAR (--shape-card) */
+#view-erp-adquisiciones .kanban-card {
+    background-color: #ffffff;
+    border-radius: var(--shape-card);
+    padding: 14px 16px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 6px rgba(26, 54, 104, 0.06);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+#view-erp-adquisiciones .kanban-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 18px rgba(26, 54, 104, 0.12);
+}
+
+#view-erp-adquisiciones .kanban-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+#view-erp-adquisiciones .kanban-card__id {
+    font-family: monospace;
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--sar-blue);
+}
+
+#view-erp-adquisiciones .kanban-card__title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0;
+    line-height: 1.35;
+}
+
+#view-erp-adquisiciones .kanban-card__meta {
+    font-size: 11.5px;
+    color: #64748b;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding-top: 8px;
+    border-top: 1px dashed #e2e8f0;
+}
+
+/* Etiquetas de Estado Corporativas (span.badge) */
+#view-erp-adquisiciones span.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: var(--shape-card);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+#view-erp-adquisiciones span.badge.badge-sar-blue {
+    background-color: var(--sar-blue);
+    color: #ffffff;
+}
+
+#view-erp-adquisiciones span.badge.badge-sar-red {
+    background-color: var(--sar-red);
+    color: #ffffff;
+}
+
+#view-erp-adquisiciones span.badge.badge-sar-orange {
+    background-color: var(--sar-orange);
+    color: #ffffff;
+}
+
+#view-erp-adquisiciones span.badge.badge-sar-yellow {
+    background-color: var(--sar-yellow);
+    color: #1A3668;
+}
+
+#view-erp-adquisiciones span.badge.badge-sar-green {
+    background-color: var(--sar-green);
+    color: #ffffff;
+}
+
+@media (max-width: 900px) {
+    .erp-layout {
+        grid-template-columns: 1fr;
+    }
+}

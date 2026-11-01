@@ -3,7 +3,7 @@
 
 <head>
     <script>
-        const APP_VERSION = '18.23';
+        const APP_VERSION = '18.24';
         if (localStorage.getItem('APP_VERSION') !== APP_VERSION) {
             localStorage.setItem('APP_VERSION', APP_VERSION);
             if ('serviceWorker' in navigator) {
@@ -23,7 +23,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=18.23-predictive">
+    <link rel="stylesheet" href="style.css?v=18.24-predictive">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -152,6 +152,12 @@
                 <div class="sidebar-box">
                     <a href="#" class="menu-item normal" data-target="view-compras" data-title="Gestión de Compras">
                         <i class="ph ph-shopping-cart"></i><span class="menu-label">Gestión de Compras</span>
+                    </a>
+                    <a href="#" class="menu-item normal" data-target="view-adquisiciones" data-title="Adquisiciones y Seguimiento">
+                        <i class="ph ph-kanban"></i><span class="menu-label">Adquisiciones ERP</span>
+                    </a>
+                    <a href="#" class="menu-item normal" data-target="view-erp-adquisiciones" data-title="ERP Adquisiciones SAR">
+                        <i class="ph ph-squares-four"></i><span class="menu-label">ERP Adquisiciones SAR</span>
                     </a>
                     <a href="#" class="menu-item normal admin-only" data-target="view-informes" data-title="Informes">
                         <i class="ph ph-chart-bar"></i><span class="menu-label">Informes</span>
@@ -2538,6 +2544,289 @@
                 </div>
             </section>
 
+            <!-- ========================================================================= -->
+            <!-- NUEVA VISTA ERP (FASE 1): MÓDULO DE ADQUISICIONES Y SEGUIMIENTO          -->
+            <!-- ========================================================================= -->
+            <section id="view-adquisiciones" class="view-section" style="display: none;">
+                <div class="dashboard-container">
+                    <div class="page-header" style="margin-bottom: 18px; flex-wrap: wrap; gap: 12px;">
+                        <div class="page-title">
+                            <h1>Módulo de Adquisiciones y Seguimiento</h1>
+                            <p>Trazabilidad integral de Solicitudes de Compra (SDC), Órdenes de Compra (OC), SLA de proveedores y distribución a red.</p>
+                        </div>
+                        <div class="adq-sla-legend">
+                            <span class="adq-sla-legend-item">
+                                <span class="sla-pill sla-pill--success"><span class="sla-dot"></span> En Plazo (SLA OK)</span>
+                            </span>
+                            <span class="adq-sla-legend-item">
+                                <span class="sla-pill sla-pill--danger"><span class="sla-dot"></span> SLA Vencido / Alerta</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Sub-menú de Pestañas (Tabs) -->
+                    <nav class="adq-subtabs-nav" aria-label="Submenú de Adquisiciones">
+                        <button type="button" class="adq-subtab-btn active" data-adq-tab="adq-tab-tablero">
+                            <i class="ph-bold ph-kanban"></i> 1. Tablero SDC/OC
+                        </button>
+                        <button type="button" class="adq-subtab-btn" data-adq-tab="adq-tab-recepcion">
+                            <i class="ph-bold ph-package"></i> 2. Recepción Dinámica
+                        </button>
+                        <button type="button" class="adq-subtab-btn" data-adq-tab="adq-tab-despachos">
+                            <i class="ph-bold ph-truck"></i> 3. Despachos a Red
+                        </button>
+                    </nav>
+
+                    <!-- ========================================================= -->
+                    <!-- TAB 1: TABLERO KANBAN SDC/OC (5 COLUMNAS CON SCROLL)      -->
+                    <!-- ========================================================= -->
+                    <div id="adq-tab-tablero" class="adq-subtab-panel active" style="display: block;">
+                        <div class="kanban-board-wrapper">
+                            <div class="kanban-board">
+                                <!-- Columna 1: SDC Creada -->
+                                <div class="kanban-column" data-column-state="SDC_CREADA">
+                                    <div class="kanban-column__header">
+                                        <div class="kanban-column__title-group">
+                                            <i class="ph-fill ph-file-plus" style="color: #64748b;"></i>
+                                            <h3 class="kanban-column__title">SDC Creada</h3>
+                                        </div>
+                                        <span class="kanban-column__count" id="kanban-count-sdc-creada">0</span>
+                                    </div>
+                                    <div class="kanban-column__body" id="kanban-col-sdc-creada"></div>
+                                </div>
+
+                                <!-- Columna 2: Publicada -->
+                                <div class="kanban-column" data-column-state="PUBLICADA">
+                                    <div class="kanban-column__header">
+                                        <div class="kanban-column__title-group">
+                                            <i class="ph-fill ph-megaphone" style="color: #0284c7;"></i>
+                                            <h3 class="kanban-column__title">Publicada</h3>
+                                        </div>
+                                        <span class="kanban-column__count" id="kanban-count-publicada">0</span>
+                                    </div>
+                                    <div class="kanban-column__body" id="kanban-col-publicada"></div>
+                                </div>
+
+                                <!-- Columna 3: OC Aceptada (SLA 48h) -->
+                                <div class="kanban-column" data-column-state="OC_ACEPTADA">
+                                    <div class="kanban-column__header">
+                                        <div class="kanban-column__title-group">
+                                            <i class="ph-fill ph-seal-check" style="color: #7c3aed;"></i>
+                                            <h3 class="kanban-column__title">OC Aceptada</h3>
+                                            <span class="kanban-column__sla-tag">SLA 48h</span>
+                                        </div>
+                                        <span class="kanban-column__count" id="kanban-count-oc-aceptada">0</span>
+                                    </div>
+                                    <div class="kanban-column__body" id="kanban-col-oc-aceptada"></div>
+                                </div>
+
+                                <!-- Columna 4: En Despacho (SLA 5d) -->
+                                <div class="kanban-column" data-column-state="EN_DESPACHO">
+                                    <div class="kanban-column__header">
+                                        <div class="kanban-column__title-group">
+                                            <i class="ph-fill ph-truck" style="color: #d97706;"></i>
+                                            <h3 class="kanban-column__title">En Despacho</h3>
+                                            <span class="kanban-column__sla-tag">SLA 5d</span>
+                                        </div>
+                                        <span class="kanban-column__count" id="kanban-count-en-despacho">0</span>
+                                    </div>
+                                    <div class="kanban-column__body" id="kanban-col-en-despacho"></div>
+                                </div>
+
+                                <!-- Columna 5: Recepcionada (Parcial/Total) -->
+                                <div class="kanban-column" data-column-state="RECEPCIONADA">
+                                    <div class="kanban-column__header">
+                                        <div class="kanban-column__title-group">
+                                            <i class="ph-fill ph-check-circle" style="color: #16a34a;"></i>
+                                            <h3 class="kanban-column__title">Recepcionada (Parcial/Total)</h3>
+                                        </div>
+                                        <span class="kanban-column__count" id="kanban-count-recepcionada">0</span>
+                                    </div>
+                                    <div class="kanban-column__body" id="kanban-col-recepcionada"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ========================================================= -->
+                    <!-- TAB 2: RECEPCIÓN DINÁMICA (ESTRUCTURA BASE)               -->
+                    <!-- ========================================================= -->
+                    <div id="adq-tab-recepcion" class="adq-subtab-panel" style="display: none;">
+                        <div class="card">
+                            <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+                                <div class="card-title"><i class="ph-fill ph-package" style="color:var(--primary);"></i> 2. Recepción Dinámica de Órdenes de Compra (Parcial / Total)</div>
+                                <span class="card-badge blue">Fase 2 Lista para Conectar</span>
+                            </div>
+                            <p class="text-muted text-sm">Contenedor preparado para la conciliación de guías/facturas contra <code>ModeloOC.productos</code> (<code>cantidadComprada</code> vs <code>cantidadRecibida</code>).</p>
+                        </div>
+                    </div>
+
+                    <!-- ========================================================= -->
+                    <!-- TAB 3: DESPACHOS A RED (ESTRUCTURA BASE)                  -->
+                    <!-- ========================================================= -->
+                    <div id="adq-tab-despachos" class="adq-subtab-panel" style="display: none;">
+                        <div class="card">
+                            <div class="card-header" style="display:flex; justify-content:space-between; align-items:center;">
+                                <div class="card-title"><i class="ph-fill ph-truck" style="color:var(--primary);"></i> 3. Despachos a Red Asistencial</div>
+                                <span class="card-badge green">Fase 3 Lista para Conectar</span>
+                            </div>
+                            <p class="text-muted text-sm">Contenedor preparado para la distribución y trazabilidad de entregas hacia dispositivos y bodegas periféricas de la red.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ========================================================================= -->
+            <!-- VISTA LAYOUT ERP CORPORATIVO SAR (#view-erp-adquisiciones)               -->
+            <!-- ========================================================================= -->
+            <section id="view-erp-adquisiciones" style="display:none;" class="erp-layout view-section">
+                <!-- Barra Lateral Izquierda Corporativa (--sar-blue) -->
+                <aside class="erp-sidebar">
+                    <div class="erp-sidebar__brand">
+                        <h2 class="erp-sidebar__brand-title">
+                            <i class="ph-fill ph-shield-check"></i> SAR ERP Logístico
+                        </h2>
+                        <div class="erp-sidebar__brand-sub">Adquisiciones &amp; Red</div>
+                    </div>
+                    <nav class="erp-sidebar__nav" aria-label="Menú ERP Adquisiciones">
+                        <button type="button" class="erp-sidebar__item active" data-erp-panel="erp-panel-tablero">
+                            <i class="ph-bold ph-kanban"></i>
+                            <span>Tablero SDC/OC</span>
+                        </button>
+                        <button type="button" class="erp-sidebar__item" data-erp-panel="erp-panel-recepcion">
+                            <i class="ph-bold ph-package"></i>
+                            <span>Recepción Logística</span>
+                        </button>
+                        <button type="button" class="erp-sidebar__item" data-erp-panel="erp-panel-despachos">
+                            <i class="ph-bold ph-truck"></i>
+                            <span>Despachos a Red</span>
+                        </button>
+                    </nav>
+                </aside>
+
+                <!-- Área Principal ERP (--sar-bg-app) -->
+                <main class="erp-content">
+                    <header class="erp-content__header">
+                        <div>
+                            <h1 class="erp-content__title">Tablero Kanban de Adquisiciones</h1>
+                            <p class="erp-content__subtitle">Monitoreo corporativo SAR de Solicitudes de Compra (SDC), Órdenes de Compra (OC) y cumplimiento de SLA.</p>
+                        </div>
+                    </header>
+
+                    <!-- Contenedor Horizontal con Scroll (.kanban-board) y 4 Columnas Fijas (.kanban-col) -->
+                    <div class="kanban-board" id="erp-kanban-board">
+                        <!-- Columna 1: SDC Creada -->
+                        <div class="kanban-col">
+                            <div class="kanban-col__header">
+                                <h3 class="kanban-col__title">
+                                    <i class="ph-fill ph-file-text"></i> SDC Creada
+                                </h3>
+                                <span class="kanban-col__counter">1</span>
+                            </div>
+                            <div class="kanban-col__cards">
+                                <!-- Tarjeta de Ejemplo 1: En Análisis (--sar-yellow) -->
+                                <article class="kanban-card">
+                                    <div class="kanban-card__header">
+                                        <span class="kanban-card__id">SDC-2026-101</span>
+                                        <span class="badge badge-sar-yellow">En Análisis</span>
+                                    </div>
+                                    <h4 class="kanban-card__title">PARACETAMOL 500 MG (5.000 COMP)</h4>
+                                    <div class="kanban-card__meta">
+                                        <span><i class="ph ph-user"></i> Analista: C. Rojas</span>
+                                        <span><i class="ph ph-calendar-blank"></i> 31/10/2026</span>
+                                    </div>
+                                </article>
+                            </div>
+                        </div>
+
+                        <!-- Columna 2: OC Publicada -->
+                        <div class="kanban-col">
+                            <div class="kanban-col__header">
+                                <h3 class="kanban-col__title">
+                                    <i class="ph-fill ph-megaphone"></i> OC Publicada
+                                </h3>
+                                <span class="kanban-col__counter">1</span>
+                            </div>
+                            <div class="kanban-col__cards">
+                                <!-- Tarjeta de Ejemplo 2: Publicada (--sar-blue) -->
+                                <article class="kanban-card">
+                                    <div class="kanban-card__header">
+                                        <span class="kanban-card__id">OC-109510-SE26</span>
+                                        <span class="badge badge-sar-blue">Publicada</span>
+                                    </div>
+                                    <h4 class="kanban-card__title">SUERO FISIOLÓGICO 0.9% 500 ML</h4>
+                                    <div class="kanban-card__meta">
+                                        <span><i class="ph ph-buildings"></i> B. Braun Medical</span>
+                                        <span>Ref: SDC-2026-098</span>
+                                    </div>
+                                </article>
+                            </div>
+                        </div>
+
+                        <!-- Columna 3: En Despacho (SLA) -->
+                        <div class="kanban-col">
+                            <div class="kanban-col__header">
+                                <h3 class="kanban-col__title">
+                                    <i class="ph-fill ph-truck"></i> En Despacho (SLA)
+                                </h3>
+                                <span class="kanban-col__counter">1</span>
+                            </div>
+                            <div class="kanban-col__cards">
+                                <!-- Tarjeta de Ejemplo 3: Alerta SLA Vencido (--sar-red) -->
+                                <article class="kanban-card">
+                                    <div class="kanban-card__header">
+                                        <span class="kanban-card__id">OC-109311-SE26</span>
+                                        <span class="badge badge-sar-red">SLA Atrasado (+30h)</span>
+                                    </div>
+                                    <h4 class="kanban-card__title">KETOROLACO 30 MG/ML AMPOLLA</h4>
+                                    <div class="kanban-card__meta">
+                                        <span><i class="ph ph-buildings"></i> Lab. Sanderson</span>
+                                        <span>SLA 5d Vencido</span>
+                                    </div>
+                                </article>
+                            </div>
+                        </div>
+
+                        <!-- Columna 4: Recepcionada -->
+                        <div class="kanban-col">
+                            <div class="kanban-col__header">
+                                <h3 class="kanban-col__title">
+                                    <i class="ph-fill ph-check-circle"></i> Recepcionada
+                                </h3>
+                                <span class="kanban-col__counter">2</span>
+                            </div>
+                            <div class="kanban-col__cards">
+                                <!-- Tarjeta de Ejemplo 4A: Despacho Parcial (--sar-orange) -->
+                                <article class="kanban-card">
+                                    <div class="kanban-card__header">
+                                        <span class="kanban-card__id">OC-109190-SE26</span>
+                                        <span class="badge badge-sar-orange">Despacho Parcial</span>
+                                    </div>
+                                    <h4 class="kanban-card__title">IBUPROFENO 400 MG (2.500 / 4.000)</h4>
+                                    <div class="kanban-card__meta">
+                                        <span><i class="ph ph-buildings"></i> Lab. Chile</span>
+                                        <span>63% Recibido</span>
+                                    </div>
+                                </article>
+
+                                <!-- Tarjeta de Ejemplo 4B: Recepcionado Conforme (--sar-green) -->
+                                <article class="kanban-card">
+                                    <div class="kanban-card__header">
+                                        <span class="kanban-card__id">OC-109044-SE26</span>
+                                        <span class="badge badge-sar-green">Conforme 100%</span>
+                                    </div>
+                                    <h4 class="kanban-card__title">GUANTES DE NITRILO TALLA M</h4>
+                                    <div class="kanban-card__meta">
+                                        <span><i class="ph ph-buildings"></i> Cenabast</span>
+                                        <span>150 / 150 Cajas</span>
+                                    </div>
+                                </article>
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            </section>
+
             <!-- VIEW: Gestión de Usuarios -->
             
     </div>
@@ -4017,8 +4306,9 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=18.23"></script>
-    <script type="module" src="patch-plantillas.js?v=18.23"></script>
-    <script src="visor-triaje.js?v=18.23"></script>
+    <script type="module" src="script.js?v=18.24"></script>
+    <script type="module" src="patch-plantillas.js?v=18.24"></script>
+    <script src="visor-triaje.js?v=18.24"></script>
+    <script src="visor-adquisiciones.js?v=18.24"></script>
 </body>
 </html>

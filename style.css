@@ -4739,3 +4739,118 @@ body[data-user-role="enfermero"] .home-only-staff,
 body[data-user-role="enfermero"] .bottom-nav__item[data-nav="view-inventario"],
 body[data-user-role="enfermero"] .bottom-nav__item[data-nav="view-movimientos"] { display: none !important; }
 body[data-user-role="enfermero"] .erp-dashboard-mid-grid { grid-template-columns: minmax(0, 1fr); }
+
+/* ===== PROPUESTA: Inicio en una vista (v20.21) ===== */
+#view-panel .dashboard-container { padding: 12px 20px; }
+#view-panel .page-header { margin-bottom: 8px; align-items: center; }
+#view-panel .page-title h1 { font-size: 20px; margin: 0; }
+#view-panel .page-title p { display: none; }                 /* subtítulo redundante */
+#view-panel .home-status { padding: 6px 12px; margin-bottom: 8px; font-size: 12px; }
+#view-panel .erp-kpi-grid-4 { grid-template-columns: repeat(4, minmax(0,1fr)); gap: 10px; margin-bottom: 10px; }
+#view-panel .erp-kpi-card { padding: 8px 12px; gap: 2px; display: grid; grid-template-columns: 1fr auto; grid-template-areas: "top val" "meta meta"; align-items: center; }
+#view-panel .erp-kpi-card__top { grid-area: top; flex-direction: column; align-items: flex-start; gap: 2px; }
+#view-panel .erp-kpi-card__value { grid-area: val; font-size: 24px; }
+#view-panel .erp-kpi-card__meta { grid-area: meta; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+#view-panel .erp-kpi-card__top .badge, #view-panel .erp-kpi-card__top .card-badge { display: none; }
+/* centro: gráfico + acción inmediata con altura tope */
+#view-panel .erp-dashboard-mid-grid { gap: 10px; margin-bottom: 10px; align-items: stretch; }
+#view-panel .erp-dashboard-mid-grid > .erp-card { padding: 12px 16px; max-height: 260px; overflow: hidden; display: flex; flex-direction: column; }
+#view-panel #dash-flow-chart svg { height: 150px !important; }
+#view-panel .erp-alert-list { overflow-y: auto; gap: 6px; flex: 1; min-height: 0; }
+#view-panel .erp-alert-item { padding: 8px 10px; }
+/* accesos: tira compacta */
+#view-panel .home-shortcuts--4 { gap: 8px; margin-bottom: 10px; }
+#view-panel .home-shortcut { padding: 8px 10px; gap: 8px; }
+#view-panel .home-shortcut__icon { width: 32px; height: 32px; flex-shrink: 0; }
+#view-panel .home-shortcut small, #view-panel .home-shortcut span:last-child > span:last-child { display: none; }
+/* tablas: alto tope + scroll interno + cabecera pegajosa */
+#view-panel .tables-grid { gap: 10px; margin-bottom: 10px; }
+#view-panel .table-wrapper { max-height: 200px; overflow-y: auto; }
+#view-panel .table-wrapper thead th { position: sticky; top: 0; background: #fff; z-index: 1; }
+#view-panel .table-wrapper td { padding-top: 6px; padding-bottom: 6px; }
+#view-panel .table-footer { padding: 6px 12px; }
+/* ubicaciones: tarjetas en una línea, auto-fit */
+#view-panel .home-section-title { margin: 8px 0 6px; font-size: 12px; }
+#view-panel #dashboard-locations-grid { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)) !important; gap: 8px !important; margin-bottom: 10px !important; }
+#view-panel #dashboard-locations-grid > .card { padding: 8px 12px !important; }
+#view-panel #dashboard-locations-grid > .card > div:first-child { margin-bottom: 6px !important; }
+#view-panel #dashboard-locations-grid .card-badge { display: none; }
+/* agenda: calendario compacto */
+#view-panel .erp-inicio-calendar-grid { grid-template-columns: 340px minmax(0,1fr); gap: 10px; margin-bottom: 12px; }
+#view-panel .erp-inicio-calendar-grid > .erp-card { padding: 12px; }
+#view-panel .erp-cal-day { aspect-ratio: auto; min-height: 28px; }
+#view-panel .erp-calendar-events-list { max-height: 230px; }
+#view-panel .erp-calendar-weekdays, #view-panel .erp-calendar-month-nav { margin-bottom: 4px; }
+
+@media (max-width: 1180px) {
+  #view-panel .erp-kpi-grid-4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
+  #view-panel .erp-dashboard-mid-grid { grid-template-columns: minmax(0,1.4fr) minmax(0,1fr); }
+  #view-panel .erp-inicio-calendar-grid { grid-template-columns: 300px minmax(0,1fr); }
+}
+@media (max-width: 900px) {
+  #view-panel .erp-kpi-grid-4 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  #view-panel .erp-dashboard-mid-grid { grid-template-columns: minmax(0,1fr); }
+  #view-panel .erp-dashboard-mid-grid > .erp-card { max-height: 220px; }
+  #view-panel .tables-grid { grid-template-columns: minmax(0,1fr); }
+  #view-panel .erp-inicio-calendar-grid { grid-template-columns: minmax(0,1fr); }
+  #view-panel .erp-calendar-events-list { max-height: 160px; }
+}
+@media (max-width: 560px) {
+  #view-panel .dashboard-container { padding: 8px 12px; }
+  #view-panel .page-header { flex-direction: row !important; flex-wrap: wrap; margin-bottom: 6px; }
+  #view-panel .page-header > div:last-child { width: auto; flex: 1; justify-content: flex-end; }
+  #view-panel .page-header .btn { min-height: 34px; padding: 4px 10px; flex: 0 0 auto; }
+  #view-panel .home-status__meta { width: auto; margin-left: auto; }
+  #view-panel .erp-kpi-card { padding: 8px 10px; }
+  #view-panel .erp-kpi-card__value { font-size: 22px; }
+  #view-panel .erp-kpi-card__meta { display: none; }
+  #view-panel .erp-dashboard-mid-grid > .erp-card { max-height: 200px; }
+  #view-panel #dash-flow-chart svg { height: 110px !important; min-width: 0 !important; }
+  /* accesos y ubicaciones como carrusel horizontal */
+  #view-panel .home-shortcuts--4, #view-panel #dashboard-locations-grid { display: flex !important; overflow-x: auto; scroll-snap-type: x mandatory; gap: 8px !important; padding-bottom: 4px; }
+  #view-panel .home-shortcut { flex: 0 0 150px; scroll-snap-align: start; }
+  #view-panel #dashboard-locations-grid > .card { flex: 0 0 230px; scroll-snap-align: start; }
+  #view-panel .table-wrapper { max-height: 170px; }
+  #view-panel .erp-calendar-quick-actions { grid-template-columns: 1fr 1fr; }
+  #view-panel .erp-calendar-events-list { max-height: 130px; }
+}
+
+/* ===== Ronda 2: llegar a <=1.5 pantallas en PC ===== */
+#view-panel .erp-dashboard-mid-grid > .erp-card { max-height: 210px; }
+#view-panel #dash-flow-chart svg { height: 110px !important; }
+#view-panel .table-wrapper { max-height: 150px; }
+/* ubicaciones: una sola fila con scroll horizontal en todos los anchos */
+#view-panel #dashboard-locations-grid { display: flex !important; overflow-x: auto; scroll-snap-type: x proximity; }
+#view-panel #dashboard-locations-grid > .card { flex: 1 0 210px; scroll-snap-align: start; }
+/* agenda plegada por defecto (JS/HTML: <details class="home-fold">) */
+#view-panel .home-fold:not([open]) > :not(summary) { display: none; }
+
+/* ===== Ronda 3: correcciones detectadas en las capturas ===== */
+/* style.css:3622 fuerza 1fr !important en <=768px: hay que ganarle con !important */
+@media (max-width: 900px) { #view-panel .erp-kpi-grid-4 { grid-template-columns: repeat(2, minmax(0,1fr)) !important; gap: 8px !important; } 
+  #view-panel .erp-dashboard-mid-grid { grid-template-columns: minmax(0,1fr) !important; gap: 8px !important; } }
+#view-panel .table-wrapper { max-height: 190px; }
+@media (min-width: 700px) { #view-panel .home-shortcuts--4 { grid-template-columns: repeat(4, minmax(0,1fr)); } }
+@media (max-width: 560px) {
+  #view-panel .data-table-card table { min-width: 360px !important; }
+  #view-panel .table-wrapper { max-height: 170px; }
+  #view-panel .home-status { gap: 4px 8px; }
+  #view-panel .home-status__meta { display: none; }   /* ya está en KPIs/Inventario */
+}
+
+/* Accesos rápidos en la barra superior y agenda plegable */
+.quick-access { position: relative; }
+.quick-access__btn { display: inline-flex; align-items: center; gap: 6px; }
+.quick-access__menu { position: absolute; right: 0; top: calc(100% + 6px); min-width: 230px; background: #fff; border: 1px solid #E2E8F0; border-radius: var(--shape-card); box-shadow: 0 10px 24px rgba(15,23,42,.14); padding: 6px; z-index: 1200; display: flex; flex-direction: column; }
+.quick-access__menu[hidden] { display: none; }
+.quick-access__menu button { display: flex; align-items: center; gap: 10px; padding: 10px 12px; min-height: 44px; border: 0; background: none; text-align: left; font: inherit; font-weight: 600; color: var(--sar-blue); border-radius: 6px; cursor: pointer; }
+.quick-access__menu button:hover, .quick-access__menu button:focus-visible { background: #EEF2F9; }
+.quick-access__menu i { font-size: 18px; color: var(--sar-orange-strong); }
+@media (max-width: 560px) { .quick-access__btn span { display: none; } .quick-access__menu { right: -40px; } }
+.home-fold { margin-bottom: 12px; }
+.home-fold__summary { cursor: pointer; font-weight: 800; color: var(--sar-blue); padding: 10px 12px; background: #fff; border: 1px solid #E2E8F0; border-radius: var(--shape-card); list-style: none; display: flex; align-items: center; gap: 8px; min-height: 44px; }
+.home-fold__summary::-webkit-details-marker { display: none; }
+.home-fold__hint { margin-left: auto; font-weight: 500; font-size: 11px; color: #64748B; }
+.home-fold[open] .home-fold__hint { display: none; }
+.home-fold[open] > .erp-inicio-calendar-grid { margin-top: 10px; }
+#view-panel .home-fold:not([open]) > :not(summary) { display: none; }

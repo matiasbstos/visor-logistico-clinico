@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=20.20",
+                "./script.js": "./script.js?v=20.21",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -62,7 +62,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=20.20">
+    <link rel="stylesheet" href="style.css?v=20.21">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -324,6 +324,18 @@
                         <i class="ph-bold ph-plus"></i>
                         <span>Nueva SDC</span>
                     </button>
+                    <div class="quick-access" id="quick-access">
+                        <button type="button" class="erp-btn erp-btn--outline quick-access__btn" id="btn-quick-access" aria-haspopup="true" aria-expanded="false" title="Accesos rápidos">
+                            <i class="ph-bold ph-lightning"></i><span>Accesos</span>
+                        </button>
+                        <div class="quick-access__menu" id="quick-access-menu" role="menu" hidden>
+                            <button type="button" role="menuitem" data-go="view-bandejas"><i class="ph-bold ph-briefcase-medical"></i>Bandejas de turno</button>
+                            <button type="button" role="menuitem" class="home-only-staff" data-go="view-toma-inventario"><i class="ph-bold ph-clipboard-text"></i>Conteos de inventario</button>
+                            <button type="button" role="menuitem" class="home-only-staff" data-go-erp="erp-panel-tablero"><i class="ph-bold ph-kanban"></i>Tablero SDC / OC</button>
+                            <button type="button" role="menuitem" class="home-only-staff" data-go-erp="erp-panel-recepcion"><i class="ph-bold ph-package"></i>Recepción dinámica</button>
+                            <button type="button" role="menuitem" class="home-only-staff" data-go-erp="erp-panel-catalogo"><i class="ph-bold ph-pill"></i>Catálogo de insumos</button>
+                        </div>
+                    </div>
                     <div class="status-badge">
                         <i class="ph-fill ph-cloud-check"></i><span>Nube actualizada</span>
                     </div>
@@ -429,14 +441,6 @@
                         </div>
                     </div>
 
-                    <!-- Accesos a las demás secciones -->
-                    <div class="home-shortcuts home-shortcuts--4 home-only-staff">
-                        <button type="button" class="home-shortcut" data-go-erp="erp-panel-tablero"><span class="home-shortcut__icon" style="background:#EEF2F9; color:var(--sar-blue);"><i class="ph-bold ph-kanban"></i></span><span><strong>Tablero SDC/OC</strong><small>Solicitudes y órdenes de compra</small></span></button>
-                        <button type="button" class="home-shortcut" data-go-erp="erp-panel-recepcion"><span class="home-shortcut__icon" style="background:#F1F8E6; color:#4D7C0F;"><i class="ph-bold ph-package"></i></span><span><strong>Recepción Dinámica</strong><small>Auditar guías y recepciones</small></span></button>
-                        <button type="button" class="home-shortcut" data-go-erp="erp-panel-catalogo"><span class="home-shortcut__icon" style="background:#FFF1E8; color:var(--sar-orange-strong);"><i class="ph-bold ph-pill"></i></span><span><strong>Catálogo de Insumos</strong><small>Explorar el catálogo maestro</small></span></button>
-                        <button type="button" class="home-shortcut" data-go="view-toma-inventario"><span class="home-shortcut__icon" style="background:#FEF9C3; color:#854D0E;"><i class="ph-bold ph-clipboard-text"></i></span><span><strong>Conteos de Inventario</strong><small>Toma de inventario y semanal</small></span></button>
-                    </div>
-
                     <div class="tables-grid">
                         <div class="data-table-card" id="card-dash-urgencias">
                             <div class="data-table-header danger">
@@ -499,8 +503,9 @@
                     </div>
 
                 <!-- Agenda y calendario logístico (movido desde Compras) -->
-                    <h3 class="home-section-title home-only-staff">Agenda y calendario logístico</h3>
-                    <div class="erp-inicio-calendar-grid home-only-staff">
+                    <details class="home-fold home-only-staff">
+                    <summary class="home-fold__summary"><i class="ph-bold ph-calendar-check"></i> Agenda y calendario logístico <span class="home-fold__hint">clic para abrir</span></summary>
+                    <div class="erp-inicio-calendar-grid">
                             <!-- Columna Izquierda: Gestión de Calendario (Estilo Referencia 1) -->
                             <div class="erp-card erp-calendar-widget">
                                 <div class="erp-calendar-widget__top">
@@ -588,6 +593,7 @@
                             </div>
                         </div>
 
+                    </details>
                     </div> <!-- END dashboard-container -->
                 </section>
 
@@ -5687,9 +5693,9 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=20.20"></script>
-    <script type="module" src="patch-plantillas.js?v=20.20"></script>
+    <script type="module" src="script.js?v=20.21"></script>
+    <script type="module" src="patch-plantillas.js?v=20.21"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="visor-adquisiciones.js?v=20.20"></script>
+    <script src="visor-adquisiciones.js?v=20.21"></script>
 </body>
 </html>

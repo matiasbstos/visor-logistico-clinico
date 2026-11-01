@@ -43,13 +43,31 @@ service cloud.firestore {
       return isAuthenticated() && (request.auth.uid == userId || request.auth.token.email == userId);
     }
 
+    // Usuario autenticado que además tiene un rol asignado en /Usuarios.
+    // Una cuenta recién registrada, sin perfil, queda como 'sin_acceso'.
+    function hasRole() {
+      return isAuthenticated() && getUserRole() != 'sin_acceso';
+    }
+
+    // Correo institucional REAL: dominio anclado tras la arroba y correo verificado.
+    // (Firebase Auth no comprueba que el correo sea del dueño si no está verificado.)
+    function isInstitutionalEmail() {
+      return isAuthenticated()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.matches('.*@(comunel|cormunel|cormumel)\\.cl');
+    }
+
     // -----------------------------------------------------
     // GESTIÓN DE USUARIOS MÉTODOS RBAC
     // -----------------------------------------------------
     match /Usuarios/{userId} {
       // LECTURA: Operadores y admins pueden ver a todos (necesario para listar enfermeros).
       allow read: if isOperadorOrAdmin() || isOwner(userId);
-      allow create: if isAdmin() || (getUserRole() == 'operador' && request.resource.data.rol == 'enfermero') || (request.auth.token.email.matches('.*comunel\\.cl') && request.resource.data.rol == 'superadmin') || (request.auth.token.email.matches('.*cormunel\\.cl') && request.resource.data.rol == 'superadmin') || (request.auth.token.email.matches('.*cormumel\\.cl') && request.resource.data.rol == 'superadmin');
+      // CREACIÓN: admin, operador (solo enfermeros) o el propio titular con correo
+      // institucional verificado que crea SU perfil inicial de superadmin (arranque).
+      allow create: if isAdmin()
+        || (getUserRole() == 'operador' && request.resource.data.rol == 'enfermero')
+        || (isOwner(userId) && isInstitutionalEmail() && request.resource.data.rol == 'superadmin');
       // ACTUALIZACIÓN: Un usuario regular NO puede modificar su propio campo 'rol' o 'role'
       allow update: if isAdmin() || (isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['rol', 'role'])));
       allow delete: if isAdmin();
@@ -87,7 +105,7 @@ service cloud.firestore {
     // HISTORIAL GLOBAL (Bitácora de todos los movimientos)
     // -----------------------------------------------------
     match /Historial_Movimientos/{movId} {
-      allow read: if isAuthenticated(); // Historial visual común
+      allow read: if hasRole(); // Solo usuarios con rol asignado (el historial antiguo puede contener RUT de pacientes)
       allow create: if isAuthenticated();
       allow update: if false;
       allow delete: if isSuperAdmin();
@@ -135,7 +153,7 @@ service cloud.firestore {
     // GESTIÓN DE BANDEJAS DE TURNO
     // -----------------------------------------------------
     match /Bandejas_Turno/{bandejaId} {
-      allow read: if isAuthenticated();
+      allow read: if hasRole(); // las bandejas antiguas pueden contener RUT de pacientes
       allow create, update: if isAuthenticated();
       allow delete: if isAdmin() || getUserRole() == 'operador';
     }

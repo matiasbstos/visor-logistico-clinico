@@ -4553,3 +4553,82 @@ body:not([data-view="view-erp-adquisiciones"]):not([data-view="view-compras"]) .
 body:not([data-view="view-erp-adquisiciones"]):not([data-view="view-compras"]) #btn-erp-nueva-sdc {
     display: none !important;
 }
+
+/* ==========================================================================
+   SISTEMA DE DISEÑO UNIFICADO (v20.15)
+   Lleva el estilo de Adquisiciones SAR (forma corporativa 8/8/8/0, azul SAR,
+   bordes suaves, tablas con encabezado claro) a todas las pantallas.
+   ========================================================================== */
+:focus-visible { outline: 2px solid var(--sar-blue); outline-offset: 2px; }
+
+/* Encabezado de página */
+.page-title h1 { font-size: 24px; font-weight: 800; color: var(--sar-blue); letter-spacing: -0.2px; }
+.page-title p { color: #64748B; font-size: 13.5px; }
+.page-header { gap: 16px; flex-wrap: wrap; }
+
+/* Botones */
+.btn { border-radius: var(--shape-card); font-size: 13px; font-weight: 700; padding: 9px 16px; min-height: 38px; }
+.btn-primary { background-color: var(--sar-blue); box-shadow: none; }
+.btn-primary:hover { background-color: var(--sar-blue-dark); box-shadow: 0 4px 12px rgba(26, 54, 104, 0.22); transform: none; }
+.btn-outline { background-color: #ffffff; border-color: #CBD5E1; color: #334155; }
+.btn-outline:hover { border-color: var(--sar-blue); color: var(--sar-blue); background-color: #F8FAFC; }
+
+/* Tarjetas y contenedores de tabla */
+.card, .data-table-card, .dashboard-card {
+    border-radius: var(--shape-card);
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+.card:hover { transform: none; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04); }
+
+/* Tablas: encabezado claro, filas con separación suave */
+.view-section table thead th {
+    background: #F8FAFC;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 12px 16px;
+    border-bottom: 1px solid #E2E8F0;
+}
+.view-section table tbody td {
+    padding: 12px 16px;
+    border-bottom: 1px solid #F1F5F9;
+    font-size: 13px;
+    color: #1E293B;
+}
+.view-section table tbody tr:hover { background-color: #F8FAFC; }
+
+/* Campos de formulario */
+.view-section input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+.view-section select,
+.view-section textarea {
+    border-color: #CBD5E1;
+    border-radius: 6px;
+}
+
+/* Navegación inferior: solo cuando el menú lateral es un cajón (≤1024px) */
+.bottom-nav { display: none; }
+@media (max-width: 1024px) {
+    .bottom-nav {
+        display: flex;
+        position: fixed;
+        left: 0; right: 0; bottom: 0;
+        z-index: 900;
+        background: #ffffff;
+        border-top: 1px solid #E2E8F0;
+        box-shadow: 0 -2px 10px rgba(15, 23, 42, 0.06);
+        padding-bottom: env(safe-area-inset-bottom, 0);
+    }
+    .bottom-nav__item {
+        flex: 1;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 2px; min-height: 56px; padding: 6px 2px;
+        background: none; border: none; cursor: pointer;
+        font-size: 11px; font-weight: 700; color: #64748B;
+    }
+    .bottom-nav__item i { font-size: 22px; }
+    .bottom-nav__item.active { color: var(--sar-blue); box-shadow: inset 0 3px 0 var(--sar-red); }
+    .main-content { padding-bottom: 72px; }
+}

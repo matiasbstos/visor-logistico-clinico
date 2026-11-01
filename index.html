@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=20.14",
+                "./script.js": "./script.js?v=20.15",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -62,7 +62,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=20.14">
+    <link rel="stylesheet" href="style.css?v=20.15">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -278,6 +278,15 @@
             </div>
         </aside>
 
+        <!-- Navegación inferior (solo tablet/celular): accesos frecuentes; "Más" abre el menú completo -->
+        <nav class="bottom-nav" id="bottom-nav" aria-label="Accesos rápidos">
+            <button type="button" class="bottom-nav__item" data-nav="view-panel"><i class="ph-bold ph-house-line"></i><span>Inicio</span></button>
+            <button type="button" class="bottom-nav__item" data-nav="view-inventario"><i class="ph-bold ph-archive-box"></i><span>Existencias</span></button>
+            <button type="button" class="bottom-nav__item" data-nav="view-movimientos"><i class="ph-bold ph-arrows-left-right"></i><span>Movimientos</span></button>
+            <button type="button" class="bottom-nav__item" data-nav="view-bandejas"><i class="ph-bold ph-briefcase-medical"></i><span>Bandejas</span></button>
+            <button type="button" class="bottom-nav__item" data-nav="mas"><i class="ph-bold ph-list"></i><span>Más</span></button>
+        </nav>
+
         <!-- Main Content Global (--sar-bg-app: #F8F9FA) -->
         <main class="main-content">
             <!-- Header Global Blanco SaaS Premium -->
@@ -451,7 +460,7 @@
                     <div class="dashboard-container">
                         <div class="page-header mb-16">
                         <div class="page-title">
-                            <h1>Inventario</h1>
+                            <h1>Existencias</h1>
                             <p>Control de existencias y búsqueda de suministros.</p>
                         </div>
                         <div style="display:flex; gap:12px; align-items:center;">
@@ -614,7 +623,8 @@
                             </div>
                         </div>
                     </div>
-                    <div class="grid-2-col-even" style="grid-template-columns: 2fr 1fr;">
+                    <!-- Recomendación IA y actividad reciente: contenido de ejemplo, oculto hasta tener datos reales -->
+                    <div class="grid-2-col-even" hidden style="display:none; grid-template-columns: 2fr 1fr;">
                         <div class="predictive-card" style="padding: 24px;">
                             <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
                                 <i class="ph-fill ph-lightning" style="color: #60a5fa; font-size:24px;"></i>
@@ -5609,8 +5619,8 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=20.14"></script>
-    <script type="module" src="patch-plantillas.js?v=20.14"></script>
+    <script type="module" src="script.js?v=20.15"></script>
+    <script type="module" src="patch-plantillas.js?v=20.15"></script>
     <script src="visor-triaje.js?v=20.11"></script>
     <script src="visor-adquisiciones.js?v=20.14"></script>
 </body>

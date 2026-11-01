@@ -1740,6 +1740,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             document.body.dataset.view = hash;
+            document.querySelectorAll('#bottom-nav [data-nav]').forEach(b => b.classList.toggle('active', b.dataset.nav === hash));
             const activeView = document.getElementById(hash);
             if (activeView) {
                 activeView.style.display = 'block';
@@ -1784,6 +1785,19 @@ document.addEventListener('DOMContentLoaded', () => {
                 topbarTitle.textContent = viewTitles[hash];
             }
         }
+
+        // Navegación inferior (tablet/celular)
+        document.querySelectorAll('#bottom-nav [data-nav]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const destino = btn.dataset.nav;
+                if (destino === 'mas') {
+                    const abrir = document.getElementById('btn-mobile-menu-toggle');
+                    if (abrir) abrir.click();
+                } else {
+                    window.location.hash = destino;
+                }
+            });
+        });
 
         // Escuchamos el evento de retroceso/avance del navegador
         window.addEventListener('hashchange', () => {

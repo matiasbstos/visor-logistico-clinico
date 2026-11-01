@@ -42,6 +42,33 @@ Mini-ERP/WMS clínico: inventario multi-ubicación con lotes y vencimientos, ban
 - Regla (a validar con el químico farmacéutico): los controlados solo en ubicaciones `aptaControlados`.
 - **Migración en etapas:** (1) agregar `bodegaId` junto a `location`; (2) migrar datos con respaldo; (3) cambiar la lectura; (4) retirar la dependencia del nombre.
 
+## 4.1 Estantes, códigos y etiquetas ✅ (decisiones del usuario, 2026-11-01)
+
+- Jerarquía: **Ubicación → Estante → Nivel → Espacio (opcional)**.
+- **Código**: `PREFIJO-LETRA+NÚMERO`, p. ej. `BS-A01`. Prefijo propio de cada bodega (se define al crearla; `BS` = Bodega Central). **Letra = nivel**, de abajo hacia arriba (A el más bajo, luego B, C, D, E). **Número = estante** correlativo (01, 02, 03…).
+- **Subdivisión**: un nivel de un estante puede subdividirse en espacios numerados (p. ej. una bandeja completa dividida por tipo de medicamento): `BS-A01-1`, `BS-A01-2`. Es opcional.
+- **Bodegas "sin estantes"** (modo simple): los productos se asignan a la bodega y se cuentan como una lista (p. ej. transitorias por espacio). Una bodega con estantes admite productos **"sin ubicar"** (pendientes) mientras se asignan.
+- Un producto puede estar repartido en varias ubicaciones, con cantidad por ubicación.
+- **Etiquetas**: el sistema las genera para imprimir, con código en letra grande, **código de barras (pistola lectora, que actúa como teclado)** y **QR** (celular). Al leer el código se abre esa ubicación: qué productos hay, cantidades, lotes por vencer y opción de contarla.
+- Vista **"¿Dónde está?"**: bodega → estante → nivel → espacio de cada producto.
+- Ubicaciones por identificador inmutable; renombrar la bodega no cambia los códigos.
+
+## 4.2 Tomas de inventario ✅ (decisiones del usuario, 2026-11-01)
+
+| Tipo | Alcance | Frecuencia |
+|---|---|---|
+| Semanal | Parcial: se eligen categorías o estantes | Semanal |
+| Bimestral | Completo (obligatorio) | Cada 2 meses 🟡 |
+| Pre-campaña de invierno | Completo (obligatorio) | Antes de la campaña |
+| Post-campaña de invierno | Completo (obligatorio) | Al terminar la campaña |
+
+- Aplica por ubicación: Bodega Central, Bodega Transitoria, Farmacia, Carro de Paro y bodegas adicionales.
+- Los completos solo cierran con conteo de **todo** el catálogo de la ubicación (0 incluido). Cada inventario queda marcado con su tipo.
+- Fechas de campaña definidas por un administrador cada año. Consumo de campaña = stock pre + ingresos − stock post; respalda la solicitud de compra.
+- Conteo guiado: ruta ordenada por ubicación, confirmación escaneando la etiqueta, conteo de los productos de esa ubicación, aviso de lo no contado.
+- El cierre fija la cantidad contada (no suma) en una sola transacción, con lotes/vencimientos y historial por diferencia; las diferencias grandes exigen justificación 🟡 (umbral y aprobación por definir).
+- 🟡 Pendiente: si los bimestrales continúan además de los dos de campaña.
+
 ## 5. Flujo de movimientos ✅ (implementación 🟡)
 ```
 Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia → Bandeja / Carro de Paro

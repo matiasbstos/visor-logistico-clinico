@@ -4658,3 +4658,14 @@ body:not([data-view="view-erp-adquisiciones"]):not([data-view="view-compras"]) #
     .home-shortcut strong { font-size: 13px; }
     .home-shortcut__icon { width: 36px; height: 36px; font-size: 18px; }
 }
+
+/* Pestañas de página (v20.17): conmutan vistas hermanas sin repetir el menú */
+.page-tabs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; padding-bottom: 12px; border-bottom: 1px solid #E2E8F0; }
+.page-tabs__spacer { flex: 1; }
+.page-tab { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; min-height: 38px; font-size: 13px; font-weight: 700; color: #475569; background: #F8FAFC; border: 1px solid #CBD5E1; border-radius: var(--shape-card); cursor: pointer; }
+.page-tab:hover { border-color: var(--sar-blue); color: var(--sar-blue); }
+body[data-view="view-toma-inventario"] .page-tab[data-go="view-toma-inventario"],
+body[data-view="view-inventario-semanal"] .page-tab[data-go="view-inventario-semanal"] {
+    background: var(--sar-blue); color: #ffffff; border-color: var(--sar-blue); box-shadow: inset 0 -3px 0 var(--sar-red);
+}
+@media (max-width: 560px) { .page-tabs__spacer { display: none; } .page-tabs .btn { flex: 1; } }

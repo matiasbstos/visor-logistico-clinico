@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=20.23",
+                "./script.js": "./script.js?v=20.24",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -62,7 +62,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=20.23">
+    <link rel="stylesheet" href="style.css?v=20.24">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -2706,6 +2706,27 @@
                                                 class="form-control" value="180" aria-label="config days caution" title="config days caution">
                                             <p class="text-sm text-muted mt-8">Insumos que vencen entre el período urgente y
                                                 este valor.</p>
+                                        </div>
+                                    </div>
+
+                                    <h3 style="margin:8px 0 4px; font-size:15px; color:var(--sar-blue);">Inventario general (2 veces al año)</h3>
+                                    <p class="text-sm text-muted mb-16">Se hace antes y después de la campaña de invierno. El consumo de la campaña se calcula con ambos conteos. Estas fechas aparecen en el Inicio.</p>
+                                    <div class="grid-2-col-even mb-24">
+                                        <div class="form-group">
+                                            <label class="form-label">Inicio de campaña de invierno</label>
+                                            <input type="date" name="invCampanaInicio" id="config-inv-campana-inicio" class="form-control" aria-label="Inicio de campaña de invierno" title="Inicio de campaña de invierno">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Término de campaña de invierno</label>
+                                            <input type="date" name="invCampanaFin" id="config-inv-campana-fin" class="form-control" aria-label="Término de campaña de invierno" title="Término de campaña de invierno">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Fecha del inventario previo a la campaña</label>
+                                            <input type="date" name="invPreFecha" id="config-inv-pre" class="form-control" aria-label="Fecha del inventario previo" title="Fecha del inventario previo">
+                                        </div>
+                                        <div class="form-group">
+                                            <label class="form-label">Fecha del inventario posterior a la campaña</label>
+                                            <input type="date" name="invPostFecha" id="config-inv-post" class="form-control" aria-label="Fecha del inventario posterior" title="Fecha del inventario posterior">
                                         </div>
                                     </div>
                                 </div>
@@ -5716,9 +5737,9 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=20.23"></script>
-    <script type="module" src="patch-plantillas.js?v=20.23"></script>
+    <script type="module" src="script.js?v=20.24"></script>
+    <script type="module" src="patch-plantillas.js?v=20.24"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="visor-adquisiciones.js?v=20.23"></script>
+    <script src="visor-adquisiciones.js?v=20.24"></script>
 </body>
 </html>

@@ -4895,3 +4895,19 @@ body[data-user-role="operador"] .home-only-admin { display: none !important; }
 .acceso-bodega__fila:last-child { border-bottom: 0; }
 .acceso-bodega__fila--crit strong { color: var(--sar-red); }
 .acceso-bodega__pie { text-align: center; font-size: 13px; }
+
+/* Ubicar productos y ¿Dónde está? (v20.28) */
+.acceso-bodega__sinubicar { display: inline-block; margin-left: 8px; font-size: 11px; font-weight: 700; color: var(--sar-orange-strong); background: #FFF1E8; border-radius: 4px; padding: 1px 6px; }
+.acceso-bodega__fila small { display: inline-block; }
+.acceso-bodega__cant { display: flex; align-items: center; gap: 10px; }
+.acceso-bodega__quitar { border: 1px solid #CBD5E1; background: #fff; border-radius: 6px; padding: 6px 10px; min-height: 36px; font: inherit; font-size: 12px; font-weight: 700; color: var(--sar-red); cursor: pointer; }
+.acceso-bodega__form { padding: 14px; margin-bottom: 12px; display: grid; gap: 10px; }
+.acceso-bodega__form h3 { margin: 0; font-size: 15px; color: var(--sar-blue); }
+.acceso-bodega__form label { display: grid; gap: 4px; font-size: 12px; font-weight: 700; color: #475569; }
+.acceso-bodega__form select, .acceso-bodega__form input { padding: 12px; border: 1px solid #CBD5E1; border-radius: 8px; font: inherit; font-size: 15px; min-height: 44px; }
+.acceso-bodega__acciones { display: flex; gap: 8px; }
+.donde__prod { padding: 12px 14px; margin-bottom: 10px; }
+.donde__prod h3 { margin: 0 0 8px; font-size: 15px; color: var(--sar-blue); }
+.donde__bodega { padding: 8px 0; border-top: 1px solid #F1F5F9; }
+.donde__bodega-top { display: flex; justify-content: space-between; font-size: 14px; }
+.donde__ubic { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }

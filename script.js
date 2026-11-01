@@ -1971,6 +1971,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'view-analitico': 'Inteligencia Operativa',
             'view-bodegas': 'Bodegas',
             'view-acceso-bodega': 'Acceso rápido de bodega',
+            'view-donde-esta': '¿Dónde está?',
             'view-usuarios': 'Gestión de Usuarios',
             'view-configuracion': 'Configuración del Sistema',
             'view-compras': 'Solicitudes de Compra',
@@ -2052,7 +2053,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 activeView.style.display = 'block';
                 activeView.classList.add('active');
 
-                if (hash === 'view-acceso-bodega') {
+                if (hash === 'view-donde-esta') {
+                    if (window.SAR_DondeEsta) window.SAR_DondeEsta.abrir();
+                } else if (hash === 'view-acceso-bodega') {
                     if (window.SAR_AccesoBodega) window.SAR_AccesoBodega.abrir(accesoRapido);
                 } else if (hash === 'view-panel') {
                     console.log("[Router] Vista Panel de Control activa.");
@@ -9823,7 +9826,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 window.firebaseAuth = { createUserWithEmailAndPassword };
-window.firebaseFirestore = { setDoc, doc, serverTimestamp, query, collection, orderBy, getDocs, updateDoc, runTransaction, increment, getDoc, where, limit, onSnapshot, startAt, endAt };
+window.firebaseFirestore = { deleteDoc, setDoc, doc, serverTimestamp, query, collection, orderBy, getDocs, updateDoc, runTransaction, increment, getDoc, where, limit, onSnapshot, startAt, endAt };
 window.firebaseDb = db;
 window.firebaseAuth = auth;
 

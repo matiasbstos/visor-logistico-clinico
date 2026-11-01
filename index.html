@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=20.27",
+                "./script.js": "./script.js?v=20.28",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -62,7 +62,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=20.27">
+    <link rel="stylesheet" href="style.css?v=20.28">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -181,6 +181,9 @@
                     </a>
                     <a href="#" class="menu-item normal" data-target="view-toma-inventario" data-title="Conteos de Inventario">
                         <i class="ph-bold ph-clipboard-text"></i><span class="menu-label">Conteos de Inventario</span>
+                    </a>
+                    <a href="#" class="menu-item normal" data-target="view-donde-esta" data-title="¿Dónde está?">
+                        <i class="ph-bold ph-map-pin-line"></i><span class="menu-label">¿Dónde está?</span>
                     </a>
                     <a style="display:none;" href="#" class="menu-item normal" data-target="view-inventario-semanal" data-title="Inventario Semanal">
                         <i class="ph-bold ph-calendar-check"></i><span class="menu-label">Inventario Semanal</span>
@@ -2539,6 +2542,20 @@
             </section>
 
             <!-- VIEW: Bodegas -->
+            <!-- ¿Dónde está?: búsqueda de un producto en bodegas y estantes -->
+            <section id="view-donde-esta" class="view-section" style="display:none;">
+                <div class="dashboard-container">
+                    <div class="page-header mb-24">
+                        <div class="page-title">
+                            <h1>¿Dónde está?</h1>
+                            <p>Busca un producto y mira en qué bodega y estante está.</p>
+                        </div>
+                    </div>
+                    <div class="acceso-bodega__buscar"><input type="search" id="donde-buscar" placeholder="Escribe el nombre del producto…" aria-label="Buscar producto"></div>
+                    <div id="donde-resultados"><div class="home-empty">Escribe al menos 3 letras.</div></div>
+                </div>
+            </section>
+
             <!-- Acceso rápido de bodega (se abre al leer el QR de una bodega o ubicación: #b/ID o #u/ID/CODIGO) -->
             <section id="view-acceso-bodega" class="view-section" style="display:none;">
                 <div class="dashboard-container" id="acceso-bodega-contenido">
@@ -5758,10 +5775,10 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=20.27"></script>
-    <script type="module" src="patch-plantillas.js?v=20.27"></script>
+    <script type="module" src="script.js?v=20.28"></script>
+    <script type="module" src="patch-plantillas.js?v=20.28"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="bodegas-estantes.js?v=20.27"></script>
-    <script src="visor-adquisiciones.js?v=20.27"></script>
+    <script src="bodegas-estantes.js?v=20.28"></script>
+    <script src="visor-adquisiciones.js?v=20.28"></script>
 </body>
 </html>

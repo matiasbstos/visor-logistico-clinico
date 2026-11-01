@@ -3,7 +3,7 @@
 
 <head>
     <script>
-        const APP_VERSION = '18.24';
+        const APP_VERSION = '18.25';
         if (localStorage.getItem('APP_VERSION') !== APP_VERSION) {
             localStorage.setItem('APP_VERSION', APP_VERSION);
             if ('serviceWorker' in navigator) {
@@ -23,7 +23,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=18.24-predictive">
+    <link rel="stylesheet" href="style.css?v=18.25-predictive">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -2825,6 +2825,29 @@
                         </div>
                     </div>
                 </main>
+
+                <!-- Panel Lateral (Drawer) de Detalle de Productos y Recepciones Parciales (Appflow) -->
+                <div id="erp-kanban-drawer-overlay" class="erp-drawer-overlay" role="dialog" aria-modal="true" aria-labelledby="erp-drawer-title">
+                    <div class="erp-drawer">
+                        <header class="erp-drawer__header">
+                            <div>
+                                <span class="badge badge-sar-yellow" style="margin-bottom:4px;">Ficha Técnica &amp; Recepción</span>
+                                <h3 id="erp-drawer-title" class="erp-drawer__title">Detalle de Orden</h3>
+                                <div id="erp-drawer-subtitle" style="font-size:11.5px; color:rgba(255,255,255,0.8); margin-top:4px;"></div>
+                            </div>
+                            <button type="button" id="btn-erp-cerrar-drawer" class="erp-drawer__close" title="Cerrar panel">
+                                <i class="ph-bold ph-x"></i>
+                            </button>
+                        </header>
+                        <div id="erp-drawer-body" class="erp-drawer__body"></div>
+                        <footer class="erp-drawer__footer">
+                            <button type="button" id="btn-erp-cancelar-drawer" class="btn btn-outline">Cerrar</button>
+                            <button type="button" id="btn-erp-guardar-recepcion" class="btn-sar-primary">
+                                <i class="ph-bold ph-check-circle"></i> Registrar Recepción Parcial / Total
+                            </button>
+                        </footer>
+                    </div>
+                </div>
             </section>
 
             <!-- VIEW: Gestión de Usuarios -->
@@ -4306,9 +4329,9 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=18.24"></script>
-    <script type="module" src="patch-plantillas.js?v=18.24"></script>
-    <script src="visor-triaje.js?v=18.24"></script>
-    <script src="visor-adquisiciones.js?v=18.24"></script>
+    <script type="module" src="script.js?v=18.25"></script>
+    <script type="module" src="patch-plantillas.js?v=18.25"></script>
+    <script src="visor-triaje.js?v=18.25"></script>
+    <script src="visor-adquisiciones.js?v=18.25"></script>
 </body>
 </html>

@@ -437,8 +437,8 @@ function showToast(title, text, type = 'info') {
     toast.innerHTML = `
         <i class="ph-fill ${icon}" style="color: ${bgColor}; font-size: 24px;"></i>
         <div>
-            <div style="font-weight: 700; font-size: 14px; margin-bottom: 2px;">${title}</div>
-            <div style="font-size: 12px; color: var(--text-muted);">${text}</div>
+            <div style="font-weight: 700; font-size: 14px; margin-bottom: 2px;">${window.escapeHTML(title)}</div>
+            <div style="font-size: 12px; color: var(--text-muted);">${window.escapeHTML(text)}</div>
         </div>
     `;
 
@@ -5029,15 +5029,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 tr.innerHTML = `
                 <td>
                     <div class="flex-item-icon clickable-user" style="cursor:pointer;" title="Editar Usuario">
-                        <div class="avatar-circle">${initials}</div>
+                        <div class="avatar-circle">${window.escapeHTML(initials)}</div>
                         <div>
                             <div class="item-name">${window.escapeHTML(user.fullName || user.name || 'Sin nombre')}</div>
                             <div class="item-category">${window.escapeHTML(user.email || user.username)}@clinica.cl</div>
                         </div>
                     </div>
                 </td>
-                <td><span class="user-badge-gray">${user.center || 'Sede Central'}</span></td>
-                <td><span class="role-badge ${roleClass}">${user.role?.toUpperCase() || 'OPERADOR'}</span></td>
+                <td><span class="user-badge-gray">${window.escapeHTML(user.center || 'Sede Central')}</span></td>
+                <td><span class="role-badge ${roleClass}">${window.escapeHTML(user.role?.toUpperCase() || 'OPERADOR')}</span></td>
                 <td>
                     <div style="display:flex; gap:8px;">
                         <button class="btn btn-icon admin-only btn-edit-role" title="Cambiar Rol"><i class="ph ph-shield-check"></i></button>
@@ -5778,9 +5778,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     tr.innerHTML = `
                     <td class="text-xs">${SAR_Utils.formatDate(log.date)}</td>
-                    <td><span class="badge-gray">${log.module?.toUpperCase() || 'SIS'}</span></td>
-                    <td><span class="status-dot ${severityClass}-dot">${log.severity?.toUpperCase() || 'S/I'}</span></td>
-                    <td class="text-sm">${log.message?.substring(0, 50)}...</td>
+                    <td><span class="badge-gray">${window.escapeHTML(log.module?.toUpperCase() || 'SIS')}</span></td>
+                    <td><span class="status-dot ${severityClass}-dot">${window.escapeHTML(log.severity?.toUpperCase() || 'S/I')}</span></td>
+                    <td class="text-sm">${window.escapeHTML(String(log.message ?? '').substring(0, 50))}...</td>
                     <td><button class="btn btn-icon btn-view-log" data-id="${docSnap.id}"><i class="ph ph-eye"></i></button></td>
                 `;
                     logsTable.appendChild(tr);
@@ -8525,14 +8525,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     const seleccionado = (r.id === data.rol) ? 'selected' : '';
                     opcionesRol += `<option value="${r.id}" ${seleccionado}>${r.label}</option>`;
                 });
-                const selectHtml = `<select class="form-control select-editar-rol" data-email="${docSnap.id}" style="padding: 4px; font-size: 13px;">${opcionesRol}</select>`;
+                const selectHtml = `<select class="form-control select-editar-rol" data-email="${window.escapeHTML(docSnap.id)}" style="padding: 4px; font-size: 13px;">${opcionesRol}</select>`;
 
                 tr.innerHTML = `
-                    <td><strong>${data.nombre || 'No registrado'}</strong><br><small class="text-muted" style="font-size:11px;">Agregado el ${fechaStr}</small></td>
-                    <td>${data.email || docSnap.id}</td>
+                    <td><strong>${window.escapeHTML(data.nombre || 'No registrado')}</strong><br><small class="text-muted" style="font-size:11px;">Agregado el ${fechaStr}</small></td>
+                    <td>${window.escapeHTML(data.email || docSnap.id)}</td>
                     <td>${selectHtml}</td>
                     <td>
-                        <button class="btn btn-sm btn-outline-danger btn-eliminar-usuario" data-id="${docSnap.id}" title="Eliminar Acceso">
+                        <button class="btn btn-sm btn-outline-danger btn-eliminar-usuario" data-id="${window.escapeHTML(docSnap.id)}" title="Eliminar Acceso">
                             <i class="ph ph-trash"></i> Eliminar
                         </button>
                     </td>
@@ -9686,7 +9686,7 @@ document.addEventListener('change', async (e) => {
                     }
 
                     tr.innerHTML = `
-                        <td>${itemVisor.nombreInsumo || itemVisor.nombre}</td>
+                        <td>${window.escapeHTML(itemVisor.nombreInsumo || itemVisor.nombre)}</td>
                         <td style="text-align:center; font-weight:bold;">${cantVisor}</td>
                         <td style="text-align:center; font-weight:bold;">${matchEncontrado ? cantRayen : '<span class="text-muted">No listado</span>'}</td>
                         <td style="text-align:center;">${coincide ? '🟢 OK' : '🔴 DIFF'}</td>
@@ -12336,7 +12336,7 @@ function doGet(e) {
                 acumuladoAlert.style.background = '#ecfdf5';
                 acumuladoAlert.style.borderColor = '#a7f3d0';
                 acumuladoAlert.style.color = '#065f46';
-                acumuladoText.innerHTML = `Stock previo en sistema: <strong>${prevQty} un.</strong> (${match.location || 'Bodega Central'}). Con esta toma (+${currentAdd} un.), el stock total acumulado sumará <strong style="font-size:13px; color:#047857;">${finalQty} un.</strong>`;
+                acumuladoText.innerHTML = `Stock previo en sistema: <strong>${prevQty} un.</strong> (${window.escapeHTML(match.location || 'Bodega Central')}). Con esta toma (+${currentAdd} un.), el stock total acumulado sumará <strong style="font-size:13px; color:#047857;">${finalQty} un.</strong>`;
             } else {
                 acumuladoAlert.style.display = 'block';
                 acumuladoAlert.style.background = '#f0f9ff';

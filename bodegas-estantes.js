@@ -44,6 +44,59 @@
         return out;
     }
 
+    /** Amplía un estante existente de forma correlativa (puro).
+     *  - espaciosNuevos: espacios que se suman a CADA nivel, a continuación del último existente.
+     *  - nivelesNuevos: niveles que se suman encima del último (letras siguientes).
+     *  `existentes` = todas las ubicaciones de ese estante (activas o archivadas), para no repetir códigos. */
+    function planificarAmpliacion({ prefijo, estante, existentes, espaciosNuevos, nivelesNuevos }) {
+        espaciosNuevos = Math.max(0, Number(espaciosNuevos) || 0);
+        nivelesNuevos = Math.max(0, Number(nivelesNuevos) || 0);
+        const maxEsp = {}; let sinEspacio = false, maxIdx = -1;
+        existentes.forEach(u => {
+            const i = LETRAS.indexOf(u.nivel); if (i > maxIdx) maxIdx = i;
+            maxEsp[u.nivel] = Math.max(maxEsp[u.nivel] || 0, u.espacio || 0);
+            if (!u.espacio) sinEspacio = true;
+        });
+        if (maxIdx < 0) return { error: 'El estante no tiene niveles.' };
+        if (espaciosNuevos > 0 && sinEspacio) return { error: 'Este estante se creó sin espacios por nivel; no se le pueden agregar espacios correlativos.' };
+        if (maxIdx + nivelesNuevos >= LETRAS.length) return { error: `Máximo ${LETRAS.length} niveles por estante.` };
+        const conEspacios = !sinEspacio;
+        const baseEsp = conEspacios ? Math.max(...Object.values(maxEsp)) : 0;
+        const totalEsp = baseEsp + espaciosNuevos;
+        const codigos = new Set(existentes.map(u => u.codigo));
+        const out = [];
+        const push = (nivel, espacio) => {
+            const codigo = codigoUbicacion(prefijo, estante, nivel, espacio);
+            if (!codigos.has(codigo)) { codigos.add(codigo); out.push({ codigo, estante, nivel, espacio: espacio || null }); }
+        };
+        // Espacios nuevos en los niveles que ya existían (continúan desde el último de cada nivel)
+        if (espaciosNuevos > 0) Object.keys(maxEsp).forEach(nivel => { for (let s = maxEsp[nivel] + 1; s <= totalEsp; s++) push(nivel, s); });
+        // Niveles nuevos encima del último
+        for (let k = 1; k <= nivelesNuevos; k++) {
+            const nivel = LETRAS[maxIdx + k];
+            if (conEspacios) { for (let s = 1; s <= Math.max(totalEsp, 1); s++) push(nivel, s); } else push(nivel, null);
+        }
+        return { plan: out };
+    }
+
+    function nuevoLote() {
+        const d = new Date(), p = (n) => String(n).padStart(2, '0');
+        return { lote: `L${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`, creadoEn: d.toISOString() };
+    }
+    function fmtFecha(iso) {
+        const d = new Date(iso); if (isNaN(d)) return 'Anterior';
+        return d.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' }) + ' ' + d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+    }
+    /** Agrupa ubicaciones por lote de creación (las antiguas, sin lote, quedan juntas). */
+    function agruparLotes(lista) {
+        const m = {};
+        lista.forEach(u => { const k = u.lote || 'anterior'; (m[k] = m[k] || { lote: k, creadoEn: u.creadoEn || '', por: u.creadoPor || '', items: [] }).items.push(u); });
+        return Object.values(m).sort((a, b) => String(a.creadoEn).localeCompare(String(b.creadoEn)));
+    }
+    function rangoTexto(items) {
+        const c = items.map(u => u.codigo).sort(); return c.length > 1 ? `${c[0]} … ${c[c.length - 1]}` : (c[0] || '');
+    }
+
     async function cargarUbicaciones(bodegaId) {
         const f = fs();
         const snap = await f.getDocs(f.collection(db(), 'Bodegas', bodegaId, 'Ubicaciones'));
@@ -114,7 +167,8 @@
         let ubic = [];
         try { ubic = await cargarUbicaciones(bodega.id); } catch (e) { cont.innerHTML = '<p class="bodega-estantes__hint">No se pudieron cargar las ubicaciones.</p>'; return; }
         const activas = ubic.filter(u => u.activo !== false);
-        const maxEstante = activas.reduce((m, u) => Math.max(m, u.estante || 0), 0);
+        const maxEstante = ubic.reduce((m, u) => Math.max(m, u.estante || 0), 0); // incluye archivadas: la numeración nunca retrocede
+        const lotes = agruparLotes(ubic.filter(u => u.activo !== false));
         const porEstante = {};
         activas.forEach(u => { (porEstante[u.estante] = porEstante[u.estante] || []).push(u); });
 
@@ -127,6 +181,14 @@
                 <label>Espacios por nivel <input type="number" id="be-esp" min="0" max="9" value="0"></label>
                 <button type="button" class="btn btn-primary" id="be-gen">Generar</button>
                 <span class="bodega-estantes__hint" id="be-prev"></span>
+            </div>
+            <div class="bodega-estantes__gen" id="be-ampliar-box">
+                <strong>Ampliar un estante existente</strong>
+                <label>Estante <select id="be-amp-est">${Object.keys(porEstante).sort((a, b) => a - b).map(e => `<option value="${e}">${pad2(e)}</option>`).join('')}</select></label>
+                <label>Espacios a sumar por nivel <input type="number" id="be-amp-esp" min="0" max="9" value="0"></label>
+                <label>Niveles a sumar arriba <input type="number" id="be-amp-niv" min="0" max="9" value="0"></label>
+                <button type="button" class="btn btn-primary" id="be-amp">Agregar</button>
+                <span class="bodega-estantes__hint" id="be-amp-prev"></span>
             </div>` : ''}
             <div class="bodega-estantes__acciones">
                 <button type="button" class="btn btn-outline" id="be-etq-todas" ${activas.length ? '' : 'disabled'}><i class="ph-bold ph-printer"></i> Imprimir etiquetas de estantes (${activas.length})</button>
@@ -135,9 +197,17 @@
             <div class="bodega-estantes__lista">
                 ${Object.keys(porEstante).length ? Object.keys(porEstante).sort((a, b) => a - b).map(e => `
                     <div class="bodega-estantes__estante"><strong>Estante ${pad2(e)}</strong>
+                        <button type="button" class="btn btn-outline btn-sm" data-reimp-estante="${e}" title="Reimprimir las etiquetas de este estante"><i class="ph-bold ph-printer"></i></button>
                         ${porEstante[e].map(u => `<span class="bodega-estantes__chip">${esc(u.codigo)}</span>`).join('')}
                     </div>`).join('') : '<p class="bodega-estantes__hint">Aún no hay estantes. Usa "Generar" para crearlos.</p>'}
-            </div>`;
+            </div>
+            <details class="bodega-estantes__historial" ${lotes.length ? '' : 'hidden'}>
+                <summary><strong>Historial de etiquetas</strong> — ${Object.keys(porEstante).length} estantes • ${activas.length} ubicaciones • ${lotes.length} ${lotes.length === 1 ? 'tanda' : 'tandas'}${ubic.length > activas.length ? ` • ${ubic.length - activas.length} archivadas` : ''}</summary>
+                ${lotes.map((l, i) => `<div class="bodega-estantes__lote">
+                    <span><strong>${l.lote === 'anterior' ? 'Anteriores' : fmtFecha(l.creadoEn)}</strong>${l.por ? ' • ' + esc(l.por) : ''}<br><small>${l.items.length} ubicaciones: ${esc(rangoTexto(l.items))}</small></span>
+                    <button type="button" class="btn btn-outline btn-sm" data-reimp-lote="${i}"><i class="ph-bold ph-printer"></i> Reimprimir</button>
+                </div>`).join('')}
+            </details>`;
 
         const cant = cont.querySelector('#be-cant'), niv = cont.querySelector('#be-niv'), esp = cont.querySelector('#be-esp'), prev = cont.querySelector('#be-prev');
         const actualizarPrev = () => {
@@ -156,16 +226,54 @@
             if (!prefijoValido(pre)) { toast('Falta el prefijo', 'Guarda primero el prefijo de la bodega.', 'warning'); return; }
             const plan = planificarUbicaciones({ prefijo: pre, desdeEstante: maxEstante + 1, cantidadEstantes: Number(cant.value) || 1, niveles: Number(niv.value) || 1, espacios: Number(esp.value) || 0 });
             if (plan.length > 600) { toast('Demasiadas ubicaciones', 'Genera de a menos estantes (máximo 600 ubicaciones por vez).', 'warning'); return; }
-            gen.disabled = true;
+            await crearUbicaciones(plan, pre, gen, 'Estantes creados');
+        });
+        async function crearUbicaciones(plan, pre, boton, titulo) {
+            const existentes = new Set(ubic.map(u => u.codigo));
+            const nuevas = plan.filter(u => !existentes.has(u.codigo)); // nunca se sobrescribe una ubicación existente
+            if (!nuevas.length) { toast('Nada que crear', 'Esas ubicaciones ya existen.', 'warning'); return; }
+            boton.disabled = true;
             try {
                 const col = fs().collection(db(), 'Bodegas', bodega.id, 'Ubicaciones');
-                for (const u of plan) {
-                    await fs().setDoc(fs().doc(col, u.codigo), { ...u, bodegaId: bodega.id, prefijo: pre, activo: true, creadoPor: (window.firebaseAuth && window.firebaseAuth.currentUser && window.firebaseAuth.currentUser.email) || '' });
+                const { lote, creadoEn } = nuevoLote();
+                const autor = (window.firebaseAuth && window.firebaseAuth.currentUser && window.firebaseAuth.currentUser.email) || '';
+                for (const u of nuevas) {
+                    await fs().setDoc(fs().doc(col, u.codigo), { ...u, bodegaId: bodega.id, prefijo: pre, activo: true, creadoPor: autor, lote, creadoEn });
                 }
-                toast('Estantes creados', `${plan.length} ubicaciones nuevas.`, 'success');
+                toast(titulo, `${nuevas.length} ubicaciones nuevas (${rangoTexto(nuevas)}). Las encuentras en el historial para imprimirlas.`, 'success');
                 renderSeccion(bodega);
-            } catch (e) { toast('Error', 'No se pudieron crear: ' + e.message, 'error'); gen.disabled = false; }
+            } catch (e) { toast('Error', 'No se pudieron crear: ' + e.message, 'error'); boton.disabled = false; }
+        }
+
+        // Ampliar un estante: espacios correlativos y/o niveles nuevos
+        const ampEst = cont.querySelector('#be-amp-est'), ampEsp = cont.querySelector('#be-amp-esp'), ampNiv = cont.querySelector('#be-amp-niv'), ampPrev = cont.querySelector('#be-amp-prev'), ampBtn = cont.querySelector('#be-amp');
+        const planAmpliar = () => {
+            const pre = (bodega.prefijo || '').toUpperCase();
+            if (!ampEst || !ampEst.value) return { error: 'Primero crea un estante.' };
+            if (!prefijoValido(pre)) return { error: 'Define y guarda el prefijo primero.' };
+            const est = Number(ampEst.value);
+            return planificarAmpliacion({ prefijo: pre, estante: est, existentes: ubic.filter(u => u.estante === est), espaciosNuevos: ampEsp.value, nivelesNuevos: ampNiv.value });
+        };
+        const actualizarAmp = () => {
+            if (!ampPrev) return; const r = planAmpliar();
+            ampPrev.textContent = r.error ? r.error : (r.plan.length ? `${r.plan.length} nuevas: ${rangoTexto(r.plan)}` : 'Indica cuántos espacios o niveles sumar.');
+        };
+        [ampEst, ampEsp, ampNiv].forEach(i => i && i.addEventListener('input', actualizarAmp));
+        actualizarAmp();
+        if (ampBtn) ampBtn.addEventListener('click', async () => {
+            const r = planAmpliar();
+            if (r.error) { toast('No se puede ampliar', r.error, 'warning'); return; }
+            if (!r.plan.length) { toast('Nada que agregar', 'Indica cuántos espacios o niveles sumar.', 'warning'); return; }
+            await crearUbicaciones(r.plan, (bodega.prefijo || '').toUpperCase(), ampBtn, 'Estante ampliado');
         });
+
+        // Reimpresión por estante o por tanda
+        cont.querySelectorAll('[data-reimp-estante]').forEach(btn => btn.addEventListener('click', () => {
+            const est = Number(btn.dataset.reimpEstante); imprimirEtiquetas(bodega, activas.filter(u => u.estante === est), false);
+        }));
+        cont.querySelectorAll('[data-reimp-lote]').forEach(btn => btn.addEventListener('click', () => {
+            const l = lotes[Number(btn.dataset.reimpLote)]; if (l) imprimirEtiquetas(bodega, l.items, false);
+        }));
         const t = cont.querySelector('#be-etq-todas'); if (t) t.addEventListener('click', () => imprimirEtiquetas(bodega, activas, false));
         const b = cont.querySelector('#be-etq-bodega'); if (b) b.addEventListener('click', () => imprimirEtiquetas(bodega, [], true));
     }
@@ -539,5 +647,5 @@
 
     window.SAR_AccesoBodega = AccesoBodega;
     window.SAR_DondeEsta = DondeEsta;
-    window.SAR_Estantes = { renderSeccion, planificarUbicaciones, codigoUbicacion, prefijoValido, imprimirEtiquetas, sinUbicar, slug };
+    window.SAR_Estantes = { renderSeccion, planificarUbicaciones, planificarAmpliacion, agruparLotes, codigoUbicacion, prefijoValido, imprimirEtiquetas, sinUbicar, slug };
 })(window, document);

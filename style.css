@@ -4854,3 +4854,8 @@ body[data-user-role="enfermero"] .erp-dashboard-mid-grid { grid-template-columns
 .home-fold[open] .home-fold__hint { display: none; }
 .home-fold[open] > .erp-inicio-calendar-grid { margin-top: 10px; }
 #view-panel .home-fold:not([open]) > :not(summary) { display: none; }
+
+/* Tarjetas por rol (v20.22): enfermero y administrador de bodega ven solo lo suyo */
+body[data-user-role="enfermero"] .home-only-admin,
+body[data-user-role="operador"] .home-only-admin { display: none !important; }
+.erp-kpi-card--yellow { border-left-color: var(--sar-yellow); }

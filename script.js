@@ -112,7 +112,7 @@ window.escapeHTML = function (str) {
 
 const ROLES_SISTEMA = [
     { id: 'enfermero', label: 'Enfermero (Gestión de Bandejas)' },
-    { id: 'operador', label: 'Operador de Bodega' },
+    { id: 'operador', label: 'Administrador de Bodega' },
     { id: 'administrador', label: 'Administrador (Inventario)' },
     { id: 'superadmin', label: 'Super Admin (Control Total)' }
 ];
@@ -208,6 +208,7 @@ const activeListeners = {
     dashboard: null,
     dashboard_bandejas: null,
     dashboard_flujo: null,
+    dashboard_sdc: null,
     expirations: null,
     historial: null,
     bodegas: null,
@@ -1305,6 +1306,7 @@ document.addEventListener('DOMContentLoaded', () => {
             clearListener('dashboard');
             clearListener('dashboard_bandejas');
             clearListener('dashboard_flujo');
+            clearListener('dashboard_sdc');
             clearListener('expirations');
             clearListener('historial');
             clearListener('bodegas');
@@ -1462,7 +1464,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.renderDashboardAcciones();
             }, (err) => console.warn('[Dashboard] Bandejas no disponibles:', err.message));
         } catch (e) { console.warn('[Dashboard] Bandejas:', e); }
+        clearListener('dashboard_sdc');
         const rolDash = String(document.body.dataset.userRole || '').toLowerCase();
+
+        // Fecha del último conteo semanal (lo ven todos los roles)
+        (async () => {
+            const el = document.getElementById('dash-inv-sem'); const meta = document.getElementById('dash-inv-meta');
+            try {
+                const snap = await getDocs(collection(db, 'Inventarios_Semanales'));
+                let ultimo = null;
+                snap.forEach(d => {
+                    const t = d.data().lastUpdated;
+                    const f = t && typeof t.toDate === 'function' ? t.toDate() : null;
+                    if (f && (!ultimo || f > ultimo)) ultimo = f;
+                });
+                if (!ultimo) { if (el) el.textContent = '–'; if (meta) meta.innerHTML = '<i class="ph-bold ph-clipboard-text"></i> Semanal: sin registro • General: sin fecha'; return; }
+                const dias = Math.floor((Date.now() - ultimo.getTime()) / 86400000);
+                if (el) el.textContent = dias === 0 ? 'Hoy' : dias + ' d';
+                if (meta) meta.innerHTML = `<i class="ph-bold ph-clipboard-text"></i> Último semanal ${dias === 0 ? 'hoy' : 'hace ' + dias + ' días'} • General: sin fecha`;
+                const card = el && el.closest('.erp-kpi-card');
+                if (card) card.classList.toggle('erp-kpi-card--red', dias > 8);
+            } catch (e) { console.warn('[Dashboard] Conteos no disponibles:', e.message); }
+        })();
+
+        // Solicitudes de compra pendientes (solo administrador)
+        if (rolDash === 'admin' || rolDash === 'administrador' || rolDash === 'global' || rolDash === 'superadmin') {
+            try {
+                activeListeners.dashboard_sdc = onSnapshot(collection(db, 'Solicitudes_Compra'), (snap) => {
+                    const cerrados = ['COMPLETADA', 'CERRADA', 'RECHAZADA', 'ANULADA', 'RECIBIDA'];
+                    let pend = 0, borr = 0;
+                    snap.forEach(d => { const e = String(d.data().estado || '').toUpperCase(); if (!cerrados.includes(e)) { pend++; if (e === 'BORRADOR') borr++; } });
+                    const n = document.getElementById('dash-sdc-pend'); if (n) n.textContent = pend;
+                    const m = document.getElementById('dash-sdc-meta');
+                    if (m) m.innerHTML = `<i class="ph-bold ph-shopping-cart"></i> ${borr} borrador${borr === 1 ? '' : 'es'} por revisar`;
+                }, (err) => console.warn('[Dashboard] Solicitudes no disponibles:', err.message));
+            } catch (e) { console.warn('[Dashboard] SDC:', e); }
+        }
         if (rolDash === 'enfermero') return; // el enfermero no ve flujo ni movimientos
         try {
             const desde = new Date(); desde.setHours(0, 0, 0, 0); desde.setDate(desde.getDate() - 6);

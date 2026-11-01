@@ -89,6 +89,13 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // Estantes y ubicaciones de cada bodega (códigos como BS-A01). No se borran: se archivan.
+    match /Bodegas/{bodegaId}/Ubicaciones/{codigo} {
+      allow read: if hasRole();
+      allow create, update: if isAdmin();
+      allow delete: if false;
+    }
+
     // -----------------------------------------------------
     // CIBERSEGURIDAD: Reglas de la Colección 'Insumos'
     // -----------------------------------------------------

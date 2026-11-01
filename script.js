@@ -1452,6 +1452,41 @@ document.addEventListener('DOMContentLoaded', () => {
         </svg>`;
     }
 
+    // Tarjeta "Conteo de inventario": último semanal + próxima fecha del inventario general
+    window.renderDashboardInventario = function () {
+        const el = document.getElementById('dash-inv-sem'); const meta = document.getElementById('dash-inv-meta');
+        if (!el || !meta) return;
+        const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+        const aFecha = (v) => { if (!v) return null; const p = String(v).split('-'); const d = new Date(Number(p[0]), Number(p[1]) - 1, Number(p[2])); return isNaN(d.getTime()) ? null : d; };
+        const fmt = (d) => d.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' });
+        const cfg = (typeof globalConfig !== 'undefined' && globalConfig) || {};
+        const pre = aFecha(cfg.invPreFecha), post = aFecha(cfg.invPostFecha);
+        let general = 'General: sin fecha definida';
+        let urgente = false;
+        const prox = [[pre, 'previo a campaña'], [post, 'posterior a campaña']].filter(([d]) => d && d >= hoy).sort((a, b) => a[0] - b[0])[0];
+        if (prox) {
+            const dias = Math.round((prox[0] - hoy) / 86400000);
+            general = `General ${prox[1]}: ${fmt(prox[0])} (${dias === 0 ? 'hoy' : 'en ' + dias + ' d'})`;
+            urgente = dias <= 7;
+        } else if (pre || post) {
+            general = 'General: fechas del año ya cumplidas';
+        }
+        const ult = window.__dashUltimoSemanal;
+        let semanal = 'Semanal: sin registro';
+        let vencidoSem = false;
+        if (ult) {
+            const dias = Math.floor((Date.now() - ult.getTime()) / 86400000);
+            el.textContent = dias === 0 ? 'Hoy' : dias + ' d';
+            semanal = `Semanal: hace ${dias === 0 ? '0 d' : dias + ' d'}`;
+            vencidoSem = dias > 8;
+        } else {
+            el.textContent = '–';
+        }
+        meta.innerHTML = `<i class="ph-bold ph-clipboard-text"></i> ${semanal} • ${general}`;
+        const card = el.closest('.erp-kpi-card');
+        if (card) card.classList.toggle('erp-kpi-card--red', vencidoSem || urgente);
+    };
+
     function startDashboardExtras() {
         clearListener('dashboard_bandejas');
         clearListener('dashboard_flujo');
@@ -1475,7 +1510,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Fecha del último conteo semanal (lo ven todos los roles)
         (async () => {
-            const el = document.getElementById('dash-inv-sem'); const meta = document.getElementById('dash-inv-meta');
             try {
                 const snap = await getDocs(collection(db, 'Inventarios_Semanales'));
                 let ultimo = null;
@@ -1484,13 +1518,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     const f = t && typeof t.toDate === 'function' ? t.toDate() : null;
                     if (f && (!ultimo || f > ultimo)) ultimo = f;
                 });
-                if (!ultimo) { if (el) el.textContent = '–'; if (meta) meta.innerHTML = '<i class="ph-bold ph-clipboard-text"></i> Semanal: sin registro • General: sin fecha'; return; }
-                const dias = Math.floor((Date.now() - ultimo.getTime()) / 86400000);
-                if (el) el.textContent = dias === 0 ? 'Hoy' : dias + ' d';
-                if (meta) meta.innerHTML = `<i class="ph-bold ph-clipboard-text"></i> Último semanal ${dias === 0 ? 'hoy' : 'hace ' + dias + ' días'} • General: sin fecha`;
-                const card = el && el.closest('.erp-kpi-card');
-                if (card) card.classList.toggle('erp-kpi-card--red', dias > 8);
+                window.__dashUltimoSemanal = ultimo;
             } catch (e) { console.warn('[Dashboard] Conteos no disponibles:', e.message); }
+            window.renderDashboardInventario();
         })();
 
         clearListener('dashboard_erp_sdc'); clearListener('dashboard_oc'); clearListener('dashboard_rec');
@@ -6548,6 +6578,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (contactEmailInput) contactEmailInput.value = globalConfig.contactEmail || "";
                     if (daysUrgentInput) daysUrgentInput.value = globalConfig.daysUrgent || 30;
                     if (daysCautionInput) daysCautionInput.value = globalConfig.daysCaution || 180;
+                    [['config-inv-campana-inicio', 'invCampanaInicio'], ['config-inv-campana-fin', 'invCampanaFin'],
+                     ['config-inv-pre', 'invPreFecha'], ['config-inv-post', 'invPostFecha']].forEach(([id, k]) => {
+                        const el = document.getElementById(id); if (el) el.value = globalConfig[k] || '';
+                    });
+                    if (typeof window.renderDashboardInventario === 'function') window.renderDashboardInventario();
 
                     // RECALCULAR DASHBOARD CON NUEVOS UMBRALES
                     if (typeof window.startRealTimeDashboard === 'function') window.startRealTimeDashboard();
@@ -6572,6 +6607,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         ...newConfig,
                         daysUrgent: Number(newConfig.daysUrgent) || 30,
                         daysCaution: Number(newConfig.daysCaution) || 180,
+                        invCampanaInicio: newConfig.invCampanaInicio || '',
+                        invCampanaFin: newConfig.invCampanaFin || '',
+                        invPreFecha: newConfig.invPreFecha || '',
+                        invPostFecha: newConfig.invPostFecha || '',
                         updatedAt: serverTimestamp()
                     }, { merge: true });
                     window.showToast('Éxito', 'Configuración guardada y aplicada.', 'success');

@@ -123,7 +123,8 @@ service cloud.firestore {
     // INFORMES Y AUDITORÍA DE ERRORES
     // -----------------------------------------------------
     match /informes/{id} {
-       allow read, write: if isAdmin(); // Solo admins
+       allow read: if hasRole();   // el Inicio lee las fechas de inventario general
+       allow write: if isAdmin();  // solo admin modificas
     }
 
     match /Logs_Sistema/{id} {

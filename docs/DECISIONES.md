@@ -51,6 +51,7 @@ Mini-ERP/WMS clínico: inventario multi-ubicación con lotes y vencimientos, ban
 - **Bodegas "sin estantes"** (modo simple): los productos se asignan a la bodega y se cuentan como una lista (p. ej. transitorias por espacio). Una bodega con estantes admite productos **"sin ubicar"** (pendientes) mientras se asignan.
 - Un producto puede estar repartido en varias ubicaciones, con cantidad por ubicación.
 - **Etiquetas**: el sistema las genera para imprimir, con código en letra grande, **código de barras (pistola lectora, que actúa como teclado)** y **QR** (celular). Al leer el código se abre esa ubicación: qué productos hay, cantidades, lotes por vencer y opción de contarla.
+- **Etiqueta general de bodega** (QR + código de barras, p. ej. `BS`): abre una pantalla de **acceso rápido** pensada para el celular, con el stock completo de esa bodega y botones grandes: *Ver stock · Ingresar · Sacar · Ajuste · Ubicar · Inventario*. Requiere iniciar sesión (el QR solo lleva el identificador de la bodega, nunca datos) y respeta los permisos por rol. Desde ahí se puede pasar a la vista completa del sitio. Si la sesión no está abierta, se inicia sesión y se vuelve a esa misma bodega.
 - Vista **"¿Dónde está?"**: bodega → estante → nivel → espacio de cada producto.
 - Ubicaciones por identificador inmutable; renombrar la bodega no cambia los códigos.
 

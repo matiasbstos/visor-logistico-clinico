@@ -4658,6 +4658,117 @@
         renderizarFlujoBandejasTurno();
     }
 
+    // ===================================================================
+    // PERSISTENCIA EN FIRESTORE (SDC, OC y Recepciones)
+    // Cada documento se guarda en su colección (ERP_SDC, ERP_OC, ERP_Recepciones).
+    // - Los cambios locales se detectan por comparación y se suben solos.
+    // - Los cambios de otros usuarios llegan por onSnapshot y refrescan la pantalla.
+    // - En modo demo (localStorage sar_demo=1) no se lee ni se escribe nada.
+    // ===================================================================
+    const ERPPersistencia = (() => {
+        const ALIAS = {
+            SDC: ['fechaCreacion', 'analistaAsignado', 'productosSolicitados'],
+            OC: ['sdcId', 'fechaLimiteDespacho', 'productos'],
+            Recepcion: []
+        };
+        const DEFS = [
+            { col: 'ERP_SDC', lista: 'sdcList', Clase: SDC, alias: ALIAS.SDC },
+            { col: 'ERP_OC', lista: 'ocList', Clase: OC, alias: ALIAS.OC },
+            { col: 'ERP_Recepciones', lista: 'recepcionesList', Clase: Recepcion, alias: ALIAS.Recepcion }
+        ];
+        const guardado = {}; // col -> Map(id -> firma)
+        let iniciado = false;
+
+        function aPlano(item, alias) {
+            const o = JSON.parse(JSON.stringify(Object.assign({}, item))); // evita toJSON() de la clase (pierde campos)
+            alias.forEach(k => { delete o[k]; });
+            return o;
+        }
+        function firma(o) { return JSON.stringify(o); }
+
+        function hidratar(def, raw) {
+            const inst = new def.Clase(raw);
+            Object.keys(raw).forEach(k => {
+                if (!(k in inst) || (k === 'estado' && def.Clase === OC)) inst[k] = raw[k];
+            });
+            return inst;
+        }
+
+        function esDemo() {
+            try { return window.localStorage.getItem('sar_demo') === '1'; } catch (e) { return false; }
+        }
+
+        function iniciar() {
+            if (iniciado) return;
+            const fs = window.firebaseFirestore, db = window.firebaseDb;
+            if (!fs || !db) return;
+            iniciado = true;
+            DEFS.forEach(def => {
+                guardado[def.col] = new Map();
+                fs.onSnapshot(fs.collection(db, def.col), (snap) => {
+                    const lista = estadoMemoria[def.lista];
+                    const porId = new Map(lista.map(x => [x.id, x]));
+                    snap.docChanges().forEach(ch => {
+                        const raw = ch.doc.data();
+                        const id = ch.doc.id;
+                        if (ch.type === 'removed') {
+                            const i = lista.findIndex(x => x.id === id);
+                            if (i >= 0) lista.splice(i, 1);
+                            guardado[def.col].delete(id);
+                            return;
+                        }
+                        try {
+                            const inst = hidratar(def, { id, ...raw });
+                            const plano = aPlano(inst, def.alias);
+                            guardado[def.col].set(id, firma(plano));
+                            if (porId.has(id)) lista[lista.indexOf(porId.get(id))] = inst;
+                            else lista.push(inst);
+                        } catch (e) { console.warn('[ERP] Documento inválido en', def.col, id, e.message); }
+                    });
+                    lista.sort((a, b) => String(b.fecha || b.fechaAceptacion || '').localeCompare(String(a.fecha || a.fechaAceptacion || '')));
+                    try {
+                        ERPCacheManager.invalidate('ERP_OC_LIST'); ERPCacheManager.invalidate('ERP_SDC_LIST');
+                        ERPIndexEngine.rebuildKanbanIndex(estadoMemoria.sdcList, estadoMemoria.ocList);
+                        refrescarTodoElERP();
+                    } catch (e) { console.warn('[ERP] No se pudo refrescar:', e.message); }
+                }, (err) => console.warn('[ERP] Lectura de', def.col, 'no disponible:', err.message));
+            });
+            setInterval(sincronizarCambios, 2000);
+        }
+
+        function sincronizarCambios() {
+            const fs = window.firebaseFirestore, db = window.firebaseDb;
+            if (!fs || !db || !document.body.dataset.userRole) return;
+            DEFS.forEach(def => {
+                const mapa = guardado[def.col];
+                estadoMemoria[def.lista].forEach(item => {
+                    let plano;
+                    try { plano = aPlano(item, def.alias); } catch (e) { return; }
+                    const f = firma(plano);
+                    if (mapa.get(item.id) === f) return;
+                    mapa.set(item.id, f); // se marca antes para no reintentar en bucle
+                    const datos = { ...plano, updatedAt: new Date().toISOString(), updatedBy: (window.firebaseAuth && window.firebaseAuth.currentUser && window.firebaseAuth.currentUser.email) || '' };
+                    fs.setDoc(fs.doc(fs.collection(db, def.col), item.id), datos).catch(err => {
+                        mapa.delete(item.id);
+                        console.warn('[ERP] No se pudo guardar', def.col, item.id, err.message);
+                    });
+                });
+            });
+        }
+
+        // Espera a que haya sesión con un rol que pueda usar Compras
+        const espera = setInterval(() => {
+            if (esDemo()) { clearInterval(espera); return; }
+            const rol = String(document.body.dataset.userRole || '').toLowerCase();
+            if (['admin', 'administrador', 'global', 'superadmin', 'operador'].includes(rol) && window.firebaseFirestore && window.firebaseDb) {
+                clearInterval(espera);
+                iniciar();
+            }
+        }, 1000);
+
+        return { iniciar, sincronizarCambios };
+    })();
+
     function initModuloAdquisiciones() {
         try {
             inicializarSubTabsAdquisiciones();

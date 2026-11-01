@@ -38,6 +38,14 @@ service cloud.firestore {
       ];
     }
 
+    // Personal que gestiona compras y bodega (excluye al enfermero)
+    function isStaff() {
+      return getUserRole() in [
+        'admin', 'superadmin', 'administrador', 'global', 'operador',
+        'ADMIN', 'SUPERADMIN', 'ADMINISTRADOR', 'GLOBAL', 'OPERADOR'
+      ];
+    }
+
     function isOwner(userId) {
       // Comparación relajada para asegurar lectura propia
       return isAuthenticated() && (request.auth.uid == userId || request.auth.token.email == userId);
@@ -203,6 +211,20 @@ service cloud.firestore {
     match /Solicitudes_Compra/{id} {
       allow read, create: if isOperadorOrAdmin();
       allow update, delete: if isAdmin();
+    }
+
+    // Módulo de compras (SDC, OC y recepciones). El borrado queda solo para administradores.
+    match /ERP_SDC/{id} {
+      allow read, create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+    match /ERP_OC/{id} {
+      allow read, create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+    match /ERP_Recepciones/{id} {
+      allow read, create, update: if isStaff();
+      allow delete: if isAdmin();
     }
 
     match /Incidencias/{id} {

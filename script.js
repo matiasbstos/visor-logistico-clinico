@@ -1732,6 +1732,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 targetItem.classList.remove('normal');
             }
 
+            // Inventario semanal comparte ítem de menú con Toma de Inventario (Conteos)
+            if (hash === 'view-inventario-semanal') {
+                const itemConteos = document.querySelector('.sidebar .menu-item[data-target="view-toma-inventario"]');
+                if (itemConteos) { itemConteos.classList.add('active'); itemConteos.classList.remove('normal'); }
+            }
+
             // Activación de vista central (ROUTER SPA HARDENED)
             const allSections = document.querySelectorAll('.view-section');
             allSections.forEach(section => {

@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=20.16",
+                "./script.js": "./script.js?v=20.17",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -62,7 +62,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=20.16">
+    <link rel="stylesheet" href="style.css?v=20.17">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -179,10 +179,10 @@
                     <a href="#" class="menu-item normal" data-target="view-inventario" data-title="Existencias">
                         <i class="ph-bold ph-archive-box"></i><span class="menu-label">Existencias</span>
                     </a>
-                    <a href="#" class="menu-item normal" data-target="view-toma-inventario" data-title="Toma de Inventario">
-                        <i class="ph-bold ph-clipboard-text"></i><span class="menu-label">Toma de Inventario</span>
+                    <a href="#" class="menu-item normal" data-target="view-toma-inventario" data-title="Conteos de Inventario">
+                        <i class="ph-bold ph-clipboard-text"></i><span class="menu-label">Conteos de Inventario</span>
                     </a>
-                    <a href="#" class="menu-item normal" data-target="view-inventario-semanal" data-title="Inventario Semanal">
+                    <a style="display:none;" href="#" class="menu-item normal" data-target="view-inventario-semanal" data-title="Inventario Semanal">
                         <i class="ph-bold ph-calendar-check"></i><span class="menu-label">Inventario Semanal</span>
                     </a>
                     <a href="#" class="menu-item normal admin-only" data-target="view-bodegas" data-title="Bodegas">
@@ -229,6 +229,9 @@
                     </a>
                     <a href="#" class="menu-item normal" data-target="view-adquisiciones" data-title="Seguimiento SLA (5 Col)" style="display:none;">
                         <i class="ph-bold ph-columns"></i><span class="menu-label">Seguimiento SLA (5 Col)</span>
+                    </a>
+                    <a href="#" class="menu-item normal erp-sidebar__item" data-target="view-erp-adquisiciones" data-erp-panel="erp-panel-dashboard" data-erp-title="Resumen de Compras y Agenda" data-title="Resumen y Agenda">
+                        <i class="ph-bold ph-calendar-check"></i><span class="menu-label">Resumen y Agenda</span>
                     </a>
                     <a href="#" class="menu-item normal erp-sidebar__item" data-erp-panel="erp-panel-tablero" data-erp-title="Tablero Kanban SDC/OC" data-target="view-erp-adquisiciones" data-title="Tablero SDC/OC">
                         <i class="ph-bold ph-kanban"></i><span class="menu-label">Tablero SDC/OC</span>
@@ -354,17 +357,7 @@
                         </div>
                     </div>
 
-                    <h3 class="home-section-title">Accesos rápidos</h3>
-                    <div class="home-shortcuts">
-                        <button type="button" class="home-shortcut" data-go="view-movimientos"><span class="home-shortcut__icon" style="background:#EEF2F9; color:var(--sar-blue);"><i class="ph-bold ph-arrow-line-down"></i></span><span><strong>Registrar ingreso</strong><small>Recepción de insumos a bodega</small></span></button>
-                        <button type="button" class="home-shortcut" data-go="view-transferencias"><span class="home-shortcut__icon" style="background:#FFF1E8; color:var(--sar-orange-strong);"><i class="ph-bold ph-truck"></i></span><span><strong>Transferir stock</strong><small>Entre bodegas o a otros centros</small></span></button>
-                        <button type="button" class="home-shortcut" data-go="view-toma-inventario"><span class="home-shortcut__icon" style="background:#F1F8E6; color:#4D7C0F;"><i class="ph-bold ph-clipboard-text"></i></span><span><strong>Tomar inventario</strong><small>Conteo físico de existencias</small></span></button>
-                        <button type="button" class="home-shortcut" data-go="view-bandejas"><span class="home-shortcut__icon" style="background:#FDECEC; color:var(--sar-red);"><i class="ph-bold ph-briefcase-medical"></i></span><span><strong>Bandejas de turno</strong><small>Preparar, cuadrar y cerrar</small></span></button>
-                        <button type="button" class="home-shortcut" data-go="view-ajustes"><span class="home-shortcut__icon" style="background:#FEF9C3; color:#854D0E;"><i class="ph-bold ph-sliders"></i></span><span><strong>Ajustar stock</strong><small>Correcciones con justificación</small></span></button>
-                        <button type="button" class="home-shortcut" data-go="view-historial"><span class="home-shortcut__icon" style="background:#F1F5F9; color:#475569;"><i class="ph-bold ph-clock-counter-clockwise"></i></span><span><strong>Ver historial</strong><small>Todos los movimientos</small></span></button>
-                    </div>
-
-                    <h3 class="home-section-title">Resumen global</h3>
+                    <h3 class="home-section-title">Resumen de inventario</h3>
                     <div class="cards-grid" id="global-cards-grid">
                         <div class="card">
                             <div class="card-header">
@@ -684,6 +677,13 @@
             <!-- VIEW: Toma de Inventario (Google Sheets por Categorías) -->
             <section id="view-toma-inventario" class="view-section" style="display:none;">
                 <div class="dashboard-container">
+                    <div class="page-tabs" role="tablist" aria-label="Conteos de inventario">
+                        <button type="button" class="page-tab" data-go="view-toma-inventario" role="tab"><i class="ph-bold ph-clipboard-text"></i> Toma de inventario</button>
+                        <button type="button" class="page-tab" data-go="view-inventario-semanal" role="tab"><i class="ph-bold ph-calendar-check"></i> Inventario semanal</button>
+                        <span class="page-tabs__spacer"></span>
+                        <button type="button" class="btn btn-outline" data-go="view-inventario"><i class="ph-bold ph-archive-box"></i> Ver existencias</button>
+                        <button type="button" class="btn btn-outline" data-go="view-historial"><i class="ph-bold ph-clock-counter-clockwise"></i> Historial</button>
+                    </div>
                     <div class="page-header mb-16">
                         <div class="page-title">
                             <h1><i class="ph ph-clipboard-text" style="color:var(--primary); margin-right:8px;"></i>Toma de Inventario</h1>
@@ -1016,6 +1016,13 @@
             <!-- VIEW: Inventario Semanal por Racks y Control de Semanas -->
             <section id="view-inventario-semanal" class="view-section" style="display:none;">
                 <div class="dashboard-container">
+                    <div class="page-tabs" role="tablist" aria-label="Conteos de inventario">
+                        <button type="button" class="page-tab" data-go="view-toma-inventario" role="tab"><i class="ph-bold ph-clipboard-text"></i> Toma de inventario</button>
+                        <button type="button" class="page-tab" data-go="view-inventario-semanal" role="tab"><i class="ph-bold ph-calendar-check"></i> Inventario semanal</button>
+                        <span class="page-tabs__spacer"></span>
+                        <button type="button" class="btn btn-outline" data-go="view-inventario"><i class="ph-bold ph-archive-box"></i> Ver existencias</button>
+                        <button type="button" class="btn btn-outline" data-go="view-historial"><i class="ph-bold ph-clock-counter-clockwise"></i> Historial</button>
+                    </div>
                     <!-- Cabecera Principal -->
                     <div class="page-header mb-16">
                         <div class="page-title">
@@ -2905,7 +2912,7 @@
                                     <i class="ph-fill ph-check-circle"></i> Nodo Operativo Activo
                                 </span>
                                 <span style="font-size:12.5px; color:#475569; font-weight:600;">
-                                    Inicio Operativo • Bodega Central: <strong>SAR Santiago Norte</strong> • Sincronizado en tiempo real
+                                    Resumen de compras, plazos y agenda • <strong>SAR Elsa Romo Aravena</strong>
                                 </span>
                             </div>
                             <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
@@ -2919,7 +2926,8 @@
                         </div>
 
                         <!-- 4 KPI Cards Superiores -->
-                        <div class="erp-kpi-grid-4">
+                        <!-- KPIs con cifras de ejemplo: ocultos hasta conectar datos reales -->
+                        <div class="erp-kpi-grid-4" hidden style="display:none;">
                             <div class="erp-kpi-card erp-kpi-card--blue" style="cursor:pointer;" data-erp-goto-panel="erp-panel-recepcion" title="Ir a Recepción Dinámica">
                                 <div class="erp-kpi-card__top">
                                     <span class="erp-kpi-card__label">Recepciones Previstas</span>
@@ -2966,7 +2974,8 @@
                         </div>
 
                         <!-- Sección Central: Flujo Logístico Semanal (Gráfico SVG) + Acción Inmediata -->
-                        <div class="erp-dashboard-mid-grid">
+                        <!-- Gráfico y alertas de ejemplo: ocultos hasta conectar datos reales -->
+                        <div class="erp-dashboard-mid-grid" hidden style="display:none;">
                             <!-- Gráfico de Flujo Logístico Semanal -->
                             <div class="erp-card">
                                 <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:12px; margin-bottom:16px;">
@@ -5628,8 +5637,8 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=20.16"></script>
-    <script type="module" src="patch-plantillas.js?v=20.16"></script>
+    <script type="module" src="script.js?v=20.17"></script>
+    <script type="module" src="patch-plantillas.js?v=20.17"></script>
     <script src="visor-triaje.js?v=20.11"></script>
     <script src="visor-adquisiciones.js?v=20.14"></script>
 </body>

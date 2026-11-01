@@ -1805,34 +1805,54 @@
     }
 
     // =========================================================================
-    // 6. NAVEGACIÓN INTERNA, MENÚ HAMBURGUESA MÓVIL Y FILTROS
+    // 6. NAVEGACIÓN UNIFICADA (SIDEBAR MAESTRA #app-sidebar + SUBNAV ERP)
     // =========================================================================
     function cerrarMenuMovilERP() {
-        const sidebar = document.getElementById('erp-sidebar-nav');
-        const backdrop = document.getElementById('erp-mobile-backdrop');
+        const sidebar = document.getElementById('app-sidebar');
+        const backdrop = document.getElementById('sidebar-backdrop');
         if (sidebar) sidebar.classList.remove('mobile-open');
         if (backdrop) backdrop.classList.remove('active');
+    }
+
+    function sincronizarEstadoSidebarUnificado(targetPanelId) {
+        const hash = window.location.hash.substring(1) || 'view-panel';
+        const isErpView = hash === 'view-erp-adquisiciones';
+        const allErpBtns = document.querySelectorAll('.erp-sidebar__item[data-erp-panel]');
+        const breadcrumbCurrent = document.getElementById('erp-breadcrumb-current');
+
+        allErpBtns.forEach(btn => {
+            const isMatch = btn.getAttribute('data-erp-panel') === targetPanelId;
+            if (btn.classList.contains('menu-item')) {
+                btn.classList.toggle('active', isErpView && isMatch);
+                btn.classList.toggle('normal', !(isErpView && isMatch));
+            } else {
+                btn.classList.toggle('active', isMatch);
+                btn.classList.toggle('erp-btn--primary', isMatch);
+                btn.classList.toggle('erp-btn--outline', !isMatch);
+            }
+            if (isErpView && isMatch && breadcrumbCurrent) {
+                breadcrumbCurrent.textContent = btn.getAttribute('data-erp-title') || btn.textContent.trim();
+            }
+        });
     }
 
     function activarPanelERP(targetPanelId) {
         const erpSection = document.getElementById('view-erp-adquisiciones');
         if (!erpSection || !targetPanelId) return;
 
-        const navBtns = erpSection.querySelectorAll('.erp-sidebar__item');
+        estadoMemoria.panelERPActivo = targetPanelId;
+
+        if (window.location.hash !== '#view-erp-adquisiciones') {
+            window.location.hash = 'view-erp-adquisiciones';
+        }
+
         const panels = erpSection.querySelectorAll('.erp-main-view-panel');
-        const breadcrumbCurrent = document.getElementById('erp-breadcrumb-current');
-
-        navBtns.forEach(btn => {
-            const isMatch = btn.getAttribute('data-erp-panel') === targetPanelId;
-            btn.classList.toggle('active', isMatch);
-            if (isMatch && breadcrumbCurrent) {
-                breadcrumbCurrent.textContent = btn.getAttribute('data-erp-title') || btn.textContent.trim();
-            }
-        });
-
         panels.forEach(panel => {
             panel.style.display = panel.id === targetPanelId ? 'block' : 'none';
         });
+
+        sincronizarEstadoSidebarUnificado(targetPanelId);
+        setTimeout(() => sincronizarEstadoSidebarUnificado(targetPanelId), 35);
 
         cerrarMenuMovilERP();
     }
@@ -1841,13 +1861,34 @@
         const erpSection = document.getElementById('view-erp-adquisiciones');
         if (!erpSection || erpSection.dataset.erpInitialized === 'true') return;
         erpSection.dataset.erpInitialized = 'true';
+        estadoMemoria.panelERPActivo = estadoMemoria.panelERPActivo || 'erp-panel-tablero';
 
-        // 1. Navegación Sidebar
-        erpSection.querySelectorAll('.erp-sidebar__item').forEach(btn => {
-            btn.addEventListener('click', () => {
+        // 1. Navegación Global Sidebar Unificada + Sub-navegación rápida
+        document.querySelectorAll('.erp-sidebar__item[data-erp-panel]').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
                 const targetId = btn.getAttribute('data-erp-panel');
                 activarPanelERP(targetId);
             });
+        });
+
+        // Sincronizar en cambios de hash del enrutador SPA principal
+        window.addEventListener('hashchange', () => {
+            const hash = window.location.hash.substring(1) || 'view-panel';
+            if (hash === 'view-erp-adquisiciones') {
+                const panelToOpen = estadoMemoria.panelERPActivo || 'erp-panel-tablero';
+                setTimeout(() => sincronizarEstadoSidebarUnificado(panelToOpen), 20);
+            } else {
+                document.querySelectorAll('#app-sidebar .erp-sidebar__item').forEach(btn => {
+                    btn.classList.remove('active');
+                    btn.classList.add('normal');
+                });
+                const activeMenu = document.querySelector(`#app-sidebar .menu-item[data-target="${hash}"]:not([data-erp-panel])`);
+                const breadcrumbCurrent = document.getElementById('erp-breadcrumb-current');
+                if (activeMenu && breadcrumbCurrent) {
+                    breadcrumbCurrent.textContent = activeMenu.getAttribute('data-title') || activeMenu.textContent.trim();
+                }
+            }
         });
 
         // 2. Accesos rápidos que cambian de sub-panel
@@ -1866,22 +1907,7 @@
             });
         });
 
-        // 4. Menú Hamburguesa Móvil
-        const btnOpenMobile = document.getElementById('btn-erp-mobile-menu');
-        const btnCloseMobile = document.getElementById('btn-erp-close-mobile-menu');
-        const backdrop = document.getElementById('erp-mobile-backdrop');
-        const sidebar = document.getElementById('erp-sidebar-nav');
-
-        if (btnOpenMobile && sidebar) {
-            btnOpenMobile.addEventListener('click', () => {
-                sidebar.classList.add('mobile-open');
-                if (backdrop) backdrop.classList.add('active');
-            });
-        }
-        if (btnCloseMobile) btnCloseMobile.addEventListener('click', cerrarMenuMovilERP);
-        if (backdrop) backdrop.addEventListener('click', cerrarMenuMovilERP);
-
-        // 5. Filtros del Kanban
+        // 4. Filtros del Kanban
         erpSection.querySelectorAll('.erp-kanban-filter-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 erpSection.querySelectorAll('.erp-kanban-filter-btn').forEach(b => {
@@ -1895,7 +1921,7 @@
             });
         });
 
-        // 6. Filtros de Recepción Dinámica
+        // 5. Filtros de Recepción Dinámica
         erpSection.querySelectorAll('.erp-rec-filter-btn').forEach(btn => {
             btn.addEventListener('click', () => {
                 erpSection.querySelectorAll('.erp-rec-filter-btn').forEach(b => {
@@ -1914,7 +1940,7 @@
             recSearch.addEventListener('input', renderizarTablaRecepcionDinamica);
         }
 
-        // 7. Búsqueda y Filtros del Catálogo de Insumos (Filtra localmente sobre caché indexado)
+        // 6. Búsqueda y Filtros del Catálogo de Insumos (Filtra localmente sobre caché indexado)
         const catSearch = document.getElementById('erp-catalog-search');
         const catCategory = document.getElementById('erp-catalog-category-filter');
         const catStatus = document.getElementById('erp-catalog-status-filter');
@@ -1922,7 +1948,7 @@
         if (catCategory) catCategory.addEventListener('change', renderizarCatalogoInsumos);
         if (catStatus) catStatus.addEventListener('change', renderizarCatalogoInsumos);
 
-        // 8. Buscador Global en Topbar ERP (Filtra localmente sobre índices en memoria)
+        // 7. Buscador Global en Topbar Maestra (Filtra localmente sobre índices en memoria)
         const globalSearch = document.getElementById('erp-global-search');
         if (globalSearch) {
             globalSearch.addEventListener('input', () => {
@@ -1933,10 +1959,13 @@
             });
         }
 
-        // 9. Botón "+ Nueva SDC" y "Actualizar Datos"
+        // 8. Botón "+ Nueva SDC" Global y "Actualizar Datos"
         const btnNuevaSdc = document.getElementById('btn-erp-nueva-sdc');
         if (btnNuevaSdc) {
-            btnNuevaSdc.addEventListener('click', () => crearNuevaSDCDesdeCatalogo(null));
+            btnNuevaSdc.addEventListener('click', () => {
+                activarPanelERP('erp-panel-tablero');
+                crearNuevaSDCDesdeCatalogo(null);
+            });
         }
 
         const btnRefreshDash = document.getElementById('btn-erp-refresh-dashboard');
@@ -1951,7 +1980,7 @@
             });
         }
 
-        // 10. Cerrar Modal de Auditoría
+        // 9. Cerrar Modal de Auditoría
         const modalAudit = document.getElementById('erp-audit-modal-overlay');
         const btnCloseAudit = document.getElementById('btn-erp-close-audit-modal');
         const btnCancelAudit = document.getElementById('btn-erp-cancel-audit-modal');

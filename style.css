@@ -1,43 +1,99 @@
-/* style.css */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+/* style.css — IDENTIDAD GLOBAL SAAS PREMIUM SAR (FASE 6) */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 
 :root {
-    --sidebar-bg: #0f172a; --sidebar-text: #94a3b8; --sidebar-active-bg: #1e3a8a;
-    --sidebar-active-border: #3b82f6; --sidebar-line: #1e293b;
-    --bg-main: #f3f4f6; --text-main: #0f172a; --text-muted: #64748b;
-    --primary: #2563eb; --primary-hover: #1d4ed8; --primary-light: #eff6ff;
-    --danger: #dc2626; --danger-bg: #b91c1c; --danger-light: #fef2f2; --danger-text: #991b1b; --danger-badge: #fecaca;
-    --warning: #d97706; --warning-bg: #f59e0b; --warning-light: #fffbeb; --warning-text: #b45309; --warning-badge: #fde68a;
-    --success: #10b981; --success-light: #ecfdf5; --success-text: #065f46;
-    --purple: #6366f1; --purple-light: #e0e7ff; --purple-text: #4338ca;
-    --card-bg: #ffffff; --border-color: #e2e8f0; --gray-light: #f8fafc;
+    /* Paleta Corporativa Oficial SAR */
+    --sar-blue: #1A3668;
+    --sar-blue-dark: #12274D;
+    --sar-blue-light: #EEF2F9;
+    --sar-red: #CC1B23;
+    --sar-orange: #E85D1E;
+    --sar-yellow: #F3D015;
+    --sar-green: #8CC63F;
+    --sar-bg-app: #F8F9FA;
+    --shape-card: 8px 8px 8px 0px;
+
+    /* Mapeo Global de Variables para Todos los Módulos del Sistema */
+    --sidebar-bg: var(--sar-blue);
+    --sidebar-text: rgba(255, 255, 255, 0.82);
+    --sidebar-active-bg: rgba(255, 255, 255, 0.16);
+    --sidebar-active-border: var(--sar-red);
+    --sidebar-line: rgba(255, 255, 255, 0.12);
+    --bg-main: var(--sar-bg-app);
+    --background: var(--sar-bg-app);
+    --surface: #FFFFFF;
+    --text-main: #0F172A;
+    --text-muted: #64748B;
+    --primary: var(--sar-blue);
+    --primary-hover: #12274D;
+    --primary-light: #EEF2F9;
+    --danger: var(--sar-red);
+    --danger-bg: #A8141B;
+    --danger-light: #FEF2F2;
+    --danger-text: #991B1B;
+    --danger-badge: #FECACA;
+    --warning: var(--sar-orange);
+    --warning-bg: var(--sar-orange);
+    --warning-light: #FFF7ED;
+    --warning-text: #C2410C;
+    --warning-badge: #FED7AA;
+    --success: #5E9E18;
+    --success-light: #F3FAE8;
+    --success-text: #365314;
+    --purple: #1A3668;
+    --purple-light: #EEF2F9;
+    --purple-text: #1A3668;
+    --card-bg: #FFFFFF;
+    --border-color: #E2E8F0;
+    --gray-light: #F8F9FA;
 }
 
-* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', sans-serif; }
-body { background-color: var(--bg-main); color: var(--text-main); }
-.app-container { display: flex; height: 100vh; overflow: hidden; }
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+}
 
-/* SIDEBAR & COLLAPSIBLE MINI-SIDEBAR */
-.sidebar { 
-    width: 250px; 
-    background-color: var(--sidebar-bg); 
-    display: flex; 
-    flex-direction: column; 
-    flex-shrink: 0; 
-    color: white; 
-    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), left 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+body {
+    background-color: var(--sar-bg-app);
+    color: var(--text-main);
+    -webkit-font-smoothing: antialiased;
+}
+
+.app-container {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    background-color: var(--sar-bg-app);
+}
+
+/* ==========================================================================
+   BARRA LATERAL MAESTRA UNIFICADA (--sar-blue: #1A3668)
+   ========================================================================== */
+.sidebar {
+    width: 268px;
+    background-color: var(--sar-blue);
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    color: #FFFFFF;
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     z-index: 100;
     user-select: none;
+    border-right: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 4px 0 20px rgba(26, 54, 104, 0.15);
 }
 
-.sidebar-header { 
-    padding: 20px 16px; 
-    display: flex; 
-    align-items: center; 
-    justify-content: space-between; 
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-    margin-bottom: 12px;
+.sidebar-header {
+    padding: 20px 16px 16px 16px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+    margin-bottom: 10px;
 }
 
 .sidebar-logo {
@@ -48,17 +104,18 @@ body { background-color: var(--bg-main); color: var(--text-main); }
 }
 
 .sidebar-logo-badge {
-    width: 36px;
-    height: 36px;
-    background: linear-gradient(135deg, #2563eb, #1d4ed8);
-    border-radius: 10px;
+    width: 38px;
+    height: 38px;
+    background: rgba(255, 255, 255, 0.14);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: var(--shape-card);
     display: flex;
     align-items: center;
     justify-content: center;
-    color: white;
+    color: #FFFFFF;
     font-size: 20px;
     flex-shrink: 0;
-    box-shadow: 0 4px 10px rgba(37,99,235,0.3);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
 }
 
 .sidebar-logo-text-wrap {
@@ -68,70 +125,159 @@ body { background-color: var(--bg-main); color: var(--text-main); }
     white-space: nowrap;
 }
 
-.sidebar-logo-text { font-size: 22px; font-weight: 700; color: white; line-height: 1.1; letter-spacing: -0.5px; }
-.sidebar-subtitle { font-size: 10px; font-weight: 700; color: #60a5fa; letter-spacing: 0.5px; }
+.sidebar-logo-text {
+    font-size: 15px;
+    font-weight: 800;
+    color: #FFFFFF;
+    line-height: 1.15;
+    letter-spacing: 0.4px;
+}
+
+.sidebar-subtitle {
+    font-size: 9.5px;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.7);
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    margin-top: 2px;
+}
 
 .sidebar-toggle-btn {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
-    color: var(--sidebar-text);
-    width: 28px;
-    height: 28px;
-    border-radius: 6px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    color: #FFFFFF;
+    width: 30px;
+    height: 30px;
+    border-radius: var(--shape-card);
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: all 0.2s ease;
-    font-size: 16px;
+    transition: all 0.3s ease;
+    font-size: 15px;
     flex-shrink: 0;
 }
+
 .sidebar-toggle-btn:hover {
-    background: rgba(255,255,255,0.15);
-    color: white;
+    background: rgba(255, 255, 255, 0.22);
+    transform: translateY(-1px);
 }
 
-.sidebar-menu-wrapper { flex: 1; padding: 0 12px; display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; }
-.sidebar-box { border: 1px dashed var(--sidebar-line); border-radius: 8px; display: flex; flex-direction: column; margin-bottom: 12px; }
+.sidebar-menu-wrapper {
+    flex: 1;
+    padding: 4px 12px 12px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
 
-.menu-item { 
-    display: flex; 
-    align-items: center; 
-    gap: 12px; 
-    padding: 10px 14px; 
-    color: var(--sidebar-text); 
-    text-decoration: none; 
-    font-size: 13px; 
-    font-weight: 500; 
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); 
-    border-radius: 6px;
+.sidebar-box {
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(0, 0, 0, 0.08);
+    border-radius: var(--shape-card);
+    padding: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+/* Bloque Destacado: Adquisiciones SAR */
+.sidebar-box.sidebar-featured-erp {
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.13) 0%, rgba(255, 255, 255, 0.05) 100%);
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
+}
+
+.sidebar-group-title {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    color: rgba(255, 255, 255, 0.55);
+    padding: 6px 10px 4px 10px;
+}
+
+.sidebar-featured-erp .sidebar-group-title {
+    color: var(--sar-yellow);
+}
+
+.menu-item {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    padding: 9px 12px;
+    color: var(--sidebar-text);
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+    border-radius: var(--shape-card);
     white-space: nowrap;
     position: relative;
+    border-left: 3px solid transparent;
 }
 
-.menu-item:hover { color: white; background: rgba(255,255,255,0.05); }
-.menu-item i { font-size: 19px; flex-shrink: 0; }
-.menu-item .menu-label { 
-    transition: opacity 0.2s ease; 
-    white-space: nowrap; 
-    overflow: hidden; 
-    text-overflow: ellipsis; 
+.menu-item:hover {
+    color: #FFFFFF;
+    background: rgba(255, 255, 255, 0.12);
+    transform: translateX(2px);
 }
 
-.menu-item.active { 
-    background-color: var(--sidebar-active-bg); 
-    border: 1px dashed var(--sidebar-active-border); 
-    color: white; 
+.menu-item i {
+    font-size: 18px;
+    flex-shrink: 0;
 }
-.menu-item.normal { border-bottom: 1px dashed var(--sidebar-line); }
-.menu-item.normal:last-child { border-bottom: none; }
 
-.sidebar-footer { padding: 12px; margin-top: auto; display: flex; flex-direction: column; gap: 4px; border-top: 1px solid rgba(255,255,255,0.06); }
-.sidebar-footer .danger:hover, .sidebar-footer .danger i { color: #ef4444; }
+.menu-item .menu-label {
+    transition: opacity 0.2s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
-/* ESTADO COLAPSADO (SOLO ICONOS) */
+.sidebar-item-badge {
+    font-size: 10px !important;
+    padding: 2px 6px !important;
+    border-radius: var(--shape-card) !important;
+    font-weight: 800 !important;
+    margin-left: auto;
+}
+
+.menu-item.active {
+    background-color: rgba(255, 255, 255, 0.18) !important;
+    border-left: 4px solid var(--sar-red) !important;
+    color: #FFFFFF !important;
+    font-weight: 700;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.menu-item.normal {
+    border-bottom: none;
+}
+
+.sidebar-footer {
+    padding: 12px;
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    border-top: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(0, 0, 0, 0.12);
+}
+
+.sidebar-footer .danger:hover,
+.sidebar-footer .danger i {
+    color: #FCA5A5;
+}
+
+/* ESTADO COLAPSADO (MINI-SIDEBAR DE ICONOS) */
 .sidebar.collapsed {
-    width: 72px;
+    width: 74px;
 }
 
 .sidebar.collapsed .sidebar-header {
@@ -139,8 +285,11 @@ body { background-color: var(--bg-main); color: var(--text-main); }
     justify-content: center;
 }
 
-.sidebar.collapsed .sidebar-logo-text-wrap {
-    display: none;
+.sidebar.collapsed .sidebar-logo-text-wrap,
+.sidebar.collapsed .sidebar-group-title,
+.sidebar.collapsed .sidebar-node-status,
+.sidebar.collapsed .sidebar-item-badge {
+    display: none !important;
     opacity: 0;
     width: 0;
 }
@@ -150,17 +299,12 @@ body { background-color: var(--bg-main); color: var(--text-main); }
 }
 
 .sidebar.collapsed .sidebar-menu-wrapper {
-    padding: 0 8px;
-}
-
-.sidebar.collapsed .sidebar-box {
-    border-style: solid;
-    border-color: rgba(255,255,255,0.05);
+    padding: 4px 8px;
 }
 
 .sidebar.collapsed .menu-item {
     justify-content: center;
-    padding: 12px 0;
+    padding: 11px 0;
     gap: 0;
 }
 
@@ -176,20 +320,20 @@ body { background-color: var(--bg-main); color: var(--text-main); }
     left: calc(100% + 12px);
     top: 50%;
     transform: translateY(-50%);
-    background: #0f172a;
-    color: #f8fafc;
+    background: var(--sar-blue);
+    color: #FFFFFF;
     padding: 6px 12px;
-    border-radius: 6px;
+    border-radius: var(--shape-card);
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 700;
     white-space: nowrap;
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
-    box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+    box-shadow: 0 6px 18px rgba(26, 54, 104, 0.35);
     z-index: 9999;
     transition: opacity 0.2s ease, visibility 0.2s ease;
-    border: 1px solid rgba(255,255,255,0.15);
+    border: 1px solid rgba(255, 255, 255, 0.22);
 }
 
 .sidebar.collapsed .menu-item:hover::after {
@@ -197,28 +341,118 @@ body { background-color: var(--bg-main); color: var(--text-main); }
     visibility: visible;
 }
 
-/* MAIN CONTENT */
-.main-content { flex: 1; display: flex; flex-direction: column; overflow-y: auto; }
+/* ==========================================================================
+   MAIN CONTENT & HEADER GLOBAL BLANCO SAAS PREMIUM
+   ========================================================================== */
+.main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+    background-color: var(--sar-bg-app);
+}
 
-/* TOPBAR */
-.topbar { display: flex; align-items: center; justify-content: space-between; padding: 14px 28px; background-color: var(--card-bg); border-bottom: 1px solid var(--border-color); }
-.topbar-left { display: flex; align-items: center; gap: 16px; }
-.topbar-title { font-size: 18px; font-weight: 700; color: var(--text-main); }
-.mobile-menu-btn { display: none; }
-.desktop-toggle-btn { display: flex; color: var(--text-muted); font-size: 20px; }
-.desktop-toggle-btn:hover { color: var(--primary); }
-.topbar-tabs { display: flex; gap: 24px; }
-.tab { font-size: 12px; font-weight: 600; color: var(--text-muted); text-decoration: none; text-transform: uppercase; padding-bottom: 4px; border-bottom: 2px solid transparent; }
-.tab.active { color: var(--primary); border-bottom-color: var(--primary); }
-.topbar-right { display: flex; align-items: center; gap: 16px; }
-.status-badge { display: flex; align-items: center; gap: 6px; background-color: var(--success-light); color: var(--success); padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-.icon-btn { background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; transition: color 0.1s; }
-.icon-btn:hover { color: var(--primary); }
-.user-profile { display: flex; align-items: center; gap: 12px; border-left: 1px solid var(--border-color); padding-left: 16px; }
-.user-text { display: flex; flex-direction: column; text-align: right; }
-.user-name { font-size: 12px; font-weight: 700; }
-.user-role { font-size: 10px; color: var(--text-muted); }
-.user-avatar { width: 32px; height: 32px; background-color: #1f2937; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; }
+.topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 28px;
+    background-color: #FFFFFF;
+    border-bottom: 1px solid #E2E8F0;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    gap: 16px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 50;
+}
+
+.topbar-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.topbar-title {
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--sar-blue);
+}
+
+.mobile-menu-btn {
+    display: none;
+}
+
+.desktop-toggle-btn {
+    display: flex;
+    color: var(--sar-blue);
+    font-size: 20px;
+    border-radius: var(--shape-card);
+}
+
+.desktop-toggle-btn:hover {
+    background-color: var(--sar-blue-light);
+    color: var(--sar-blue);
+}
+
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background-color: rgba(140, 198, 63, 0.16);
+    color: #3f6212;
+    padding: 6px 12px;
+    border-radius: var(--shape-card);
+    font-size: 12px;
+    font-weight: 700;
+    border: 1px solid rgba(140, 198, 63, 0.35);
+}
+
+.user-profile {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border-left: 1px solid #E2E8F0;
+    padding-left: 16px;
+}
+
+.user-text {
+    display: flex;
+    flex-direction: column;
+    text-align: right;
+}
+
+.user-name {
+    font-size: 12px;
+    font-weight: 800;
+    color: var(--sar-blue);
+}
+
+.user-role {
+    font-size: 10.5px;
+    color: var(--text-muted);
+    font-weight: 600;
+}
+
+.user-avatar {
+    width: 36px;
+    height: 36px;
+    background-color: var(--sar-blue);
+    border-radius: var(--shape-card);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #FFFFFF;
+    box-shadow: 0 2px 8px rgba(26, 54, 104, 0.22);
+}
 
 /* ANIMACIONES REACTIVAS */
 @keyframes dashPulse {
@@ -2234,16 +2468,15 @@ gemini-analysis {
 /* Estructura Layout ERP (CSS Grid) */
 .erp-layout {
     display: none;
-    grid-template-columns: 250px 1fr;
-    min-height: calc(100vh - 65px);
     width: 100%;
+    min-height: calc(100vh - 65px);
     background-color: var(--sar-bg-app);
 }
 
 .erp-layout.active,
 #view-erp-adquisiciones[style*="display: block"],
 #view-erp-adquisiciones[style*="display: grid"] {
-    display: grid !important;
+    display: block !important;
 }
 
 /* Barra Lateral Izquierda ERP */
@@ -3269,7 +3502,8 @@ main.erp-content {
 /* Tablets (Modo Bodega: 768px a 1024px) */
 @media (min-width: 768px) and (max-width: 1024px) {
     #view-erp-adquisiciones.erp-layout {
-        grid-template-columns: 220px 1fr;
+        display: block;
+        width: 100%;
     }
 
     /* Optimización táctil de botones e inputs en Modo Bodega */
@@ -3392,5 +3626,208 @@ main.erp-content {
         grid-template-columns: 1fr !important;
         padding: 16px;
         gap: 16px;
+    }
+}
+
+/* ==========================================================================
+   FASE 6: GOBERNANZA GLOBAL SAAS PREMIUM & GEOMETRÍA ESTRICTA (--shape-card)
+   ========================================================================== */
+
+/* 1. Barra de Sub-navegación Rápida dentro de Adquisiciones SAR */
+.erp-subnav-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: var(--shape-card);
+    padding: 10px 14px;
+    margin-bottom: 16px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.erp-subnav-bar .erp-sidebar__item {
+    width: auto;
+    padding: 8px 14px;
+    font-size: 12.5px;
+    font-weight: 700;
+    border-radius: var(--shape-card) !important;
+    color: #334155;
+    background: #F8FAFC;
+    border: 1px solid #CBD5E1;
+}
+
+.erp-subnav-bar .erp-sidebar__item:hover {
+    border-color: var(--sar-blue);
+    color: var(--sar-blue);
+    background: #EEF2F9;
+}
+
+.erp-subnav-bar .erp-sidebar__item.active {
+    background: var(--sar-blue) !important;
+    color: #FFFFFF !important;
+    border-color: var(--sar-blue) !important;
+    border-left: 4px solid var(--sar-red) !important;
+    box-shadow: 0 4px 12px rgba(26, 54, 104, 0.2);
+}
+
+/* 2. Badges Corporativos Globales (En Sidebar y en Todas las Vistas) */
+span.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 3px 9px;
+    border-radius: var(--shape-card);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+span.badge.badge-sar-blue { background-color: var(--sar-blue); color: #ffffff; }
+span.badge.badge-sar-red { background-color: var(--sar-red); color: #ffffff; }
+span.badge.badge-sar-orange { background-color: var(--sar-orange); color: #ffffff; }
+span.badge.badge-sar-yellow { background-color: var(--sar-yellow); color: #1A3668; }
+span.badge.badge-sar-green { background-color: var(--sar-green); color: #ffffff; }
+
+/* 3. Herencia Global de Geometría Asimétrica (--shape-card: 8px 8px 8px 0px) y Sombras Suaves para Módulos Antiguos */
+.card,
+.stat-card,
+.form-card,
+.data-table-card,
+.table-wrapper,
+.bodega-card,
+.login-card,
+.modal-content,
+.modal-card,
+.btn,
+.form-control,
+.barcode-scanner-box,
+.smart-scanner-box,
+.maintenance-box,
+.alert-box,
+#panel-crear-bandeja,
+#panel-mis-bandejas,
+#panel-historial-bandejas,
+#panel-gestionar-packs,
+#contenedor-detalle-bandeja {
+    border-radius: var(--shape-card) !important;
+}
+
+.card,
+.stat-card,
+.form-card,
+.data-table-card,
+.bodega-card,
+#panel-crear-bandeja,
+#panel-mis-bandejas,
+#panel-historial-bandejas,
+#panel-gestionar-packs {
+    background-color: #FFFFFF !important;
+    border: 1px solid #E2E8F0 !important;
+    box-shadow: 0 2px 8px rgba(26, 54, 104, 0.05) !important;
+    transition: transform 0.3s ease, box-shadow 0.3s ease, border-color 0.3s ease;
+}
+
+.card:hover,
+.stat-card:hover,
+.bodega-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 10px 24px -4px rgba(26, 54, 104, 0.12), 0 4px 10px -2px rgba(15, 23, 42, 0.05) !important;
+}
+
+.table-wrapper {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    overflow-x: auto;
+}
+
+.table-wrapper table thead th,
+table.table thead th {
+    background-color: #F8FAFC !important;
+    color: var(--sar-blue) !important;
+    font-weight: 800 !important;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.4px;
+    border-bottom: 2px solid #E2E8F0 !important;
+}
+
+.page-title h1,
+.view-header h2 {
+    color: var(--sar-blue) !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.3px;
+}
+
+/* Scrollbars Minimalistas a Nivel Global */
+::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: #F1F5F9;
+}
+
+::-webkit-scrollbar-thumb {
+    background: #CBD5E1;
+    border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--sar-blue);
+}
+
+/* Fondos de Modales Globales con Blur Suave */
+.modal-overlay {
+    backdrop-filter: blur(3px) !important;
+    -webkit-backdrop-filter: blur(3px) !important;
+}
+
+/* Responsividad Global de Topbar y Sidebar en Móvil/Tablet */
+@media (max-width: 1024px) {
+    .mobile-menu-btn {
+        display: inline-flex !important;
+        background: var(--sar-blue);
+        color: #FFFFFF !important;
+        border-radius: var(--shape-card);
+    }
+
+    .desktop-toggle-btn {
+        display: none !important;
+    }
+
+    .topbar {
+        padding: 12px 16px;
+    }
+
+    .erp-breadcrumb__root,
+    .erp-breadcrumb__sep {
+        display: none;
+    }
+}
+
+@media (max-width: 767px) {
+    .topbar-global-search {
+        order: 10;
+        width: 100%;
+    }
+
+    .topbar-global-search .erp-input {
+        width: 100%;
+        min-width: 100%;
+    }
+
+    .status-badge span {
+        display: none;
+    }
+
+    .modal-content,
+    .modal-card {
+        width: 95% !important;
+        max-width: 95vw !important;
     }
 }

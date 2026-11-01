@@ -39,7 +39,7 @@ window.SAR_Utils = {
     parseDate: function(val) {
         if (!val) return null;
         if (typeof val === 'object' && val instanceof Date) return isNaN(val.getTime()) ? null : val;
-        val = String(val).trim();
+        val = String(val).trim().replace(/\s*\/\s*/g, '/');
         if (!val || val === 'N/A' || val === 'S/I' || val === 'null' || val === 'undefined') return null;
 
         // Formato MM/YYYY o M/YYYY
@@ -89,6 +89,15 @@ window.SAR_Utils = {
         const y = d.getFullYear();
         return `${m}/${y}`;
     }
+};
+
+// Comparador FEFO: primero el lote que vence antes. Fechas inválidas o vacías van al final.
+window.fefoCompare = function(a, b) {
+    const t = (x) => {
+        const d = window.SAR_Utils.parseDate(x && x.expirationDate);
+        return d ? d.getTime() : Number.MAX_SAFE_INTEGER;
+    };
+    return t(a) - t(b);
 };
 
 /* ----------------------------------------------------
@@ -318,7 +327,7 @@ export async function updateInventoryWithAudit(itemId, newData, currentUser) {
                 } else if (newQty !== oldQty) {
                     // Si tiene multiples lotes y alguien cambió la cantidad total a mano desde Editar (peligroso)
                     // Se ajusta el primer lote (el más próximo a vencer)
-                    currentBatches.sort((a, b) => new Date(a.expirationDate || '2099-12-31') - new Date(b.expirationDate || '2099-12-31'));
+                    currentBatches.sort(window.fefoCompare);
                     const diff = newQty - oldQty;
                     currentBatches[0].quantity += diff;
                     if (currentBatches[0].quantity < 0) currentBatches[0].quantity = 0; // Fallback
@@ -805,7 +814,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (cantidadParsed < 0) {
                             // RESTA - FEFO
                             let qtyToReduce = Math.abs(cantidadParsed);
-                            currentBatches.sort((a, b) => new Date(a.expirationDate || '2099-12-31') - new Date(b.expirationDate || '2099-12-31'));
+                            currentBatches.sort(window.fefoCompare);
 
                             for (let i = 0; i < currentBatches.length && qtyToReduce > 0; i++) {
                                 if (currentBatches[i].quantity > 0) {
@@ -1695,6 +1704,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
             let targetItem = document.querySelector(`.sidebar .menu-item[data-target="${hash}"]`);
 
+            // Control de acceso por rol (espejo de las reglas CSS del menú; la barrera real son las reglas de Firestore)
+            const VISTAS_BLOQUEADAS = {
+                enfermero: ['view-historial', 'view-ajustes', 'view-compras', 'view-informes', 'view-bodegas',
+                            'view-usuarios', 'view-configuracion', 'view-transferencias'],
+                operador: ['view-compras', 'view-usuarios', 'view-configuracion']
+            };
+            const rolActual = String(document.body.dataset.userRole || '').toLowerCase();
+            if ((VISTAS_BLOQUEADAS[rolActual] || []).includes(hash)) {
+                console.warn(`[Router] Vista ${hash} no permitida para el rol ${rolActual}.`);
+                showToast('Acceso restringido', 'Su rol no tiene acceso a esa sección.', 'warning');
+                hash = 'view-panel';
+                if (window.location.hash !== '#view-panel') window.location.hash = 'view-panel';
+                targetItem = document.querySelector(`.sidebar .menu-item[data-target="view-panel"]`);
+            }
+
             // Si el hash ingresado no existe (ej. error manual), lo reseteamos al home
             if (!targetItem) {
                 hash = 'view-panel';
@@ -1763,7 +1787,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // Escuchamos el evento de retroceso/avance del navegador
         window.addEventListener('hashchange', () => {
             navigateToHash();
-            showToast('Navegación', 'Vista actualizada correctamente.', 'info');
         });
 
         // Eventos de clic de botones que alteran la URL
@@ -1788,7 +1811,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Solo logueamos y modificamos si el hash no era idéntico (para no redundar)
                 if (window.location.hash !== `#${targetId}`) {
                     window.location.hash = targetId;
-                    showToast('Navegación', `Cargando módulo: ${item.textContent.trim()}`, 'info');
                 }
             });
         });
@@ -4065,7 +4087,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const cleanBatch = (data.batch || "").trim().toUpperCase();
 
                 // Sanitización de Fecha Robusta (Type Guard)
-                const formattedDate = SAR_Utils.formatDate(data.expirationDate);
+                const _expD = window.SAR_Utils.parseDate(data.expirationDate);
+                const formattedDate = _expD
+                    ? `${_expD.getFullYear()}-${String(_expD.getMonth() + 1).padStart(2, '0')}-${String(_expD.getDate()).padStart(2, '0')}`
+                    : "N/A";
 
                 btn.innerHTML = '<i class="ph-spinner ph-spin"></i> PROCESANDO...';
                 btn.disabled = true;
@@ -4133,7 +4158,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
 
                             // FEFO: Ordenar array por fecha de vencimiento ascendente
-                            currentBatches.sort((a, b) => new Date(a.expirationDate || '2099-12-31') - new Date(b.expirationDate || '2099-12-31'));
+                            currentBatches.sort(window.fefoCompare);
 
                             transaction.update(insumoRef, {
                                 quantity: increment(quantity),
@@ -4790,7 +4815,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         let qtyToReduce = qtyToMove;
                         let usedBatchesForLog = []; // Trazabilidad de lotes despachados
 
-                        currentBatches.sort((a, b) => new Date(a.expirationDate || '2099-12-31') - new Date(b.expirationDate || '2099-12-31'));
+                        currentBatches.sort(window.fefoCompare);
 
                         for (let i = 0; i < currentBatches.length && qtyToReduce > 0; i++) {
                             if (currentBatches[i].quantity > 0) {

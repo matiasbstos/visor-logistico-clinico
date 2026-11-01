@@ -9,6 +9,7 @@
     --sar-red: #CC1B23;
     --sar-red-dark: #7F1D1D;
     --sar-orange: #E85D1E;
+    --sar-orange-strong: #C2410C; /* naranja con texto blanco (contraste 5,2:1, WCAG AA) */
     --sar-warning-orange: #E85D1E;
     --sar-yellow: #F3D015;
     --sar-green: #8CC63F;
@@ -39,7 +40,7 @@
     --warning-light: #FFF7ED;
     --warning-text: #C2410C;
     --warning-badge: #FED7AA;
-    --success: #5E9E18;
+    --success: #4D7C0F;
     --success-light: #F3FAE8;
     --success-text: #365314;
     --purple: #1A3668;
@@ -2721,7 +2722,7 @@ main.erp-content {
 }
 
 #view-erp-adquisiciones span.badge.badge-sar-orange {
-    background-color: var(--sar-orange);
+    background-color: var(--sar-orange-strong);
     color: #ffffff;
 }
 
@@ -2736,7 +2737,7 @@ main.erp-content {
 }
 
 #view-erp-adquisiciones span.badge.badge-sar-partial {
-    background-color: var(--sar-warning-orange);
+    background-color: var(--sar-orange-strong);
     color: #ffffff;
 }
 
@@ -3177,7 +3178,7 @@ main.erp-content {
 }
 
 .erp-btn--warning {
-    background-color: var(--sar-orange);
+    background-color: var(--sar-orange-strong);
     color: #ffffff;
 }
 
@@ -3722,7 +3723,7 @@ span.badge {
 
 span.badge.badge-sar-blue { background-color: var(--sar-blue); color: #ffffff; }
 span.badge.badge-sar-red { background-color: var(--sar-red); color: #ffffff; }
-span.badge.badge-sar-orange { background-color: var(--sar-orange); color: #ffffff; }
+span.badge.badge-sar-orange { background-color: var(--sar-orange-strong); color: #ffffff; }
 span.badge.badge-sar-yellow { background-color: var(--sar-yellow); color: #1A3668; }
 span.badge.badge-sar-green { background-color: var(--sar-green); color: #ffffff; }
 

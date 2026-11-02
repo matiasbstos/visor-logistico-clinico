@@ -5375,7 +5375,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 const bodegaId = modal.dataset.currentBodegaId;
                 const bodegaName = modal.dataset.currentBodegaName;
 
-                if (confirm(`¿Está seguro de eliminar la bodega "${bodegaName}"?\nSe perderá el registro de su infraestructura.`)) {
+                // Regla: una bodega solo se elimina si no tiene stock. Con stock, se archiva (no se pierde nada).
+                let stockTotal = 0, lineasConStock = 0;
+                try {
+                    const snapStock = await getDocs(query(collection(db, 'Insumos'), where('location', '==', bodegaName), limit(600)));
+                    snapStock.forEach(d => { const q = Number(d.data().quantity) || 0; if (q > 0) { stockTotal += q; lineasConStock++; } });
+                } catch (err) {
+                    showToast('No se pudo verificar', 'No se pudo comprobar el stock de la bodega; no se elimina nada.', 'error');
+                    return;
+                }
+                if (stockTotal > 0) {
+                    if (confirm(`La bodega "${bodegaName}" todavía tiene stock (${lineasConStock} productos, ${stockTotal} unidades), por eso no se puede eliminar.\n\n¿Quieres ARCHIVARLA? Queda inactiva, conserva su stock e historial y se puede reactivar.`)) {
+                        try {
+                            await updateDoc(doc(db, 'Bodegas', bodegaId), { isActive: false, archivada: true });
+                            showToast('Archivada', 'La bodega quedó inactiva; su stock e historial se conservan.', 'success');
+                            modal.classList.remove('active');
+                        } catch (err) {
+                            showToast('Error', 'No se pudo archivar: ' + (err.code || err.message), 'error');
+                        }
+                    }
+                    return;
+                }
+                if (confirm(`¿Está seguro de eliminar la bodega "${bodegaName}"?\nNo tiene stock. Se perderá el registro de su infraestructura.`)) {
                     try {
                         await deleteDoc(doc(db, 'Bodegas', bodegaId));
                         showToast('Eliminado', 'Bodega removida del sistema.', 'success');

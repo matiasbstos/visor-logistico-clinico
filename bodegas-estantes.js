@@ -281,17 +281,23 @@
     // ---------------------------------------------------------------
     // Etiquetas imprimibles (código en letra grande + barras + QR)
     // ---------------------------------------------------------------
+    /** Nombre visible de la bodega, con respaldos por si el objeto llega incompleto. */
+    function nombreBodega(b) {
+        const el = document.getElementById('modal-bodega-name');
+        return String((b && (b.name || b.nombre)) || (el && el.textContent) || (b && b.prefijo) || (b && b.id) || '').trim();
+    }
     function imprimirEtiquetas(bodega, ubicaciones, soloBodega) {
+        const nombre = nombreBodega(bodega);
         const items = [];
         const pre = (bodega.prefijo || '').toUpperCase();
         if (soloBodega || !ubicaciones.length) {
-            items.push({ titulo: bodega.name, codigo: pre || (String(bodega.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]/g, '').slice(0, 4).toUpperCase() || 'BOD'), url: `${URL_BASE}#b/${encodeURIComponent(bodega.id)}`, general: true });
+            items.push({ titulo: nombre, codigo: pre || (String(nombre).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^A-Za-z0-9]/g, '').slice(0, 4).toUpperCase() || 'BOD'), url: `${URL_BASE}#b/${encodeURIComponent(bodega.id)}`, general: true });
         }
-        if (!soloBodega) ubicaciones.forEach(u => items.push({ titulo: bodega.name, codigo: u.codigo, url: `${URL_BASE}#u/${encodeURIComponent(bodega.id)}/${encodeURIComponent(u.codigo)}`, general: false }));
+        if (!soloBodega) ubicaciones.forEach(u => items.push({ titulo: nombre, codigo: u.codigo, url: `${URL_BASE}#u/${encodeURIComponent(bodega.id)}/${encodeURIComponent(u.codigo)}`, general: false }));
         const w = window.open('', '_blank');
         if (!w) { toast('Ventana bloqueada', 'Permite ventanas emergentes para imprimir las etiquetas.', 'warning'); return; }
         const datos = JSON.stringify(items).replace(/</g, '\\u003c');
-        w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Etiquetas ${esc(bodega.name)}</title>
+        w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Etiquetas ${esc(nombre)}</title>
 <style>
  @page { size: A4; margin: 10mm; }
  body { font-family: Arial, Helvetica, sans-serif; margin: 0; color: #0f172a; }

@@ -519,8 +519,22 @@
                     if (!ubic.length) { toast('Sin estantes', 'Primero crea los estantes en Bodegas.', 'info'); return; }
                     panelUbicar(cont.querySelector('#acceso-ubicar'), esUbic ? ctx.codigo : null);
                 }
-                else window.location.hash = id;
+                else {
+                    window.location.hash = id;
+                    if (id === 'view-toma-inventario') preseleccionarBodega('toma-ubicacion', nombreBodega(bodega));
+                }
             }));
+        }
+
+        /** Deja elegida la bodega en un selector de otra pantalla (espera a que sus opciones carguen). */
+        function preseleccionarBodega(selectId, nombre) {
+            let intentos = 0;
+            const t = setInterval(() => {
+                const sel = document.getElementById(selectId);
+                const opt = sel && Array.from(sel.options).find(o => o.value === nombre || o.textContent.trim() === nombre);
+                if (opt) { sel.value = opt.value; sel.dispatchEvent(new Event('change', { bubbles: true })); clearInterval(t); }
+                else if (++intentos > 25) clearInterval(t);
+            }, 200);
         }
 
         function panelUbicar(host, codigoFijo) {

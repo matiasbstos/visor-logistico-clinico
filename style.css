@@ -4918,3 +4918,20 @@ body[data-user-role="operador"] .home-only-admin { display: none !important; }
 .bodega-estantes__lote { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-top: 1px solid #EEF2F9; font-size: 13px; }
 .bodega-estantes__lote:first-of-type { margin-top: 8px; }
 .bodega-estantes__estante .btn-sm { padding: 2px 8px; font-size: 12px; }
+
+/* v20.35 cerrar bodega */
+.bodega-estantes__cierre { margin-top: 14px; padding-top: 10px; border-top: 1px dashed #DCE3EF; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.cierre-overlay { position: fixed; inset: 0; background: rgba(15,23,42,.55); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+.cierre-box { background: #fff; border-radius: 10px; padding: 18px; width: min(560px, 100%); max-height: 90vh; overflow: auto; display: flex; flex-direction: column; gap: 10px; }
+.cierre-box h3 { margin: 0; color: var(--sar-blue, #1A3668); }
+.cierre-box label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; font-weight: 600; }
+.cierre-box input[type=text], .cierre-box select { padding: 8px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 14px; }
+.cierre-box .cierre-check { flex-direction: row; align-items: flex-start; gap: 8px; font-weight: 500; }
+.cierre-hint { font-size: 12px; color: #64748B; margin: 0; }
+.cierre-error { color: #B91C1C; font-size: 13px; }
+.cierre-tabla { max-height: 220px; overflow: auto; border: 1px solid #E2E8F0; border-radius: 6px; }
+.cierre-tabla table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.cierre-tabla th, .cierre-tabla td { padding: 4px 8px; border-bottom: 1px solid #EEF2F9; text-align: left; }
+.cierre-fila-err td { color: #B91C1C; }
+.cierre-acciones { display: flex; justify-content: flex-end; gap: 8px; }
+.cierre-progreso { font-size: 13px; padding: 8px; background: #F1F5F9; border-radius: 6px; }

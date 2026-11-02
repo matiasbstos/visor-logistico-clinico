@@ -133,9 +133,24 @@
                 </label>
                 ${admin ? '<button type="button" class="btn btn-outline" id="be-guardar">Guardar</button>' : ''}
             </div>
+            ${admin && bodega.isActive === false ? `<div class="bodega-estantes__hint" style="display:flex;gap:10px;align-items:center;"><span><strong>Esta bodega está ${bodega.archivada ? 'archivada' : 'inactiva'}.</strong></span><button type="button" class="btn btn-primary btn-sm" id="be-reactivar">Reactivar</button></div>` : ''}
             <p class="bodega-estantes__hint"><strong>Guardado:</strong> prefijo ${bodega.prefijo ? esc(bodega.prefijo) : '(ninguno)'} • ${usa ? 'usa estantes' : 'sin estantes'}</p>
             <p class="bodega-estantes__hint">${usa ? 'Los productos de esta bodega se ubican por estante, nivel y espacio. Puede haber productos "sin ubicar" mientras se asignan.' : 'Modo simple: los productos se asignan a la bodega, sin estantes.'}</p>
             <div id="be-contenido"></div>`;
+
+        const reactivar = sec.querySelector('#be-reactivar');
+        if (reactivar) reactivar.addEventListener('click', async () => {
+            reactivar.disabled = true;
+            try {
+                const ref = fs().doc(fs().collection(db(), 'Bodegas'), bodega.id);
+                await fs().updateDoc(ref, { isActive: true, archivada: false });
+                const leido = (await fs().getDoc(ref)).data() || {};
+                if (leido.isActive !== true) throw new Error('el dato no quedó guardado');
+                bodega.isActive = true; bodega.archivada = false;
+                toast('Bodega reactivada', 'Vuelve a figurar como activa.', 'success');
+                renderSeccion(bodega);
+            } catch (e) { toast('No se reactivó', `${e.code || 'error'}: ${e.message}`, 'error'); reactivar.disabled = false; }
+        });
 
         const guardar = sec.querySelector('#be-guardar');
         if (guardar) guardar.addEventListener('click', async () => {

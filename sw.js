@@ -1,13 +1,13 @@
-const CACHE_NAME = 'visor-logistico-v20.31';
+const CACHE_NAME = 'visor-logistico-v20.32';
 const urlsToCache = [
   './',
   './index.html',
-  './style.css?v=20.31',
-  './script.js?v=20.31',
-  './patch-plantillas.js?v=20.31',
+  './style.css?v=20.32',
+  './script.js?v=20.32',
+  './patch-plantillas.js?v=20.32',
   './visor-triaje.js?v=20.11',
-'./bodegas-estantes.js?v=20.31',
-  './visor-adquisiciones.js?v=20.31',
+'./bodegas-estantes.js?v=20.32',
+  './visor-adquisiciones.js?v=20.32',
   './excelUtils.js?v=20.11',
   'https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap',
   'https://unpkg.com/@phosphor-icons/web',

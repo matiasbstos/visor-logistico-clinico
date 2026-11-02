@@ -136,7 +136,10 @@
             ${admin && bodega.isActive === false ? `<div class="bodega-estantes__hint" style="display:flex;gap:10px;align-items:center;"><span><strong>Esta bodega está ${bodega.archivada ? 'archivada' : 'inactiva'}.</strong></span><button type="button" class="btn btn-primary btn-sm" id="be-reactivar">Reactivar</button></div>` : ''}
             <p class="bodega-estantes__hint"><strong>Guardado:</strong> prefijo ${bodega.prefijo ? esc(bodega.prefijo) : '(ninguno)'} • ${usa ? 'usa estantes' : 'sin estantes'}</p>
             <p class="bodega-estantes__hint">${usa ? 'Los productos de esta bodega se ubican por estante, nivel y espacio. Puede haber productos "sin ubicar" mientras se asignan.' : 'Modo simple: los productos se asignan a la bodega, sin estantes.'}</p>
-            <div id="be-contenido"></div>`;
+            <div id="be-contenido"></div>
+            ${admin && bodega.isActive !== false ? '<div class="bodega-estantes__cierre"><button type="button" class="btn btn-outline" id="be-cerrar"><i class="ph-bold ph-lock-key"></i> Cerrar bodega…</button><span class="bodega-estantes__hint">Devuelve todo el stock a otra bodega y archiva esta. Antes te muestra qué se movería.</span></div>' : ''}`;
+        const btnCerrar = sec.querySelector('#be-cerrar');
+        if (btnCerrar) btnCerrar.addEventListener('click', () => { if (window.SAR_Cierre) window.SAR_Cierre.abrir({ id: bodega.id, name: nombreBodega(bodega) }); });
 
         const reactivar = sec.querySelector('#be-reactivar');
         if (reactivar) reactivar.addEventListener('click', async () => {

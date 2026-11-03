@@ -179,6 +179,19 @@ service cloud.firestore {
         allow update, delete: if false;
       }
     }
+    match /Actas_Entrega/{numero} {
+      allow read, create: if isStaff();
+      // solo se puede pasar de EMITIDA a ANULADA (administrador); el resto del acta no cambia
+      allow update: if isAdmin()
+        && resource.data.estado == 'EMITIDA' && request.resource.data.estado == 'ANULADA'
+        && request.resource.data.numero == resource.data.numero
+        && request.resource.data.items == resource.data.items;
+      allow delete: if false;
+    }
+    match /Contadores/{id} {
+      allow read, create, update: if isStaff();
+      allow delete: if false;
+    }
     match /Config_Correo/{id} {
       allow read: if isStaff();
       allow write: if isAdmin();

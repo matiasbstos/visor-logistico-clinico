@@ -131,3 +131,9 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 - Bitácora `Seguimiento_OC/{id}/Eventos` **inmutable** (notas, recepciones, decisión de multa, resultado del correo).
 - Cada notificación puede enviar correo a la lista de destinatarios de la OC. Envío por Google Apps Script propio (sin plan Blaze); el código y los pasos están en "Configurar correo". Config en `Config_Correo/principal` (URL + clave; lectura staff, escritura admin). Sin configurar, se abre un borrador de correo.
 - No se guardan datos de pacientes. La decisión de multa (ej. "bajo $100.000 no se cursa") se registra como evento, no se calcula automáticamente: la tasa de multa depende del anexo económico de cada compra.
+
+## 4.5 Actas de entrega (v20.37)
+- Formato fiel al acta oficial (encabezado con logo SAR, "Se hace entrega al centro X de lo siguiente", lista numerada, pendientes, tabla de firmas) en **PDF y Word editable**. Se agregó el **N° de acta** (AE-AAAA-NNNN). "Cantidad/Entregado" del modelo se unificó a "Entregado".
+- Correlativo atómico (`Contadores/acta-AAAA`). Acta en `Actas_Entrega/{numero}`; no se borra. Anulación solo por administrador: devuelve el stock, queda ANULADA y el número no se reutiliza.
+- **Emitir descuenta stock** de la bodega de origen (FEFO por lote) en la misma transacción, con movimiento `ENTREGA_ACTA` en el historial (documento = N° de acta). El borrador no toca stock. Productos en CUARENTENA no se pueden entregar.
+- Sección "Documentos asociados" (SDC, OC, factura, guía, memo) opcional. Sin datos de pacientes.

@@ -4961,3 +4961,26 @@ body[data-user-role="operador"] .home-only-admin { display: none !important; }
 .soc-bit__txt { white-space: pre-wrap; } .soc-correo { color: #64748B; } .soc-correo--error { color: #B91C1C; } .soc-correo--enviado { color: #166534; }
 .soc-fila { display: flex; gap: 8px; flex-wrap: wrap; } .soc-fila label { flex: 1; min-width: 120px; } .soc-pie { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
 .cierre-box textarea, .cierre-box input[type=date], .cierre-box input[type=number], .cierre-box input[type=file] { padding: 8px; border: 1px solid #CBD5E1; border-radius: 6px; font-size: 14px; }
+
+/* v20.37 actas de entrega */
+.act-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; align-items: start; }
+@media (max-width: 900px) { .act-grid { grid-template-columns: 1fr; } }
+.act-col { background: var(--bg-card, #fff); border: 1px solid var(--border-color, #e2e8f0); border-radius: 12px; padding: 16px; }
+.act-h { margin: 0 0 12px; font-size: 1.05rem; }
+.act-h4 { margin: 16px 0 6px; font-size: .95rem; }
+.act-l { display: block; font-weight: 600; font-size: .85rem; margin-bottom: 10px; }
+.act-col select, .act-col input:not([type=checkbox]) { width: 100%; padding: 8px 10px; border: 1px solid var(--border-color, #cbd5e1); border-radius: 8px; font: inherit; box-sizing: border-box; }
+.act-stock { max-height: 420px; overflow-y: auto; margin-top: 10px; }
+.act-fila { display: flex; gap: 8px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border-color, #e2e8f0); }
+.act-fila.act-docs { flex-wrap: wrap; } .act-fila.act-docs > * { flex: 1 1 140px; }
+.act-fn { flex: 1; min-width: 0; font-size: .88rem; overflow-wrap: anywhere; }
+.act-fn small { display: block; color: var(--text-muted, #64748b); font-size: .76rem; }
+.act-col .act-qty { width: 76px; flex: 0 0 76px; text-align: center; }
+.act-fila .btn { flex: 0 0 auto; padding: 6px 10px; }
+.act-ya { opacity: .55; } .act-chip { font-size: .75rem; background: #e0f2fe; color: #075985; padding: 2px 8px; border-radius: 999px; }
+.act-hint { color: var(--text-muted, #64748b); font-size: .85rem; margin: 8px 0; }
+.act-det { margin-top: 12px; } .act-det summary { cursor: pointer; font-weight: 600; font-size: .88rem; padding: 6px 0; }
+.act-err { color: #b91c1c; font-size: .84rem; margin: 12px 0 0; padding-left: 18px; }
+.act-acc { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap; }
+.act-anulada { opacity: .6; text-decoration: line-through; }
+.act-anulada .act-fn small { text-decoration: none; }

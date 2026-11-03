@@ -84,11 +84,16 @@
     /** Estado del plazo respecto de hoy. */
     function estadoPlazo(oc, hoy) {
         hoy = hoy || hoyISO();
-        const limite = oc.fechaLimite || sumarHabiles(oc.aceptada, num(oc.plazoDiasHabiles) || 5);
+        const limite = oc.fechaLimite || (oc.aceptada ? sumarHabiles(oc.aceptada, num(oc.plazoDiasHabiles) || 5) : '');
         const tot = totalesPorCentro(oc);
         const pendiente = tot.some(t => t.pendiente > 0);
         if (oc.cerrada) return { codigo: 'CERRADA', limite, texto: 'Seguimiento cerrado', atraso: 0 };
         if (!pendiente && tot.length) return { codigo: 'COMPLETA', limite, texto: 'Recibida completa', atraso: 0 };
+        if (!oc.aceptada) {
+            const lim = oc.aceptarLimite || '';
+            if (lim && hoy > lim) return { codigo: 'ACEPT_VENCIDA', limite: lim, texto: 'Aceptación vencida: el proveedor no ha aceptado', atraso: 0 };
+            return { codigo: 'POR_ACEPTAR', limite: lim, texto: lim ? `Por aceptar hasta el ${fmtFecha(lim)}` : 'Por aceptar', atraso: 0 };
+        }
         if (hoy > limite) { const a = habilesEntre(limite, hoy); return { codigo: 'ATRASADA', limite, atraso: a, texto: `Atrasada ${a} día${a === 1 ? '' : 's'} hábil${a === 1 ? '' : 'es'}` }; }
         const r = habilesEntre(hoy, limite);
         return { codigo: 'EN_PLAZO', limite, restan: r, texto: r === 0 ? 'Vence hoy' : `Vence en ${r} día${r === 1 ? '' : 's'} hábil${r === 1 ? '' : 'es'}` };
@@ -96,6 +101,8 @@
     /** Lista de discrepancias a revisar (nivel: alto / medio / info). */
     function discrepancias(oc, hoy) {
         const out = [], pl = estadoPlazo(oc, hoy), tot = totalesPorCentro(oc);
+        if (pl.codigo === 'ACEPT_VENCIDA') out.push({ nivel: 'alto', texto: `El proveedor no aceptó la orden dentro del plazo (hasta el ${fmtFecha(pl.limite)}). Revisa en Mercado Público o contáctalo.` });
+        (oc.incidencias || []).filter(i => i.estado === 'ABIERTA').forEach(i => out.push({ nivel: 'alto', texto: `Incidencia abierta (${INCIDENCIAS[i.tipo] || i.tipo}) — ${i.producto}${i.detalle ? ': ' + i.detalle : ''}.` }));
         if (pl.codigo === 'ATRASADA') {
             const pend = tot.filter(t => t.pendiente > 0);
             out.push({ nivel: 'alto', texto: `Plazo vencido el ${fmtFecha(pl.limite)}: ${pl.texto}. Sin recibir completo: ${pend.map(t => `${t.centro} (${t.pendiente} un.)`).join(', ')}.` });
@@ -159,6 +166,7 @@
         const cuerpo = `${texto}\n\n— Estado de la orden —\n${resumenTexto(oc, hoy)}\n\nEnviado desde el sistema de inventario SAR Melipilla por ${autor}.`;
         return { subject: `OC ${oc.numeroOC} · ${titulo}`, text: cuerpo, html: '<div style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap">' + esc(cuerpo) + '</div>' };
     }
+    const INCIDENCIAS = { DANADO: 'Dañado / defectuoso', VENCIMIENTO_CORTO: 'Vencimiento corto', DISTINTO: 'Producto distinto al pedido', FALTANTE: 'Faltante', OTRO: 'Otro' };
     const emailValido = (e) => /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(String(e || '').trim());
 
     let configCorreo = { webhookUrl: '', token: '', destinatariosBase: [], feriadosExtra: [] };
@@ -208,21 +216,44 @@
 
     function chip(pl) { return `<span class="soc-chip soc-chip--${pl.codigo.toLowerCase()}">${esc(pl.texto)}</span>`; }
 
+    /** Stock pendiente de recepción (lo pedido al SAR que aún no llega), de las órdenes abiertas. */
+    function pendientesDeRecepcion(ordenes) {
+        const out = [];
+        (ordenes || []).filter(o => !o.cerrada).forEach(oc => {
+            const pl = estadoPlazo(oc);
+            (oc.columnas || []).filter(c => c.centro === CENTRO_PROPIO).forEach(c => (oc.lineas || []).forEach(l => {
+                const p = num(l.dist && l.dist[c.key]), r = num(l.recibido && l.recibido[c.key]);
+                if (p > r) out.push({ ocId: oc.id, numeroOC: oc.numeroOC, proveedor: oc.proveedor, producto: l.descripcion, pendiente: p - r, pedido: p, codigo: pl.codigo, limite: pl.limite, aceptada: !!oc.aceptada });
+            }));
+        });
+        return out.sort((a, b) => String(a.limite || '9999').localeCompare(String(b.limite || '9999')));
+    }
+    function pendienteHTML() {
+        const pend = pendientesDeRecepcion(lista);
+        if (!pend.length) return '';
+        const unidades = pend.reduce((t, x) => t + x.pendiente, 0);
+        return `<div class="erp-card soc-pend"><h3>Stock pendiente de recepción <span class="soc-n">${unidades} un.</span></h3>
+            <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pend.</th><th>Orden</th><th>Estado</th></tr></thead><tbody>${pend.map(x => `<tr data-oc="${esc(x.ocId)}" class="soc-pend__fila"><td>${esc(x.producto)}</td><td><strong>${x.pendiente}</strong> de ${x.pedido}</td><td>${esc(x.numeroOC)}<br><small>${esc(x.proveedor || '')}</small></td><td><span class="soc-chip soc-chip--${x.codigo.toLowerCase()}">${esc(x.aceptada ? (x.codigo === 'ATRASADA' ? 'Atrasada' : 'Vence ' + fmtFecha(x.limite)) : (x.codigo === 'ACEPT_VENCIDA' ? 'Sin aceptar: vencido' : 'Por aceptar'))}</span></td></tr>`).join('')}</tbody></table></div></div>`;
+    }
+
     function pintarLista() {
         ocActual = null; if (unsubEventos) { try { unsubEventos(); } catch (e) { /* noop */ } unsubEventos = null; }
         root().innerHTML = `
             <div class="page-header mb-24"><div class="page-title"><h1>Seguimiento de órdenes de compra</h1>
                 <p>Plazos, recepciones por centro, discrepancias, notas y avisos por correo.</p></div>
-                <button type="button" class="btn btn-primary" id="soc-nueva"><i class="ph-bold ph-plus"></i> Ingresar orden</button></div>
+                <div class="soc-acc"><button type="button" class="btn btn-primary" id="soc-pdf"><i class="ph-bold ph-file-pdf"></i> Ingresar desde PDF</button>
+                <button type="button" class="btn btn-outline" id="soc-nueva"><i class="ph-bold ph-microsoft-excel-logo"></i> Con cuadro Excel</button></div></div>
+            ${pendienteHTML()}
             <div class="soc-lista">${lista.length ? lista.map(oc => {
                 const pl = estadoPlazo(oc), tot = totalesPorCentro(oc), mio = tot.find(t => t.centro === CENTRO_PROPIO) || tot[0];
                 const pct = mio && mio.pedido ? Math.min(100, Math.round(mio.recibido * 100 / mio.pedido)) : 0;
                 return `<button type="button" class="erp-card soc-card" data-oc="${esc(oc.id)}">
                     <div class="soc-card__top"><strong>${esc(oc.numeroOC)}</strong>${chip(pl)}</div>
-                    <div class="soc-card__sub">${esc(oc.proveedor || 'Proveedor sin indicar')} · vence ${fmtFecha(pl.limite)}</div>
+                    <div class="soc-card__sub">${esc(oc.proveedor || 'Proveedor sin indicar')} · ${oc.aceptada ? 'vence ' + fmtFecha(pl.limite) : (pl.limite ? 'acepta hasta ' + fmtFecha(pl.limite) : 'sin aceptar')}</div>
                     ${mio ? `<div class="soc-barra" title="${esc(mio.centro)}"><span style="width:${pct}%"></span></div><small>${esc(mio.centro)}: ${mio.recibido} de ${mio.pedido} unidades recibidas</small>` : ''}
                 </button>`; }).join('') : '<div class="home-empty">Aún no hay órdenes en seguimiento. Usa "Ingresar orden".</div>'}</div>`;
         root().querySelector('#soc-nueva').addEventListener('click', formNueva);
+        root().querySelector('#soc-pdf').addEventListener('click', formDesdePDF);
         root().querySelectorAll('[data-oc]').forEach(b => b.addEventListener('click', () => abrirDetalle(b.dataset.oc)));
     }
 
@@ -247,13 +278,16 @@
                 <h1>OC ${esc(oc.numeroOC)}</h1><p>${esc(oc.proveedor || '')}${oc.descripcion ? ' · ' + esc(oc.descripcion) : ''}</p></div>${chip(pl)}</div>
             <div class="erp-card soc-fechas">
                 <div><small>Emitida</small><strong>${fmtFecha(oc.emitida)}</strong></div>
-                <div><small>Aceptada</small><strong>${fmtFecha(oc.aceptada)}</strong></div>
-                <div><small>Plazo</small><strong>${num(oc.plazoDiasHabiles) || 5} días hábiles</strong></div>
-                <div><small>Vence</small><strong>${fmtFecha(pl.limite)}</strong></div>
+                <div><small>Aceptada</small>${oc.aceptada ? `<strong>${fmtFecha(oc.aceptada)}</strong>` : `<strong>—</strong>${oc.aceptarLimite ? `<small>hasta el ${fmtFecha(oc.aceptarLimite)}</small>` : ''}<button type="button" class="btn btn-outline btn-sm" id="soc-acepta">Registrar aceptación</button>`}</div>
+                <div><small>Plazo de entrega</small><strong>${num(oc.plazoDiasHabiles) || 5} días hábiles</strong></div>
+                <div><small>Vence</small><strong>${oc.aceptada ? fmtFecha(pl.limite) : '—'}</strong></div>
                 <div><small>Multa</small><strong>${esc(({ por_evaluar: 'Por evaluar', no_se_cursa: 'No se cursa', cursada: 'Cursada' })[(oc.multa && oc.multa.estado) || 'por_evaluar'])}${oc.multa && oc.multa.monto ? ' · ' + peso(oc.multa.monto) : ''}</strong></div>
             </div>
+            ${oc.datos ? `<div class="erp-card soc-datos"><h3>Datos de la orden</h3><div class="soc-datos__g">
+                ${[['Despacho', oc.datos.direccionDespacho], ['Contraparte técnica', oc.datos.contraparte], ['Contacto', oc.datos.contacto], ['Horario', oc.datos.horario], ['Forma de pago', oc.datos.formaPago], ['Factura a', oc.datos.emailFactura], ['Memo', oc.datos.memo ? 'N° ' + oc.datos.memo + (oc.descripcion ? ' · ' + oc.descripcion : '') : ''], ['Total (con IVA)', oc.datos.total ? peso(oc.datos.total) : '']].filter(x => x[1]).map(x => `<div><small>${x[0]}</small><span>${esc(x[1])}</span></div>`).join('')}</div></div>` : ''}
             <div class="erp-card"><h3>Discrepancias <span class="soc-n">${disc.length}</span></h3>
-                ${disc.length ? '<ul class="soc-disc">' + disc.map(d => `<li class="soc-disc--${d.nivel}">${esc(d.texto)}</li>`).join('') + '</ul>' : '<p class="bodega-estantes__hint">Sin discrepancias.</p>'}</div>
+                ${disc.length ? '<ul class="soc-disc">' + disc.map(d => `<li class="soc-disc--${d.nivel}">${esc(d.texto)}</li>`).join('') + '</ul>' : '<p class="bodega-estantes__hint">Sin discrepancias.</p>'}
+                ${(oc.incidencias || []).filter(i => i.estado === 'ABIERTA').map(i => `<button type="button" class="btn btn-outline btn-sm" data-resolver="${esc(i.id)}">Resolver: ${esc(i.producto.slice(0, 30))}</button>`).join(' ')}</div>
             <div class="erp-card"><div class="soc-sub"><h3>Pedido y recibido</h3>
                 <label class="soc-toggle"><input type="checkbox" id="soc-todos" ${verTodos ? 'checked' : ''}> Ver todos los centros</label>
                 <button type="button" class="btn btn-primary btn-sm" id="soc-recep"><i class="ph-bold ph-package"></i> Registrar recepción</button></div>
@@ -274,6 +308,8 @@
         q('#soc-volver').addEventListener('click', () => { ocActual = null; pintarLista(); });
         q('#soc-todos').addEventListener('change', (e) => { verTodos = e.target.checked; pintarDetalle(); });
         q('#soc-recep').addEventListener('click', formRecepcion);
+        const ac = q('#soc-acepta'); if (ac) ac.addEventListener('click', formAceptacion);
+        root().querySelectorAll('[data-resolver]').forEach(b => b.addEventListener('click', () => formResolver(b.dataset.resolver)));
         q('#soc-guardar-nota').addEventListener('click', guardarNota);
         const m = q('#soc-multa'); if (m) m.addEventListener('click', formMulta);
         const c = q('#soc-cerrar'); if (c) c.addEventListener('click', alternarCierre);
@@ -298,7 +334,7 @@
         const b = host.querySelector('#soc-base'); if (b) b.addEventListener('click', () => guardar([...new Set([...dest, ...configCorreo.destinatariosBase])]));
     }
 
-    const ICONOS = { NOTA: 'Nota', RECEPCION: 'Recepción', MULTA: 'Multa', ESTADO: 'Estado', CREACION: 'Ingreso' };
+    const ICONOS = { INCIDENCIA: 'Incidencia', ACEPTACION: 'Aceptación', NOTA: 'Nota', RECEPCION: 'Recepción', MULTA: 'Multa', ESTADO: 'Estado', CREACION: 'Ingreso' };
     function pintarBitacora() {
         const host = root() && root().querySelector('#soc-bitacora'); if (!host) return;
         host.innerHTML = eventos.length ? '<ul class="soc-bit">' + eventos.map(e => `<li><div><strong>${esc(ICONOS[e.tipo] || e.tipo)}</strong> · ${esc(e.autor || '')} · <small>${esc(fmtFechaHora(e.fecha))}</small></div>
@@ -393,31 +429,211 @@
         });
     }
 
-    function formRecepcion() {
+    // ---------------------------------------------------------------
+    // Ingreso de una OC desde el PDF de Mercado Público (con pantalla de revisión)
+    // ---------------------------------------------------------------
+    const sumarDias = (iso, n) => { const d = deISO(iso); d.setDate(d.getDate() + n); return aISO(d); };
+    function armarOCdesdeRevision(v) {
+        const numero = String(v.numeroOC || '').trim().toUpperCase();
+        if (!numero) throw new Error('Falta el N° de la orden.');
+        if (!v.emitida) throw new Error('Falta la fecha de envío de la orden.');
+        const lineas = (v.lineas || []).filter(l => String(l.descripcion || '').trim() && num(l.cantidad) > 0);
+        if (!lineas.length) throw new Error('Agrega al menos un producto con cantidad.');
+        const horas = num(v.aceptarHoras) || 48, dias = num(v.entregaDias) || 2;
+        return {
+            numeroOC: numero, proveedor: String(v.proveedor || '').trim(), rutProveedor: String(v.rutProveedor || '').trim(), descripcion: String(v.descripcion || '').trim(),
+            emitida: v.emitida, emitidaHora: v.emitidaHora || '', aceptarHoras: horas, aceptarLimite: sumarDias(v.emitida, Math.ceil(horas / 24)), aceptada: '',
+            plazoDiasHabiles: dias, fechaLimite: '', origen: v.origen || 'MANUAL',
+            columnas: [{ memo: String(v.memo || '').trim() || 's/n', centro: CENTRO_PROPIO, cdp: '', key: 'sar' }],
+            lineas: lineas.map(l => ({ descripcion: String(l.descripcion).trim(), codigoMP: l.codigoMP || '', licitacion: l.licitacion || '', valorNeto: num(l.valorNeto), dist: { sar: num(l.cantidad) }, recibido: {} })),
+            datos: { direccionDespacho: v.direccionDespacho || '', contraparte: v.contraparte || '', contacto: v.contacto || '', horario: v.horario || '', formaPago: v.formaPago || '', emailFactura: v.emailFactura || '', memo: v.memo || '', total: num(v.total), totalNeto: num(v.totalNeto) },
+            incidencias: [], multa: { estado: 'por_evaluar' }, cerrada: false
+        };
+    }
+    function formDesdePDF() {
+        let rev = { lineas: [], aceptarHoras: 48, entregaDias: 2, origen: 'MANUAL' };
+        const campo = (id, et, v, tipo) => `<label>${et}<input type="${tipo || 'text'}" id="${id}" value="${esc(v == null ? '' : v)}"></label>`;
+        const ov = modal('Ingresar orden de compra', `
+            <label>PDF de la orden (Mercado Público)<input type="file" id="p-file" accept="application/pdf"></label>
+            <label>Correo del despacho (opcional: pega el texto para leer los plazos)<textarea id="p-correo" rows="3" placeholder="Pega aquí el correo con el plazo de aceptación y los días de entrega"></textarea></label>
+            <div id="p-estado" class="cierre-hint">Sube el PDF y revisa lo que se leyó. También puedes completar todo a mano.</div>
+            <div id="p-rev"></div>`, async (o) => {
+            leerRev(o);
+            const oc = armarOCdesdeRevision(rev);
+            const id = slug(oc.numeroOC), ref = fs().doc(fs().collection(db(), 'Seguimiento_OC'), id);
+            if ((await fs().getDoc(ref)).exists()) { toast('Ya existe', 'Esa orden ya está en seguimiento.', 'warning'); return false; }
+            oc.destinatarios = [...(configCorreo.destinatariosBase || [])]; oc.creadoPor = usuario(); oc.creadoEn = fs().serverTimestamp();
+            await fs().runTransaction(db(), async (tx) => {
+                tx.set(ref, oc);
+                tx.set(fs().doc(fs().collection(db(), 'Seguimiento_OC', id, 'Eventos')), { tipo: 'CREACION', texto: `Orden ingresada${oc.origen === 'OC_MP' ? ' desde el PDF' : ''}: ${oc.lineas.length} producto(s). El proveedor debe aceptarla hasta el ${fmtFecha(oc.aceptarLimite)}; entrega en ${oc.plazoDiasHabiles} días hábiles desde la aceptación.`, autor: usuario(), fecha: fs().serverTimestamp() });
+            });
+            toast('Orden ingresada', `Acepta hasta el ${fmtFecha(oc.aceptarLimite)}.`, 'success');
+        });
+        const q = (s) => ov.querySelector(s);
+        function leerRev(o) {
+            const g = (id) => { const e = o.querySelector('#' + id); return e ? e.value : ''; };
+            ['numeroOC', 'proveedor', 'rutProveedor', 'emitida', 'emitidaHora', 'aceptarHoras', 'entregaDias', 'memo', 'descripcion', 'direccionDespacho', 'contraparte', 'contacto', 'horario', 'formaPago', 'emailFactura'].forEach(k => { if (o.querySelector('#v-' + k)) rev[k] = g('v-' + k); });
+            rev.lineas = [...o.querySelectorAll('[data-fila]')].map(tr => ({ ...(rev.lineas[Number(tr.dataset.fila)] || {}), descripcion: tr.querySelector('.v-d').value, cantidad: num(tr.querySelector('.v-c').value), valorNeto: num(tr.querySelector('.v-v').value) }));
+        }
+        function pintarRev(avisos) {
+            q('#p-rev').innerHTML = `${(avisos || []).length ? '<ul class="cierre-error">' + avisos.map(a => `<li>${esc(a)}</li>`).join('') + '</ul>' : ''}
+                <div class="soc-fila">${campo('v-numeroOC', 'N° de orden', rev.numeroOC)}${campo('v-proveedor', 'Proveedor', rev.proveedor)}${campo('v-rutProveedor', 'RUT proveedor', rev.rutProveedor)}</div>
+                <div class="soc-fila">${campo('v-emitida', 'Orden enviada el', rev.emitida, 'date')}${campo('v-emitidaHora', 'Hora', rev.emitidaHora, 'time')}${campo('v-aceptarHoras', 'Plazo para aceptar (horas)', rev.aceptarHoras, 'number')}${campo('v-entregaDias', 'Entrega (días hábiles desde aceptación)', rev.entregaDias, 'number')}</div>
+                <div class="soc-fila">${campo('v-memo', 'Memo N°', rev.memo)}${campo('v-descripcion', 'Descripción', rev.descripcion)}</div>
+                <div class="soc-fila">${campo('v-direccionDespacho', 'Dirección de despacho', rev.direccionDespacho)}${campo('v-contraparte', 'Contraparte técnica', rev.contraparte)}</div>
+                <div class="soc-fila">${campo('v-contacto', 'Contacto', rev.contacto)}${campo('v-horario', 'Horario de recepción', rev.horario)}</div>
+                <div class="soc-fila">${campo('v-formaPago', 'Forma de pago', rev.formaPago)}${campo('v-emailFactura', 'Email envío factura', rev.emailFactura)}</div>
+                <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Cant.</th><th>Neto unit.</th><th></th></tr></thead><tbody>${rev.lineas.map((l, i) => `<tr data-fila="${i}"><td><input class="v-d" value="${esc(l.descripcion || '')}"></td><td><input class="v-c" type="number" min="0" value="${esc(l.cantidad || '')}"></td><td><input class="v-v" type="number" min="0" value="${esc(l.valorNeto || '')}"></td><td><button type="button" class="btn btn-outline btn-sm" data-del="${i}">✕</button></td></tr>`).join('')}</tbody></table></div>
+                <button type="button" class="btn btn-outline btn-sm" id="v-add">+ Producto</button>${rev.totalNeto ? ` <small>Neto de la orden: ${peso(rev.totalNeto)} · Total con IVA: ${peso(rev.total)}</small>` : ''}`;
+            q('#v-add').addEventListener('click', () => { leerRev(ov); rev.lineas.push({ descripcion: '', cantidad: 0, valorNeto: 0 }); pintarRev(avisos); });
+            ov.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => { leerRev(ov); rev.lineas.splice(Number(b.dataset.del), 1); pintarRev(avisos); }));
+        }
+        pintarRev([]);
+        q('#p-file').addEventListener('change', async (e) => {
+            const f = e.target.files[0]; if (!f) return;
+            const est = q('#p-estado'); est.textContent = 'Leyendo el PDF…';
+            try {
+                if (!window.SAR_Lector) throw new Error('El lector de documentos no está cargado.');
+                const r = await window.SAR_Lector.leerArchivo(f);
+                const c = window.SAR_Lector.extraerCorreo(q('#p-correo').value);
+                rev = { ...rev, ...r, aceptarHoras: c.aceptarHoras || rev.aceptarHoras || 48, entregaDias: c.entregaDias || rev.entregaDias || 2, contraparte: c.contraparte || r.contraparte, horario: c.horario || r.horario, origen: 'OC_MP' };
+                est.innerHTML = `<strong>Leído:</strong> ${esc(r.numeroOC || '—')} · ${r.lineas.length} producto(s). Revisa cada dato antes de guardar.`;
+                pintarRev(r.avisos);
+            } catch (err) { est.innerHTML = `<span class="cierre-error">${esc(err.message)}</span>`; }
+        });
+        q('#p-correo').addEventListener('change', () => { const c = window.SAR_Lector && window.SAR_Lector.extraerCorreo(q('#p-correo').value); if (!c) return; leerRev(ov); if (c.aceptarHoras) rev.aceptarHoras = c.aceptarHoras; if (c.entregaDias) rev.entregaDias = c.entregaDias; if (c.contraparte && !rev.contraparte) rev.contraparte = c.contraparte; if (c.horario && !rev.horario) rev.horario = c.horario; pintarRev([]); });
+    }
+
+    function formAceptacion() {
+        const oc = ocActual;
+        modal('Registrar aceptación del proveedor', `<p class="cierre-hint">Desde la fecha de aceptación corren los ${num(oc.plazoDiasHabiles) || 5} días hábiles de entrega.</p>
+            <label>Fecha de aceptación<input type="date" id="a-fecha" value="${hoyISO()}"></label>
+            <label class="soc-toggle"><input type="checkbox" id="a-correo" checked> Avisar por correo a la lista</label>`, async (o) => {
+            const f = o.querySelector('#a-fecha').value; if (!f) { toast('Falta la fecha', 'Indica la fecha de aceptación.', 'warning'); return false; }
+            const limite = sumarHabiles(f, num(oc.plazoDiasHabiles) || 5);
+            await registrarEvento(oc, { tipo: 'ACEPTACION', texto: `El proveedor aceptó la orden el ${fmtFecha(f)}. Plazo de entrega: ${num(oc.plazoDiasHabiles) || 5} días hábiles, hasta el ${fmtFecha(limite)}.`, titulo: 'Orden aceptada', notificar: o.querySelector('#a-correo').checked, cambiosOC: { aceptada: f, fechaLimite: limite } });
+            toast('Aceptación registrada', `Entrega hasta el ${fmtFecha(limite)}.`, 'success');
+        });
+    }
+
+    function formResolver(idInc) {
+        const oc = ocActual, inc = (oc.incidencias || []).find(i => i.id === idInc); if (!inc) return;
+        modal('Resolver incidencia', `<p class="cierre-hint">${esc(INCIDENCIAS[inc.tipo] || inc.tipo)} — ${esc(inc.producto)}${inc.detalle ? ': ' + esc(inc.detalle) : ''}</p>
+            <label>¿Cómo se resolvió? (obligatorio)<input type="text" id="x-res" maxlength="300" placeholder="Ej.: proveedor repuso 2 cajas el 10-11"></label>
+            <label class="soc-toggle"><input type="checkbox" id="x-correo" checked> Avisar por correo a la lista</label>`, async (o) => {
+            const res = o.querySelector('#x-res').value.trim(); if (!res) { toast('Falta la resolución', 'Escribe cómo se resolvió.', 'warning'); return false; }
+            await registrarEvento(oc, { tipo: 'INCIDENCIA', texto: `Incidencia resuelta — ${inc.producto}: ${res}`, titulo: 'Incidencia resuelta', notificar: o.querySelector('#x-correo').checked,
+                cambiosOC: (d) => ({ incidencias: (d.incidencias || []).map(i => i.id === idInc ? { ...i, estado: 'RESUELTA', resolucion: res, resueltaPor: usuario(), resueltaEn: hoyISO() } : i) }) });
+            toast('Incidencia resuelta', 'Quedó registrada en la bitácora.', 'success');
+        });
+    }
+
+    // ---------------------------------------------------------------
+    // Recepción: lo recibido, incidencias y (opcional) ingreso al stock de Bodega Central
+    // ---------------------------------------------------------------
+    const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+    /** Suma lotes recibidos a un doc de Insumos (mismo lote y vencimiento se acumulan). Puro. */
+    function mezclarIngreso(doc, ingresos) {
+        let lotes = Array.isArray(doc && doc.batches) ? doc.batches.map(b => ({ ...b })) : [];
+        if (!lotes.length && doc && num(doc.quantity) > 0) lotes = [{ batch: doc.batch || 'S/L', quantity: num(doc.quantity), expirationDate: doc.expirationDate || 'N/A' }];
+        let total = 0;
+        ingresos.forEach(g => {
+            total += g.cantidad;
+            const ex = lotes.find(b => b.batch === g.lote && (b.expirationDate || 'N/A') === g.vence);
+            if (ex) ex.quantity = num(ex.quantity) + g.cantidad; else lotes.push({ batch: g.lote, quantity: g.cantidad, expirationDate: g.vence });
+        });
+        if (typeof window.fefoCompare === 'function') lotes.sort(window.fefoCompare);
+        return { batches: lotes, quantity: num(doc && doc.quantity) + total, ingresado: total };
+    }
+    /** Aplica lo recibido a las líneas de la OC. Puro. */
+    function aplicarRecepcion(data, key, det, incidencias, extra) {
+        const lineas = (data.lineas || []).map(l => ({ ...l, recibido: { ...(l.recibido || {}) } }));
+        det.forEach(d => { const l = lineas[d.i]; l.recibido[key] = num(l.recibido[key]) + d.cantidad; if (d.insumoName) l.insumoName = d.insumoName; });
+        return { lineas, incidencias: [...(data.incidencias || []), ...incidencias.map((n, k) => ({ id: `inc-${Date.now()}-${k}`, ...n, estado: 'ABIERTA', fecha: hoyISO(), ...(extra || {}) }))] };
+    }
+    async function recepcionConStock(oc, { key, det, incidencias, guia, fecha, obs, notificar, ingresaStock, central, texto, titulo }) {
+        const f = fs();
+        const aplicadoLocal = aplicarRecepcion(oc, key, det, incidencias);
+        let correo = null;
+        if (notificar) correo = await enviarCorreo(oc.destinatarios || [], armarCorreo({ ...oc, ...aplicadoLocal }, titulo, texto, usuario()));
+        const ocRef = f.doc(f.collection(db(), 'Seguimiento_OC'), oc.id);
+        const evRef = f.doc(f.collection(db(), 'Seguimiento_OC', oc.id, 'Eventos'));
+        // Productos del inventario (Bodega Central): se buscan por nombre antes de la transacción
+        const grupos = new Map();
+        if (ingresaStock) {
+            for (const d of det) {
+                const nombre = String(d.insumoName || '').trim(); if (!nombre) throw new Error('Indica el producto del inventario de cada línea recibida.');
+                const snap = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('name', '==', nombre), f.limit(10)));
+                let ref = null; snap.forEach(x => { const l = x.data().location; if (!ref && (l === central || !l)) ref = f.doc(f.collection(db(), 'Insumos'), x.id); });
+                if (!ref) ref = f.doc(f.collection(db(), 'Insumos'), `tras_${slug(nombre)}__${slug(central)}`);
+                const g = grupos.get(ref.path) || { ref, nombre, ingresos: [], lineas: [] };
+                g.ingresos.push({ cantidad: d.cantidad, lote: (d.lote || '').trim().toUpperCase() || 'S/L', vence: d.vence || 'N/A' }); g.lineas.push(d); grupos.set(ref.path, g);
+            }
+        }
+        await f.runTransaction(db(), async (tx) => {
+            const os = await tx.get(ocRef); if (!os.exists()) throw new Error('La orden ya no existe.');
+            const lecturas = []; for (const g of grupos.values()) lecturas.push([g, await tx.get(g.ref)]);
+            tx.update(ocRef, { ...aplicarRecepcion(os.data(), key, det, incidencias), actualizadoEn: f.serverTimestamp() });
+            tx.set(evRef, { tipo: 'RECEPCION', texto, autor: usuario(), fecha: f.serverTimestamp(), ...(correo ? { correo } : {}), columna: key, guia, fechaRecepcion: fecha, ingresoAStock: !!ingresaStock, detalle: det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })), incidencias: incidencias.map(n => ({ producto: n.producto, tipo: n.tipo, detalle: n.detalle })) });
+            lecturas.forEach(([g, snap]) => {
+                const actual = snap.exists() ? snap.data() : null, m = mezclarIngreso(actual, g.ingresos);
+                const limite = num(actual && (actual.criticalLimit || actual.stock_minimo)) || 50;
+                const prox = m.batches[0];
+                const base = { quantity: m.quantity, batches: m.batches, isCritical: m.quantity <= limite, batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', provider: oc.proveedor || (actual && actual.provider) || 'S/I', updatedAt: f.serverTimestamp() };
+                if (actual) tx.update(g.ref, base); else tx.set(g.ref, { name: g.nombre, location: central, criticalLimit: 50, ...base });
+                g.ingresos.forEach(ing => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), {
+                    insumoName: g.nombre, item: g.nombre, quantity: ing.cantidad, type: 'INGRESO_OC', batch: ing.lote, expirationDate: ing.vence, destination: central, dest: central, origin: oc.proveedor || 'Proveedor',
+                    provider: oc.proveedor || 'S/I', user: usuario(), date: f.serverTimestamp(), document: `OC ${oc.numeroOC}${guia ? ' · guía ' + guia : ''}`, observacion: obs || '', ocId: oc.id, idInsumoDestino: g.ref.id }));
+            });
+        });
+        return correo;
+    }
+
+    async function formRecepcion() {
         const oc = ocActual; const cols = oc.columnas || [];
+        let central = 'Bodega Central', nombresInv = [];
+        try {
+            const bs = await fs().getDocs(fs().collection(db(), 'Bodegas')); bs.forEach(d => { const b = d.data(); if (/central/i.test(String(b.name || '')) && b.isActive !== false) central = b.name; });
+            const ins = await fs().getDocs(fs().query(fs().collection(db(), 'Insumos'), fs().where('location', '==', central), fs().limit(1500)));
+            const set = new Set(); ins.forEach(d => { if (d.data().name) set.add(d.data().name); }); nombresInv = [...set].sort((a, b) => a.localeCompare(b, 'es'));
+        } catch (e) { /* sin lista de inventario: se escribe a mano */ }
+        const propia = (key) => { const c = cols.find(x => x.key === key); return !!c && c.centro === CENTRO_PROPIO; };
         const ov = modal('Registrar recepción', `
-            <label>¿Qué memo/CDP se recibió?<select id="r-col">${cols.map(c => `<option value="${esc(c.key)}" ${c.centro === CENTRO_PROPIO ? '' : ''}>${esc(c.centro)} · memo ${esc(c.memo)} · CDP ${esc(c.cdp)}</option>`).join('')}</select></label>
+            <label>¿Qué memo/CDP se recibió?<select id="r-col">${cols.map(c => `<option value="${esc(c.key)}">${esc(c.centro)} · memo ${esc(c.memo)}${c.cdp ? ' · CDP ' + esc(c.cdp) : ''}</option>`).join('')}</select></label>
             <div class="soc-fila"><label>N° guía de despacho<input type="text" id="r-guia" autocomplete="off"></label><label>Fecha<input type="date" id="r-fecha" value="${hoyISO()}"></label></div>
             <div id="r-lineas"></div>
+            <label class="soc-toggle" id="r-stock-w"><input type="checkbox" id="r-stock" checked> Ingresar lo recibido al stock de ${esc(central)}</label>
             <label>Observación (opcional)<input type="text" id="r-obs" maxlength="300"></label>
-            <label class="soc-toggle"><input type="checkbox" id="r-correo" checked> Avisar por correo a la lista</label>`,
+            <label class="soc-toggle"><input type="checkbox" id="r-correo" checked> Avisar por correo a la lista</label>
+            <datalist id="r-inv">${nombresInv.map(n => `<option value="${esc(n)}">`).join('')}</datalist>`,
             async (o) => {
-                const q = (s) => o.querySelector(s), key = q('#r-col').value;
-                const det = []; o.querySelectorAll('[data-i]').forEach(inp => { const v = num(inp.value); if (v > 0) det.push({ i: Number(inp.dataset.i), v }); });
-                if (!det.length) { toast('Sin cantidades', 'Indica al menos una cantidad recibida.', 'warning'); return false; }
-                const col = cols.find(c => c.key === key), guia = q('#r-guia').value.trim(), fecha = q('#r-fecha').value || hoyISO();
-                const detalle = det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, cantidad: d.v }));
-                const texto = `Recepción en ${col.centro} (memo ${col.memo}, CDP ${col.cdp}) el ${fmtFecha(fecha)}${guia ? ' · guía N° ' + guia : ''}:\n` + detalle.map(d => `- ${d.descripcion}: ${d.cantidad} un.`).join('\n') + (q('#r-obs').value.trim() ? '\nObs.: ' + q('#r-obs').value.trim() : '');
-                const aplicar = (data) => { const lineas = (data.lineas || []).map(l => ({ ...l, recibido: { ...(l.recibido || {}) } })); det.forEach(d => { const l = lineas[d.i]; l.recibido[key] = num(l.recibido[key]) + d.v; }); return { lineas }; };
-                await registrarEvento(oc, { tipo: 'RECEPCION', texto, titulo: `Recepción en ${col.centro}`, notificar: q('#r-correo').checked, extra: { columna: key, guia, fechaRecepcion: fecha, detalle }, cambiosOC: (data) => aplicar(data) });
-                toast('Recepción registrada', 'Se actualizó lo recibido.', 'success');
+                const q = (s) => o.querySelector(s), key = q('#r-col').value, ingresaStock = propia(key) && q('#r-stock').checked;
+                const det = [], incidencias = [];
+                o.querySelectorAll('tr[data-i]').forEach(tr => {
+                    const v = num(tr.querySelector('.r-c').value), tipo = tr.querySelector('.r-t').value, i = Number(tr.dataset.i);
+                    if (v > 0) { const venc = tr.querySelector('.r-v'); det.push({ i, cantidad: v, lote: tr.querySelector('.r-l') ? tr.querySelector('.r-l').value : '', vence: venc && venc.value ? venc.value : '', insumoName: tr.querySelector('.r-n') ? tr.querySelector('.r-n').value.trim() : '' }); }
+                    if (tipo) incidencias.push({ producto: oc.lineas[i].descripcion, tipo, detalle: tr.querySelector('.r-td').value.trim() });
+                });
+                if (!det.length && !incidencias.length) { toast('Sin datos', 'Indica una cantidad recibida o una incidencia.', 'warning'); return false; }
+                const col = cols.find(c => c.key === key), guia = q('#r-guia').value.trim(), fecha = q('#r-fecha').value || hoyISO(), obs = q('#r-obs').value.trim();
+                if (ingresaStock && det.some(d => !d.insumoName)) { toast('Falta el producto', 'Indica el producto del inventario de cada línea que recibes.', 'warning'); return false; }
+                const texto = `Recepción en ${col.centro}${col.memo ? ' (memo ' + col.memo + (col.cdp ? ', CDP ' + col.cdp : '') + ')' : ''} el ${fmtFecha(fecha)}${guia ? ' · guía N° ' + guia : ''}:\n` +
+                    (det.length ? det.map(d => `- ${oc.lineas[d.i].descripcion}: ${d.cantidad} un.${d.lote ? ' · lote ' + d.lote : ''}${d.vence ? ' · vence ' + fmtFecha(d.vence) : ''}`).join('\n') : '- (sin unidades recibidas)') +
+                    (incidencias.length ? '\nINCIDENCIAS:\n' + incidencias.map(n => `- ${n.producto}: ${INCIDENCIAS[n.tipo]}${n.detalle ? ' — ' + n.detalle : ''}`).join('\n') : '') + (obs ? '\nObs.: ' + obs : '') + (ingresaStock ? `\nIngresado al stock de ${central}.` : '');
+                await recepcionConStock(oc, { key, det, incidencias, guia, fecha, obs, notificar: q('#r-correo').checked, ingresaStock, central, texto, titulo: incidencias.length ? `Recepción con incidencias en ${col.centro}` : `Recepción en ${col.centro}` });
+                toast('Recepción registrada', ingresaStock ? `Lo recibido quedó en el stock de ${central}.` : 'Se actualizó lo recibido.', 'success');
             });
         const pintar = () => {
-            const key = ov.querySelector('#r-col').value;
-            ov.querySelector('#r-lineas').innerHTML = '<div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Ya recibido</th><th>Recibido ahora</th></tr></thead><tbody>' +
-                oc.lineas.map((l, i) => { const p = num(l.dist && l.dist[key]); return p ? `<tr><td>${esc(l.descripcion)}</td><td>${p}</td><td>${num(l.recibido && l.recibido[key])}</td><td><input type="number" min="0" data-i="${i}" value=""></td></tr>` : ''; }).join('') + '</tbody></table></div>';
+            const key = ov.querySelector('#r-col').value, st = propia(key);
+            ov.querySelector('#r-stock-w').style.display = st ? '' : 'none';
+            ov.querySelector('#r-lineas').innerHTML = '<div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Ya recibido</th><th>Recibido ahora</th>' + (st ? '<th>Producto en inventario</th><th>Lote</th><th>Vence</th>' : '') + '<th>Incidencia</th></tr></thead><tbody>' +
+                oc.lineas.map((l, i) => { const p = num(l.dist && l.dist[key]); return p ? `<tr data-i="${i}"><td>${esc(l.descripcion)}</td><td>${p}</td><td>${num(l.recibido && l.recibido[key])}</td><td><input type="number" min="0" class="r-c" value=""></td>` +
+                    (st ? `<td><input class="r-n" list="r-inv" value="${esc(l.insumoName || l.descripcion)}"></td><td><input class="r-l" placeholder="S/L"></td><td><input type="date" class="r-v"></td>` : '') +
+                    `<td><select class="r-t"><option value="">Sin incidencia</option>${Object.entries(INCIDENCIAS).map(([k, t]) => `<option value="${k}">${esc(t)}</option>`).join('')}</select><input class="r-td" placeholder="Detalle"></td></tr>` : ''; }).join('') + '</tbody></table></div>';
         };
-        ov.querySelector('#r-col').addEventListener('change', pintar); pintar();
+        ov.querySelector('#r-col').addEventListener('change', pintar);
+        const sel = ov.querySelector('#r-col'); const iPropia = cols.findIndex(c => c.centro === CENTRO_PROPIO); if (iPropia > 0) sel.selectedIndex = iPropia;
+        pintar();
     }
 
     function formMulta() {
@@ -483,5 +699,5 @@ function salida(o) { return ContentService.createTextOutput(JSON.stringify(o)).s
         ov.querySelector('#c-copiar').addEventListener('click', async () => { try { await navigator.clipboard.writeText(SCRIPT_GAS); toast('Copiado', 'Código copiado.', 'success'); } catch (e) { ov.querySelector('#c-script').select(); } });
     }
 
-    window.SAR_SeguimientoOC = { abrir, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
+    window.SAR_SeguimientoOC = { abrir, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
 })(window, document);

@@ -142,3 +142,10 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 - Los balones portátiles son **equipos médicos**, no insumos: se llevan en `Equipos_Oxigeno/{serie}` (uno por N° de serie, capacidad por defecto 1 m³) con estado LLENO / VACÍO / EN RECARGA / ENTREGADO A CENTRO / FUERA DE SERVICIO y bitácora inmutable `Eventos` (alta, envío a recarga, recarga recibida, vacío, devolución, incidencia, entrega con acta).
 - La entrega a un centro usa el mismo formato y correlativo AE-AAAA-NNNN que las actas de insumos (`Actas_Entrega` con `tipo: 'OXIGENO'`, una línea por balón con su N° de serie). Solo se entregan balones LLENOS. No descuenta Insumos; no se anula (se registra la devolución).
 - Pendiente: balones grandes (bombonas) cuando se conozca su manejo. No se registran datos de pacientes.
+
+## 4.7 Órdenes de compra desde el PDF, aceptación y recepción con stock (v20.39)
+- **Lectores de documentos** (`oc-lector.js`): cada tipo de documento tiene su propio lector, porque cada emisor distribuye la información distinto. Hoy solo la OC de Mercado Público (formato estándar). Guías y facturas de proveedores se agregan después como lectores nuevos. Un lector **nunca guarda solo**: muestra una pantalla de revisión y la persona confirma. Si algo no se lee, se completa a mano.
+- Plazos de una OC con convenio marco: **aceptación del proveedor** (ej. 48 horas desde el envío) y **entrega en N días hábiles desde la aceptación** (ej. 2). Ambos vienen en el correo; se pueden pegar para leerlos. Sin aceptación vencida = alerta; con aceptación, vence a los N días hábiles.
+- "Stock pendiente de recepción": lo pedido al SAR que aún no llega, de las OC abiertas (no es stock disponible).
+- **Recepción**: por producto se indica cantidad, lote, vencimiento, producto del inventario y, si corresponde, una **incidencia** (dañado, vencimiento corto, distinto, faltante, otro). Lo recibido se **ingresa a Bodega Central** (movimiento `INGRESO_OC` con N° de OC y guía) en la misma transacción que actualiza la OC. Las incidencias quedan abiertas como discrepancia hasta resolverlas con una nota.
+- No se guarda el PDF (solo los datos leídos y revisados).

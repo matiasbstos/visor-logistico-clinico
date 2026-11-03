@@ -137,3 +137,8 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 - Correlativo atómico (`Contadores/acta-AAAA`). Acta en `Actas_Entrega/{numero}`; no se borra. Anulación solo por administrador: devuelve el stock, queda ANULADA y el número no se reutiliza.
 - **Emitir descuenta stock** de la bodega de origen (FEFO por lote) en la misma transacción, con movimiento `ENTREGA_ACTA` en el historial (documento = N° de acta). El borrador no toca stock. Productos en CUARENTENA no se pueden entregar.
 - Sección "Documentos asociados" (SDC, OC, factura, guía, memo) opcional. Sin datos de pacientes.
+
+## 4.6 Oxígeno portátil (v20.38)
+- Los balones portátiles son **equipos médicos**, no insumos: se llevan en `Equipos_Oxigeno/{serie}` (uno por N° de serie, capacidad por defecto 1 m³) con estado LLENO / VACÍO / EN RECARGA / ENTREGADO A CENTRO / FUERA DE SERVICIO y bitácora inmutable `Eventos` (alta, envío a recarga, recarga recibida, vacío, devolución, incidencia, entrega con acta).
+- La entrega a un centro usa el mismo formato y correlativo AE-AAAA-NNNN que las actas de insumos (`Actas_Entrega` con `tipo: 'OXIGENO'`, una línea por balón con su N° de serie). Solo se entregan balones LLENOS. No descuenta Insumos; no se anula (se registra la devolución).
+- Pendiente: balones grandes (bombonas) cuando se conozca su manejo. No se registran datos de pacientes.

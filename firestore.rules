@@ -167,6 +167,23 @@ service cloud.firestore {
        allow write: if isAdmin();
     }
 
+    // -----------------------------------------------------
+    // SEGUIMIENTO DE ÓRDENES DE COMPRA (v20.36)
+    // La bitácora (Eventos) es inmutable: solo se crea.
+    // -----------------------------------------------------
+    match /Seguimiento_OC/{ocId} {
+      allow read, create, update: if isStaff();
+      allow delete: if isAdmin();
+      match /Eventos/{eventoId} {
+        allow read, create: if isStaff();
+        allow update, delete: if false;
+      }
+    }
+    match /Config_Correo/{id} {
+      allow read: if isStaff();
+      allow write: if isAdmin();
+    }
+
     match /ajustes_sistema/{id} {
        allow read, write: if isAdmin(); // Solo admin
     }

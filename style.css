@@ -4997,3 +4997,11 @@ body[data-user-role="operador"] .home-only-admin { display: none !important; }
 .oxi-acc { padding: 6px; border-radius: 8px; border: 1px solid var(--border-color, #cbd5e1); max-width: 210px; }
 .oxi-ev { flex-basis: 100%; background: #f8fafc; border-radius: 8px; padding: 6px 14px; font-size: .84rem; } .oxi-ev ul { margin: 4px 0; padding-left: 18px; }
 .cierre-box textarea, .cierre-box input:not([type=checkbox]) { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--border-color, #cbd5e1); border-radius: 8px; font: inherit; }
+
+/* v20.39 OC desde PDF, aceptación, pendiente de recepción */
+.soc-chip--por_aceptar { background: #E0F2FE; color: #075985; } .soc-chip--acept_vencida { background: #FEE2E2; color: #B91C1C; }
+.soc-acc { display: flex; gap: 8px; flex-wrap: wrap; }
+.soc-pend { margin-bottom: 16px; } .soc-pend__fila { cursor: pointer; } .soc-pend__fila:hover { background: #f1f5f9; }
+.soc-datos__g { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px 18px; }
+.soc-datos__g small { display: block; color: var(--text-muted, #64748b); } .soc-datos__g span { font-size: .9rem; overflow-wrap: anywhere; }
+.cierre-box .soc-tabla input, .cierre-box .soc-tabla select { min-width: 90px; }

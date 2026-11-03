@@ -1974,6 +1974,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'view-donde-esta': '¿Dónde está?',
             'view-seguimiento-oc': 'Seguimiento de OC',
             'view-actas-entrega': 'Actas de entrega',
+            'view-oxigeno': 'Oxígeno portátil',
             'view-usuarios': 'Gestión de Usuarios',
             'view-configuracion': 'Configuración del Sistema',
             'view-compras': 'Solicitudes de Compra',
@@ -2010,7 +2011,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Control de acceso por rol (espejo de las reglas CSS del menú; la barrera real son las reglas de Firestore)
             const VISTAS_BLOQUEADAS = {
                 enfermero: ['view-historial', 'view-ajustes', 'view-compras', 'view-informes', 'view-bodegas',
-                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-actas-entrega'],
+                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-actas-entrega', 'view-oxigeno'],
                 operador: ['view-compras', 'view-usuarios', 'view-configuracion']
             };
             const rolActual = String(document.body.dataset.userRole || '').toLowerCase();
@@ -2055,7 +2056,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 activeView.style.display = 'block';
                 activeView.classList.add('active');
 
-                if (hash === 'view-actas-entrega') {
+                if (hash === 'view-oxigeno') {
+                    if (window.SAR_Oxigeno) window.SAR_Oxigeno.abrir();
+                } else if (hash === 'view-actas-entrega') {
                     if (window.SAR_ActasEntrega) window.SAR_ActasEntrega.abrir();
                 } else if (hash === 'view-seguimiento-oc') {
                     if (window.SAR_SeguimientoOC) window.SAR_SeguimientoOC.abrir();

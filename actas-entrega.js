@@ -270,9 +270,9 @@
           </div>
         </div>
         <h3 class="act-h" style="margin-top:28px;">Actas emitidas</h3>
-        <div class="act-hist">${historial.length ? historial.map(a => `<div class="act-fila${a.estado === 'ANULADA' ? ' act-anulada' : ''}"><div class="act-fn"><strong>${esc(a.numero)}</strong> · ${esc(a.centro)}<small>${esc(a.fecha)} · ${(a.items || []).length} productos · ${esc(a.bodegaOrigen)} · ${esc(a.creadoPor || '')}${a.estado === 'ANULADA' ? ' · <b>ANULADA</b>' : ''}</small></div>
+        <div class="act-hist">${historial.length ? historial.map(a => `<div class="act-fila${a.estado === 'ANULADA' ? ' act-anulada' : ''}"><div class="act-fn"><strong>${esc(a.numero)}</strong> · ${esc(a.centro)}<small>${esc(a.fecha)} · ${a.tipo === 'OXIGENO' ? 'oxígeno · ' : ''}${(a.items || []).length} ${a.tipo === 'OXIGENO' ? 'balones' : 'productos'} · ${esc(a.bodegaOrigen)} · ${esc(a.creadoPor || '')}${a.estado === 'ANULADA' ? ' · <b>ANULADA</b>' : ''}</small></div>
             <button type="button" class="btn btn-outline act-dl" data-n="${esc(a.numero)}" data-f="pdf">PDF</button><button type="button" class="btn btn-outline act-dl" data-n="${esc(a.numero)}" data-f="docx">Word</button>
-            ${esAdmin() && a.estado !== 'ANULADA' ? `<button type="button" class="btn btn-outline act-an" data-n="${esc(a.numero)}">Anular</button>` : ''}</div>`).join('') : '<p class="act-hint">Todavía no hay actas emitidas.</p>'}</div>`;
+            ${esAdmin() && a.estado !== 'ANULADA' && a.tipo !== 'OXIGENO' ? `<button type="button" class="btn btn-outline act-an" data-n="${esc(a.numero)}">Anular</button>` : ''}</div>`).join('') : '<p class="act-hint">Todavía no hay actas emitidas.</p>'}</div>`;
         enlazar();
     }
 
@@ -365,6 +365,6 @@
         pintar();
     }
 
-    window.SAR_ActasEntrega = { abrir, descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, lotesDeDoc };
+    window.SAR_ActasEntrega = { abrir, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, lotesDeDoc };
     if (typeof module !== 'undefined') module.exports = window.SAR_ActasEntrega;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: { dataset: {} } });

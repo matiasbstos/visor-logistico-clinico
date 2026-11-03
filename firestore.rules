@@ -188,6 +188,14 @@ service cloud.firestore {
         && request.resource.data.items == resource.data.items;
       allow delete: if false;
     }
+    match /Equipos_Oxigeno/{equipoId} {
+      allow read, create, update: if isStaff();
+      allow delete: if isAdmin();
+      match /Eventos/{eventoId} {
+        allow read, create: if isStaff();
+        allow update, delete: if false;
+      }
+    }
     match /Contadores/{id} {
       allow read, create, update: if isStaff();
       allow delete: if false;

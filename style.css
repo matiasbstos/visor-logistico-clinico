@@ -4984,3 +4984,16 @@ body[data-user-role="operador"] .home-only-admin { display: none !important; }
 .act-acc { display: flex; gap: 10px; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap; }
 .act-anulada { opacity: .6; text-decoration: line-through; }
 .act-anulada .act-fn small { text-decoration: none; }
+
+/* v20.38 oxígeno portátil */
+.oxi-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.oxi-card { border: 2px solid var(--c); background: var(--bg-card, #fff); border-radius: 12px; padding: 10px; cursor: pointer; display: flex; flex-direction: column; align-items: center; font: inherit; color: inherit; }
+.oxi-card b { font-size: 1.6rem; color: var(--c); } .oxi-card span { font-size: .78rem; }
+.oxi-card.oxi-on { background: var(--c); } .oxi-card.oxi-on b, .oxi-card.oxi-on span { color: #fff; }
+.oxi-barra { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; } .oxi-barra input { flex: 1 1 220px; padding: 8px 10px; border: 1px solid var(--border-color, #cbd5e1); border-radius: 8px; font: inherit; }
+.oxi-fila { display: flex; gap: 10px; align-items: center; padding: 10px 6px; border-bottom: 1px solid var(--border-color, #e2e8f0); flex-wrap: wrap; }
+.oxi-chk { width: 22px; } .oxi-info { flex: 1 1 240px; min-width: 0; } .oxi-info small { display: block; color: var(--text-muted, #64748b); }
+.oxi-est { color: #fff; font-size: .72rem; padding: 2px 8px; border-radius: 999px; margin-left: 6px; }
+.oxi-acc { padding: 6px; border-radius: 8px; border: 1px solid var(--border-color, #cbd5e1); max-width: 210px; }
+.oxi-ev { flex-basis: 100%; background: #f8fafc; border-radius: 8px; padding: 6px 14px; font-size: .84rem; } .oxi-ev ul { margin: 4px 0; padding-left: 18px; }
+.cierre-box textarea, .cierre-box input:not([type=checkbox]) { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--border-color, #cbd5e1); border-radius: 8px; font: inherit; }

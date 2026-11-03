@@ -124,3 +124,10 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 - El inventario general se hace **2 veces al año**: antes y después de la campaña de invierno. No hay inventarios bimestrales.
 - El administrador define en Configuración → Logística: inicio y término de la campaña y las fechas de ambos conteos (`ajustes_sistema/global_config`: `invCampanaInicio`, `invCampanaFin`, `invPreFecha`, `invPostFecha`).
 - El Inicio muestra la próxima fecha (roja si faltan 7 días o menos) y hace cuánto fue el último conteo semanal (rojo si pasan más de 8 días). Lo ven todos los roles.
+
+## 4.4 Seguimiento de órdenes de compra (v20.36)
+- Una OC de Mercado Público puede reunir varios memos/CDP de distintos centros (ej. 1298355-840-AG26: 7 memos/CDP de 5 centros). El seguimiento (`Seguimiento_OC`) guarda el cuadro de distribución y lo recibido por memo/CDP; la vista por defecto muestra solo los del SAR.
+- Plazo en **días hábiles** (lun–vie sin feriados) contados desde el día siguiente a la aceptación de la OC por el proveedor. Feriados de Chile 2026 incluidos; otros años se agregan en "Configurar correo".
+- Bitácora `Seguimiento_OC/{id}/Eventos` **inmutable** (notas, recepciones, decisión de multa, resultado del correo).
+- Cada notificación puede enviar correo a la lista de destinatarios de la OC. Envío por Google Apps Script propio (sin plan Blaze); el código y los pasos están en "Configurar correo". Config en `Config_Correo/principal` (URL + clave; lectura staff, escritura admin). Sin configurar, se abre un borrador de correo.
+- No se guardan datos de pacientes. La decisión de multa (ej. "bajo $100.000 no se cursa") se registra como evento, no se calcula automáticamente: la tasa de multa depende del anexo económico de cada compra.

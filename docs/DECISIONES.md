@@ -182,3 +182,7 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 - Capa de CSS al final de `style.css`: entrada de vistas y modales, realce de tarjetas, foco visible con teclado, cifras tabulares, cabeceras de tabla fijas, áreas táctiles de 44 px en móvil y respeto a "reducir movimiento".
 - No se agregan librerías ni dependencias de terceros: el sistema sigue siendo JavaScript simple con Firebase.
 - v20.47: en celular el encabezado cabe en una fila (56 px en vez de 117 px: se ocultan el segundo logo, la ruta de navegación, la campana y la ayuda); en el Inicio, "Acción inmediata" va antes del gráfico semanal; el ejemplo del login usa el dominio institucional.
+
+### 4.13 Login animado (v20.48)
+- Solo presentación: panel de marca (azul SAR, acento verde) que se desliza entre "Ingresar" y "Recuperar acceso". IDs y manejadores de autenticación (`form-login`, `login-email`, `login-pwd`, `forgot-pwd-link`) no cambian; el formulario de recuperación reutiliza el mismo manejador.
+- Sin "crear cuenta": las cuentas las crea el administrador. En móvil (<760px) no hay panel; se mantiene el enlace "¿Olvidó su contraseña?". Respeta `prefers-reduced-motion`. Archivo: `login-animado.js`.

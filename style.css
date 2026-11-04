@@ -5076,3 +5076,72 @@ button.erp-card:hover, .soc-card:hover { transform: translateY(-2px); box-shadow
 }
 /* v20.47 — en celular, primero "Acción inmediata" y después el gráfico semanal */
 @media (max-width: 767px) { .erp-dashboard-mid-grid > :first-child { order: 2; } }
+
+/* ==========================================================================
+   v20.48 · LOGIN ANIMADO — panel de marca que se desliza (Ingresar ⇄ Recuperar)
+   ========================================================================== */
+.login-overlay { background: linear-gradient(135deg, #eef3fb 0%, #f6f9ee 100%); overflow: hidden; padding: 16px; }
+.lg-fondo span { position: absolute; border-radius: 50%; filter: blur(60px); opacity: .45; animation: lgDeriva 18s ease-in-out infinite alternate; }
+.lg-fondo span:nth-child(1) { width: 420px; height: 420px; background: #1A3668; top: -140px; left: -120px; opacity: .22; }
+.lg-fondo span:nth-child(2) { width: 360px; height: 360px; background: #8CC63F; bottom: -120px; right: -80px; animation-delay: -6s; }
+.lg-fondo span:nth-child(3) { width: 240px; height: 240px; background: #4a78c2; top: 55%; left: 38%; opacity: .15; animation-delay: -11s; }
+@keyframes lgDeriva { to { transform: translate(40px, -30px) scale(1.12); } }
+
+.lg-shell { position: relative; width: 100%; max-width: 880px; height: 540px; background: #fff; border-radius: 24px; overflow: hidden;
+  box-shadow: 0 30px 60px -20px rgba(26,54,104,.35), 0 8px 20px rgba(0,0,0,.06); animation: lgEntra .7s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes lgEntra { from { opacity: 0; transform: translateY(22px) scale(.97); } to { opacity: 1; transform: none; } }
+
+.lg-lado { position: absolute; top: 0; bottom: 0; width: 50%; padding: 34px 44px; display: flex; flex-direction: column; justify-content: center;
+  transition: opacity .45s ease, transform .7s cubic-bezier(.65,0,.25,1), visibility 0s linear .0s; }
+.lg-lado--ingreso { left: 0; }
+.lg-lado--recuperar { left: 50%; }
+.lg-shell[data-modo="ingreso"] .lg-lado--recuperar { opacity: 0; visibility: hidden; transform: translateX(40px); transition-delay: 0s, 0s, .45s; }
+.lg-shell[data-modo="recuperar"] .lg-lado--ingreso { opacity: 0; visibility: hidden; transform: translateX(-40px); transition-delay: 0s, 0s, .45s; }
+.lg-shell[data-modo="ingreso"] .lg-lado--ingreso, .lg-shell[data-modo="recuperar"] .lg-lado--recuperar { opacity: 1; visibility: visible; transform: none; transition-delay: .25s, 0s, 0s; }
+
+.lg-logos { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+.lg-logos img { height: 44px; width: auto; object-fit: contain; }
+.lg-sep { width: 1px; height: 32px; background: #d6dde8; }
+.lg-titulo { font-size: 1.7rem; color: #1A3668; margin: 0 0 4px; font-weight: 800; letter-spacing: -.01em; }
+.lg-sub { color: var(--text-muted, #64748b); font-size: .88rem; margin: 0 0 20px; line-height: 1.4; }
+.lg-campo { margin-bottom: 14px; }
+.lg-enviar { width: 100%; justify-content: center; margin-top: 4px; }
+.lg-olvido { text-align: center; margin-top: 14px; font-size: .85rem; }
+.lg-olvido a { color: #1A3668; text-decoration: none; font-weight: 600; }
+.lg-olvido a:hover { text-decoration: underline; }
+.lg-lado .form-control:focus { box-shadow: 0 0 0 3px rgba(140,198,63,.35); border-color: #8CC63F; }
+
+/* Panel deslizante */
+.lg-panel { position: absolute; top: 0; bottom: 0; left: 50%; width: 50%; z-index: 3; color: #fff; overflow: hidden;
+  background: radial-gradient(120% 90% at 20% 0%, #2c5aa8 0%, #1A3668 55%, #122650 100%);
+  border-radius: 120px 0 0 120px; transition: transform .8s cubic-bezier(.65,0,.25,1), border-radius .8s cubic-bezier(.65,0,.25,1); will-change: transform; }
+.lg-panel::before, .lg-panel::after { content: ""; position: absolute; border-radius: 50%; background: rgba(140,198,63,.18); }
+.lg-panel::before { width: 260px; height: 260px; right: -90px; top: -70px; animation: lgDeriva 14s ease-in-out infinite alternate; }
+.lg-panel::after { width: 200px; height: 200px; left: -60px; bottom: -60px; background: rgba(255,255,255,.07); animation: lgDeriva 17s ease-in-out infinite alternate-reverse; }
+.lg-shell[data-modo="recuperar"] .lg-panel { transform: translateX(-100%); border-radius: 0 120px 120px 0; }
+.lg-panel__cuerpo { position: absolute; inset: 0; padding: 40px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; z-index: 1;
+  transition: opacity .4s ease, transform .7s cubic-bezier(.65,0,.25,1); }
+.lg-shell[data-modo="ingreso"] .lg-panel__cuerpo--recuperar, .lg-shell[data-modo="recuperar"] .lg-panel__cuerpo--ingreso { opacity: 0; pointer-events: none; transform: translateX(30px); visibility: hidden; }
+.lg-shell[data-modo="recuperar"] .lg-panel__cuerpo--recuperar { transform: none; }
+.lg-escudo { width: 64px; height: 64px; border-radius: 18px; background: rgba(255,255,255,.12); display: grid; place-items: center; font-size: 34px; color: #8CC63F; margin-bottom: 16px; animation: lgFlota 4s ease-in-out infinite; }
+@keyframes lgFlota { 50% { transform: translateY(-6px); } }
+.lg-panel h2 { margin: 0 0 6px; font-size: 1.35rem; letter-spacing: .08em; font-weight: 800; color: #fff; }
+.lg-panel__sub { margin: 0 0 18px; font-size: .88rem; opacity: .85; line-height: 1.45; }
+.lg-lista { list-style: none; padding: 0; margin: 0 0 22px; text-align: left; font-size: .86rem; display: grid; gap: 8px; }
+.lg-lista i { color: #8CC63F; margin-right: 8px; }
+.lg-ghost { background: transparent; color: #fff; border: 1.5px solid rgba(255,255,255,.7); border-radius: 999px; padding: 9px 22px; font-weight: 700; font-size: .82rem; letter-spacing: .04em; cursor: pointer; transition: background .2s, color .2s; }
+.lg-ghost:hover { background: #fff; color: #1A3668; }
+.lg-ghost:focus-visible { outline: 3px solid #8CC63F; outline-offset: 2px; }
+
+/* Móvil: sin deslizamiento, una columna */
+@media (max-width: 760px) {
+  .lg-shell { height: auto; min-height: 0; max-width: 420px; }
+  .lg-panel { display: none; }
+  .lg-lado { position: relative; width: 100%; padding: 28px 24px; }
+  .lg-shell[data-modo="ingreso"] .lg-lado--recuperar, .lg-shell[data-modo="recuperar"] .lg-lado--ingreso { display: none; }
+  .lg-lado--recuperar::after { content: ""; }
+  .lg-shell[data-modo="recuperar"] .lg-lado--recuperar { left: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lg-shell, .lg-panel, .lg-panel__cuerpo, .lg-lado, .lg-fondo span, .lg-escudo, .lg-panel::before, .lg-panel::after { animation: none !important; transition-duration: .01ms !important; }
+}

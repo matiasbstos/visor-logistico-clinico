@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=20.47",
+                "./script.js": "./script.js?v=20.48",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -62,7 +62,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=20.47">
+    <link rel="stylesheet" href="style.css?v=20.48">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -103,43 +103,78 @@
 
     <!-- VISTA DE LOGIN -->
     <div id="login-view" class="login-overlay">
-        <div class="login-card">
-            <div style="display:flex; align-items:center; justify-content:center; gap:18px; margin-bottom:20px; padding-bottom:16px; border-bottom:1px solid #E2E8F0;">
-                <img src="assets/logo-corpo-melipilla.jpg" alt="Corporación Municipal de Melipilla" style="height:56px; width:auto; object-fit:contain; border-radius:6px;">
-                <div style="width:1px; height:44px; background:#CBD5E1;"></div>
-                <img src="assets/logo-sar.png" alt="SAR Arpillerista Elsa Romo Aravena" style="height:56px; width:auto; object-fit:contain;">
-            </div>
-            <div class="sidebar-logo" style="justify-content:center; margin-bottom:24px; flex-direction:column; gap:2px;">
-                <div class="sidebar-logo-text" style="color:var(--sar-blue); font-size:24px; font-weight:900;">VISOR LOGÍSTICO</div>
-                <div class="sidebar-subtitle" style="color:var(--text-muted); font-size:11px; font-weight:700;">SAR ARPILLERISTA ELSA ROMO ARAVENA • MELIPILLA</div>
-            </div>
-            <form id="form-login">
-                <div class="form-group" style="margin-bottom:16px;">
-                    <label class="form-label" for="login-email">Correo Institucional</label>
-                    <input type="email" class="form-control" id="login-email" required
-                        placeholder="nombre.apellido@cormumel.cl">
+        <div class="lg-fondo" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div class="lg-shell" id="lg-shell" data-modo="ingreso">
+            <!-- Ingreso -->
+            <section class="lg-lado lg-lado--ingreso" id="lg-ingreso" aria-label="Ingreso al sistema">
+                <div class="lg-logos">
+                    <img src="assets/logo-corpo-melipilla.jpg" alt="Corporación Municipal de Melipilla">
+                    <span class="lg-sep"></span>
+                    <img src="assets/logo-sar.png" alt="SAR Arpillerista Elsa Romo Aravena">
                 </div>
-                <div class="form-group" style="margin-bottom:24px;">
-                    <label class="form-label" for="login-pwd">Contraseña Asignada</label>
-                    <div style="position: relative;">
-                        <input type="password" class="form-control" id="login-pwd" required placeholder="••••••••"
-                            style="padding-right: 40px;">
-                        <button type="button" id="toggle-pwd-btn"
-                            style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 0; display:flex;">
-                            <i class="ph ph-eye" style="font-size: 20px;"></i>
-                        </button>
+                <h1 class="lg-titulo">Ingresar</h1>
+                <p class="lg-sub">Use su correo institucional y la contraseña asignada.</p>
+                <form id="form-login">
+                    <div class="form-group lg-campo">
+                        <label class="form-label" for="login-email">Correo Institucional</label>
+                        <input type="email" class="form-control" id="login-email" required autocomplete="username"
+                            placeholder="nombre.apellido@cormumel.cl">
                     </div>
+                    <div class="form-group lg-campo">
+                        <label class="form-label" for="login-pwd">Contraseña Asignada</label>
+                        <div style="position: relative;">
+                            <input type="password" class="form-control" id="login-pwd" required placeholder="••••••••" autocomplete="current-password"
+                                style="padding-right: 40px;">
+                            <button type="button" id="toggle-pwd-btn" aria-label="Mostrar u ocultar la contraseña"
+                                style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 0; display:flex;">
+                                <i class="ph ph-eye" style="font-size: 20px;"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-large lg-enviar">
+                        ACREDITAR IDENTIDAD <i class="ph-bold ph-arrow-right"></i>
+                    </button>
+                    <div class="lg-olvido">
+                        <a href="#" id="forgot-pwd-link">¿Olvidó su contraseña?</a>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Recuperar acceso -->
+            <section class="lg-lado lg-lado--recuperar" id="lg-recuperar" aria-label="Recuperar acceso" aria-hidden="true">
+                <h1 class="lg-titulo">Recuperar acceso</h1>
+                <p class="lg-sub">Le enviaremos un enlace a su correo institucional para crear una contraseña nueva.</p>
+                <form id="form-recuperar" novalidate>
+                    <div class="form-group lg-campo">
+                        <label class="form-label" for="reset-email">Correo Institucional</label>
+                        <input type="email" class="form-control" id="reset-email" placeholder="nombre.apellido@cormumel.cl" autocomplete="username">
+                    </div>
+                    <button type="submit" class="btn btn-primary btn-large lg-enviar">
+                        ENVIAR ENLACE <i class="ph-bold ph-paper-plane-tilt"></i>
+                    </button>
+                </form>
+            </section>
+
+            <!-- Panel que se desliza -->
+            <aside class="lg-panel" id="lg-panel">
+                <div class="lg-panel__cuerpo lg-panel__cuerpo--ingreso">
+                    <div class="lg-escudo"><i class="ph-fill ph-shield-check"></i></div>
+                    <h2>VISOR LOGÍSTICO</h2>
+                    <p class="lg-panel__sub">SAR Arpillerista Elsa Romo Aravena<br>Melipilla</p>
+                    <ul class="lg-lista">
+                        <li><i class="ph-bold ph-package"></i> Inventario y vencimientos</li>
+                        <li><i class="ph-bold ph-shopping-cart"></i> Compras, OC y recepción</li>
+                        <li><i class="ph-bold ph-file-text"></i> Actas de entrega y oxígeno</li>
+                    </ul>
+                    <button type="button" class="lg-ghost" id="lg-ir-recuperar">¿Olvidó su contraseña?</button>
                 </div>
-                <button type="submit" class="btn btn-primary btn-large"
-                    style="width:100%; justify-content:center; margin-bottom: 16px;">
-                    ACREDITAR IDENTIDAD <i class="ph-bold ph-arrow-right"></i>
-                </button>
-                <div style="text-align: center;">
-                    <a href="#" id="forgot-pwd-link"
-                        style="color: var(--primary); font-size: 13px; text-decoration: none; font-weight: 600;">¿Olvidó
-                        su contraseña?</a>
+                <div class="lg-panel__cuerpo lg-panel__cuerpo--recuperar">
+                    <div class="lg-escudo"><i class="ph-fill ph-key"></i></div>
+                    <h2>¿Ya la recuerda?</h2>
+                    <p class="lg-panel__sub">Vuelva a la pantalla de ingreso con su correo y contraseña.</p>
+                    <button type="button" class="lg-ghost" id="lg-ir-ingreso">Volver a ingresar</button>
                 </div>
-            </form>
+            </aside>
         </div>
     </div>
 
@@ -5789,20 +5824,21 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=20.47"></script>
-    <script type="module" src="patch-plantillas.js?v=20.47"></script>
+    <script type="module" src="script.js?v=20.48"></script>
+    <script type="module" src="patch-plantillas.js?v=20.48"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="bodegas-estantes.js?v=20.47"></script>
-    <script src="bodegas-cierre.js?v=20.47"></script>
-    <script src="oc-lector.js?v=20.47"></script>
-    <script src="anonimizar-pacientes.js?v=20.47"></script>
-    <script src="seguimiento-oc.js?v=20.47"></script>
-    <script src="compras-agiles.js?v=20.47"></script>
-    <script src="home-compras.js?v=20.47"></script>
-    <script src="recepcion-conforme.js?v=20.47"></script>
-    <script src="acta-documentos.js?v=20.47"></script>
-    <script src="actas-entrega.js?v=20.47"></script>
-    <script src="oxigeno.js?v=20.47"></script>
-    <script src="visor-adquisiciones.js?v=20.47"></script>
+    <script src="bodegas-estantes.js?v=20.48"></script>
+    <script src="bodegas-cierre.js?v=20.48"></script>
+    <script src="oc-lector.js?v=20.48"></script>
+    <script src="anonimizar-pacientes.js?v=20.48"></script>
+    <script src="seguimiento-oc.js?v=20.48"></script>
+    <script src="compras-agiles.js?v=20.48"></script>
+    <script src="home-compras.js?v=20.48"></script>
+    <script src="login-animado.js?v=20.48"></script>
+    <script src="recepcion-conforme.js?v=20.48"></script>
+    <script src="acta-documentos.js?v=20.48"></script>
+    <script src="actas-entrega.js?v=20.48"></script>
+    <script src="oxigeno.js?v=20.48"></script>
+    <script src="visor-adquisiciones.js?v=20.48"></script>
 </body>
 </html>

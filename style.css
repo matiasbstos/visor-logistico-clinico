@@ -5293,3 +5293,8 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .sidebar.collapsed .sidebar-logo { justify-content: center; }
 .sidebar.collapsed .sidebar-logo-badge { width: 42px; height: 42px; }
 .sidebar.collapsed .sidebar-toggle-btn { width: 42px; height: 28px; }
+
+/* v20.60 · botones de la barra superior (menú / expandir barra): sin el borde 3D del navegador */
+.desktop-toggle-btn, .mobile-menu-btn { appearance: none; -webkit-appearance: none; width: 40px; height: 40px; padding: 0; align-items: center; justify-content: center; background: #fff; border: 1px solid #E2E8F0; box-shadow: var(--sh-1); cursor: pointer; transition: background .2s, border-color .2s, box-shadow .2s; }
+.desktop-toggle-btn:hover, .mobile-menu-btn:hover { background: var(--sar-blue-light, #EEF2F9); border-color: var(--brand-blue); }
+.desktop-toggle-btn:active, .mobile-menu-btn:active { transform: scale(.96); }

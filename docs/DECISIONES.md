@@ -152,3 +152,8 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 
 ## 4.8 Bandejas: producto del inventario central (v20.40)
 - Al reintegrar o reponer desde una bandeja, el producto se busca por nombre y, si existe en varias bodegas, se usa el de **Bodega Central** (o el registro antiguo sin bodega), no uno al azar.
+
+## 4.9 Sin datos de pacientes en el código (v20.41)
+- Se eliminó la captura de RUT, nombre y cama: la transferencia "Dispensación nominal a paciente" pasó a **"Salida por consumo (sin datos de paciente)"** (documento `SALIDA-CONSUMO`) y el arqueo parcial de bandejas ya no pide RUT. Se quitaron también los lugares que mostraban esos datos y los datos de ejemplo.
+- Datos ya guardados: herramienta **"Anonimizar datos antiguos"** (Configuración, solo superadministrador): revisa sin cambiar nada, descarga un respaldo local y luego limpia `Historial_Movimientos` (rutPaciente, nombrePaciente, camaPaciente, documento `RECETA-…`) y `Bandejas_Turno` (rutPaciente y "(RUT: …)"). Las reglas permiten ese único cambio al historial.
+- Pendiente: revisar respaldos existentes (`Respaldos_Toma_Inventario`, respaldos del borrado) y el historial de git; y la fase 2 (folio DAU para controlados).

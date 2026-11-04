@@ -4882,10 +4882,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         baseType === 'ajuste' || baseType === 'traspaso' || baseType === 'carga masiva' ? 'text-blue' : 'text-red';
                 const qtySign = baseType === 'entrada' ? '+' : baseType === 'salida' ? '-' : '';
 
-                let patientInfo = '';
-                if (m.rutPaciente || m.nombrePaciente) {
-                    patientInfo = `<div class="item-category" style="color:var(--primary); font-weight:600;"><i class="ph-fill ph-user-circle"></i> Paciente: ${window.escapeHTML(m.nombrePaciente || m.rutPaciente)} ${m.camaPaciente ? '(' + window.escapeHTML(m.camaPaciente) + ')' : ''}</div>`;
-                }
+                const patientInfo = ''; // sin datos de pacientes (docs/DECISIONES.md §2)
 
                 tr.innerHTML = `
                 <td><div class="item-name">${dateFmt}</div><div class="item-category">${timeFmt}</div></td>
@@ -4903,7 +4900,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td><div class="item-name">L: ${window.escapeHTML(m.batch || m.lote || 'S/L')}</div><div class="${qtyClass} font-bold">${qtySign} ${m.quantity || 0} uds</div></td>
                 <td><div class="item-category">Doc: ${window.escapeHTML(m.document || m.supportDocument || 'S/N')}</div></td>
                 <td><span class="doc-badge">${window.escapeHTML(m.document || m.supportDocument || 'FACT-000')}</span></td>
-                <td><button class="btn btn-icon" onclick="window.showAlertCenter('Mensaje del Sistema', 'Detalle:\\nProducto: ${window.escapeHTML(m.insumoName || m.articleName || 'Insumo').replace(/'/g, "\\'")}\\nFecha: ${dateFmt} ${timeFmt}\\nUsuario: ${window.escapeHTML(m.user || m.operatorUid || m.usuario || 'S/I').replace(/'/g, "\\'")}\\n${m.nombrePaciente ? 'Paciente: ' + window.escapeHTML(m.nombrePaciente).replace(/'/g, "\\'") : ''}')"><i class="ph ph-eye"></i></button></td>
+                <td><button class="btn btn-icon" onclick="window.showAlertCenter('Mensaje del Sistema', 'Detalle:\\nProducto: ${window.escapeHTML(m.insumoName || m.articleName || 'Insumo').replace(/'/g, "\\'")}\\nFecha: ${dateFmt} ${timeFmt}\\nUsuario: ${window.escapeHTML(m.user || m.operatorUid || m.usuario || 'S/I').replace(/'/g, "\\'")}')"><i class="ph ph-eye"></i></button></td>
             `;
                 tbody.appendChild(tr);
             });
@@ -5126,9 +5123,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     transferTypeEl.value = 'BODEGA';
                     transferTypeEl.dispatchEvent(new Event('change'));
                 }
-                document.getElementById('transfer-rut-paciente').value = '';
-                document.getElementById('transfer-nombre-paciente').value = '';
-                document.getElementById('transfer-cama-paciente').value = '';
 
                 modalDetail.classList.remove('active');
                 transModal.classList.add('active');
@@ -5138,17 +5132,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // UI Toggle para Transferencia vs Paciente
         const transferTypeSelect = document.getElementById('transfer-type');
         const groupBodegaDestino = document.getElementById('group-bodega-destino');
-        const groupPacienteDestino = document.getElementById('group-paciente-destino');
 
         if (transferTypeSelect) {
             transferTypeSelect.addEventListener('change', (e) => {
                 if (e.target.value === 'PACIENTE') {
                     groupBodegaDestino.style.display = 'none';
-                    groupPacienteDestino.style.display = 'block';
                     document.getElementById('transfer-to-id').removeAttribute('required');
                 } else {
                     groupBodegaDestino.style.display = 'block';
-                    groupPacienteDestino.style.display = 'none';
                     document.getElementById('transfer-to-id').setAttribute('required', 'true');
                 }
             });
@@ -5164,11 +5155,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 const toName = transferType === 'BODEGA' ? document.getElementById('transfer-to-id').value : 'PACIENTE';
                 const insumoId = document.getElementById('transfer-insumo-id').value;
                 const qtyToMove = Number(document.getElementById('transfer-qty').value);
-
-                // Datos del Paciente
-                const rutPaciente = document.getElementById('transfer-rut-paciente').value.trim();
-                const nombrePaciente = document.getElementById('transfer-nombre-paciente').value.trim();
-                const camaPaciente = document.getElementById('transfer-cama-paciente').value.trim();
 
                 if (!toName || !insumoId || qtyToMove <= 0) return;
 
@@ -5196,7 +5182,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         return;
                     }
 
-                    showToast('Procesando', transferType === 'PACIENTE' ? `Dispensando ${qtyToMove} unidades...` : `Moviendo ${qtyToMove} unidades...`, 'info');
+                    showToast('Procesando', transferType === 'PACIENTE' ? `Registrando salida de ${qtyToMove} unidades...` : `Moviendo ${qtyToMove} unidades...`, 'info');
 
                     // Datos del registro de historial (se escribe dentro de la misma transacción)
                     let docName = '';
@@ -5204,13 +5190,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     let actionDetails = {};
                     if (transferType === 'PACIENTE') {
                         actionType = 'salida';
-                        docName = `RECETA-${rutPaciente || 'S/R'}`;
-                        actionDetails = {
-                            rutPaciente: rutPaciente,
-                            nombrePaciente: nombrePaciente,
-                            camaPaciente: camaPaciente,
-                            tipoSalida: 'DISPENSACION_PACIENTE'
-                        };
+                        docName = 'SALIDA-CONSUMO';
+                        actionDetails = { tipoSalida: 'CONSUMO' };
                     } else {
                         actionType = 'traspaso';
                         docName = `TRASP-${fromName.substring(0, 3)}-${toName.substring(0, 3)}`;
@@ -7565,7 +7546,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                     <td>
                                         ${med.nombreInsumo || med.nombre}
                                         ${med.observacionAdicional ? `<br><small class="text-muted">${med.observacionAdicional}</small>` : ''}
-                                        ${med.rutPaciente ? `<br><small class="text-primary font-bold" style="display: inline-flex; align-items: center; gap: 4px; margin-top: 4px;"><i class="ph-fill ph-user-circle"></i> Paciente RUT: ${window.escapeHTML(med.rutPaciente)}</small>` : ''}
                                     </td>
                                     <td style="text-align: center; font-weight: bold;">${maxVal}</td>
                                     <td style="text-align: center; color: #dc3545; font-weight: bold;">${consumidoVal > 0 ? '-' + consumidoVal : '0'}</td>
@@ -7836,7 +7816,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('arqueo-popup-cantidad').value = 1;
         
         // Reset/limpiar campos nuevos
-        document.getElementById('arqueo-popup-rut').value = '';
         
         const tieneIncidenciaSelect = document.getElementById('arqueo-popup-tiene-incidencia');
         tieneIncidenciaSelect.value = 'no';
@@ -7867,20 +7846,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const cant = Number(document.getElementById('arqueo-popup-cantidad').value) || 0;
         const tieneIncidencia = document.getElementById('arqueo-popup-tiene-incidencia').value;
         const motivo = document.getElementById('arqueo-popup-motivo').value;
-        const rutVal = document.getElementById('arqueo-popup-rut').value.trim();
 
         if (cant === 0) {
             window.showToast('Error', 'La cantidad a registrar no puede ser 0', 'error');
-            return;
-        }
-
-        if (!rutVal) {
-            window.showToast('Error', 'El RUT del paciente es obligatorio.', 'error');
-            return;
-        }
-
-        if (!validarRut(rutVal)) {
-            window.showToast('Error', 'El RUT ingresado no es válido. Formato esperado: 12345678-9', 'error');
             return;
         }
 
@@ -7889,7 +7857,6 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const rutFormatted = formatearRut(rutVal);
         const { docId, idx, maxVal } = window._arqueoParcialActivo;
         if (!docId) return;
 
@@ -7917,15 +7884,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const detalleMotivo = tieneIncidencia === 'si' ? motivo : 'Consumo';
             const logSign = cant > 0 ? `+${cant}` : `${cant}`;
             const nuevaObs = med.observacionAdicional 
-                ? `${med.observacionAdicional} | (${logSign}) ${detalleMotivo} (RUT: ${rutFormatted})` 
-                : `(${logSign}) ${detalleMotivo} (RUT: ${rutFormatted})`;
+                ? `${med.observacionAdicional} | (${logSign}) ${detalleMotivo}` 
+                : `(${logSign}) ${detalleMotivo}`;
 
             const medicamentosActualizados = [...data.medicamentos];
             medicamentosActualizados[idx] = {
                 ...med,
                 cantidadConsumida: nuevoConsumido,
-                observacionAdicional: nuevaObs,
-                rutPaciente: med.rutPaciente ? `${med.rutPaciente}, ${rutFormatted}` : rutFormatted
+                observacionAdicional: nuevaObs
             };
 
             // Guardar en Firestore la bandeja
@@ -7949,8 +7915,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 cantidadMermada: cant,
                 quantity: cant,
                 motivoMerma: detalleMotivo,
-                document: `Arqueo: ${detalleMotivo}`,
-                rutPaciente: rutFormatted
+                document: `Arqueo: ${detalleMotivo}`
             });
 
             document.getElementById('modal-arqueo-parcial-popup').classList.remove('active');

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Manual de marca · Visor Logístico</title>
+<meta name="theme-color" content="#1A3668">
+<link rel="icon" type="image/svg+xml" href="assets/logo/marca.svg">
+<link rel="stylesheet" href="style.css?v=20.58">
+<script src="https://unpkg.com/@phosphor-icons/web" defer></script>
+<style>
+  body { background: #F8F9FA; }
+  .mm { max-width: 1040px; margin: 0 auto; padding: 24px 20px 80px; }
+  .mm header { display: flex; align-items: center; gap: 18px; padding: 28px 0 18px; border-bottom: 1px solid #E2E8F0; margin-bottom: 8px; }
+  .mm header img { width: 64px; height: 64px; }
+  .mm h1 { margin: 0; color: var(--brand-blue); font-size: 2rem; font-weight: 800; letter-spacing: -.01em; }
+  .mm h2 { color: var(--brand-blue); font-size: 1.35rem; font-weight: 800; margin: 44px 0 6px; letter-spacing: -.01em; }
+  .mm h2 small { display: block; font-size: .8rem; font-weight: 500; color: var(--text-muted); letter-spacing: 0; margin-top: 2px; }
+  .mm p, .mm li { font-size: 14px; line-height: 1.55; }
+  .mm .muted { color: var(--text-muted); }
+  .mm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; margin-top: 14px; }
+  .mm-sw { border: 1px solid #E2E8F0; border-radius: 12px; overflow: hidden; background: #fff; box-shadow: var(--sh-1); }
+  .mm-sw i { display: block; height: 72px; }
+  .mm-sw div { padding: 10px 12px; font-size: 12px; } .mm-sw b { display: block; font-size: 13px; } .mm-sw code { color: #475569; }
+  .mm-logos { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin-top: 14px; }
+  .mm-logo { border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; display: grid; place-items: center; gap: 10px; background: #fff; text-align: center; font-size: 12px; color: var(--text-muted); }
+  .mm-logo--osc { background: var(--brand-blue); color: #fff; border-color: var(--brand-blue); }
+  .mm-logo img { max-height: 90px; max-width: 100%; }
+  .mm-box { background: #fff; border: 1px solid #E2E8F0; border-radius: 12px; padding: 20px; margin-top: 14px; box-shadow: var(--sh-1); }
+  .mm-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+  .mm-ty { display: grid; grid-template-columns: 170px 1fr; gap: 6px 18px; align-items: baseline; margin-top: 10px; }
+  .mm-ty > span { font-size: 12px; color: var(--text-muted); }
+  .mm-rad { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 14px; }
+  .mm-rad div { width: 110px; height: 70px; background: var(--sar-blue-light, #EEF2F9); border: 1px solid #C7D2E5; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--brand-blue); }
+  .mm-sh div { background: #fff; width: 130px; height: 70px; border-radius: 12px; display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--brand-blue); }
+  .mm-do { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; } @media (max-width: 640px) { .mm-do, .mm-ty { grid-template-columns: 1fr; } }
+  .mm-do div { border-radius: 12px; padding: 14px 16px; font-size: 13px; } .mm-do .si { background: #F3FAE8; border: 1px solid #CFE8A8; } .mm-do .no { background: #FEF2F2; border: 1px solid #FECACA; }
+  .mm-do ul { margin: 6px 0 0; padding-left: 18px; }
+  .mm table { width: 100%; border-collapse: collapse; } .mm td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid #F1F5F9; }
+</style>
+</head>
+<body>
+<div class="mm">
+  <header>
+    <img src="assets/logo/marca.svg" alt="Marca Visor Logístico">
+    <div><h1>Manual de marca</h1><div class="muted">Visor Logístico · SAR Arpillerista Elsa Romo Aravena · v20.58</div></div>
+  </header>
+  <p class="muted">Guía del <strong>aspecto del sitio</strong>. Los documentos oficiales (actas, recepción conforme, informes) tienen su formato estándar y no se modifican desde aquí. Versión en texto: <code>docs/MANUAL_DE_MARCA.md</code>.</p>
+
+  <h2>1 · Idea<small>Cruz clínica en un hexágono, con un punto verde que orbita.</small></h2>
+  <p>Cuidado + logística + orden. Tono sobrio y claro: mucho blanco, azul profundo para estructura y títulos, verde solo como acento positivo. Una pantalla debe leerse en 3 segundos.</p>
+
+  <h2>2 · Logo<small>Zona de respeto: media altura del hexágono. Mínimo 24 px. No deformar, girar ni recolorear.</small></h2>
+  <div class="mm-logos">
+    <div class="mm-logo"><img src="assets/logo/marca.svg" alt=""><span><b>marca.svg</b><br>fondo claro</span></div>
+    <div class="mm-logo mm-logo--osc"><img src="assets/logo/marca-sobre-oscuro.svg" alt=""><span><b>marca-sobre-oscuro.svg</b><br>fondo azul/oscuro</span></div>
+    <div class="mm-logo"><img src="assets/logo/horizontal.svg" alt=""><span><b>horizontal.svg</b><br>encabezados</span></div>
+    <div class="mm-logo"><img src="assets/logo/vertical.svg" alt=""><span><b>vertical.svg</b><br>pantallas altas</span></div>
+    <div class="mm-logo"><img src="assets/logo/marca-monocromo.svg" alt=""><span><b>marca-monocromo.svg</b><br>1 tinta, sellos</span></div>
+    <div class="mm-logo"><img src="assets/logo/icono-app.svg" alt="" style="border-radius:22px"><span><b>icono-app.svg</b><br>PWA, favicon</span></div>
+  </div>
+  <p class="muted" style="margin-top:12px">El logo del SAR (<code>assets/logo-sar.png</code>) acompaña a la marca en el encabezado. El de la Corporación va solo en documentos oficiales.</p>
+
+  <h2>3 · Color<small>El color significa algo. Nunca decorar con rojo. Estados siempre con texto o ícono, no solo color.</small></h2>
+  <div class="mm-grid">
+    <div class="mm-sw"><i style="background:#1A3668"></i><div><b>Azul de marca</b><code>#1A3668</code><br>Estructura, títulos, primario</div></div>
+    <div class="mm-sw"><i style="background:#122650"></i><div><b>Azul profundo</b><code>#122650</code><br>Hover, fondos oscuros</div></div>
+    <div class="mm-sw"><i style="background:#2C5AA8"></i><div><b>Azul luz</b><code>#2C5AA8</code><br>Degradados, detalles</div></div>
+    <div class="mm-sw"><i style="background:#8CC63F"></i><div><b>Verde de marca</b><code>#8CC63F</code><br>Foco, acento positivo</div></div>
+    <div class="mm-sw"><i style="background:#4D7C0F"></i><div><b>Verde texto</b><code>#4D7C0F</code><br>Texto verde (AA)</div></div>
+    <div class="mm-sw"><i style="background:#CC1B23"></i><div><b>Rojo</b><code>#CC1B23</code><br>Alerta, atraso, error</div></div>
+    <div class="mm-sw"><i style="background:#E85D1E"></i><div><b>Naranja</b><code>#E85D1E</code> · texto <code>#C2410C</code><br>Parcial, advertencia</div></div>
+    <div class="mm-sw"><i style="background:#F3D015"></i><div><b>Amarillo</b><code>#F3D015</code><br>En análisis</div></div>
+    <div class="mm-sw"><i style="background:#0F172A"></i><div><b>Texto</b><code>#0F172A</code></div></div>
+    <div class="mm-sw"><i style="background:#64748B"></i><div><b>Secundario</b><code>#64748B</code></div></div>
+    <div class="mm-sw"><i style="background:#E2E8F0"></i><div><b>Bordes</b><code>#E2E8F0</code></div></div>
+    <div class="mm-sw"><i style="background:#F8F9FA"></i><div><b>Fondo app</b><code>#F8F9FA</code></div></div>
+  </div>
+
+  <h2>4 · Tipografía<small>Inter 400–800. Monoespaciada solo para códigos (N° de OC, lotes, folios).</small></h2>
+  <div class="mm-box">
+    <div class="mm-ty"><span>Título de página · 28/800</span><div style="font-size:28px;font-weight:800;color:var(--brand-blue);letter-spacing:-.01em">Seguimiento de órdenes</div>
+      <span>Título de tarjeta · 16–18/700</span><div style="font-size:17px;font-weight:700;color:var(--brand-blue)">Distribución y entregas por centro</div>
+      <span>Texto · 14/400</span><div style="font-size:14px">Cada acta descuenta el stock y deja el saldo pendiente actualizado.</div>
+      <span>Secundario · 12–13</span><div style="font-size:12.5px;color:var(--text-muted)">Registrada el 04-11-2026 por el encargado de insumos.</div>
+      <span>Etiqueta · 11/700 MAYÚS.</span><div style="font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#475569">Correo institucional</div>
+      <span>Código · mono</span><div style="font-family:ui-monospace,Consolas,monospace;font-size:13px">1298355-935-CM26</div></div>
+  </div>
+
+  <h2>5 · Forma, sombra y foco<small>Forma firma: esquina inferior izquierda recta (los cuadrados del logo).</small></h2>
+  <div class="mm-rad">
+    <div style="border-radius:var(--shape-card)">forma firma</div><div style="border-radius:8px">8 · sm</div><div style="border-radius:12px">12 · md</div><div style="border-radius:16px">16 · lg</div><div style="border-radius:24px">24 · xl</div><div style="border-radius:999px">píldora</div>
+  </div>
+  <div class="mm-rad mm-sh">
+    <div style="box-shadow:var(--sh-1)">sh-1 · reposo</div><div style="box-shadow:var(--sh-2)">sh-2 · elevada</div><div style="box-shadow:var(--sh-3)">sh-3 · modal</div>
+  </div>
+  <p class="muted" style="margin-top:12px">Sombras teñidas de azul, nunca negro puro. Movimiento: <code>cubic-bezier(.2,.7,.2,1)</code>, 150–250 ms en controles; 600–800 ms solo en transiciones de marca. Se respeta «reducir movimiento».</p>
+
+  <h2>6 · Componentes<small>Reales: usan el mismo CSS del sitio.</small></h2>
+  <div class="mm-box">
+    <div class="mm-row">
+      <button class="btn btn-primary">Registrar recepción</button>
+      <button class="btn btn-outline">Cancelar</button>
+      <button class="btn btn-outline red-border">Anular acta</button>
+      <button class="lg-ghost" style="background:var(--brand-blue)">¿Olvidó su contraseña?</button>
+    </div>
+    <p class="muted" style="margin:10px 0 0">Una sola acción primaria por zona. Foco: anillo verde.</p>
+  </div>
+  <div class="mm-box">
+    <div class="mm-row" style="align-items:flex-start">
+      <div class="form-group" style="min-width:260px"><label class="form-label">Correo institucional</label><input class="form-control" placeholder="nombre.apellido@cormumel.cl"></div>
+      <div class="form-group" style="min-width:200px"><label class="form-label">Bodega</label><select class="form-control"><option>Bodega Central</option></select></div>
+    </div>
+    <p class="muted" style="margin:6px 0 0">Haga clic en un campo: el borde y el anillo pasan a verde.</p>
+  </div>
+  <div class="mm-box">
+    <div class="mm-row">
+      <span class="soc-chip" style="background:#F3FAE8;color:#365314">Entregado completo</span>
+      <span class="soc-chip" style="background:#FFF7ED;color:#C2410C">Entrega parcial</span>
+      <span class="soc-chip" style="background:#FEF2F2;color:#991B1B">Atrasada</span>
+      <span class="soc-chip" style="background:#FEF9C3;color:#854D0E">En análisis</span>
+      <span class="soc-chip">En plazo</span>
+    </div>
+  </div>
+  <div class="mm-box" style="padding:0;overflow:hidden">
+    <table><thead><tr><th>Producto</th><th>Pedido</th><th>Llegó</th><th>Entregado</th><th>Pendiente</th></tr></thead>
+      <tbody><tr><td>VENDA FIXOMULL ADHESIVA AMPLIA</td><td>46</td><td>46</td><td>46</td><td style="color:var(--brand-green-ink);font-weight:700">0</td></tr>
+      <tr><td>APÓSITO LEUKOMED TRANSPARENTE</td><td>3</td><td>2</td><td>2</td><td style="color:#C2410C;font-weight:700">1</td></tr></tbody></table>
+  </div>
+  <div class="mm-box" style="background:#F1F5F9">
+    <div class="cierre-box" style="position:static;margin:0 auto;width:min(420px,100%)"><h3>Acta de entrega · CESFAM Boris Soler</h3><label>Recibe (nombre)<input type="text" value="Pilar González"></label><div class="cierre-acciones"><button class="btn btn-outline">Cancelar</button><button class="btn btn-primary">Guardar</button></div></div>
+  </div>
+
+  <h2>7 · Sí y no</h2>
+  <div class="mm-do">
+    <div class="si"><b>Sí</b><ul><li>Tokens: <code>var(--brand-blue)</code>, <code>var(--sh-1)</code>.</li><li>Reusar <code>.btn</code>, <code>.card</code>, <code>.erp-card</code>, <code>.soc-chip</code>.</li><li>Verbos en botones: «Generar acta».</li><li>Error = qué pasó + qué hacer + código.</li></ul></div>
+    <div class="no"><b>No</b><ul><li>Azules o grises sueltos (#0284C7, etc.).</li><li>Radios uniformes que borren la forma firma.</li><li>Rojo decorativo; color sin texto.</li><li>Tocar los documentos oficiales por cambios del sitio.</li></ul></div>
+  </div>
+  <p class="muted" style="margin-top:28px">Voz: español de Chile; «usted» en acceso y avisos formales; directo en el trabajo diario; sin datos de pacientes ni RUT (ver <code>docs/DECISIONES.md</code>).</p>
+</div>
+</body>
+</html>

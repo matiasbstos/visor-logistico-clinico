@@ -759,7 +759,7 @@ select.form-control, select {
 
 .smart-scanner-box {
     background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
-    border: 1.5px dashed #0284c7;
+    border: 1.5px dashed var(--brand-blue);
     border-radius: 12px;
     padding: 16px 20px;
     display: flex;
@@ -787,7 +787,7 @@ select.form-control, select {
 }
 
 .smart-scanner-icon {
-    background: #0284c7;
+    background: var(--brand-blue);
     color: white;
     width: 44px;
     height: 44px;
@@ -827,7 +827,7 @@ select.form-control, select {
     white-space: nowrap;
     flex-shrink: 0;
     pointer-events: none;
-    background: #0284c7;
+    background: var(--brand-blue);
     border: none;
     color: white;
     box-shadow: 0 2px 8px rgba(2, 132, 199, 0.3);
@@ -1816,7 +1816,7 @@ gemini-analysis {
 }
 
 .week-pill-btn.active {
-    background: #0284c7;
+    background: var(--brand-blue);
     border-color: #38bdf8;
     color: white;
     box-shadow: 0 4px 12px rgba(2, 132, 199, 0.4);
@@ -1860,8 +1860,8 @@ gemini-analysis {
 }
 
 .rack-chip.active {
-    background: #0284c7;
-    border-color: #0284c7;
+    background: var(--brand-blue);
+    border-color: var(--brand-blue);
     color: white;
     box-shadow: 0 2px 6px rgba(2, 132, 199, 0.3);
 }
@@ -1932,8 +1932,8 @@ gemini-analysis {
 }
 
 .semanal-stepper-btn:hover {
-    background: #0284c7;
-    border-color: #0284c7;
+    background: var(--brand-blue);
+    border-color: var(--brand-blue);
     color: white;
 }
 
@@ -1950,7 +1950,7 @@ gemini-analysis {
 }
 
 .semanal-input-count:focus {
-    border-color: #0284c7;
+    border-color: var(--brand-blue);
     outline: none;
     box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.2);
 }
@@ -2040,7 +2040,7 @@ gemini-analysis {
 .smart-autocomplete-item:hover,
 .smart-autocomplete-item.active-item {
     background: #f0f9ff;
-    color: #0284c7;
+    color: var(--brand-blue);
 }
 
 .smart-autocomplete-item .item-title {
@@ -2050,7 +2050,7 @@ gemini-analysis {
 
 .smart-autocomplete-item:hover .item-title,
 .smart-autocomplete-item.active-item .item-title {
-    color: #0284c7;
+    color: var(--brand-blue);
 }
 
 .smart-autocomplete-item .item-meta {
@@ -2411,7 +2411,7 @@ gemini-analysis {
 
 .kanban-card__progress-bar {
     height: 100%;
-    background: #0284c7;
+    background: var(--brand-blue);
     border-radius: 999px;
     transition: width 0.3s ease;
 }
@@ -5245,3 +5245,45 @@ button.erp-card:hover, .soc-card:hover { transform: translateY(-2px); box-shadow
 .lg-ghost i { margin-right: 6px; vertical-align: -1px; }
 .lg-ghost:hover i { animation: lg-llave .6s ease; }
 @keyframes lg-llave { 40% { transform: rotate(-25deg) scale(1.15); } 100% { transform: none; } }
+
+/* ==========================================================================
+   v20.58 · IDENTIDAD VISUAL UNIFICADA (ver docs/MANUAL_DE_MARCA.md)
+   Tokens de marca + ajuste de componentes al lenguaje del login.
+   NO toca documentos (acta, recepción conforme, impresión).
+   ========================================================================== */
+:root {
+    --brand-blue: #1A3668; --brand-blue-deep: #122650; --brand-blue-bright: #2C5AA8;
+    --brand-green: #8CC63F; --brand-green-ink: #4D7C0F;
+    --r-sm: 8px; --r-md: 12px; --r-lg: 16px; --r-xl: 24px; --r-pill: 999px;
+    --sh-1: 0 1px 3px rgba(26, 54, 104, .07);
+    --sh-2: 0 10px 22px -10px rgba(26, 54, 104, .22), 0 2px 6px rgba(26, 54, 104, .06);
+    --sh-3: 0 30px 60px -20px rgba(26, 54, 104, .35), 0 8px 20px rgba(0, 0, 0, .06);
+    --ring-green: 0 0 0 3px rgba(140, 198, 63, .35);
+    --ux-ring: var(--ring-green);
+}
+/* botones: sombra y hover en el azul de marca (antes un azul ajeno a la paleta) */
+.btn-primary { background-color: var(--brand-blue); box-shadow: 0 2px 6px rgba(26, 54, 104, .25); }
+.btn-primary:hover { background-color: var(--brand-blue-deep); box-shadow: 0 8px 18px -6px rgba(26, 54, 104, .45); }
+.btn:focus-visible, a:focus-visible, button:focus-visible, [tabindex]:focus-visible { outline: 3px solid var(--brand-green); outline-offset: 2px; }
+.btn-outline:hover { border-color: var(--brand-blue); color: var(--brand-blue); background: var(--sar-blue-light, #EEF2F9); }
+/* campos: foco verde, igual que el login */
+.form-control:focus, input:not([type=checkbox]):not([type=radio]):focus, select:focus, textarea:focus { border-color: var(--brand-green); box-shadow: var(--ring-green); outline: none; }
+/* tarjetas y modales */
+.card, .erp-card { border-color: #E2E8F0; box-shadow: var(--sh-1); }
+.card:hover { box-shadow: var(--sh-2); }
+.cierre-box { border-radius: var(--r-lg); box-shadow: var(--sh-3); padding: 22px; }
+.cierre-box h3 { font-weight: 800; letter-spacing: -.01em; }
+.cierre-box input:not([type=checkbox]), .cierre-box select, .cierre-box textarea { border-radius: var(--r-sm); background: #F8FAFC; }
+/* títulos de página como en el login: azul, firmes */
+.page-title h1 { color: var(--brand-blue); font-weight: 800; letter-spacing: -.01em; }
+.page-title p { color: var(--text-muted); }
+/* encabezados de tabla: etiqueta pequeña en mayúsculas */
+th { letter-spacing: .04em; font-weight: 700; color: #475569; }
+/* chips y etiquetas de estado: siempre píldora */
+.soc-chip, .err-chip, .err-niv, .sal-e, .badge-gray { border-radius: var(--r-pill); }
+.soc-chip { letter-spacing: .01em; }
+/* encabezados de tablas de módulos */
+.erp-reception-table th, .sal-cab { font-size: 11px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--brand-blue); background: #F8FAFC; border-bottom: 2px solid #E2E8F0; }
+.modal-content, .modal-card { box-shadow: var(--sh-3); }
+/* fondo de la aplicación: el mismo aire que el login (muy sutil) */
+.main-content { background-image: linear-gradient(135deg, #F4F7FC 0%, #F8F9FA 55%, #F6F9EE 100%); background-attachment: local; }

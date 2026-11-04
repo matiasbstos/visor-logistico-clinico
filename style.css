@@ -5238,3 +5238,10 @@ button.erp-card:hover, .soc-card:hover { transform: translateY(-2px); box-shadow
 .soc-entrega { margin: 0 0 14px; padding-bottom: 10px; border-bottom: 1px dashed #DCE3EF; } .soc-entrega:last-of-type { border-bottom: 0; }
 .soc-entrega .soc-sub { flex-wrap: wrap; gap: 8px; align-items: center; }
 .soc-est--ok { color: #15803D; }
+
+/* v20.56 — un solo acceso a recuperar contraseña: botón del panel; en móvil, el enlace */
+.lg-olvido--movil { display: none; }
+@media (max-width: 760px) { .lg-olvido--movil { display: block; } }
+.lg-ghost i { margin-right: 6px; vertical-align: -1px; }
+.lg-ghost:hover i { animation: lg-llave .6s ease; }
+@keyframes lg-llave { 40% { transform: rotate(-25deg) scale(1.15); } 100% { transform: none; } }

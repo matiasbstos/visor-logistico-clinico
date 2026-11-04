@@ -5173,3 +5173,6 @@ button.erp-card:hover, .soc-card:hover { transform: translateY(-2px); box-shadow
 @media (prefers-reduced-motion: reduce) {
   .lg-hex, .lg-cruz, .lg-punto { animation: none !important; stroke-dashoffset: 0; fill-opacity: 1; transform: none; }
 }
+
+/* v20.50 · marca en la barra lateral */
+.sidebar-logo-badge .sb-marca { width: 78%; height: 78%; display: block; }

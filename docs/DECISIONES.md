@@ -190,3 +190,6 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 ### 4.14 Marca del Visor y animación del login (v20.49)
 - Marca: hexágono (caja de insumos) + cruz clínica + punto verde SAR; archivos en `assets/logo/`. Aplicada por ahora solo en el login; falta favicon/ícono de app/encabezado.
 - Login: el hexágono se dibuja, la cruz crece y el punto cae y late; al cambiar a "Recuperar" el hexágono gira 60° y el punto orbita 180°; al enviar credenciales el punto orbita (máx. 6 s). Respeta `prefers-reduced-motion`.
+
+### 4.15 Marca en toda la app (v20.50)
+- Marca en barra lateral, favicon (SVG + PNG 32), apple-touch-icon y manifest PWA (iconos 192/512 maskable, theme-color #1A3668). Reemplaza la "S" roja.

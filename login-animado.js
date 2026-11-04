@@ -32,5 +32,11 @@
         $('login-email').value = email;               // el manejador existente lee este campo
         $('forgot-pwd-link').click();                 // valida, envía y muestra el aviso
     });
+    // estado "enviando": el punto verde orbita mientras se valida (máx. 6 s)
+    let t;
+    function cargando() { shell.classList.add('lg-cargando'); clearTimeout(t); t = setTimeout(() => shell.classList.remove('lg-cargando'), 6000); }
+    $('form-login').addEventListener('submit', cargando);
+    $('form-recuperar').addEventListener('submit', cargando);
+    $('forgot-pwd-link').addEventListener('click', cargando);
     // el enlace "¿Olvidó…?" del formulario sigue funcionando por sí solo (envía con el correo escrito)
 })(window, document);

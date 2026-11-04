@@ -186,3 +186,7 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 ### 4.13 Login animado (v20.48)
 - Solo presentación: panel de marca (azul SAR, acento verde) que se desliza entre "Ingresar" y "Recuperar acceso". IDs y manejadores de autenticación (`form-login`, `login-email`, `login-pwd`, `forgot-pwd-link`) no cambian; el formulario de recuperación reutiliza el mismo manejador.
 - Sin "crear cuenta": las cuentas las crea el administrador. En móvil (<760px) no hay panel; se mantiene el enlace "¿Olvidó su contraseña?". Respeta `prefers-reduced-motion`. Archivo: `login-animado.js`.
+
+### 4.14 Marca del Visor y animación del login (v20.49)
+- Marca: hexágono (caja de insumos) + cruz clínica + punto verde SAR; archivos en `assets/logo/`. Aplicada por ahora solo en el login; falta favicon/ícono de app/encabezado.
+- Login: el hexágono se dibuja, la cruz crece y el punto cae y late; al cambiar a "Recuperar" el hexágono gira 60° y el punto orbita 180°; al enviar credenciales el punto orbita (máx. 6 s). Respeta `prefers-reduced-motion`.

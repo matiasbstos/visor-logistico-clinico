@@ -169,3 +169,4 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 - Se registran: ítems y cuadro por centro (memo/CDP), oferta admisible, documentos del oferente (con vencimiento), V°B° por centro y bitácora inmutable.
 - Alertas automáticas: sobre presupuesto, plazo/vigencia fuera de bases, documento vencido antes de la oferta, certificado de habilidad con más de 30 días, ficha técnica faltante por ítem, observaciones de equivalencia, cuenta bancaria a nombre de un tercero, OC que no llega 5+ días hábiles después del V°B°.
 - Las alertas informan; la decisión de adjudicar o pagar sigue siendo de las personas autorizadas.
+- Al ingresar la OC desde el PDF, si existe la compra ágil con el mismo prefijo y las cantidades calzan (mismo orden o por cantidad), el cuadro por centro (memo/CDP) se copia a la OC y las dos quedan enlazadas (v20.43). Si no calza, se ingresa todo al SAR y se avisa.

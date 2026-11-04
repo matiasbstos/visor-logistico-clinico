@@ -440,12 +440,16 @@
         const lineas = (v.lineas || []).filter(l => String(l.descripcion || '').trim() && num(l.cantidad) > 0);
         if (!lineas.length) throw new Error('Agrega al menos un producto con cantidad.');
         const horas = num(v.aceptarHoras) || 48, dias = num(v.entregaDias) || 2;
+        // cuadro por centro tomado de la compra ágil: solo si calza con las líneas (misma cantidad)
+        const cuadro = (v.cuadro && v.cuadro.dist && v.cuadro.dist.length === lineas.length
+            && lineas.every((l, i) => Object.values(v.cuadro.dist[i] || {}).reduce((t, x) => t + num(x), 0) === num(l.cantidad))) ? v.cuadro : null;
         return {
             numeroOC: numero, proveedor: String(v.proveedor || '').trim(), rutProveedor: String(v.rutProveedor || '').trim(), descripcion: String(v.descripcion || '').trim(),
             emitida: v.emitida, emitidaHora: v.emitidaHora || '', aceptarHoras: horas, aceptarLimite: sumarDias(v.emitida, Math.ceil(horas / 24)), aceptada: '',
             plazoDiasHabiles: dias, fechaLimite: '', origen: v.origen || 'MANUAL',
-            columnas: [{ memo: String(v.memo || '').trim() || 's/n', centro: CENTRO_PROPIO, cdp: '', key: 'sar' }],
-            lineas: lineas.map(l => ({ descripcion: String(l.descripcion).trim(), codigoMP: l.codigoMP || '', licitacion: l.licitacion || '', valorNeto: num(l.valorNeto), dist: { sar: num(l.cantidad) }, recibido: {} })),
+            columnas: cuadro ? cuadro.columnas : [{ memo: String(v.memo || '').trim() || 's/n', centro: CENTRO_PROPIO, cdp: '', key: 'sar' }],
+            lineas: lineas.map((l, i) => ({ descripcion: String(l.descripcion).trim(), codigoMP: l.codigoMP || '', licitacion: l.licitacion || '', valorNeto: num(l.valorNeto), dist: cuadro ? { ...cuadro.dist[i] } : { sar: num(l.cantidad) }, recibido: {} })),
+            ...(cuadro ? { compraAgil: cuadro.compra } : {}),
             datos: { direccionDespacho: v.direccionDespacho || '', contraparte: v.contraparte || '', contacto: v.contacto || '', horario: v.horario || '', formaPago: v.formaPago || '', emailFactura: v.emailFactura || '', memo: v.memo || '', total: num(v.total), totalNeto: num(v.totalNeto) },
             incidencias: [], multa: { estado: 'por_evaluar' }, cerrada: false
         };
@@ -459,6 +463,11 @@
             <div id="p-estado" class="cierre-hint">Sube el PDF y revisa lo que se leyó. También puedes completar todo a mano.</div>
             <div id="p-rev"></div>`, async (o) => {
             leerRev(o);
+            let usoCuadro = null;
+            if (window.SAR_ComprasAgiles && String(rev.numeroOC || '').trim()) {
+                const r = await window.SAR_ComprasAgiles.cuadroParaOC(String(rev.numeroOC).trim().toUpperCase(), rev.lineas.filter(l => String(l.descripcion || '').trim() && num(l.cantidad) > 0));
+                if (r && !r.error) { rev.cuadro = r; usoCuadro = r; } else if (r && r.error && r.error !== 'sin compra ágil') toast('Cuadro por centro', `No se usó el de la compra ágil ${r.compra}: ${r.error} Se ingresó todo al SAR; revisa el cuadro.`, 'warning');
+            }
             const oc = armarOCdesdeRevision(rev);
             const id = slug(oc.numeroOC), ref = fs().doc(fs().collection(db(), 'Seguimiento_OC'), id);
             if ((await fs().getDoc(ref)).exists()) { toast('Ya existe', 'Esa orden ya está en seguimiento.', 'warning'); return false; }
@@ -467,7 +476,8 @@
                 tx.set(ref, oc);
                 tx.set(fs().doc(fs().collection(db(), 'Seguimiento_OC', id, 'Eventos')), { tipo: 'CREACION', texto: `Orden ingresada${oc.origen === 'OC_MP' ? ' desde el PDF' : ''}: ${oc.lineas.length} producto(s). El proveedor debe aceptarla hasta el ${fmtFecha(oc.aceptarLimite)}; entrega en ${oc.plazoDiasHabiles} días hábiles desde la aceptación.`, autor: usuario(), fecha: fs().serverTimestamp() });
             });
-            toast('Orden ingresada', `Acepta hasta el ${fmtFecha(oc.aceptarLimite)}.`, 'success');
+            if (usoCuadro) window.SAR_ComprasAgiles.vincularOC(usoCuadro.id, oc.numeroOC);
+            toast('Orden ingresada', `Acepta hasta el ${fmtFecha(oc.aceptarLimite)}.${usoCuadro ? ' Cuadro por centro tomado de la compra ágil ' + usoCuadro.compra + '.' : ''}`, 'success');
         });
         const q = (s) => ov.querySelector(s);
         function leerRev(o) {

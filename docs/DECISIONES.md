@@ -198,3 +198,11 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 - `errores.js`: catálogo único de 36 códigos `SAR-<ÁREA>-NNN` (acceso, datos, inventario, compras, documentos, seguridad clínica, sistema) con significado, causa, solución y quién actúa.
 - Los avisos de error/advertencia que coinciden con el catálogo muestran "Ref. CÓDIGO"; cada aparición se anota solo en el equipo local (máx. 100, sin datos de pacientes). Vista exclusiva de administración (menú "Directorio de errores").
 - Para sumar un error nuevo: agregar una fila en el arreglo `C` de `errores.js` con los textos que lo identifican.
+
+### 4.17 Sobregiro en actas de entrega y saldos contables (v20.52)
+- Se puede entregar en un acta lo que aún no está cargado en el sistema (insumo existente sin stock o **ingreso manual**, que se asume físico). `quantity` nunca baja de 0: lo que falta queda como `sobregiro` del insumo. **Saldo contable = en sistema − sobregiro** (puede ser negativo); **disponible = máx(0, contable)**.
+- Ingreso manual crea un insumo `provisional` en la bodega (o usa el existente con ese nombre). Se fusiona/valida al hacer el inventario.
+- **Cuadre:** al ingresar la OC/SDC, "Cuadrar" (por insumo o todos) descuenta lo ya entregado del stock ingresado, deja el resto disponible y registra `CUADRE_SOBREGIRO` en el historial. Si se emite otra acta antes, cuadra automáticamente primero. Anular un acta retira el sobregiro correspondiente.
+- Medicamentos controlados **no** pueden entregarse sin stock en sistema (circuito con folio DAU en registro separado).
+- El documento del acta (PDF/Word) **no cambia de formato**: el sobregiro es solo registro interno (acta `conSobregiro`, item `sinRespaldo`, historial). Informes Excel (CSV): contable valorizado y disponible, en la vista Actas de entrega.
+- Pendiente: mostrar el sobregiro en Existencias/Informes generales y cuadrar automáticamente en cada vía de ingreso.

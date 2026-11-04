@@ -5145,3 +5145,31 @@ button.erp-card:hover, .soc-card:hover { transform: translateY(-2px); box-shadow
 @media (prefers-reduced-motion: reduce) {
   .lg-shell, .lg-panel, .lg-panel__cuerpo, .lg-lado, .lg-fondo span, .lg-escudo, .lg-panel::before, .lg-panel::after { animation: none !important; transition-duration: .01ms !important; }
 }
+
+/* v20.49 · marca animada en el login */
+.lg-escudo { width: 92px; height: 92px; background: none; border-radius: 0; margin-bottom: 14px; animation: none; display: block; }
+.lg-marca { width: 100%; height: 100%; overflow: visible; }
+.lg-hex { fill: rgba(255,255,255,.96); stroke: #fff; stroke-width: 3; stroke-linejoin: round; transform-origin: 100px 100px; transform-box: view-box; }
+.lg-cruz { fill: #1A3668; transform-origin: 100px 100px; transform-box: view-box; }
+.lg-orbita { transform-origin: 100px 100px; transform-box: view-box; transition: transform .8s cubic-bezier(.65,0,.25,1); }
+.lg-punto { fill: #8CC63F; transform-origin: 146px 146px; transform-box: view-box; }
+/* entrada: el hexágono se dibuja, la cruz crece y el punto "cae" */
+.lg-hex { stroke-dasharray: 100; stroke-dashoffset: 100; fill-opacity: 0; animation: lgDibuja 1s .35s cubic-bezier(.65,0,.25,1) forwards, lgRellena .5s 1.2s ease forwards; }
+.lg-cruz { transform: scale(0); animation: lgCrece .55s 1.1s cubic-bezier(.34,1.56,.64,1) forwards; }
+.lg-punto { transform: scale(0); animation: lgCrece .5s 1.55s cubic-bezier(.34,1.56,.64,1) forwards, lgLatido 3.2s 2.4s ease-in-out infinite; }
+@keyframes lgDibuja { to { stroke-dashoffset: 0; } }
+@keyframes lgRellena { to { fill-opacity: 1; } }
+@keyframes lgCrece { to { transform: scale(1); } }
+@keyframes lgLatido { 0%,70%,100% { transform: scale(1); } 80% { transform: scale(1.5); } 90% { transform: scale(.95); } }
+/* al cambiar de modo el punto orbita media vuelta y el hexágono gira 60° */
+.lg-shell[data-modo="recuperar"] .lg-orbita { transform: rotate(180deg); }
+.lg-panel .lg-hex { transition: transform .8s cubic-bezier(.65,0,.25,1); }
+.lg-shell[data-modo="recuperar"] .lg-hex { transform: rotate(60deg); }
+/* enviando credenciales: el punto orbita sin parar */
+.lg-shell.lg-cargando .lg-orbita { animation: lgGira 1s linear infinite; transition: none; }
+.lg-shell.lg-cargando .lg-punto { animation: none; transform: scale(1.1); }
+@keyframes lgGira { to { transform: rotate(360deg); } }
+.lg-shell.lg-cargando .lg-enviar { opacity: .75; pointer-events: none; }
+@media (prefers-reduced-motion: reduce) {
+  .lg-hex, .lg-cruz, .lg-punto { animation: none !important; stroke-dashoffset: 0; fill-opacity: 1; transform: none; }
+}

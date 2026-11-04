@@ -65,41 +65,63 @@
         }
         if (falta > 0) usados.push({ batch: 'S/L', used: falta, expirationDate: '' });
     }
+    /** Detalle del sobregiro por acta [{acta, qty}] (el más antiguo primero); cuadra con `sobregiro`. */
+    function detalleDe(d) {
+        const det = (Array.isArray(d.sobregiroDetalle) ? d.sobregiroDetalle : []).map(x => ({ acta: x.acta, qty: num(x.qty) })).filter(x => x.qty > 0);
+        const dif = num(d.sobregiro) - det.reduce((t, x) => t + x.qty, 0);
+        if (dif > 0) det.unshift({ acta: '(sin acta)', qty: dif });
+        return det;
+    }
+    /** Consume `n` unidades del detalle (FIFO). Devuelve {det, cubiertas:[{acta,qty}]}. */
+    function consumirDetalle(det, n) {
+        let falta = n; const cubiertas = [], rest = [];
+        for (const x of det) {
+            if (falta > 0) { const u = Math.min(x.qty, falta); if (u > 0) cubiertas.push({ acta: x.acta, qty: u }); falta -= u; if (x.qty - u > 0) rest.push({ acta: x.acta, qty: x.qty - u }); }
+            else rest.push({ ...x });
+        }
+        return { det: rest, cubiertas };
+    }
     /**
      * Entrega con sobregiro. 1) Cuadra: si ya entró stock al sistema y hay unidades entregadas antes sin respaldo
-     * (sobregiro), se descuentan primero. 2) Entrega lo que alcance. 3) Lo que falte queda como sobregiro nuevo.
-     * Saldo contable = quantity − sobregiro (puede ser negativo). quantity nunca baja de 0.
+     * (sobregiro), se descuentan primero. 2) Entrega lo que alcance. 3) Lo que falte queda como sobregiro nuevo
+     * asociado al acta. Saldo contable = quantity − sobregiro (puede ser negativo). quantity nunca baja de 0.
      */
-    function planificar(d, cantidad) {
+    function planificar(d, cantidad, acta) {
         const c = num(cantidad);
         if (!(c > 0) || c !== Math.floor(c)) throw new Error('La cantidad debe ser un entero mayor que 0.');
         let q = num(d.quantity), sg = num(d.sobregiro);
+        let det = detalleDe(d), cubiertas = [];
         const cmp = typeof window.fefoCompare === 'function' ? window.fefoCompare : () => 0;
         const lotes = lotesDeDoc(d).sort(cmp);
         const cuadrado = Math.min(sg, q), cuadreUsados = [];
-        if (cuadrado > 0) { quitarFEFO(lotes, cuadrado, cuadreUsados); q -= cuadrado; sg -= cuadrado; }
+        if (cuadrado > 0) { quitarFEFO(lotes, cuadrado, cuadreUsados); q -= cuadrado; sg -= cuadrado; const r = consumirDetalle(det, cuadrado); det = r.det; cubiertas = r.cubiertas; }
         const take = Math.min(c, q), usados = [];
         if (take > 0) { quitarFEFO(lotes, take, usados); q -= take; }
         const faltante = c - take; sg += faltante;
-        return { usados, cuadreUsados, batches: lotes.filter(l => l.quantity > 0), quantity: q, sobregiro: sg, faltante, cuadrado };
+        if (faltante > 0) det.push({ acta: acta || '(sin acta)', qty: faltante });
+        return { usados, cuadreUsados, batches: lotes.filter(l => l.quantity > 0), quantity: q, sobregiro: sg, sobregiroDetalle: det, cubiertas, faltante, cuadrado };
     }
     /** Cuadre explícito (sin entrega): descuenta del stock lo ya entregado sin respaldo. */
     function cuadrar(d) {
         const q = num(d.quantity), sg = num(d.sobregiro), n = Math.min(q, sg);
-        if (!(n > 0)) return { cuadrado: 0, batches: lotesDeDoc(d), quantity: q, sobregiro: sg, usados: [] };
+        if (!(n > 0)) return { cuadrado: 0, batches: lotesDeDoc(d), quantity: q, sobregiro: sg, sobregiroDetalle: detalleDe(d), cubiertas: [], usados: [] };
         const cmp = typeof window.fefoCompare === 'function' ? window.fefoCompare : () => 0;
         const lotes = lotesDeDoc(d).sort(cmp), usados = [];
         quitarFEFO(lotes, n, usados);
-        return { cuadrado: n, batches: lotes.filter(l => l.quantity > 0), quantity: q - n, sobregiro: sg - n, usados };
+        const r = consumirDetalle(detalleDe(d), n);
+        return { cuadrado: n, batches: lotes.filter(l => l.quantity > 0), quantity: q - n, sobregiro: sg - n, sobregiroDetalle: r.det, cubiertas: r.cubiertas, usados };
     }
     /** Anulación: devuelve lo descontado y retira del sobregiro lo que nunca salió del sistema. */
-    function restaurarConSobregiro(d, usados, sinRespaldo) {
+    function restaurarConSobregiro(d, usados, sinRespaldo, acta) {
         const res = restaurarLotes(d, usados);
         const sr = num(sinRespaldo), sg = num(d.sobregiro);
-        const quita = Math.min(sg, sr), resto = sr - quita;
+        const det = detalleDe(d).map(x => ({ ...x }));
+        const e = det.find(x => x.acta === acta) || det.find(x => x.acta === '(sin acta)');
+        const quita = Math.min(e ? e.qty : 0, sr, sg), resto = sr - quita;
+        if (e) e.qty -= quita;
         let batches = res.batches, quantity = res.quantity;
         if (resto > 0) { batches = batches.concat([{ batch: 'S/L', quantity: resto, expirationDate: '' }]); quantity += resto; }
-        return { batches, quantity, sobregiro: sg - quita };
+        return { batches, quantity, sobregiro: sg - quita, sobregiroDetalle: det.filter(x => x.qty > 0) };
     }
     /** Devuelve a un doc los lotes usados (anulación). */
     function restaurarLotes(d, usados) {
@@ -197,7 +219,7 @@
                 return d;
             });
             const calc = refs.map((r, k) => {
-                const p = planificar({ ...datos[k], name: datos[k].name }, r.i.cantidad);
+                const p = planificar({ ...datos[k], name: datos[k].name }, r.i.cantidad, numero);
                 if (datos[k].controlado && p.faltante > 0) throw new Error(`${r.i.nombre} es medicamento controlado: no puede entregarse sin stock en sistema.`);
                 return p;
             });
@@ -206,9 +228,9 @@
                 const d = datos[k], c = calc[k];
                 const limite = num(d.criticalLimit || d.stock_minimo || 50);
                 const prox = c.batches[0];
-                const cambios = { quantity: c.quantity, batches: c.batches, sobregiro: c.sobregiro, isCritical: c.quantity <= limite, ...(prox ? { batch: prox.batch, expirationDate: prox.expirationDate || '' } : {}), updatedAt: f.serverTimestamp() };
+                const cambios = { quantity: c.quantity, batches: c.batches, sobregiro: c.sobregiro, sobregiroDetalle: c.sobregiroDetalle, isCritical: c.quantity <= limite, ...(prox ? { batch: prox.batch, expirationDate: prox.expirationDate || '' } : {}), updatedAt: f.serverTimestamp() };
                 if (r.i.nuevo) tx.set(r.ref, { ...d, ...cambios }); else tx.update(r.ref, cambios);
-                if (c.cuadrado > 0) tx.set(r.histC, { insumoName: d.name, quantity: c.cuadrado, type: 'CUADRE_SOBREGIRO', user: usuario, date: f.serverTimestamp(), document: numero, batch: 'MULTI-LOTE', origin: b.origen, lotes: c.cuadreUsados, idInsumoOrigen: r.ref.id, observacion: `Cuadre automático al emitir ${numero}: ${c.cuadrado} u. ya entregadas sin respaldo`, actaId: numero });
+                c.cubiertas.forEach(cu => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name, quantity: cu.qty, type: 'CUADRE_SOBREGIRO', user: usuario, date: f.serverTimestamp(), document: numero, batch: 'MULTI-LOTE', origin: b.origen, idInsumoOrigen: r.ref.id, observacion: `Cuadre automático al emitir ${numero}: ${cu.qty} u. del acta ${cu.acta} ya estaban entregadas sin respaldo`, actaId: cu.acta, cuadradoPor: numero }));
                 tx.set(r.hist, {
                     insumoName: d.name, quantity: num(r.i.cantidad), type: 'ENTREGA_ACTA', user: usuario, date: f.serverTimestamp(), document: numero,
                     batch: c.usados.length === 1 ? c.usados[0].batch : (c.usados.length ? 'MULTI-LOTE' : 'SIN-RESPALDO'), origin: b.origen, dest: b.centro, lotes: c.usados,
@@ -243,9 +265,9 @@
             const snaps = []; for (const r of refs) snaps.push(await tx.get(r.ref));
             refs.forEach((r, k) => {
                 if (!snaps[k].exists()) throw new Error(`${r.i.nombre} ya no existe: no se puede devolver el stock.`);
-                const d = snaps[k].data(), res = restaurarConSobregiro(d, r.i.lotes, r.i.sinRespaldo);
+                const d = snaps[k].data(), res = restaurarConSobregiro(d, r.i.lotes, r.i.sinRespaldo, numero);
                 const limite = num(d.criticalLimit || d.stock_minimo || 50);
-                tx.update(r.ref, { quantity: res.quantity, batches: res.batches, sobregiro: res.sobregiro, isCritical: res.quantity <= limite, updatedAt: f.serverTimestamp() });
+                tx.update(r.ref, { quantity: res.quantity, batches: res.batches, sobregiro: res.sobregiro, sobregiroDetalle: res.sobregiroDetalle, isCritical: res.quantity <= limite, updatedAt: f.serverTimestamp() });
                 tx.set(r.hist, {
                     insumoName: d.name, quantity: num(r.i.cantidad), type: 'ANULACION_ACTA', user: usuario, date: f.serverTimestamp(), document: numero,
                     batch: 'MULTI-LOTE', origin: a.centro, dest: a.bodegaOrigen, lotes: r.i.lotes || [], idInsumoDestino: r.i.id,
@@ -446,6 +468,6 @@
         pintar();
     }
 
-    window.SAR_ActasEntrega = { abrir, planificar, cuadrar, restaurarConSobregiro, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, lotesDeDoc };
+    window.SAR_ActasEntrega = { abrir, planificar, cuadrar, restaurarConSobregiro, detalleDe, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, lotesDeDoc };
     if (typeof module !== 'undefined') module.exports = window.SAR_ActasEntrega;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: { dataset: {} } });

@@ -5211,3 +5211,10 @@ button.erp-card:hover, .soc-card:hover { transform: translateY(-2px); box-shadow
 .sal-n small { display: block; color: #64748b; font-size: .74rem; }
 .sal-e { font-style: normal; font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #E2E8F0; color: #475569; }
 .sal-e--SIN_RESPALDO { background: #FEE2E2; color: #991B1B; } .sal-e--LISTO { background: #DCFCE7; color: #166534; } .sal-e--PROVISIONAL { background: #FEF3C7; color: #92400E; }
+
+/* v20.53 · seguimiento por ID de acta */
+.seg-cab { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 4px 0 10px; font-size: .9rem; }
+.seg-f { grid-template-columns: minmax(180px, 2.4fr) repeat(5, minmax(70px, 1fr)) !important; }
+.seg-mov { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 6px; font-size: .86rem; }
+.seg-mov li { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; }
+.seg-mov li span { color: #64748b; margin-left: 8px; font-size: .78rem; } .seg-mov li small { display: block; color: #64748b; margin-top: 2px; }

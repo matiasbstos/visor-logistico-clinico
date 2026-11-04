@@ -206,3 +206,9 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 - Medicamentos controlados **no** pueden entregarse sin stock en sistema (circuito con folio DAU en registro separado).
 - El documento del acta (PDF/Word) **no cambia de formato**: el sobregiro es solo registro interno (acta `conSobregiro`, item `sinRespaldo`, historial). Informes Excel (CSV): contable valorizado y disponible, en la vista Actas de entrega.
 - Pendiente: mostrar el sobregiro en Existencias/Informes generales y cuadrar automáticamente en cada vía de ingreso.
+
+### 4.18 ID de seguimiento del acta (v20.53)
+- El ID de seguimiento es el número del acta (AE-AAAA-NNNN), que ya sale impreso; el documento no cambia.
+- Cada insumo guarda `sobregiroDetalle` [{acta, qty}] (cuadre FIFO: se cubre primero el acta más antigua). Cada cuadre/anulación queda en el historial con `actaId`.
+- Vista Actas de entrega → "Seguimiento de un acta": se escribe el ID y muestra por insumo entregado / con respaldo / sin respaldo / cuadrado / pendiente, más la línea de movimientos (entrega, cuadres con su OC/SDC, anulación). Descarga Excel (CSV).
+- Los informes contable y disponible incluyen la columna "Actas con sobregiro (unidades)".

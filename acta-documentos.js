@@ -44,7 +44,7 @@
         const W = 612, H = 792, negro = rgb(0, 0, 0);
         let page = doc.addPage([W, H]);
         const Y = (y) => H - y;
-        const seguro = (font, s) => { const set = font.getCharacterSet(); return Array.from(String(s)).map(c => set.includes(c.codePointAt(0)) ? c : '?').join(''); };
+        const seguro = (font, s) => { const set = font.getCharacterSet(); return Array.from(String(s).replace(/³/g, '3').replace(/²/g, '2')).map(c => set.includes(c.codePointAt(0)) ? c : '?').join(''); };
         // Helvetica es más ancha que Calibri, sobre todo en MAYÚSCULAS: el factor se elige por párrafo
         const fct = (s) => { const l = String(s).replace(/[^A-Za-zÁÉÍÓÚÑáéíóúñ]/g, ''); return l && (l.replace(/[^A-ZÁÉÍÓÚÑ]/g, '').length / l.length) > 0.6 ? 0.85 : HF; };
         const ancho = (s, size, bold, hf) => (bold ? FB : F).widthOfTextAtSize(seguro(bold ? FB : F, s), size * (hf || HF));

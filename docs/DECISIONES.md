@@ -149,3 +149,6 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 - "Stock pendiente de recepción": lo pedido al SAR que aún no llega, de las OC abiertas (no es stock disponible).
 - **Recepción**: por producto se indica cantidad, lote, vencimiento, producto del inventario y, si corresponde, una **incidencia** (dañado, vencimiento corto, distinto, faltante, otro). Lo recibido se **ingresa a Bodega Central** (movimiento `INGRESO_OC` con N° de OC y guía) en la misma transacción que actualiza la OC. Las incidencias quedan abiertas como discrepancia hasta resolverlas con una nota.
 - No se guarda el PDF (solo los datos leídos y revisados).
+
+## 4.8 Bandejas: producto del inventario central (v20.40)
+- Al reintegrar o reponer desde una bandeja, el producto se busca por nombre y, si existe en varias bodegas, se usa el de **Bodega Central** (o el registro antiguo sin bodega), no uno al azar.

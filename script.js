@@ -92,6 +92,16 @@ window.SAR_Utils = {
 };
 
 // Comparador FEFO: primero el lote que vence antes. Fechas inválidas o vacías van al final.
+/** Busca el producto en el inventario central por nombre. Si el mismo nombre existe en varias bodegas,
+ *  prefiere "Central" (o el registro sin bodega, antiguo) en vez de tomar uno al azar. */
+window.SAR_buscarInsumoCentral = async function (nombre) {
+    const F = window.firebaseFirestore, d = window.firebaseDb;
+    const snap = await F.getDocs(F.query(F.collection(d, 'Insumos'), F.where('name', '==', nombre), F.limit(25)));
+    if (snap.empty) return null;
+    const docs = snap.docs;
+    const central = docs.find(x => /central/i.test(String(x.data().location || ''))) || docs.find(x => !x.data().location) || docs[0];
+    return { id: central.id, ref: F.doc(d, 'Insumos', central.id) };
+};
 window.fefoCompare = function(a, b) {
     const t = (x) => {
         const d = window.SAR_Utils.parseDate(x && x.expirationDate);
@@ -7182,16 +7192,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Buscar referencias de forma concurrente para evitar demoras
                 const fetchPromises = Array.from(itemsAProcesarNombres).map(async (nombre) => {
-                    const q = window.firebaseFirestore.query(
-                        window.firebaseFirestore.collection(window.firebaseFirestore.db || window.db || db, 'Insumos'),
-                        window.firebaseFirestore.where('name', '==', nombre),
-                        window.firebaseFirestore.limit(1)
-                    );
-                    const snap = await window.firebaseFirestore.getDocs(q);
-                    if (snap.empty) {
+                    const hallado = await window.SAR_buscarInsumoCentral(nombre);
+                    if (!hallado) {
                         throw new Error(`Fármaco "${nombre}" no encontrado en inventario central.`);
                     }
-                    return { ref: snap.docs[0].ref, name: nombre };
+                    return { ref: hallado.ref, name: nombre };
                 });
                 const refsMap = await Promise.all(fetchPromises);
 
@@ -8423,9 +8428,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!initialSnap.exists()) throw new Error("La bandeja no existe.");
                 const insumosRefsMap = {};
                 for (let med of initialSnap.data().medicamentos) {
-                    const insQuery = window.firebaseFirestore.query(window.firebaseFirestore.collection(db, 'Insumos'), window.firebaseFirestore.where('name', '==', med.nombreInsumo), window.firebaseFirestore.limit(1));
-                    const iSnap = await window.firebaseFirestore.getDocs(insQuery);
-                    if (!iSnap.empty) insumosRefsMap[med.nombreInsumo] = window.firebaseFirestore.doc(db, 'Insumos', iSnap.docs[0].id);
+                    const hallado = await window.SAR_buscarInsumoCentral(med.nombreInsumo);
+                    if (hallado) insumosRefsMap[med.nombreInsumo] = hallado.ref;
                 }
 
                 await window.firebaseFirestore.runTransaction(db, async (transaction) => {
@@ -8657,11 +8661,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 let docIdsMap = {};
                 for (const item of stockARetornar) {
                     const key = item.nombre.toLowerCase().trim();
-                    const q1 = query(invRef, where('name', '==', item.nombre), limit(1));
-                    const snap1 = await getDocs(q1);
-                    if (!snap1.empty) {
-                        docIdsMap[key] = snap1.docs[0].id;
-                    }
+                    const hallado = await window.SAR_buscarInsumoCentral(item.nombre);
+                    if (hallado) docIdsMap[key] = hallado.id;
                 }
 
                 await runTransaction(db, async (transaction) => {

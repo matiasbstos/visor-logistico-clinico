@@ -209,6 +209,19 @@
             const actaRef = f.doc(f.collection(db(), 'Actas_Entrega'), numero);
             const snaps = [];
             for (const r of refs) snaps.push(r.i.nuevo ? null : await tx.get(r.ref));
+            // Entrega desde una orden de compra (v20.55): se valida y se actualiza lo entregado de cada línea
+            let ocSnap = null, ocRef = null, ocLineas = null;
+            if (b.oc) {
+                ocRef = f.doc(f.collection(db(), 'Seguimiento_OC'), b.oc.id); ocSnap = await tx.get(ocRef);
+                if (!ocSnap.exists()) throw new Error('La orden de compra ya no existe.');
+                ocLineas = (ocSnap.data().lineas || []).map(l => ({ ...l, entregado: { ...(l.entregado || {}) } }));
+                items.forEach(i => {
+                    const l = ocLineas[i.ocI]; if (!l) throw new Error(`${i.nombre}: la línea de la orden no existe.`);
+                    const disp = num(l.ingresado && l.ingresado[b.oc.key]) - num(l.entregado[b.oc.key]);
+                    if (num(i.cantidad) > disp) throw new Error(`${i.nombre}: solo quedan ${Math.max(0, disp)} u. por entregar de esta orden (alguien más pudo entregar antes). Actualiza la pantalla.`);
+                    l.entregado[b.oc.key] = num(l.entregado[b.oc.key]) + num(i.cantidad);
+                });
+            }
             const base = (r) => ({ name: r.i.nombre, name_lowercase: String(r.i.nombre).toLowerCase(), location: b.origen, quantity: 0, batches: [], sobregiro: 0, provisional: true, category: 'Provisional', criticalLimit: 50, isCritical: true, unitPrice: 0, status: 'ACTIVO', createdAt: f.serverTimestamp(), createdBy: usuario });
             const datos = refs.map((r, k) => {
                 if (r.i.nuevo) return base(r);
@@ -223,7 +236,7 @@
                 if (datos[k].controlado && p.faltante > 0) throw new Error(`${r.i.nombre} es medicamento controlado: no puede entregarse sin stock en sistema.`);
                 return p;
             });
-            const itemsActa = refs.map((r, k) => ({ id: r.ref.id, nombre: r.i.nombre, cantidad: num(r.i.cantidad), lotes: calc[k].usados, sinRespaldo: calc[k].faltante, ...(r.i.nuevo ? { provisional: true } : {}) }));
+            const itemsActa = refs.map((r, k) => ({ id: r.ref.id, nombre: r.i.nombre, cantidad: num(r.i.cantidad), lotes: calc[k].usados, sinRespaldo: calc[k].faltante, ...(r.i.nuevo ? { provisional: true } : {}), ...(b.oc ? { ocI: r.i.ocI } : {}) }));
             refs.forEach((r, k) => {
                 const d = datos[k], c = calc[k];
                 const limite = num(d.criticalLimit || d.stock_minimo || 50);
@@ -247,7 +260,12 @@
                 entrega: { nombre: firma.nombre, cargo: firma.cargo }, recibe: { nombre: (b.recibe && b.recibe.nombre) || '', cargo: (b.recibe && b.recibe.cargo) || '' },
                 creadoPor: usuario, creadoEn: f.serverTimestamp()
             };
+            if (b.oc) acta.oc = { id: b.oc.id, numeroOC: b.oc.numeroOC || '', columna: b.oc.key, memo: b.oc.memo || '', cdp: b.oc.cdp || '' };
             tx.set(actaRef, acta);
+            if (b.oc) {
+                tx.update(ocRef, { lineas: ocLineas, actualizadoEn: f.serverTimestamp() });
+                tx.set(f.doc(f.collection(db(), 'Seguimiento_OC', b.oc.id, 'Eventos')), { tipo: 'ENTREGA', texto: `Acta ${numero} a ${b.centro.trim()}${b.oc.memo ? ' (memo ' + b.oc.memo + ')' : ''}:\n` + itemsActa.map(i => `- ${i.nombre}: ${i.cantidad} un.`).join('\n'), autor: usuario, fecha: f.serverTimestamp(), columna: b.oc.key, actaId: numero });
+            }
             return { ...acta, creadoEn: new Date().toISOString() };
         });
     }
@@ -263,6 +281,11 @@
             if (a.estado === 'ANULADA') throw new Error('El acta ya estaba anulada.');
             const refs = a.items.map(i => ({ i, ref: f.doc(f.collection(db(), 'Insumos'), i.id), hist: f.doc(f.collection(db(), 'Historial_Movimientos')) }));
             const snaps = []; for (const r of refs) snaps.push(await tx.get(r.ref));
+            let ocRef = null, ocLineas = null;
+            if (a.oc && a.oc.id) {                  // devuelve lo entregado a la orden
+                ocRef = f.doc(f.collection(db(), 'Seguimiento_OC'), a.oc.id); const os = await tx.get(ocRef);
+                if (os.exists()) { ocLineas = (os.data().lineas || []).map(l => ({ ...l, entregado: { ...(l.entregado || {}) } })); a.items.forEach(i => { const l = ocLineas[i.ocI]; if (l) l.entregado[a.oc.columna] = Math.max(0, num(l.entregado[a.oc.columna]) - num(i.cantidad)); }); }
+            }
             refs.forEach((r, k) => {
                 if (!snaps[k].exists()) throw new Error(`${r.i.nombre} ya no existe: no se puede devolver el stock.`);
                 const d = snaps[k].data(), res = restaurarConSobregiro(d, r.i.lotes, r.i.sinRespaldo, numero);
@@ -274,6 +297,10 @@
                     observacion: `Anulación de acta ${numero}: ${motivo}`, actaId: numero
                 });
             });
+            if (ocLineas) {
+                tx.update(ocRef, { lineas: ocLineas, actualizadoEn: f.serverTimestamp() });
+                tx.set(f.doc(f.collection(db(), 'Seguimiento_OC', a.oc.id, 'Eventos')), { tipo: 'ANULACION_ENTREGA', texto: `Acta ${numero} anulada: lo entregado vuelve a quedar pendiente. Motivo: ${motivo}`, autor: usuario, fecha: f.serverTimestamp(), columna: a.oc.columna, actaId: numero });
+            }
             tx.update(actaRef, { estado: 'ANULADA', stockDescontado: false, anuladaEn: f.serverTimestamp(), anuladaPor: usuario, anulacionMotivo: motivo });
         });
     }

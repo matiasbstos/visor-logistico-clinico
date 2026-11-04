@@ -77,6 +77,19 @@
             return { centro: ce.centro, pedido, recibido, pendiente: Math.max(0, pedido - recibido), netoPend, netoTotal, completo: pedido > 0 && recibido >= pedido };
         });
     }
+    /** Entregas por columna (centro/memo): pedido, recibido, en stock, entregado y lo que falta. Puro. */
+    function estadoEntregas(oc) {
+        return (oc.columnas || []).map(c => {
+            let pedido = 0, recibido = 0, ingresado = 0, entregado = 0, entregable = 0;
+            (oc.lineas || []).forEach(l => {
+                const p = num(l.dist && l.dist[c.key]), r = num(l.recibido && l.recibido[c.key]), g = num(l.ingresado && l.ingresado[c.key]), e = num(l.entregado && l.entregado[c.key]);
+                pedido += p; recibido += r; ingresado += g; entregado += e; entregable += Math.max(0, g - e);
+            });
+            const estado = pedido > 0 && entregado >= pedido ? 'ENTREGADO' : entregado > 0 ? 'PARCIAL' : entregable > 0 ? 'EN_STOCK' : recibido > 0 ? 'RECIBIDO' : 'SIN_RECIBIR';
+            return { key: c.key, centro: c.centro, memo: c.memo, cdp: c.cdp, pedido, recibido, ingresado, entregado, entregable, pendiente: Math.max(0, pedido - entregado), estado };
+        });
+    }
+    const ETIQ_ENTREGA = { ENTREGADO: 'Entregado completo', PARCIAL: 'Entrega parcial', EN_STOCK: 'En bodega, listo para entregar', RECIBIDO: 'Recibido (sin ingresar a stock)', SIN_RECIBIR: 'Aún no llega' };
     function estadoLinea(pedido, recibido) {
         if (pedido <= 0 && recibido <= 0) return 'sin';
         if (recibido <= 0) return 'pendiente';
@@ -208,6 +221,7 @@
     async function abrir() {
         if (!root()) return;
         await cargarConfig();
+        if (window.SAR_CDP) await window.SAR_CDP.cargar();
         if (unsubLista) { try { unsubLista(); } catch (e) { /* noop */ } }
         root().innerHTML = '<div class="home-empty">Cargando órdenes…</div>';
         unsubLista = fs().onSnapshot(fs().collection(db(), 'Seguimiento_OC'), (snap) => {
@@ -248,6 +262,7 @@
                 <div class="soc-acc"><button type="button" class="btn btn-primary" id="soc-pdf"><i class="ph-bold ph-file-pdf"></i> Ingresar desde PDF</button>
                 <button type="button" class="btn btn-outline" id="soc-nueva"><i class="ph-bold ph-microsoft-excel-logo"></i> Con cuadro Excel</button></div></div>
             ${pendienteHTML()}
+            ${window.SAR_CDP ? window.SAR_CDP.cardHTML(lista) : ''}
             <div class="soc-lista">${lista.length ? lista.map(oc => {
                 const pl = estadoPlazo(oc), tot = totalesPorCentro(oc), mio = tot.find(t => t.centro === CENTRO_PROPIO) || tot[0];
                 const pct = mio && mio.pedido ? Math.min(100, Math.round(mio.recibido * 100 / mio.pedido)) : 0;
@@ -256,6 +271,7 @@
                     <div class="soc-card__sub">${esc(oc.proveedor || 'Proveedor sin indicar')} · ${oc.aceptada ? 'vence ' + fmtFecha(pl.limite) : (pl.limite ? 'acepta hasta ' + fmtFecha(pl.limite) : 'sin aceptar')}</div>
                     ${mio ? `<div class="soc-barra" title="${esc(mio.centro)}"><span style="width:${pct}%"></span></div><small>${esc(mio.centro)}: ${mio.recibido} de ${mio.pedido} unidades recibidas</small>` : ''}
                 </button>`; }).join('') : '<div class="home-empty">Aún no hay órdenes en seguimiento. Usa "Ingresar orden".</div>'}</div>`;
+        if (window.SAR_CDP) window.SAR_CDP.enlazar(root(), lista, modal, toast, pintarLista);
         root().querySelector('#soc-nueva').addEventListener('click', formNueva);
         root().querySelector('#soc-pdf').addEventListener('click', formDesdePDF);
         root().querySelectorAll('[data-oc]').forEach(b => b.addEventListener('click', () => abrirDetalle(b.dataset.oc)));
@@ -289,6 +305,7 @@
             </div>
             ${oc.datos ? `<div class="erp-card soc-datos"><h3>Datos de la orden</h3><div class="soc-datos__g">
                 ${[['Despacho', oc.datos.direccionDespacho], ['Contraparte técnica', oc.datos.contraparte], ['Contacto', oc.datos.contacto], ['Horario', oc.datos.horario], ['Forma de pago', oc.datos.formaPago], ['Factura a', oc.datos.emailFactura], ['Memo', oc.datos.memo ? 'N° ' + oc.datos.memo + (oc.descripcion ? ' · ' + oc.descripcion : '') : ''], ['Total (con IVA)', oc.datos.total ? peso(oc.datos.total) : '']].filter(x => x[1]).map(x => `<div><small>${x[0]}</small><span>${esc(x[1])}</span></div>`).join('')}</div></div>` : ''}
+            ${memosCDPHTML(oc)}${entregasHTML(oc)}
             <div class="erp-card"><h3>Discrepancias <span class="soc-n">${disc.length}</span></h3>
                 ${disc.length ? '<ul class="soc-disc">' + disc.map(d => `<li class="soc-disc--${d.nivel}">${esc(d.texto)}</li>`).join('') + '</ul>' : '<p class="bodega-estantes__hint">Sin discrepancias.</p>'}
                 ${(oc.incidencias || []).filter(i => i.estado === 'ABIERTA').map(i => `<button type="button" class="btn btn-outline btn-sm" data-resolver="${esc(i.id)}">Resolver: ${esc(i.producto.slice(0, 30))}</button>`).join(' ')}</div>
@@ -315,6 +332,7 @@
         q('#soc-todos').addEventListener('change', (e) => { verTodos = e.target.checked; pintarDetalle(); });
         q('#soc-recep').addEventListener('click', formRecepcion);
         q('#soc-conforme').addEventListener('click', () => { if (window.SAR_RecepcionConforme) window.SAR_RecepcionConforme.abrir({ oc: ocActual, modal, toast, enviarCorreo, config: configCorreo, usuario: usuario(), fmtFecha, peso, totalesPorCentro, centroPropio: CENTRO_PROPIO }); });
+        root().querySelectorAll('[data-acta]').forEach(b => b.addEventListener('click', () => formActaCentro(b.dataset.acta)));
         const ac = q('#soc-acepta'); if (ac) ac.addEventListener('click', formAceptacion);
         root().querySelectorAll('[data-resolver]').forEach(b => b.addEventListener('click', () => formResolver(b.dataset.resolver)));
         q('#soc-guardar-nota').addEventListener('click', guardarNota);
@@ -322,6 +340,68 @@
         const c = q('#soc-cerrar'); if (c) c.addEventListener('click', alternarCierre);
         const cf = q('#soc-config'); if (cf) cf.addEventListener('click', formConfig);
         pintarDestinatarios(); pintarBitacora();
+    }
+
+    function memosCDPHTML(oc) {
+        const cols = oc.columnas || []; if (!cols.length) return '';
+        const hayExtra = cols.some(c => c.financiamiento || c.cdp || c.total);
+        const memos = (oc.memos && oc.memos.length) ? oc.memos : [...new Set(cols.map(c => c.memo).filter(Boolean))];
+        if (!hayExtra && !memos.length) return '';
+        return `<div class="erp-card"><h3>Memos y CDP <span class="soc-n">${memos.length ? 'memo N° ' + esc(memos.join('-')) : ''}</span></h3>
+            <div class="soc-tabla"><table><thead><tr><th>Memo</th><th>Centro</th><th>Financiamiento</th><th>CDP</th><th>Neto</th><th>IVA</th><th>Total</th><th>Despacho · contraparte · contacto</th></tr></thead><tbody>${cols.map(c => `<tr><td>${esc(c.memo)}</td><td>${esc(c.centro)}</td><td>${esc(c.financiamiento || '—')}</td><td>${esc(c.cdp || '—')}</td><td>${c.neto ? peso(c.neto) : '—'}</td><td>${c.iva ? peso(c.iva) : '—'}</td><td>${c.total ? peso(c.total) : '—'}</td>
+                <td><small>${[c.direccion, c.contraparte, [c.contacto, c.correo].filter(Boolean).join(' · '), c.horario].filter(Boolean).map(esc).join('<br>')}</small></td></tr>`).join('')}</tbody></table></div>
+            ${oc.descripcion ? `<p class="soc-card__sub">${esc(oc.descripcion)}</p>` : ''}</div>`;
+    }
+    function entregasHTML(oc) {
+        const est = estadoEntregas(oc), cols = oc.columnas || []; if (!est.length) return '';
+        const globalPed = est.reduce((t, e) => t + e.pedido, 0), globalEnt = est.reduce((t, e) => t + e.entregado, 0), globalRec = est.reduce((t, e) => t + e.recibido, 0);
+        return `<div class="erp-card"><h3>Distribución y entregas por centro <span class="soc-n">${globalEnt} de ${globalPed} entregadas · ${globalRec} recibidas</span></h3>
+            ${est.map(e => {
+                const c = cols.find(x => x.key === e.key), propio = e.centro === CENTRO_PROPIO;
+                return `<div class="soc-entrega"><div class="soc-sub"><strong>${esc(e.centro)}</strong> <small>memo ${esc(e.memo)}${e.cdp ? ' · CDP ' + esc(e.cdp) : ''}</small>
+                    <span class="soc-chip soc-chip--${e.estado === 'ENTREGADO' ? 'completa' : e.estado === 'SIN_RECIBIR' ? 'en_plazo' : 'cerrada'}">${esc(ETIQ_ENTREGA[e.estado])}</span>
+                    ${!propio && e.entregable > 0 ? `<button type="button" class="btn btn-primary btn-sm" data-acta="${esc(e.key)}"><i class="ph-bold ph-file-text"></i> Generar acta (${e.entregable} un.)</button>` : ''}</div>
+                    <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Llegó</th><th>En bodega</th><th>Entregado</th><th>Pendiente</th></tr></thead><tbody>${(oc.lineas || []).map(l => {
+                        const p = num(l.dist && l.dist[e.key]); if (!p) return '';
+                        const r = num(l.recibido && l.recibido[e.key]), g = num(l.ingresado && l.ingresado[e.key]), en = num(l.entregado && l.entregado[e.key]);
+                        return `<tr><td>${esc(l.descripcion)}</td><td>${p}</td><td>${r}</td><td>${Math.max(0, g - en)}</td><td>${en}</td><td class="${p - en > 0 ? 'soc-est--parcial' : 'soc-est--ok'}"><strong>${Math.max(0, p - en)}</strong></td></tr>`; }).join('')}</tbody></table></div></div>`; }).join('')}
+            <p class="bodega-estantes__hint">"Llegó" = lo registrado en Registrar recepción · "En bodega" = ingresado al stock y aún sin entregar · "Entregado" = en actas emitidas desde esta orden. Cada acta descuenta el stock y deja el saldo pendiente actualizado.</p></div>`;
+    }
+    /** Acta de entrega a un centro con lo que ya llegó a bodega y aún no se entrega. */
+    async function formActaCentro(key) {
+        const oc = ocActual, c = (oc.columnas || []).find(x => x.key === key); if (!c || !window.SAR_ActasEntrega) { toast('No disponible', 'El módulo de actas no está cargado.', 'warning'); return; }
+        let bodegas = [];
+        try { const bs = await fs().getDocs(fs().collection(db(), 'Bodegas')); bs.forEach(d => { const b = d.data(); if (b.isActive !== false && b.name) bodegas.push(b.name); }); } catch (e) { /* sin lista */ }
+        bodegas.sort((a, b) => (/central/i.test(b) - /central/i.test(a)) || a.localeCompare(b, 'es'));
+        if (!bodegas.length) bodegas = ['Bodega Central'];
+        const filas = (oc.lineas || []).map((l, i) => ({ i, l, disp: Math.max(0, num(l.ingresado && l.ingresado[key]) - num(l.entregado && l.entregado[key])) })).filter(x => x.disp > 0);
+        if (!filas.length) { toast('Nada por entregar', 'No hay unidades en bodega para este centro. Registra la recepción con "Ingresar al stock".', 'warning'); return; }
+        modal(`Acta de entrega · ${c.centro} (memo ${c.memo})`, `
+            <div class="soc-fila"><label>Bodega de origen<select id="a-bod">${bodegas.map(b => `<option>${esc(b)}</option>`).join('')}</select></label><label>Centro que recibe<input type="text" id="a-centro" value="${esc(c.centro)}"></label></div>
+            <div class="soc-fila"><label>Recibe (nombre)<input type="text" id="a-rn" value="${esc(c.contraparte || '')}"></label><label>Cargo<input type="text" id="a-rc"></label></div>
+            <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>En bodega</th><th>Entregar ahora</th></tr></thead><tbody>${filas.map(x => `<tr data-i="${x.i}"><td>${esc(x.l.insumoName || x.l.descripcion)}</td><td>${x.disp}</td><td><input type="number" min="0" max="${x.disp}" class="a-c" value="${x.disp}"></td></tr>`).join('')}</tbody></table></div>
+            <small>Se emite el acta con el mismo formato de siempre, se descuenta el stock de la bodega (FEFO) y la orden queda con lo entregado y lo pendiente. Si entregas menos, el resto queda para otra acta.</small>`, async (o) => {
+            const origen = o.querySelector('#a-bod').value, items = [];
+            for (const tr of o.querySelectorAll('tr[data-i]')) {
+                const i = Number(tr.dataset.i), cant = num(tr.querySelector('.a-c').value), l = oc.lineas[i], x = filas.find(f => f.i === i);
+                if (cant > x.disp) { toast('Cantidad inválida', `${l.descripcion}: máximo ${x.disp}.`, 'warning'); return false; }
+                if (cant > 0) {
+                    const nombre = String(l.insumoName || l.descripcion).trim(); let id = null;
+                    const q = await fs().getDocs(fs().query(fs().collection(db(), 'Insumos'), fs().where('name', '==', nombre), fs().limit(10)));
+                    q.forEach(d => { if (!id && d.data().location === origen) id = d.id; });
+                    if (!id) { const t = await fs().getDoc(fs().doc(db(), 'Insumos', `tras_${slug(nombre)}__${slug(origen)}`)); if (t.exists()) id = t.id; }
+                    items.push(id ? { id, nombre, cantidad: cant, ocI: i } : { manual: true, nombre, cantidad: cant, ocI: i });
+                }
+            }
+            if (!items.length) { toast('Sin cantidades', 'Indica cuántas unidades se entregan.', 'warning'); return false; }
+            const A = window.SAR_ActasEntrega, borrador = { origen, centro: o.querySelector('#a-centro').value.trim(), items, pendientes: [], documentos: [{ tipo: 'OC', numero: oc.numeroOC, detalle: `memo ${c.memo}` }], recibe: { nombre: o.querySelector('#a-rn').value.trim(), cargo: o.querySelector('#a-rc').value.trim() }, oc: { id: oc.id, numeroOC: oc.numeroOC, key, memo: c.memo, cdp: c.cdp } };
+            const err = A.validarBorrador(borrador); if (err.length) { toast('Revisa el acta', err[0], 'warning'); return false; }
+            const total = items.reduce((t, x) => t + x.cantidad, 0);
+            if (!window.confirm(`Se emitirá el acta para ${borrador.centro} (${total} unidades) y se descontará de ${origen}. ¿Emitir?`)) return false;
+            const acta = await A.emitir(borrador, usuario());
+            toast('Acta emitida', `${acta.numero} · stock descontado y orden actualizada.`, 'success');
+            try { await A.descargarActa(acta, 'pdf'); } catch (e) { toast('Descarga', 'El acta se emitió; descárgala desde "Actas emitidas": ' + e.message, 'warning'); }
+        });
     }
 
     function pintarDestinatarios() {
@@ -440,6 +520,7 @@
     // Ingreso de una OC desde el PDF de Mercado Público (con pantalla de revisión)
     // ---------------------------------------------------------------
     const sumarDias = (iso, n) => { const d = deISO(iso); d.setDate(d.getDate() + n); return aISO(d); };
+    const memosDe = (v) => (String(v.memo || '').trim() ? String(v.memo).split(/\s*[-,/y]\s*/).filter(Boolean) : (v.memos || []));
     function armarOCdesdeRevision(v) {
         const numero = String(v.numeroOC || '').trim().toUpperCase();
         if (!numero) throw new Error('Falta el N° de la orden.');
@@ -448,16 +529,25 @@
         if (!lineas.length) throw new Error('Agrega al menos un producto con cantidad.');
         const horas = num(v.aceptarHoras) || 48, dias = num(v.entregaDias) || 2;
         // cuadro por centro tomado de la compra ágil: solo si calza con las líneas (misma cantidad)
-        const cuadro = (v.cuadro && v.cuadro.dist && v.cuadro.dist.length === lineas.length
-            && lineas.every((l, i) => Object.values(v.cuadro.dist[i] || {}).reduce((t, x) => t + num(x), 0) === num(l.cantidad))) ? v.cuadro : null;
+        let cuadro0 = v.cuadro;
+        if (v.distrib && window.SAR_Lector) {           // cuadro de distribución en PDF (v20.55): manda sobre la compra ágil
+            const u = window.SAR_Lector.unirDistribucion({ lineas, memos: memosDe(v) }, v.distrib);
+            cuadro0 = { columnas: u.columnas, dist: u.dist, compra: v.cuadro && v.cuadro.compra, desdePDF: true };
+        }
+        const cuadro = (cuadro0 && cuadro0.dist && cuadro0.dist.length === lineas.length
+            && lineas.every((l, i) => Object.values(cuadro0.dist[i] || {}).reduce((t, x) => t + num(x), 0) === num(l.cantidad))) ? cuadro0 : null;
+        if (v.distrib && !cuadro) throw new Error('El cuadro de distribución no calza con los productos de la orden (revisa los avisos). Corrige las cantidades o quita el cuadro.');
+        const propia = cuadro && cuadro.columnas ? cuadro.columnas.find(c => c.centro === CENTRO_PROPIO) : null;
         return {
             numeroOC: numero, proveedor: String(v.proveedor || '').trim(), rutProveedor: String(v.rutProveedor || '').trim(), descripcion: String(v.descripcion || '').trim(),
             emitida: v.emitida, emitidaHora: v.emitidaHora || '', aceptarHoras: horas, aceptarLimite: sumarDias(v.emitida, Math.ceil(horas / 24)), aceptada: '',
             plazoDiasHabiles: dias, fechaLimite: '', origen: v.origen || 'MANUAL',
             columnas: cuadro ? cuadro.columnas : [{ memo: String(v.memo || '').trim() || 's/n', centro: CENTRO_PROPIO, cdp: '', key: 'sar' }],
-            lineas: lineas.map((l, i) => ({ descripcion: String(l.descripcion).trim(), codigoMP: l.codigoMP || '', licitacion: l.licitacion || '', valorNeto: num(l.valorNeto), dist: cuadro ? { ...cuadro.dist[i] } : { sar: num(l.cantidad) }, recibido: {} })),
-            ...(cuadro ? { compraAgil: cuadro.compra } : {}),
-            datos: { direccionDespacho: v.direccionDespacho || '', contraparte: v.contraparte || '', contacto: v.contacto || '', horario: v.horario || '', formaPago: v.formaPago || '', emailFactura: v.emailFactura || '', memo: v.memo || '', total: num(v.total), totalNeto: num(v.totalNeto) },
+            lineas: lineas.map((l, i) => ({ descripcion: String(l.descripcion).trim(), codigoMP: l.codigoMP || '', licitacion: l.licitacion || '', valorNeto: num(l.valorNeto), dist: cuadro ? { ...cuadro.dist[i] } : { sar: num(l.cantidad) }, recibido: {}, entregado: {}, ingresado: {} })),
+            ...(cuadro && cuadro.compra ? { compraAgil: cuadro.compra } : {}),
+            ...(cuadro && cuadro.desdePDF ? { distribucionPDF: true } : {}),
+            memos: memosDe(v),
+            datos: { direccionDespacho: v.direccionDespacho || (propia && propia.direccion) || '', contraparte: v.contraparte || (propia && propia.contraparte) || '', contacto: v.contacto || (propia && propia.contacto) || '', horario: v.horario || (propia && propia.horario) || '', formaPago: v.formaPago || '', emailFactura: v.emailFactura || '', memo: v.memo || '', total: num(v.total), totalNeto: num(v.totalNeto) },
             incidencias: [], multa: { estado: 'por_evaluar' }, cerrada: false
         };
     }
@@ -466,12 +556,14 @@
         const campo = (id, et, v, tipo) => `<label>${et}<input type="${tipo || 'text'}" id="${id}" value="${esc(v == null ? '' : v)}"></label>`;
         const ov = modal('Ingresar orden de compra', `
             <label>PDF de la orden (Mercado Público)<input type="file" id="p-file" accept="application/pdf"></label>
+            <label>Cuadro de distribución (PDF, opcional): lee memos, CDP, cantidades por centro y montos<input type="file" id="p-dist" accept="application/pdf"></label>
+            <div id="p-dist-est" class="cierre-hint"></div>
             <label>Correo del despacho (opcional: pega el texto para leer los plazos)<textarea id="p-correo" rows="3" placeholder="Pega aquí el correo con el plazo de aceptación y los días de entrega"></textarea></label>
             <div id="p-estado" class="cierre-hint">Sube el PDF y revisa lo que se leyó. También puedes completar todo a mano.</div>
             <div id="p-rev"></div>`, async (o) => {
             leerRev(o);
             let usoCuadro = null;
-            if (window.SAR_ComprasAgiles && String(rev.numeroOC || '').trim()) {
+            if (window.SAR_ComprasAgiles && String(rev.numeroOC || '').trim() && !rev.distrib) {
                 rev.cuadro = null;
                 const r = await window.SAR_ComprasAgiles.cuadroParaOC(String(rev.numeroOC).trim().toUpperCase(), rev.lineas.filter(l => String(l.descripcion || '').trim() && num(l.cantidad) > 0));
                 if (r && !r.error) { rev.cuadro = r; usoCuadro = r; } else if (r && r.error && r.error !== 'sin compra ágil') toast('Cuadro por centro', `No se usó el de la compra ágil ${r.compra}: ${r.error} Se ingresó todo al SAR; revisa el cuadro.`, 'warning');
@@ -479,13 +571,17 @@
             const oc = armarOCdesdeRevision(rev);
             const id = slug(oc.numeroOC), ref = fs().doc(fs().collection(db(), 'Seguimiento_OC'), id);
             if ((await fs().getDoc(ref)).exists()) { toast('Ya existe', 'Esa orden ya está en seguimiento.', 'warning'); return false; }
+            if (window.SAR_CDP) {                       // presupuesto CDP (opcional): avisa si esta orden lo sobregira
+                const al = await window.SAR_CDP.alertaNuevaOC({ ...oc, id }, lista);
+                if (al.length && !window.confirm('Atención con el presupuesto:\n\n' + al.join('\n') + '\n\n¿Ingresar la orden de todos modos?')) return false;
+            }
             oc.destinatarios = [...(configCorreo.destinatariosBase || [])]; oc.creadoPor = usuario(); oc.creadoEn = fs().serverTimestamp();
             await fs().runTransaction(db(), async (tx) => {
                 tx.set(ref, oc);
                 tx.set(fs().doc(fs().collection(db(), 'Seguimiento_OC', id, 'Eventos')), { tipo: 'CREACION', texto: `Orden ingresada${oc.origen === 'OC_MP' ? ' desde el PDF' : ''}: ${oc.lineas.length} producto(s). El proveedor debe aceptarla hasta el ${fmtFecha(oc.aceptarLimite)}; entrega en ${oc.plazoDiasHabiles} días hábiles desde la aceptación.`, autor: usuario(), fecha: fs().serverTimestamp() });
             });
             if (usoCuadro) window.SAR_ComprasAgiles.vincularOC(usoCuadro.id, oc.numeroOC);
-            toast('Orden ingresada', `Acepta hasta el ${fmtFecha(oc.aceptarLimite)}.${usoCuadro ? ' Cuadro por centro tomado de la compra ágil ' + usoCuadro.compra + '.' : ''}`, 'success');
+            toast('Orden ingresada', `Acepta hasta el ${fmtFecha(oc.aceptarLimite)}.${oc.distribucionPDF ? ' Distribución por centro leída del PDF.' : ''}${usoCuadro && !oc.distribucionPDF ? ' Cuadro por centro tomado de la compra ágil ' + usoCuadro.compra + '.' : ''}`, 'success');
         });
         const q = (s) => ov.querySelector(s);
         function leerRev(o) {
@@ -518,6 +614,21 @@
                 est.innerHTML = `<strong>Leído:</strong> ${esc(r.numeroOC || '—')} · ${r.lineas.length} producto(s). Revisa cada dato antes de guardar.`;
                 pintarRev(r.avisos);
             } catch (err) { est.innerHTML = `<span class="cierre-error">${esc(err.message)}</span>`; }
+        });
+        q('#p-dist').addEventListener('change', async (e) => {
+            const f = e.target.files[0], est = q('#p-dist-est'); rev.distrib = null; if (!f) { est.textContent = ''; return; }
+            est.textContent = 'Leyendo el cuadro…';
+            try {
+                if (!window.SAR_Lector) throw new Error('El lector de documentos no está cargado.');
+                leerRev(ov);
+                const d = await window.SAR_Lector.leerDistribucion(f); rev.distrib = d;
+                const lineasOk = rev.lineas.filter(l => String(l.descripcion || '').trim() && num(l.cantidad) > 0);
+                const u = lineasOk.length ? window.SAR_Lector.unirDistribucion({ lineas: lineasOk, memos: memosDe(rev) }, d) : { avisos: ['Sube primero el PDF de la orden para cruzar los productos.'] };
+                const av = [...d.avisos, ...u.avisos];
+                est.innerHTML = `<strong>Cuadro leído:</strong> ${d.columnas.length} columna(s) · ${d.lineas.length} producto(s)
+                    <div class="soc-tabla"><table><thead><tr><th>Memo</th><th>Centro</th><th>Financiamiento</th><th>CDP</th><th>Neto</th><th>Total</th></tr></thead><tbody>${d.columnas.map(c => `<tr><td>${esc(c.memo)}</td><td>${esc(c.centro)}</td><td>${esc(c.financiamiento)}</td><td>${esc(c.cdp)}</td><td>${peso(c.neto)}</td><td>${peso(c.total)}</td></tr>`).join('')}</tbody></table></div>
+                    ${av.length ? '<ul class="cierre-error">' + av.map(a => `<li>${esc(a)}</li>`).join('') + '</ul>' : ''}`;
+            } catch (err) { rev.distrib = null; est.innerHTML = `<span class="cierre-error">${esc(err.message)}</span>`; }
         });
         q('#p-correo').addEventListener('change', () => { const c = window.SAR_Lector && window.SAR_Lector.extraerCorreo(q('#p-correo').value); if (!c) return; leerRev(ov); if (c.aceptarHoras) rev.aceptarHoras = c.aceptarHoras; if (c.entregaDias) rev.entregaDias = c.entregaDias; if (c.contraparte && !rev.contraparte) rev.contraparte = c.contraparte; if (c.horario && !rev.horario) rev.horario = c.horario; pintarRev([]); });
     }
@@ -564,14 +675,14 @@
         return { batches: lotes, quantity: num(doc && doc.quantity) + total, ingresado: total };
     }
     /** Aplica lo recibido a las líneas de la OC. Puro. */
-    function aplicarRecepcion(data, key, det, incidencias, extra) {
-        const lineas = (data.lineas || []).map(l => ({ ...l, recibido: { ...(l.recibido || {}) } }));
-        det.forEach(d => { const l = lineas[d.i]; l.recibido[key] = num(l.recibido[key]) + d.cantidad; if (d.insumoName) l.insumoName = d.insumoName; });
+    function aplicarRecepcion(data, key, det, incidencias, extra, ingresaStock) {
+        const lineas = (data.lineas || []).map(l => ({ ...l, recibido: { ...(l.recibido || {}) }, ingresado: { ...(l.ingresado || {}) }, entregado: { ...(l.entregado || {}) } }));
+        det.forEach(d => { const l = lineas[d.i]; l.recibido[key] = num(l.recibido[key]) + d.cantidad; if (ingresaStock) l.ingresado[key] = num(l.ingresado[key]) + d.cantidad; if (d.insumoName) l.insumoName = d.insumoName; });
         return { lineas, incidencias: [...(data.incidencias || []), ...incidencias.map((n, k) => ({ id: `inc-${Date.now()}-${k}`, ...n, estado: 'ABIERTA', fecha: hoyISO(), ...(extra || {}) }))] };
     }
     async function recepcionConStock(oc, { key, det, incidencias, guia, fecha, obs, notificar, ingresaStock, central, texto, titulo }) {
         const f = fs();
-        const aplicadoLocal = aplicarRecepcion(oc, key, det, incidencias);
+        const aplicadoLocal = aplicarRecepcion(oc, key, det, incidencias, null, ingresaStock);
         let correo = null;
         if (notificar) correo = await enviarCorreo(oc.destinatarios || [], armarCorreo({ ...oc, ...aplicadoLocal }, titulo, texto, usuario()));
         const ocRef = f.doc(f.collection(db(), 'Seguimiento_OC'), oc.id);
@@ -591,7 +702,7 @@
         await f.runTransaction(db(), async (tx) => {
             const os = await tx.get(ocRef); if (!os.exists()) throw new Error('La orden ya no existe.');
             const lecturas = []; for (const g of grupos.values()) lecturas.push([g, await tx.get(g.ref)]);
-            tx.update(ocRef, { ...aplicarRecepcion(os.data(), key, det, incidencias), actualizadoEn: f.serverTimestamp() });
+            tx.update(ocRef, { ...aplicarRecepcion(os.data(), key, det, incidencias, null, ingresaStock), actualizadoEn: f.serverTimestamp() });
             tx.set(evRef, { tipo: 'RECEPCION', texto, autor: usuario(), fecha: f.serverTimestamp(), ...(correo ? { correo } : {}), columna: key, guia, fechaRecepcion: fecha, ingresoAStock: !!ingresaStock, detalle: det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })), incidencias: incidencias.map(n => ({ producto: n.producto, tipo: n.tipo, detalle: n.detalle })) });
             lecturas.forEach(([g, snap]) => {
                 const actual = snap.exists() ? snap.data() : null, m = mezclarIngreso(actual, g.ingresos);
@@ -620,12 +731,12 @@
             <label>¿Qué memo/CDP se recibió?<select id="r-col">${cols.map(c => `<option value="${esc(c.key)}">${esc(c.centro)} · memo ${esc(c.memo)}${c.cdp ? ' · CDP ' + esc(c.cdp) : ''}</option>`).join('')}</select></label>
             <div class="soc-fila"><label>N° guía de despacho<input type="text" id="r-guia" autocomplete="off"></label><label>Fecha<input type="date" id="r-fecha" value="${hoyISO()}"></label></div>
             <div id="r-lineas"></div>
-            <label class="soc-toggle" id="r-stock-w"><input type="checkbox" id="r-stock" checked> Ingresar lo recibido al stock de ${esc(central)}</label>
+            <label class="soc-toggle" id="r-stock-w"><input type="checkbox" id="r-stock" checked> Ingresar lo recibido al stock de ${esc(central)} (así se descuenta al entregarlo por acta)</label>
             <label>Observación (opcional)<input type="text" id="r-obs" maxlength="300"></label>
             <label class="soc-toggle"><input type="checkbox" id="r-correo" checked> Avisar por correo a la lista</label>
             <datalist id="r-inv">${nombresInv.map(n => `<option value="${esc(n)}">`).join('')}</datalist>`,
             async (o) => {
-                const q = (s) => o.querySelector(s), key = q('#r-col').value, ingresaStock = propia(key) && q('#r-stock').checked;
+                const q = (s) => o.querySelector(s), key = q('#r-col').value, ingresaStock = q('#r-stock').checked;
                 const det = [], incidencias = [];
                 o.querySelectorAll('tr[data-i]').forEach(tr => {
                     const v = num(tr.querySelector('.r-c').value), tipo = tr.querySelector('.r-t').value, i = Number(tr.dataset.i);
@@ -642,14 +753,13 @@
                 toast('Recepción registrada', ingresaStock ? `Lo recibido quedó en el stock de ${central}.` : 'Se actualizó lo recibido.', 'success');
             });
         const pintar = () => {
-            const key = ov.querySelector('#r-col').value, st = propia(key);
-            ov.querySelector('#r-stock-w').style.display = st ? '' : 'none';
+            const key = ov.querySelector('#r-col').value, st = ov.querySelector('#r-stock').checked;
             ov.querySelector('#r-lineas').innerHTML = '<div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Ya recibido</th><th>Recibido ahora</th>' + (st ? '<th>Producto en inventario</th><th>Lote</th><th>Vence</th>' : '') + '<th>Incidencia</th></tr></thead><tbody>' +
                 oc.lineas.map((l, i) => { const p = num(l.dist && l.dist[key]); return p ? `<tr data-i="${i}"><td>${esc(l.descripcion)}</td><td>${p}</td><td>${num(l.recibido && l.recibido[key])}</td><td><input type="number" min="0" class="r-c" value=""></td>` +
                     (st ? `<td><input class="r-n" list="r-inv" value="${esc(l.insumoName || l.descripcion)}"></td><td><input class="r-l" placeholder="S/L"></td><td><input type="date" class="r-v"></td>` : '') +
                     `<td><select class="r-t"><option value="">Sin incidencia</option>${Object.entries(INCIDENCIAS).map(([k, t]) => `<option value="${k}">${esc(t)}</option>`).join('')}</select><input class="r-td" placeholder="Detalle"></td></tr>` : ''; }).join('') + '</tbody></table></div>';
         };
-        ov.querySelector('#r-col').addEventListener('change', pintar);
+        ov.querySelector('#r-col').addEventListener('change', pintar); ov.querySelector('#r-stock').addEventListener('change', pintar);
         const sel = ov.querySelector('#r-col'); const iPropia = cols.findIndex(c => c.centro === CENTRO_PROPIO); if (iPropia > 0) sel.selectedIndex = iPropia;
         pintar();
     }
@@ -722,5 +832,5 @@ function salida(o) { return ContentService.createTextOutput(JSON.stringify(o)).s
         ov.querySelector('#c-copiar').addEventListener('click', async () => { try { await navigator.clipboard.writeText(SCRIPT_GAS); toast('Copiado', 'Código copiado.', 'success'); } catch (e) { ov.querySelector('#c-script').select(); } });
     }
 
-    window.SAR_SeguimientoOC = { abrir, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
+    window.SAR_SeguimientoOC = { abrir, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
 })(window, document);

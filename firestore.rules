@@ -181,6 +181,11 @@ service cloud.firestore {
         allow update, delete: if false;
       }
     }
+    // PRESUPUESTO POR CDP (v20.55): opcional; lo comprometido se calcula desde las órdenes
+    match /CDP_Presupuesto/{id} {
+      allow read, create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
     // COMPRAS ÁGILES (v20.42): bitácora inmutable.
     match /Compras_Agiles/{id} {
       allow read, create, update: if isStaff();

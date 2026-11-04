@@ -181,6 +181,15 @@ service cloud.firestore {
         allow update, delete: if false;
       }
     }
+    // COMPRAS ÁGILES (v20.42): bitácora inmutable.
+    match /Compras_Agiles/{id} {
+      allow read, create, update: if isStaff();
+      allow delete: if isAdmin();
+      match /Eventos/{eventoId} {
+        allow read, create: if isStaff();
+        allow update, delete: if false;
+      }
+    }
     match /Actas_Entrega/{numero} {
       allow read, create: if isStaff();
       // solo se puede pasar de EMITIDA a ANULADA (administrador); el resto del acta no cambia

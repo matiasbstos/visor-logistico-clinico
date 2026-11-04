@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=20.41",
+                "./script.js": "./script.js?v=20.42",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -62,7 +62,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Visor Logístico Clínico</title>
     <link rel="icon" href="data:;base64,iVBORw0KGgo=">
-    <link rel="stylesheet" href="style.css?v=20.41">
+    <link rel="stylesheet" href="style.css?v=20.42">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -235,6 +235,9 @@
                     </div>
                     <a href="#" class="menu-item normal" data-target="view-compras" data-title="Solicitudes de Compra">
                         <i class="ph-bold ph-shopping-cart"></i><span class="menu-label">Solicitudes de Compra</span>
+                    </a>
+                    <a href="#" class="menu-item normal" data-target="view-compras-agiles" data-title="Compras ágiles">
+                        <i class="ph-bold ph-handshake"></i><span class="menu-label">Compras ágiles</span>
                     </a>
                     <a href="#" class="menu-item normal" data-target="view-seguimiento-oc" data-title="Seguimiento de OC">
                         <i class="ph-bold ph-clipboard-text"></i><span class="menu-label">Seguimiento de OC</span>
@@ -2558,6 +2561,10 @@
 
             <section id="view-actas-entrega" class="view-section" style="display:none;">
                 <div class="dashboard-container" id="act-root"></div>
+            </section>
+
+            <section id="view-compras-agiles" class="view-section" style="display:none;">
+                <div class="dashboard-container" id="cag-root"></div>
             </section>
 
             <section id="view-seguimiento-oc" class="view-section" style="display:none;">
@@ -5782,17 +5789,18 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=20.41"></script>
-    <script type="module" src="patch-plantillas.js?v=20.41"></script>
+    <script type="module" src="script.js?v=20.42"></script>
+    <script type="module" src="patch-plantillas.js?v=20.42"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="bodegas-estantes.js?v=20.41"></script>
-    <script src="bodegas-cierre.js?v=20.41"></script>
-    <script src="oc-lector.js?v=20.41"></script>
-    <script src="anonimizar-pacientes.js?v=20.41"></script>
-    <script src="seguimiento-oc.js?v=20.41"></script>
-    <script src="acta-documentos.js?v=20.41"></script>
-    <script src="actas-entrega.js?v=20.41"></script>
-    <script src="oxigeno.js?v=20.41"></script>
-    <script src="visor-adquisiciones.js?v=20.41"></script>
+    <script src="bodegas-estantes.js?v=20.42"></script>
+    <script src="bodegas-cierre.js?v=20.42"></script>
+    <script src="oc-lector.js?v=20.42"></script>
+    <script src="anonimizar-pacientes.js?v=20.42"></script>
+    <script src="seguimiento-oc.js?v=20.42"></script>
+    <script src="compras-agiles.js?v=20.42"></script>
+    <script src="acta-documentos.js?v=20.42"></script>
+    <script src="actas-entrega.js?v=20.42"></script>
+    <script src="oxigeno.js?v=20.42"></script>
+    <script src="visor-adquisiciones.js?v=20.42"></script>
 </body>
 </html>

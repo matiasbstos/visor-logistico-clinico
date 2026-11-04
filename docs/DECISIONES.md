@@ -162,3 +162,10 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 - `Respaldos_Toma_Inventario` guarda solo stock (producto, cantidad, lote, vencimiento): **no contiene datos de pacientes**.
 - En el código solo quedan RUT de proveedores (públicos) y el RUT de la enfermera firmante de las actas (funcionaria, no paciente). Los RUT de pacientes que aparecían eran datos de ejemplo del demo (ya eliminados en v20.41); en el historial de git solo existen esos ejemplos, no datos reales.
 - Los datos reales de pacientes (si los hubo) estaban en Firestore: `Historial_Movimientos` y `Bandejas_Turno`, cubiertos por la herramienta de anonimización.
+
+### 4.10 Compras ágiles (etapa previa a la OC) — v20.42
+- Una compra ágil (ID `1298355-1122-COT26`) se sigue desde la publicación de los TDR hasta que llega la OC (`1298355-1122-AG26`); se enlazan por el prefijo `1298355-1122`.
+- Estados: Publicada → Oferta recibida → Esperando V°B° → V°B° completo · esperando OC → OC emitida (o Cerrada/desierta).
+- Se registran: ítems y cuadro por centro (memo/CDP), oferta admisible, documentos del oferente (con vencimiento), V°B° por centro y bitácora inmutable.
+- Alertas automáticas: sobre presupuesto, plazo/vigencia fuera de bases, documento vencido antes de la oferta, certificado de habilidad con más de 30 días, ficha técnica faltante por ítem, observaciones de equivalencia, cuenta bancaria a nombre de un tercero, OC que no llega 5+ días hábiles después del V°B°.
+- Las alertas informan; la decisión de adjudicar o pagar sigue siendo de las personas autorizadas.

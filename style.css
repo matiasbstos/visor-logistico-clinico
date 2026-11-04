@@ -5218,3 +5218,17 @@ button.erp-card:hover, .soc-card:hover { transform: translateY(-2px); box-shadow
 .seg-mov { list-style: none; padding: 0; margin: 6px 0 0; display: grid; gap: 6px; font-size: .86rem; }
 .seg-mov li { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; }
 .seg-mov li span { color: #64748b; margin-left: 8px; font-size: .78rem; } .seg-mov li small { display: block; color: #64748b; margin-top: 2px; }
+
+/* v20.54 · flujo de la compra y cobertura del pedido */
+.cag-flujo { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.cag-paso { position: relative; display: grid; gap: 2px; justify-items: center; text-align: center; font-size: .78rem; padding-top: 2px; }
+.cag-paso::before { content: ""; position: absolute; top: 15px; left: -50%; right: 50%; height: 3px; background: #e2e8f0; z-index: 0; }
+.cag-paso:first-child::before { display: none; }
+.cag-paso--hecho::before { background: #8CC63F; }
+.cag-punto { position: relative; z-index: 1; width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; font-weight: 800; background: #e2e8f0; color: #64748b; }
+.cag-paso--hecho .cag-punto { background: #8CC63F; color: #fff; } .cag-paso--actual .cag-punto { background: #1A3668; color: #fff; box-shadow: 0 0 0 4px rgba(26,54,104,.18); }
+.cag-paso--parcial .cag-punto { background: #F59E0B; color: #fff; }
+.cag-paso b { color: #1e293b; line-height: 1.2; } .cag-paso small { color: #64748b; line-height: 1.2; word-break: break-word; }
+.cag-cob { margin: 6px 0 10px; padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: .9rem; }
+.cag-cob--ok { background: #DCFCE7; color: #166534; } .cag-cob--alerta { background: #FEF3C7; color: #92400E; } .cag-cob--info { background: #E0F2FE; color: #075985; }
+@media (max-width: 760px) { .cag-flujo { grid-template-columns: 1fr; } .cag-paso { grid-template-columns: 30px 1fr; justify-items: start; text-align: left; column-gap: 10px; } .cag-paso small { grid-column: 2; } .cag-paso::before { display: none; } }

@@ -178,19 +178,21 @@
         return configCorreo;
     }
     /** Envía el correo por el Apps Script; si no está configurado, abre un borrador. Nunca lanza. */
-    async function enviarCorreo(destinatarios, correo) {
+    async function enviarCorreo(destinatarios, correo, extra) {
         const to = (destinatarios || []).filter(emailValido);
+        const cc = ((extra && extra.cc) || []).filter(emailValido), adj = (extra && extra.attachments) || [];
         if (!to.length) return { estado: 'sin_destinatarios', destinatarios: [] };
         if (!configCorreo.webhookUrl || !configCorreo.token) {
-            try { window.open(`mailto:${encodeURIComponent(to.join(','))}?subject=${encodeURIComponent(correo.subject)}&body=${encodeURIComponent(correo.text)}`, '_blank'); } catch (e) { /* bloqueado */ }
-            return { estado: 'borrador', destinatarios: to };
+            try { window.open(`mailto:${encodeURIComponent(to.join(','))}?${cc.length ? 'cc=' + encodeURIComponent(cc.join(',')) + '&' : ''}subject=${encodeURIComponent(correo.subject)}&body=${encodeURIComponent(correo.text)}`, '_blank'); } catch (e) { /* bloqueado */ }
+            return { estado: 'borrador', destinatarios: to, cc };
         }
         try {
             const r = await fetch(configCorreo.webhookUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-                body: JSON.stringify({ token: configCorreo.token, to, subject: correo.subject, text: correo.text, html: correo.html }) });
+                body: JSON.stringify({ token: configCorreo.token, to, cc, subject: correo.subject, text: correo.text, html: correo.html, attachments: adj }) });
             const j = await r.json();
-            return j && j.ok ? { estado: 'enviado', destinatarios: to } : { estado: 'error', destinatarios: to, detalle: String((j && j.error) || 'respuesta no válida') };
-        } catch (e) { return { estado: 'error', destinatarios: to, detalle: String((e && e.message) || e) }; }
+            if (j && j.ok && adj.length && num(j.adjuntos) !== adj.length) return { estado: 'sin_adjuntos', destinatarios: to, cc, detalle: 'El correo salió SIN adjuntos: el script de Apps Script no está actualizado. Pega el código nuevo en "Configurar correo" y vuelve a implementar.' };
+            return j && j.ok ? { estado: 'enviado', destinatarios: to, cc } : { estado: 'error', destinatarios: to, cc, detalle: String((j && j.error) || 'respuesta no válida') };
+        } catch (e) { return { estado: 'error', destinatarios: to, cc, detalle: String((e && e.message) || e) }; }
     }
 
     // ---------------------------------------------------------------
@@ -290,7 +292,9 @@
                 ${(oc.incidencias || []).filter(i => i.estado === 'ABIERTA').map(i => `<button type="button" class="btn btn-outline btn-sm" data-resolver="${esc(i.id)}">Resolver: ${esc(i.producto.slice(0, 30))}</button>`).join(' ')}</div>
             <div class="erp-card"><div class="soc-sub"><h3>Pedido y recibido</h3>
                 <label class="soc-toggle"><input type="checkbox" id="soc-todos" ${verTodos ? 'checked' : ''}> Ver todos los centros</label>
-                <button type="button" class="btn btn-primary btn-sm" id="soc-recep"><i class="ph-bold ph-package"></i> Registrar recepción</button></div>
+                <button type="button" class="btn btn-primary btn-sm" id="soc-recep"><i class="ph-bold ph-package"></i> Registrar recepción</button>
+                <button type="button" class="btn btn-outline btn-sm" id="soc-conforme"><i class="ph-bold ph-seal-check"></i> Recepción conforme</button></div>
+                ${oc.recepcionConforme ? `<p class="soc-card__sub">Recepción conforme registrada el ${fmtFecha(oc.recepcionConforme.fecha)} (${esc(oc.recepcionConforme.tipoDoc === 'FACTURA' ? 'factura' : 'guía')} ${esc(oc.recepcionConforme.numeroDoc)}). Correo: ${({ enviado: 'enviado', borrador: 'borrador abierto', error: 'NO se envió', sin_adjuntos: 'enviado SIN adjuntos', sin_destinatarios: 'sin destinatarios' })[(oc.recepcionConforme.correo || {}).estado] || '—'}.</p>` : ''}
                 <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Neto</th>${colsVis.map(c => `<th>${esc(c.centro)}<br><small>memo ${esc(c.memo)} · CDP ${esc(c.cdp)}</small></th>`).join('')}</tr></thead><tbody>
                 ${(oc.lineas || []).map(l => `<tr><td>${esc(l.descripcion)}</td><td>${peso(l.valorNeto)}</td>${colsVis.map(c => {
                     const p = num(l.dist && l.dist[c.key]), r = num(l.recibido && l.recibido[c.key]); if (!p && !r) return '<td class="soc-vacio">—</td>';
@@ -308,6 +312,7 @@
         q('#soc-volver').addEventListener('click', () => { ocActual = null; pintarLista(); });
         q('#soc-todos').addEventListener('change', (e) => { verTodos = e.target.checked; pintarDetalle(); });
         q('#soc-recep').addEventListener('click', formRecepcion);
+        q('#soc-conforme').addEventListener('click', () => { if (window.SAR_RecepcionConforme) window.SAR_RecepcionConforme.abrir({ oc: ocActual, modal, toast, enviarCorreo, config: configCorreo, usuario: usuario(), fmtFecha, peso, totalesPorCentro, centroPropio: CENTRO_PROPIO }); });
         const ac = q('#soc-acepta'); if (ac) ac.addEventListener('click', formAceptacion);
         root().querySelectorAll('[data-resolver]').forEach(b => b.addEventListener('click', () => formResolver(b.dataset.resolver)));
         q('#soc-guardar-nota').addEventListener('click', guardarNota);
@@ -334,7 +339,7 @@
         const b = host.querySelector('#soc-base'); if (b) b.addEventListener('click', () => guardar([...new Set([...dest, ...configCorreo.destinatariosBase])]));
     }
 
-    const ICONOS = { INCIDENCIA: 'Incidencia', ACEPTACION: 'Aceptación', NOTA: 'Nota', RECEPCION: 'Recepción', MULTA: 'Multa', ESTADO: 'Estado', CREACION: 'Ingreso' };
+    const ICONOS = { CONFORME: 'Recepción conforme', INCIDENCIA: 'Incidencia', ACEPTACION: 'Aceptación', NOTA: 'Nota', RECEPCION: 'Recepción', MULTA: 'Multa', ESTADO: 'Estado', CREACION: 'Ingreso' };
     function pintarBitacora() {
         const host = root() && root().querySelector('#soc-bitacora'); if (!host) return;
         host.innerHTML = eventos.length ? '<ul class="soc-bit">' + eventos.map(e => `<li><div><strong>${esc(ICONOS[e.tipo] || e.tipo)}</strong> · ${esc(e.autor || '')} · <small>${esc(fmtFechaHora(e.fecha))}</small></div>
@@ -677,10 +682,15 @@ function doPost(e) {
   try {
     const d = JSON.parse(e.postData.contents);
     if (d.token !== TOKEN) return salida({ ok: false, error: 'token' });
-    const to = (d.to || []).filter(m => DOMINIOS.some(x => String(m).toLowerCase().endsWith('@' + x)));
+    const ok = (l) => (l || []).filter(m => DOMINIOS.some(x => String(m).toLowerCase().endsWith('@' + x)));
+    const to = ok(d.to), cc = ok(d.cc);
     if (!to.length) return salida({ ok: false, error: 'sin destinatarios permitidos' });
-    MailApp.sendEmail({ to: to.join(','), subject: String(d.subject).slice(0, 200), body: String(d.text), htmlBody: String(d.html), name: 'Sistema SAR Melipilla' });
-    return salida({ ok: true, enviados: to.length });
+    const adj = (d.attachments || []).slice(0, 5).map(a => Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'application/pdf', String(a.name).slice(0, 120)));
+    const op = { to: to.join(','), subject: String(d.subject).slice(0, 200), body: String(d.text), htmlBody: String(d.html), name: 'Sistema SAR Melipilla' };
+    if (cc.length) op.cc = cc.join(',');
+    if (adj.length) op.attachments = adj;
+    MailApp.sendEmail(op);
+    return salida({ ok: true, enviados: to.length + cc.length, adjuntos: adj.length });
   } catch (err) { return salida({ ok: false, error: String(err) }); }
 }
 function salida(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }`;

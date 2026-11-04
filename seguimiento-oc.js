@@ -33,7 +33,9 @@
     // los de otros años se agregan en Configuración de correo/feriados (feriadosExtra).
     // ---------------------------------------------------------------
     const FERIADOS_BASE = ['2026-01-01', '2026-04-03', '2026-04-04', '2026-05-01', '2026-05-21', '2026-06-20', '2026-06-29', '2026-07-16',
-        '2026-08-15', '2026-09-18', '2026-09-19', '2026-10-12', '2026-10-31', '2026-11-01', '2026-12-08', '2026-12-25'];
+        '2026-08-15', '2026-09-18', '2026-09-19', '2026-10-12', '2026-10-31', '2026-11-01', '2026-12-08', '2026-12-25',
+        // 2027: solo feriados que caen de lunes a viernes (los de fin de semana no cambian los días hábiles)
+        '2027-01-01', '2027-03-26', '2027-05-21', '2027-06-28', '2027-07-16', '2027-10-11', '2027-11-01', '2027-12-08'];
     let feriados = new Set(FERIADOS_BASE);
     function setFeriadosExtra(lista) { feriados = new Set([...FERIADOS_BASE, ...(Array.isArray(lista) ? lista : [])]); }
     const pad = (n) => String(n).padStart(2, '0');
@@ -470,6 +472,7 @@
             leerRev(o);
             let usoCuadro = null;
             if (window.SAR_ComprasAgiles && String(rev.numeroOC || '').trim()) {
+                rev.cuadro = null;
                 const r = await window.SAR_ComprasAgiles.cuadroParaOC(String(rev.numeroOC).trim().toUpperCase(), rev.lineas.filter(l => String(l.descripcion || '').trim() && num(l.cantidad) > 0));
                 if (r && !r.error) { rev.cuadro = r; usoCuadro = r; } else if (r && r.error && r.error !== 'sin compra ágil') toast('Cuadro por centro', `No se usó el de la compra ágil ${r.compra}: ${r.error} Se ingresó todo al SAR; revisa el cuadro.`, 'warning');
             }
@@ -704,7 +707,7 @@ function salida(o) { return ContentService.createTextOutput(JSON.stringify(o)).s
             <label>URL de la aplicación web<input type="text" id="c-url" value="${esc(c.webhookUrl || '')}" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></label>
             <label>Clave (la misma del script)<input type="text" id="c-token" value="${esc(c.token || '')}" autocomplete="off"></label>
             <label>Lista base de destinatarios (separados por coma)<input type="text" id="c-base" value="${esc((c.destinatariosBase || []).join(', '))}"></label>
-            <label>Feriados adicionales (AAAA-MM-DD, separados por coma)<input type="text" id="c-fer" value="${esc((c.feriadosExtra || []).join(', '))}" placeholder="Hoy están cargados los de 2026"></label>`,
+            <label>Feriados adicionales (AAAA-MM-DD, separados por coma)<input type="text" id="c-fer" value="${esc((c.feriadosExtra || []).join(', '))}" placeholder="Cargados 2026 y los hábiles de 2027"></label>`,
             async (o) => {
                 const lst = (s) => s.split(/[,\s;]+/).map(x => x.trim()).filter(Boolean);
                 const base = lst(o.querySelector('#c-base').value).map(x => x.toLowerCase()), fer = lst(o.querySelector('#c-fer').value);

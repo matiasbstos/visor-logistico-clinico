@@ -23,6 +23,7 @@
     }
     rec.inert = true;
     $('lg-ir-recuperar').addEventListener('click', () => modo('recuperar'));
+    $('lg-ir-recuperar-m').addEventListener('click', (e) => { e.preventDefault(); modo('recuperar'); });
     $('lg-ir-ingreso').addEventListener('click', () => modo('ingreso'));
     document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && shell.dataset.modo === 'recuperar' && $('login-view').style.display !== 'none') modo('ingreso'); });
     $('form-recuperar').addEventListener('submit', (e) => {
@@ -38,5 +39,5 @@
     $('form-login').addEventListener('submit', cargando);
     $('form-recuperar').addEventListener('submit', cargando);
     $('forgot-pwd-link').addEventListener('click', cargando);
-    // el enlace "¿Olvidó…?" del formulario sigue funcionando por sí solo (envía con el correo escrito)
+    // #forgot-pwd-link (oculto) conserva el envío del correo; lo dispara el formulario de Recuperar acceso
 })(window, document);

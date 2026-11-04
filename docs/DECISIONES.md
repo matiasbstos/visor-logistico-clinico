@@ -181,3 +181,4 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 - Portada: tarjeta "Compras y órdenes en curso" (OC por aceptar/atrasadas y alertas de compras ágiles), solo personal.
 - Capa de CSS al final de `style.css`: entrada de vistas y modales, realce de tarjetas, foco visible con teclado, cifras tabulares, cabeceras de tabla fijas, áreas táctiles de 44 px en móvil y respeto a "reducir movimiento".
 - No se agregan librerías ni dependencias de terceros: el sistema sigue siendo JavaScript simple con Firebase.
+- v20.47: en celular el encabezado cabe en una fila (56 px en vez de 117 px: se ocultan el segundo logo, la ruta de navegación, la campana y la ayuda); en el Inicio, "Acción inmediata" va antes del gráfico semanal; el ejemplo del login usa el dominio institucional.

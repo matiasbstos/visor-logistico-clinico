@@ -5062,3 +5062,17 @@ button.erp-card:hover, .soc-card:hover { transform: translateY(-2px); box-shadow
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }
+
+/* v20.47 — encabezado en celular: una sola fila (antes se partía en dos y ocupaba 117 px) */
+@media (max-width: 767px) {
+    .topbar { flex-wrap: nowrap; gap: 8px; height: auto; min-height: 56px; padding-top: 6px; padding-bottom: 6px; }
+    .topbar-left { flex: 1 1 auto; min-width: 0; flex-wrap: nowrap; gap: 8px; overflow: hidden; }
+    .topbar-right { flex: 0 0 auto; flex-wrap: nowrap; gap: 8px; }
+    .topbar-brand-logos { padding: 3px 6px !important; gap: 6px !important; }
+    .topbar-brand-logos img[alt^="Corporación"], .topbar-brand-logos > span { display: none !important; }
+    .erp-breadcrumb { min-width: 0; } .erp-breadcrumb__root, .erp-breadcrumb__sep { display: none; }
+    .erp-breadcrumb__current { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 30vw; }
+    .quick-access__btn span, .topbar-right .user-text, .topbar-right .btn.btn-icon { display: none !important; }
+}
+/* v20.47 — en celular, primero "Acción inmediata" y después el gráfico semanal */
+@media (max-width: 767px) { .erp-dashboard-mid-grid > :first-child { order: 2; } }

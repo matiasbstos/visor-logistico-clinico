@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=20.50",
+                "./script.js": "./script.js?v=20.51",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -65,7 +65,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
     <meta name="theme-color" content="#1A3668">
-    <link rel="stylesheet" href="style.css?v=20.50">
+    <link rel="stylesheet" href="style.css?v=20.51">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -325,6 +325,9 @@
                     <div style="font-size:11.5px; font-weight:700; color:#ffffff;">SAR Elsa Romo Aravena</div>
                     <div style="font-size:10px; color:rgba(255,255,255,0.55); margin-top:1px;">Corp. Municipal de Melipilla</div>
                 </div>
+                <a href="#" class="menu-item normal admin-only" data-target="view-errores" data-title="Directorio de errores">
+                    <i class="ph-bold ph-bug"></i><span class="menu-label">Directorio de errores</span>
+                </a>
                 <a href="#" class="menu-item normal admin-only" data-target="view-configuracion" id="menu-config" data-title="Configuración">
                     <i class="ph-bold ph-gear"></i><span class="menu-label">Configuración</span>
                 </a>
@@ -2599,6 +2602,10 @@
 
             <section id="view-actas-entrega" class="view-section" style="display:none;">
                 <div class="dashboard-container" id="act-root"></div>
+            </section>
+
+            <section id="view-errores" class="view-section" style="display:none;">
+                <div class="dashboard-container" id="err-root"></div>
             </section>
 
             <section id="view-compras-agiles" class="view-section" style="display:none;">
@@ -5827,21 +5834,22 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=20.50"></script>
-    <script type="module" src="patch-plantillas.js?v=20.50"></script>
+    <script type="module" src="script.js?v=20.51"></script>
+    <script type="module" src="patch-plantillas.js?v=20.51"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="bodegas-estantes.js?v=20.50"></script>
-    <script src="bodegas-cierre.js?v=20.50"></script>
-    <script src="oc-lector.js?v=20.50"></script>
-    <script src="anonimizar-pacientes.js?v=20.50"></script>
-    <script src="seguimiento-oc.js?v=20.50"></script>
-    <script src="compras-agiles.js?v=20.50"></script>
-    <script src="home-compras.js?v=20.50"></script>
-    <script src="login-animado.js?v=20.50"></script>
-    <script src="recepcion-conforme.js?v=20.50"></script>
-    <script src="acta-documentos.js?v=20.50"></script>
-    <script src="actas-entrega.js?v=20.50"></script>
-    <script src="oxigeno.js?v=20.50"></script>
-    <script src="visor-adquisiciones.js?v=20.50"></script>
+    <script src="bodegas-estantes.js?v=20.51"></script>
+    <script src="bodegas-cierre.js?v=20.51"></script>
+    <script src="oc-lector.js?v=20.51"></script>
+    <script src="anonimizar-pacientes.js?v=20.51"></script>
+    <script src="seguimiento-oc.js?v=20.51"></script>
+    <script src="compras-agiles.js?v=20.51"></script>
+    <script src="home-compras.js?v=20.51"></script>
+    <script src="login-animado.js?v=20.51"></script>
+    <script src="errores.js?v=20.51"></script>
+    <script src="recepcion-conforme.js?v=20.51"></script>
+    <script src="acta-documentos.js?v=20.51"></script>
+    <script src="actas-entrega.js?v=20.51"></script>
+    <script src="oxigeno.js?v=20.51"></script>
+    <script src="visor-adquisiciones.js?v=20.51"></script>
 </body>
 </html>

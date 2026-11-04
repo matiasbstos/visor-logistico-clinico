@@ -193,3 +193,8 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 
 ### 4.15 Marca en toda la app (v20.50)
 - Marca en barra lateral, favicon (SVG + PNG 32), apple-touch-icon y manifest PWA (iconos 192/512 maskable, theme-color #1A3668). Reemplaza la "S" roja.
+
+### 4.16 Directorio de errores y alertas (v20.51)
+- `errores.js`: catálogo único de 36 códigos `SAR-<ÁREA>-NNN` (acceso, datos, inventario, compras, documentos, seguridad clínica, sistema) con significado, causa, solución y quién actúa.
+- Los avisos de error/advertencia que coinciden con el catálogo muestran "Ref. CÓDIGO"; cada aparición se anota solo en el equipo local (máx. 100, sin datos de pacientes). Vista exclusiva de administración (menú "Directorio de errores").
+- Para sumar un error nuevo: agregar una fila en el arreglo `C` de `errores.js` con los textos que lo identifican.

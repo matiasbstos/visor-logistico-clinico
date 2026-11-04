@@ -5176,3 +5176,24 @@ button.erp-card:hover, .soc-card:hover { transform: translateY(-2px); box-shadow
 
 /* v20.50 · marca en la barra lateral */
 .sidebar-logo-badge .sb-marca { width: 78%; height: 78%; display: block; }
+
+/* v20.51 · Directorio de errores */
+.err-cab h2 { margin: 0 0 2px; color: #1A3668; } .err-cab p { margin: 0 0 14px; color: var(--text-muted); font-size: .9rem; }
+.err-barra { display: grid; gap: 10px; margin-bottom: 14px; }
+.err-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.err-chip { border: 1px solid #d6dde8; background: #fff; border-radius: 999px; padding: 5px 12px; font-size: .8rem; cursor: pointer; color: #475569; }
+.err-chip.on { background: #1A3668; border-color: #1A3668; color: #fff; }
+.err-lista { display: grid; gap: 8px; }
+.err-item { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: hidden; }
+.err-fila { width: 100%; display: grid; grid-template-columns: 112px 64px 1fr auto; gap: 10px; align-items: center; text-align: left; padding: 11px 14px; background: none; border: 0; cursor: pointer; font: inherit; }
+.err-fila:hover { background: #f8fafc; }
+.err-cod { font-family: ui-monospace, Consolas, monospace; font-size: .78rem; font-weight: 700; color: #1A3668; }
+.err-niv { font-size: .7rem; font-weight: 700; border-radius: 999px; padding: 2px 8px; text-align: center; }
+.err-niv--error { background: #FEE2E2; color: #991B1B; } .err-niv--warning { background: #FEF3C7; color: #92400E; }
+.err-tit { font-weight: 600; color: #1e293b; } .err-cnt { font-size: .75rem; color: #64748b; }
+.err-det { display: none; padding: 4px 16px 14px 16px; border-top: 1px dashed #e2e8f0; font-size: .88rem; color: #334155; }
+.err-item.abierto .err-det { display: block; animation: uxVista .2s ease; } .err-det p { margin: 8px 0 0; }
+.err-recientes { margin-top: 22px; } .err-recientes h3 { color: #1A3668; font-size: 1rem; }
+.err-recientes ul { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 4px; font-size: .85rem; }
+.err-recientes li span { color: #64748b; margin-left: 6px; } .err-vacio { color: #64748b; font-size: .88rem; }
+@media (max-width: 640px) { .err-fila { grid-template-columns: 1fr auto; } .err-cod { grid-column: 1 / 3; } .err-niv { justify-self: start; } }

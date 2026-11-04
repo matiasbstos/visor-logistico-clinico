@@ -166,6 +166,53 @@
             if (!actual) pintarLista(); else { const n = lista.find(x => x.id === actual.id); if (n) { actual = n; pintarDetalle(); } }
         }, (e) => { root().innerHTML = `<div class="home-empty">No se pudo leer: ${esc(e.code || e.message)}</div>`; });
     }
+    // ---------------------------------------------------------------
+    // Flujo SDC/Memo → CDP → publicación → adjudicación → OC → guía/factura → recepción
+    // ---------------------------------------------------------------
+    const norm = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
+    const toks = (t) => new Set(norm(t).split(' ').filter(x => x.length > 2));
+    function similitud(a, b) { const A = toks(a), B = toks(b); if (!A.size || !B.size) return 0; let i = 0; A.forEach(x => { if (B.has(x)) i++; }); return i / (A.size + B.size - i); }
+    /** Empareja cada ítem pedido con una línea de la OC: descripción igual → mismo orden (si hay igual cantidad de líneas) → mayor parecido (≥0,5). */
+    function emparejar(items, lineas) {
+        const usadas = new Set(), res = items.map(() => -1);
+        items.forEach((it, i) => { const k = lineas.findIndex((l, j) => !usadas.has(j) && norm(l.descripcion) === norm(it.descripcion)); if (k >= 0) { res[i] = k; usadas.add(k); } });
+        if (items.length === lineas.length) items.forEach((it, i) => { if (res[i] < 0 && !usadas.has(i)) { res[i] = i; usadas.add(i); } });
+        items.forEach((it, i) => { if (res[i] >= 0) return; let mejor = -1, ms = 0.5; lineas.forEach((l, j) => { if (usadas.has(j)) return; const sc = similitud(it.descripcion, l.descripcion); if (sc >= ms) { ms = sc; mejor = j; } }); if (mejor >= 0) { res[i] = mejor; usadas.add(mejor); } });
+        return res;
+    }
+    const sumaObj = (o) => Object.values(o || {}).reduce((t, x) => t + num(x), 0);
+    /** Pedido (SDC) vs comprado (OC) vs recibido: qué falta o si se compró la totalidad. Pura. */
+    function cobertura(ca, oc) {
+        const items = ca.items || [], lineas = (oc && oc.lineas) || [];
+        const par = emparejar(items, lineas);
+        const filas = items.map((it, i) => {
+            const l = par[i] >= 0 ? lineas[par[i]] : null;
+            const pedido = num(it.cantidad), comprado = l ? sumaObj(l.dist) : 0, recibido = l ? sumaObj(l.recibido) : 0;
+            return { descripcion: it.descripcion, pedido, comprado, recibido, faltaComprar: Math.max(0, pedido - comprado), faltaRecibir: Math.max(0, comprado - recibido), excede: Math.max(0, comprado - pedido), conOC: !!l };
+        });
+        const extras = lineas.filter((l, j) => !par.includes(j)).map(l => ({ descripcion: l.descripcion, comprado: sumaObj(l.dist), recibido: sumaObj(l.recibido) }));
+        const t = (k) => filas.reduce((a, f) => a + f[k], 0);
+        const tot = { pedido: t('pedido'), comprado: t('comprado'), recibido: t('recibido'), faltaComprar: t('faltaComprar'), faltaRecibir: t('faltaRecibir') };
+        return { filas, extras, tot, hayOC: !!oc, totalidad: !!oc && items.length > 0 && tot.faltaComprar === 0, recibidoTotal: !!oc && tot.comprado > 0 && tot.faltaRecibir === 0 };
+    }
+    /** Pasos del flujo con su estado: hecho | actual | pendiente. Pura. */
+    function flujo(ca, oc) {
+        const cob = cobertura(ca, oc), cols = ca.columnas || [], o = ca.origen || {};
+        const cdpOk = cols.filter(c => c.cdp).length;
+        const rc = oc && oc.recepcionConforme;
+        const algoRecibido = cob.tot.recibido > 0;
+        const pasos = [
+            { clave: 'sdc', titulo: o.tipo || 'SDC / Memo', hecho: !!o.numero, detalle: o.numero ? `N° ${o.numero}${o.centro ? ' · ' + o.centro : ''}` : 'Sin registrar' },
+            { clave: 'cdp', titulo: 'CDP (Presupuesto)', hecho: cols.length > 0 && cdpOk === cols.length, detalle: cols.length ? `${cdpOk} de ${cols.length} centros` : 'Sin centros' },
+            { clave: 'pub', titulo: 'Publicada en Mercado Público', hecho: !!ca.codigo, detalle: ca.codigo || '' },
+            { clave: 'adj', titulo: 'Adjudicación', hecho: !!ofertaElegida(ca) && vbCompleto(ca) || !!ca.ocNumero || !!oc, detalle: ofertaElegida(ca) ? ofertaElegida(ca).proveedor : 'Sin oferta admisible' },
+            { clave: 'oc', titulo: 'Orden de compra', hecho: !!(ca.ocNumero || oc), detalle: (oc && oc.numeroOC) || ca.ocNumero || 'Pendiente' },
+            { clave: 'doc', titulo: 'Guía / factura del proveedor', hecho: !!(rc && rc.numeroDoc) || algoRecibido, detalle: rc && rc.numeroDoc ? `${rc.tipoDoc || 'Doc.'} N° ${rc.numeroDoc}` : (algoRecibido ? 'Recibido sin registrar documento' : 'Pendiente') },
+            { clave: 'rec', titulo: 'Recepción conforme', hecho: cob.recibidoTotal, parcial: algoRecibido && !cob.recibidoTotal, detalle: cob.recibidoTotal ? 'Total' : algoRecibido ? `Parcial: ${cob.tot.recibido} de ${cob.tot.comprado} u.` : 'Pendiente' }
+        ];
+        let actual = pasos.findIndex(x => !x.hecho);
+        return { pasos: pasos.map((x, i) => ({ ...x, estado: x.hecho ? 'hecho' : (i === actual ? 'actual' : 'pendiente') })), cobertura: cob };
+    }
     function ocDe(ca) {
         const p = prefijo(ca.codigo); if (!p) return null;
         return ocs.find(o => String(o.numeroOC || '').startsWith(p + '-')) || null;
@@ -208,13 +255,15 @@
         root().innerHTML = `
             <div class="page-header mb-24"><div class="page-title"><h1>${esc(ca.codigo)}</h1><p>${esc(ca.titulo || '')}</p></div>
                 <div class="soc-acc"><button type="button" class="btn btn-outline" id="cag-volver"><i class="ph-bold ph-arrow-left"></i> Volver</button></div></div>
+            ${flujoHtml(ca, oc)}
             <div class="erp-card"><div class="soc-fechas">
                 <div><small>Estado</small>${chipE(cod)}</div><div><small>Publicada</small><strong>${fmtFecha(ca.publicada)}</strong></div>
                 <div><small>Presupuesto (IVA incl.)</small><strong>${peso(ca.presupuesto)}</strong></div>
                 <div><small>Entrega máx. (bases)</small><strong>${num(ca.plazoMaxEntregaHabiles)} días hábiles</strong></div>
                 <div><small>Aceptación de la OC</small><strong>${num(ca.aceptaHoras) || 48} h</strong></div>
                 <div><small>Analista de compras</small><strong>${esc(ca.analista || '—')}</strong></div></div>
-                <div class="soc-acc"><button type="button" class="btn btn-outline" id="cag-oferta"><i class="ph-bold ph-receipt"></i> Registrar oferta</button>
+                <div class="soc-acc"><button type="button" class="btn btn-outline" id="cag-origen"><i class="ph-bold ph-file-text"></i> Origen (SDC / Memo)</button>
+                <button type="button" class="btn btn-outline" id="cag-oferta"><i class="ph-bold ph-receipt"></i> Registrar oferta</button>
                 <button type="button" class="btn btn-outline" id="cag-item"><i class="ph-bold ph-list-plus"></i> Agregar ítem</button>
                 <button type="button" class="btn btn-outline" id="cag-vb"><i class="ph-bold ph-check-circle"></i> V°B° de un centro</button>
                 <button type="button" class="btn btn-outline" id="cag-oc"><i class="ph-bold ph-link"></i> Vincular OC</button>
@@ -222,6 +271,7 @@
                 ${ca.cerrada ? '' : '<button type="button" class="btn btn-outline" id="cag-cerrar"><i class="ph-bold ph-x-circle"></i> Cerrar / desierta</button>'}</div></div>
             ${oc ? `<div class="erp-card"><h3>Orden de compra asociada</h3><p><strong>${esc(oc.numeroOC)}</strong> · ${esc(oc.proveedor || '')} · ${oc.aceptada ? 'aceptada ' + fmtFecha(oc.aceptada) : 'sin aceptar'}. Se sigue en "Seguimiento de OC".</p></div>`
                 : (ca.ocNumero ? `<div class="erp-card"><h3>Orden de compra asociada</h3><p><strong>${esc(ca.ocNumero)}</strong> (aún no ingresada al seguimiento de OC).</p></div>` : '')}
+            ${origenHtml(ca)}${coberturaHtml(ca, oc)}
             <div class="erp-card"><h3>Alertas y revisión <span class="soc-n">${al.filter(a => a.nivel !== 'info').length}</span></h3>
                 ${al.length ? `<ul class="soc-disc cag-al">${al.map(a => `<li class="cag-al--${a.nivel}">${esc(a.texto)}</li>`).join('')}</ul>` : '<p class="soc-card__sub">Sin oferta admisible registrada todavía.</p>'}</div>
             ${of ? `<div class="erp-card"><h3>Oferta admisible</h3><div class="soc-fechas">
@@ -240,11 +290,42 @@
             <div class="erp-card"><h3>Bitácora</h3><div id="cag-bitacora"></div></div>`;
         const q = (s) => root().querySelector(s);
         q('#cag-volver').addEventListener('click', () => { actual = null; pintarLista(); });
-        q('#cag-oferta').addEventListener('click', formOferta); q('#cag-item').addEventListener('click', formItem); q('#cag-vb').addEventListener('click', formVB);
+        q('#cag-origen').addEventListener('click', formOrigen); q('#cag-oferta').addEventListener('click', formOferta); q('#cag-item').addEventListener('click', formItem); q('#cag-vb').addEventListener('click', formVB);
         q('#cag-oc').addEventListener('click', formOC); q('#cag-nota').addEventListener('click', formNota);
         const bc = q('#cag-cerrar'); if (bc) bc.addEventListener('click', formCerrar);
         root().querySelectorAll('[data-doc]').forEach(b => b.addEventListener('click', () => formDoc(Number(b.dataset.doc))));
         pintarBitacora();
+    }
+    function flujoHtml(ca, oc) {
+        const f = flujo(ca, oc);
+        return `<div class="erp-card cag-flujo-card"><h3>Flujo de la compra</h3><ol class="cag-flujo">${f.pasos.map((x, i) => `<li class="cag-paso cag-paso--${x.estado}${x.parcial ? ' cag-paso--parcial' : ''}"><span class="cag-punto">${x.estado === 'hecho' ? '✓' : (x.parcial ? '½' : i + 1)}</span><b>${esc(x.titulo)}</b><small>${esc(x.detalle)}</small></li>`).join('')}</ol></div>`;
+    }
+    function origenHtml(ca) {
+        const o = ca.origen || {};
+        return `<div class="erp-card"><h3>Origen de la compra</h3>${o.numero
+            ? `<div class="soc-fechas"><div><small>Documento</small><strong>${esc(o.tipo || 'SDC')} N° ${esc(o.numero)}</strong></div><div><small>Encargado / centro</small><strong>${esc(o.centro || '—')}</strong></div><div><small>Fecha</small><strong>${fmtFecha(o.fecha)}</strong></div><div><small>Nota</small><strong>${esc(o.nota || '—')}</strong></div></div>`
+            : '<p class="soc-card__sub">Sin registrar. La compra nace de una SDC (solicitud de compra del encargado del centro) o de un memo; el CDP lo genera Presupuesto por centro.</p>'}</div>`;
+    }
+    function coberturaHtml(ca, oc) {
+        if (!(ca.items || []).length) return '';
+        const c = cobertura(ca, oc);
+        const banner = !c.hayOC ? '<p class="cag-cob cag-cob--info">Aún no hay OC: todo el pedido está por comprar.</p>'
+            : c.totalidad ? `<p class="cag-cob cag-cob--ok">Se compró la totalidad del pedido${c.recibidoTotal ? ' y se recibió completo.' : c.tot.recibido ? `; recibido ${c.tot.recibido} de ${c.tot.comprado} u. (recepción parcial).` : '; falta recibir.'}</p>`
+            : `<p class="cag-cob cag-cob--alerta">Falta comprar ${c.tot.faltaComprar} unidad(es) del pedido (${c.filas.filter(f => f.faltaComprar > 0).length} producto(s)).</p>`;
+        return `<div class="erp-card"><h3>Pedido (SDC) vs orden de compra</h3>${banner}
+            <div class="soc-tabla"><table><thead><tr><th>Producto pedido</th><th>Pedido</th><th>Comprado (OC)</th><th>Recibido</th><th>Falta comprar</th><th>Falta recibir</th></tr></thead>
+            <tbody>${c.filas.map(f => `<tr><td>${esc(f.descripcion)}${c.hayOC && !f.conOC ? '<br><small class="cag-obs">No aparece en la OC</small>' : ''}</td><td>${f.pedido}</td><td>${f.comprado}${f.excede ? ` <small class="cag-obs">(+${f.excede})</small>` : ''}</td><td>${f.recibido}</td><td class="${f.faltaComprar ? 'act-sin' : ''}">${f.faltaComprar}</td><td>${f.faltaRecibir}</td></tr>`).join('')}
+            <tr><td><strong>Total</strong></td><td><strong>${c.tot.pedido}</strong></td><td><strong>${c.tot.comprado}</strong></td><td><strong>${c.tot.recibido}</strong></td><td><strong>${c.tot.faltaComprar}</strong></td><td><strong>${c.tot.faltaRecibir}</strong></td></tr></tbody></table></div>
+            ${c.extras.length ? `<small class="cag-obs">En la OC y no pedidos: ${c.extras.map(e => esc(e.descripcion) + ' (' + e.comprado + ')').join(', ')}</small>` : ''}</div>`;
+    }
+    function formOrigen() {
+        const o = actual.origen || {};
+        modal('Origen de la compra', `<label class="cag-f">Documento<select id="o-t"><option${o.tipo === 'SDC' || !o.tipo ? ' selected' : ''}>SDC</option><option${o.tipo === 'Memo' ? ' selected' : ''}>Memo</option></select></label>
+            ${campo('o-n', 'N° de la SDC o memo', 'text', o.numero)}${campo('o-c', 'Encargado / centro que solicita', 'text', o.centro)}${campo('o-f', 'Fecha', 'date', o.fecha || hoyISO())}${campo('o-x', 'Nota (opcional)', 'text', o.nota)}`, async (ov) => {
+            const n = v(ov, 'o-n').trim(); if (!n) { toast('Falta dato', 'Escribe el N° de la SDC o memo.', 'warning'); return false; }
+            const origen = { tipo: v(ov, 'o-t'), numero: n, centro: v(ov, 'o-c').trim(), fecha: v(ov, 'o-f'), nota: v(ov, 'o-x').trim() };
+            await guardar(actual.id, { origen }); await evento(actual.id, 'HITO', `Origen registrado: ${origen.tipo} N° ${n}${origen.centro ? ' (' + origen.centro + ')' : ''}.`);
+        });
     }
     function pintarBitacora() {
         const el = document.getElementById('cag-bitacora'); if (!el) return;
@@ -395,5 +476,5 @@
         } catch (e) { /* best-effort */ }
     }
 
-    window.SAR_ComprasAgiles = { cuadroPara, cuadroParaOC, vincularOC, abrir, estadoCA, alertas, vbCompleto, prefijo, ofertaElegida, datosTermometros, distTotal, totalItems, _setOcs: (o) => { ocs = o; }, ocDe };
+    window.SAR_ComprasAgiles = { cobertura, flujo, emparejar, cuadroPara, cuadroParaOC, vincularOC, abrir, estadoCA, alertas, vbCompleto, prefijo, ofertaElegida, datosTermometros, distTotal, totalItems, _setOcs: (o) => { ocs = o; }, ocDe };
 })(window, document);

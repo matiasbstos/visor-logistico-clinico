@@ -212,3 +212,9 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 - Cada insumo guarda `sobregiroDetalle` [{acta, qty}] (cuadre FIFO: se cubre primero el acta más antigua). Cada cuadre/anulación queda en el historial con `actaId`.
 - Vista Actas de entrega → "Seguimiento de un acta": se escribe el ID y muestra por insumo entregado / con respaldo / sin respaldo / cuadrado / pendiente, más la línea de movimientos (entrega, cuadres con su OC/SDC, anulación). Descarga Excel (CSV).
 - Los informes contable y disponible incluyen la columna "Actas con sobregiro (unidades)".
+
+### 4.19 Flujo de compra SDC/Memo → OC → recepción (v20.54)
+Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC del encargado del centro (o memo) · publicación en Mercado Público (ID COT, adjudicación) · OC `1298355-XXX-AG26` (XXX = N° de orden) · guía de despacho/factura del proveedor · recepción conforme parcial o total · cuadro de distribución por centro (Adquisiciones Salud).
+- Compra ágil: nuevo bloque **Origen (SDC/Memo)** y barra **Flujo de la compra** de 7 pasos (SDC/Memo → CDP → Publicada → Adjudicación → OC → Guía/factura → Recepción parcial/total).
+- Nueva tarjeta **Pedido (SDC) vs orden de compra**: por producto pedido / comprado / recibido / falta comprar / falta recibir; avisa si "se compró la totalidad". Emparejamiento pedido↔OC: descripción igual → mismo orden → mayor parecido (≥0,5).
+- Pendiente: lista de pedido de la SDC con sus propias cantidades distintas al ítem de la compra; alerta cuando la OC trae menos de lo pedido; enlazar recepción con el cuadre de sobregiro.

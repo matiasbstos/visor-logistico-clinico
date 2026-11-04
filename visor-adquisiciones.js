@@ -4070,8 +4070,7 @@
                     cantidadConsumida: 6,
                     cantidadMerma: 1,
                     observacion: 'Recorte al recibir: Se entregaron 18 ampollas por stock físico en estante.',
-                    observacionAdicional: '(+4) Consumo (RUT: 15.432.198-K) | (+2) Consumo (RUT: 18.920.114-2) | (+1) Quiebre por preparación (Ampolla trizada)',
-                    rutPaciente: '15.432.198-K, 18.920.114-2'
+                    observacionAdicional: '(+4) Consumo | (+2) Consumo | (+1) Quiebre por preparación (Ampolla trizada)'
                 },
                 {
                     nombreInsumo: 'PARACETAMOL 500 MG COMPRIMIDO',
@@ -4080,8 +4079,7 @@
                     cantidadConsumida: 12,
                     cantidadMerma: 0,
                     observacion: '',
-                    observacionAdicional: '(+12) Consumo (RUT: 12.883.401-5)',
-                    rutPaciente: '12.883.401-5'
+                    observacionAdicional: '(+12) Consumo'
                 },
                 {
                     nombreInsumo: 'ONDANSETRÓN 4 MG/2ML AMPOLLA',
@@ -4090,8 +4088,7 @@
                     cantidadConsumida: 3,
                     cantidadMerma: 1,
                     observacion: '',
-                    observacionAdicional: '(+3) Consumo (RUT: 19.002.311-8) | (+1) Precipitado detectado en jeringa',
-                    rutPaciente: '19.002.311-8'
+                    observacionAdicional: '(+3) Consumo | (+1) Precipitado detectado en jeringa'
                 }
             ]
         },
@@ -4473,7 +4470,6 @@
                 <tr style="${recorte > 0 || merma > 0 ? 'background:#FFFBEB;' : ''}">
                     <td>
                         <div style="font-weight:800; color:#0F172A;">${nombre}</div>
-                        ${m.rutPaciente ? `<div style="font-size:11px; color:var(--sar-blue); font-weight:700;"><i class="ph-fill ph-user"></i> Paciente(s) RUT: ${m.rutPaciente}</div>` : ''}
                     </td>
                     <td style="text-align:center; font-weight:800;">${asig}</td>
                     <td style="text-align:center; font-weight:800; color:${recorte > 0 ? 'var(--sar-orange)' : '#1E293B'};">

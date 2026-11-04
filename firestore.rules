@@ -128,7 +128,9 @@ service cloud.firestore {
     match /Historial_Movimientos/{movId} {
       allow read: if hasRole(); // Solo usuarios con rol asignado (el historial antiguo puede contener RUT de pacientes)
       allow create: if isAuthenticated();
-      allow update: if false;
+      // Solo el superadministrador, y solo para quitar datos de pacientes antiguos (anonimizar-pacientes.js)
+      allow update: if isSuperAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rutPaciente', 'nombrePaciente', 'camaPaciente', 'document']);
       allow delete: if isSuperAdmin();
     }
 

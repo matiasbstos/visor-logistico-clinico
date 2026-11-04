@@ -5197,3 +5197,17 @@ button.erp-card:hover, .soc-card:hover { transform: translateY(-2px); box-shadow
 .err-recientes ul { list-style: none; padding: 0; margin: 0 0 10px; display: grid; gap: 4px; font-size: .85rem; }
 .err-recientes li span { color: #64748b; margin-left: 6px; } .err-vacio { color: #64748b; font-size: .88rem; }
 @media (max-width: 640px) { .err-fila { grid-template-columns: 1fr auto; } .err-cod { grid-column: 1 / 3; } .err-niv { justify-self: start; } }
+
+/* v20.52 · sobregiro y saldos contables */
+.act-sin { color: #b45309; font-weight: 600; }
+.act-manual { margin: 8px 0 12px; } .act-chk { display: flex; gap: 6px; align-items: center; font-size: .82rem; color: #475569; }
+.sal-barra { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0 14px; }
+.sal-res { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.sal-res > div { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px 14px; display: grid; }
+.sal-res b { font-size: 1.25rem; color: #1A3668; } .sal-res span { font-size: .78rem; color: #64748b; }
+.sal-tabla { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow-x: auto; }
+.sal-fila { display: grid; grid-template-columns: minmax(180px, 2.4fr) repeat(4, minmax(70px, 1fr)) minmax(130px, 1.3fr) 90px; gap: 8px; align-items: center; padding: 9px 14px; border-top: 1px solid #f1f5f9; font-size: .88rem; min-width: 700px; }
+.sal-cab { font-size: .74rem; font-weight: 700; text-transform: uppercase; color: #64748b; border-top: 0; background: #f8fafc; }
+.sal-n small { display: block; color: #64748b; font-size: .74rem; }
+.sal-e { font-style: normal; font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #E2E8F0; color: #475569; }
+.sal-e--SIN_RESPALDO { background: #FEE2E2; color: #991B1B; } .sal-e--LISTO { background: #DCFCE7; color: #166534; } .sal-e--PROVISIONAL { background: #FEF3C7; color: #92400E; }

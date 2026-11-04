@@ -2072,6 +2072,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (window.SAR_Oxigeno) window.SAR_Oxigeno.abrir();
                 } else if (hash === 'view-actas-entrega') {
                     if (window.SAR_ActasEntrega) window.SAR_ActasEntrega.abrir();
+                    if (window.SAR_Saldos) window.SAR_Saldos.abrir();
                 } else if (hash === 'view-errores') {
                     if (window.SAR_Errores) window.SAR_Errores.abrir();
                 } else if (hash === 'view-compras-agiles') {

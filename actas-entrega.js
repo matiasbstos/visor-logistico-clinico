@@ -55,6 +55,52 @@
         if (falta > 0) usados.push({ batch: 'S/L', used: falta, expirationDate: '' });
         return { usados, batches: lotes.filter(l => l.quantity > 0), quantity: q - c };
     }
+    /** Descuenta `n` unidades por FEFO sobre `lotes` (se modifica) y las anota en `usados`. */
+    function quitarFEFO(lotes, n, usados) {
+        let falta = n;
+        for (const l of lotes) {
+            if (falta <= 0) break;
+            const u = Math.min(l.quantity, falta);
+            if (u > 0) { usados.push({ batch: l.batch, used: u, expirationDate: l.expirationDate }); l.quantity -= u; falta -= u; }
+        }
+        if (falta > 0) usados.push({ batch: 'S/L', used: falta, expirationDate: '' });
+    }
+    /**
+     * Entrega con sobregiro. 1) Cuadra: si ya entró stock al sistema y hay unidades entregadas antes sin respaldo
+     * (sobregiro), se descuentan primero. 2) Entrega lo que alcance. 3) Lo que falte queda como sobregiro nuevo.
+     * Saldo contable = quantity − sobregiro (puede ser negativo). quantity nunca baja de 0.
+     */
+    function planificar(d, cantidad) {
+        const c = num(cantidad);
+        if (!(c > 0) || c !== Math.floor(c)) throw new Error('La cantidad debe ser un entero mayor que 0.');
+        let q = num(d.quantity), sg = num(d.sobregiro);
+        const cmp = typeof window.fefoCompare === 'function' ? window.fefoCompare : () => 0;
+        const lotes = lotesDeDoc(d).sort(cmp);
+        const cuadrado = Math.min(sg, q), cuadreUsados = [];
+        if (cuadrado > 0) { quitarFEFO(lotes, cuadrado, cuadreUsados); q -= cuadrado; sg -= cuadrado; }
+        const take = Math.min(c, q), usados = [];
+        if (take > 0) { quitarFEFO(lotes, take, usados); q -= take; }
+        const faltante = c - take; sg += faltante;
+        return { usados, cuadreUsados, batches: lotes.filter(l => l.quantity > 0), quantity: q, sobregiro: sg, faltante, cuadrado };
+    }
+    /** Cuadre explícito (sin entrega): descuenta del stock lo ya entregado sin respaldo. */
+    function cuadrar(d) {
+        const q = num(d.quantity), sg = num(d.sobregiro), n = Math.min(q, sg);
+        if (!(n > 0)) return { cuadrado: 0, batches: lotesDeDoc(d), quantity: q, sobregiro: sg, usados: [] };
+        const cmp = typeof window.fefoCompare === 'function' ? window.fefoCompare : () => 0;
+        const lotes = lotesDeDoc(d).sort(cmp), usados = [];
+        quitarFEFO(lotes, n, usados);
+        return { cuadrado: n, batches: lotes.filter(l => l.quantity > 0), quantity: q - n, sobregiro: sg - n, usados };
+    }
+    /** Anulación: devuelve lo descontado y retira del sobregiro lo que nunca salió del sistema. */
+    function restaurarConSobregiro(d, usados, sinRespaldo) {
+        const res = restaurarLotes(d, usados);
+        const sr = num(sinRespaldo), sg = num(d.sobregiro);
+        const quita = Math.min(sg, sr), resto = sr - quita;
+        let batches = res.batches, quantity = res.quantity;
+        if (resto > 0) { batches = batches.concat([{ batch: 'S/L', quantity: resto, expirationDate: '' }]); quantity += resto; }
+        return { batches, quantity, sobregiro: sg - quita };
+    }
     /** Devuelve a un doc los lotes usados (anulación). */
     function restaurarLotes(d, usados) {
         const arr = lotesDeDoc(d).map(b => ({ ...b }));
@@ -73,7 +119,7 @@
         if (!b.origen) errores.push('Elige la bodega de origen.');
         if (!b.items.length) errores.push('Agrega al menos un producto.');
         if (b.items.length > MAX_ITEMS) errores.push(`Máximo ${MAX_ITEMS} productos por acta.`);
-        b.items.forEach(i => { if (!(num(i.cantidad) > 0) || num(i.cantidad) !== Math.floor(num(i.cantidad))) errores.push(`Cantidad inválida en ${i.nombre}.`); else if (num(i.cantidad) > num(i.stock)) errores.push(`${i.nombre}: pides ${i.cantidad} y hay ${i.stock}.`); });
+        b.items.forEach(i => { if (!(num(i.cantidad) > 0) || num(i.cantidad) !== Math.floor(num(i.cantidad))) errores.push(`Cantidad inválida en ${i.nombre}.`); else if (!String(i.nombre || '').trim() || (i.manual && String(i.nombre).trim().length < 3)) errores.push('Un producto manual necesita nombre.'); else if (i.controlado && num(i.cantidad) > num(i.stock)) errores.push(`${i.nombre}: es medicamento controlado, no puede entregarse sin stock en sistema (requiere folio DAU en registro separado).`); });
         return errores;
     }
 
@@ -109,8 +155,8 @@
         if (!borrador.origen) return;
         const f = fs();
         const snap = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('location', '==', borrador.origen), f.limit(1500)));
-        snap.forEach(d => { const x = d.data(); if (num(x.quantity) > 0 && x.status !== 'CUARENTENA') stock.push({ id: d.id, name: x.name || '', quantity: num(x.quantity), controlado: !!x.controlado, batches: lotesDeDoc(x) }); });
-        stock.sort((a, b) => a.name.localeCompare(b.name, 'es'));
+        snap.forEach(d => { const x = d.data(); if (x.status !== 'CUARENTENA') stock.push({ id: d.id, name: x.name || '', quantity: num(x.quantity), sobregiro: num(x.sobregiro), disp: Math.max(0, num(x.quantity) - num(x.sobregiro)), controlado: !!x.controlado, provisional: !!x.provisional, batches: lotesDeDoc(x) }); });
+        stock.sort((a, b) => (b.disp > 0) - (a.disp > 0) || a.name.localeCompare(b.name, 'es'));
     }
     async function cargarHistorial() {
         const f = fs();
@@ -118,42 +164,62 @@
         historial = []; snap.forEach(d => historial.push({ id: d.id, ...d.data() }));
     }
 
-    /** Emite el acta: correlativo + descuento + historial en una sola transacción. */
+    /** Emite el acta: correlativo + descuento + sobregiro + historial en una sola transacción. */
     async function emitir(b, usuario) {
         const f = fs();
         const anio = new Date().getFullYear();
         const ctrRef = f.doc(f.collection(db(), 'Contadores'), `acta-${anio}`);
         const fecha = new Date().toISOString().slice(0, 10);
-        const refs = b.items.map(i => ({ i, ref: f.doc(f.collection(db(), 'Insumos'), i.id), hist: f.doc(f.collection(db(), 'Historial_Movimientos')) }));
+        // Productos manuales: si ya existe uno con ese nombre en la bodega se usa; si no, se crea como PROVISIONAL.
+        const items = b.items.map(i => ({ ...i }));
+        for (const i of items) {
+            if (i.id || !i.manual) continue;
+            const nombre = String(i.nombre || '').trim().toUpperCase();
+            const q = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('name_lowercase', '==', nombre.toLowerCase()), f.where('location', '==', b.origen), f.limit(1)));
+            if (!q.empty) { i.id = q.docs[0].id; i.nombre = q.docs[0].data().name || nombre; }
+            else { i.nuevo = true; i.nombre = nombre; }
+        }
+        const refs = items.map(i => ({ i, ref: i.nuevo ? f.doc(f.collection(db(), 'Insumos')) : f.doc(f.collection(db(), 'Insumos'), i.id), hist: f.doc(f.collection(db(), 'Historial_Movimientos')), histC: f.doc(f.collection(db(), 'Historial_Movimientos')) }));
         return f.runTransaction(db(), async (tx) => {
             const cs = await tx.get(ctrRef);
             const n = (cs.exists() ? num(cs.data().ultimo) : 0) + 1;
             const numero = numeroActa(anio, n);
             const actaRef = f.doc(f.collection(db(), 'Actas_Entrega'), numero);
             const snaps = [];
-            for (const r of refs) snaps.push(await tx.get(r.ref));
-            const calc = refs.map((r, k) => {
+            for (const r of refs) snaps.push(r.i.nuevo ? null : await tx.get(r.ref));
+            const base = (r) => ({ name: r.i.nombre, name_lowercase: String(r.i.nombre).toLowerCase(), location: b.origen, quantity: 0, batches: [], sobregiro: 0, provisional: true, category: 'Provisional', criticalLimit: 50, isCritical: true, unitPrice: 0, status: 'ACTIVO', createdAt: f.serverTimestamp(), createdBy: usuario });
+            const datos = refs.map((r, k) => {
+                if (r.i.nuevo) return base(r);
                 if (!snaps[k].exists()) throw new Error(`${r.i.nombre} ya no existe en la bodega.`);
                 const d = snaps[k].data();
                 if ((d.location || '') !== b.origen) throw new Error(`${r.i.nombre} cambió de bodega.`);
                 if (d.status === 'CUARENTENA') throw new Error(`${r.i.nombre} está en CUARENTENA.`);
-                return descontarFEFO({ ...d, name: d.name }, r.i.cantidad);
+                return d;
             });
-            const itemsActa = refs.map((r, k) => ({ id: r.i.id, nombre: r.i.nombre, cantidad: num(r.i.cantidad), lotes: calc[k].usados }));
+            const calc = refs.map((r, k) => {
+                const p = planificar({ ...datos[k], name: datos[k].name }, r.i.cantidad);
+                if (datos[k].controlado && p.faltante > 0) throw new Error(`${r.i.nombre} es medicamento controlado: no puede entregarse sin stock en sistema.`);
+                return p;
+            });
+            const itemsActa = refs.map((r, k) => ({ id: r.ref.id, nombre: r.i.nombre, cantidad: num(r.i.cantidad), lotes: calc[k].usados, sinRespaldo: calc[k].faltante, ...(r.i.nuevo ? { provisional: true } : {}) }));
             refs.forEach((r, k) => {
-                const d = snaps[k].data(), c = calc[k];
+                const d = datos[k], c = calc[k];
                 const limite = num(d.criticalLimit || d.stock_minimo || 50);
                 const prox = c.batches[0];
-                tx.update(r.ref, { quantity: c.quantity, batches: c.batches, isCritical: c.quantity <= limite, ...(prox ? { batch: prox.batch, expirationDate: prox.expirationDate || '' } : {}), updatedAt: f.serverTimestamp() });
+                const cambios = { quantity: c.quantity, batches: c.batches, sobregiro: c.sobregiro, isCritical: c.quantity <= limite, ...(prox ? { batch: prox.batch, expirationDate: prox.expirationDate || '' } : {}), updatedAt: f.serverTimestamp() };
+                if (r.i.nuevo) tx.set(r.ref, { ...d, ...cambios }); else tx.update(r.ref, cambios);
+                if (c.cuadrado > 0) tx.set(r.histC, { insumoName: d.name, quantity: c.cuadrado, type: 'CUADRE_SOBREGIRO', user: usuario, date: f.serverTimestamp(), document: numero, batch: 'MULTI-LOTE', origin: b.origen, lotes: c.cuadreUsados, idInsumoOrigen: r.ref.id, observacion: `Cuadre automático al emitir ${numero}: ${c.cuadrado} u. ya entregadas sin respaldo`, actaId: numero });
                 tx.set(r.hist, {
                     insumoName: d.name, quantity: num(r.i.cantidad), type: 'ENTREGA_ACTA', user: usuario, date: f.serverTimestamp(), document: numero,
-                    batch: c.usados.length === 1 ? c.usados[0].batch : 'MULTI-LOTE', origin: b.origen, dest: b.centro, lotes: c.usados,
-                    idInsumoOrigen: r.i.id, observacion: `Acta de entrega ${numero}`, actaId: numero
+                    batch: c.usados.length === 1 ? c.usados[0].batch : (c.usados.length ? 'MULTI-LOTE' : 'SIN-RESPALDO'), origin: b.origen, dest: b.centro, lotes: c.usados,
+                    idInsumoOrigen: r.ref.id, sinRespaldo: c.faltante,
+                    observacion: `Acta de entrega ${numero}${c.faltante > 0 ? ` · ${c.faltante} u. sin respaldo en sistema (sobregiro)` : ''}${r.i.nuevo ? ' · insumo provisional' : ''}`, actaId: numero
                 });
             });
             tx.set(ctrRef, { ultimo: n, anio, updatedAt: f.serverTimestamp() });
             const acta = {
                 numero, fecha, centro: b.centro.trim(), bodegaOrigen: b.origen, estado: 'EMITIDA', stockDescontado: true,
+                conSobregiro: itemsActa.some(i => i.sinRespaldo > 0),
                 items: itemsActa, pendientes: b.pendientes.map(p => ({ nombre: p.nombre, cantidad: num(p.cantidad) })),
                 documentos: b.documentos.map(d => ({ tipo: d.tipo, numero: d.numero, detalle: d.detalle || '' })),
                 entrega: { nombre: firma.nombre, cargo: firma.cargo }, recibe: { nombre: (b.recibe && b.recibe.nombre) || '', cargo: (b.recibe && b.recibe.cargo) || '' },
@@ -177,9 +243,9 @@
             const snaps = []; for (const r of refs) snaps.push(await tx.get(r.ref));
             refs.forEach((r, k) => {
                 if (!snaps[k].exists()) throw new Error(`${r.i.nombre} ya no existe: no se puede devolver el stock.`);
-                const d = snaps[k].data(), res = restaurarLotes(d, r.i.lotes);
+                const d = snaps[k].data(), res = restaurarConSobregiro(d, r.i.lotes, r.i.sinRespaldo);
                 const limite = num(d.criticalLimit || d.stock_minimo || 50);
-                tx.update(r.ref, { quantity: res.quantity, batches: res.batches, isCritical: res.quantity <= limite, updatedAt: f.serverTimestamp() });
+                tx.update(r.ref, { quantity: res.quantity, batches: res.batches, sobregiro: res.sobregiro, isCritical: res.quantity <= limite, updatedAt: f.serverTimestamp() });
                 tx.set(r.hist, {
                     insumoName: d.name, quantity: num(r.i.cantidad), type: 'ANULACION_ACTA', user: usuario, date: f.serverTimestamp(), document: numero,
                     batch: 'MULTI-LOTE', origin: a.centro, dest: a.bodegaOrigen, lotes: r.i.lotes || [], idInsumoDestino: r.i.id,
@@ -243,9 +309,13 @@
             <label class="act-l">Bodega de origen
               <select id="act-origen"><option value="">— elegir —</option>${bodegas.map(b => `<option value="${esc(b.name)}"${b.name === borrador.origen ? ' selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
             <input id="act-buscar" type="search" placeholder="Buscar producto…" value="${esc(busqueda)}" autocomplete="off">
-            <div class="act-stock">${!borrador.origen ? '<p class="act-hint">Elige una bodega para ver su stock.</p>' : !lista.length ? '<p class="act-hint">Sin resultados con stock.</p>' : lista.map(s => `
-              <div class="act-fila${yaEsta(s.id) ? ' act-ya' : ''}"><div class="act-fn">${esc(s.name)}${s.controlado ? ' <small>(controlado)</small>' : ''}<small>Stock: ${s.quantity}</small></div>
-                ${yaEsta(s.id) ? '<span class="act-chip">agregado</span>' : `<input type="number" min="1" max="${s.quantity}" value="1" class="act-qty" data-qid="${esc(s.id)}" aria-label="Cantidad"><button type="button" class="btn btn-outline act-add" data-id="${esc(s.id)}">Agregar</button>`}</div>`).join('')}
+            <details class="act-det act-manual"${borrador.items.some(i => i.manual) ? ' open' : ''}><summary>¿No está en el sistema? Ingreso manual</summary>
+              <p class="act-hint">Se asume que lo tienes físicamente. Queda como insumo provisional y como <b>sobregiro</b> (saldo contable negativo) hasta que ingrese la OC/SDC y se cuadre.</p>
+              <div class="act-fila act-docs"><input id="act-mn" placeholder="Nombre del insumo"><input id="act-mq" type="number" min="1" value="1" class="act-qty" aria-label="Cantidad"><button type="button" class="btn btn-outline" id="act-madd">Agregar</button></div>
+              <label class="act-l act-chk"><input type="checkbox" id="act-mc"> Es medicamento controlado (no se permite sin stock)</label></details>
+            <div class="act-stock">${!borrador.origen ? '<p class="act-hint">Elige una bodega para ver su stock.</p>' : !lista.length ? '<p class="act-hint">Sin resultados. Si no está en el sistema, agrégalo a mano abajo.</p>' : lista.map(s => `
+              <div class="act-fila${yaEsta(s.id) ? ' act-ya' : ''}"><div class="act-fn">${esc(s.name)}${s.controlado ? ' <small>(controlado)</small>' : ''}${s.provisional ? ' <small>(provisional)</small>' : ''}<small>${s.disp > 0 ? 'Disponible: ' + s.disp : '<span class="act-sin">Sin stock en sistema</span>'}${s.sobregiro > 0 ? ' · sobregiro: ' + s.sobregiro : ''}</small></div>
+                ${yaEsta(s.id) ? '<span class="act-chip">agregado</span>' : `<input type="number" min="1" value="1" class="act-qty" data-qid="${esc(s.id)}" aria-label="Cantidad"><button type="button" class="btn btn-outline act-add" data-id="${esc(s.id)}">Agregar</button>`}</div>`).join('')}
               ${stock.filter(s => !q || s.name.toLowerCase().includes(q)).length > 80 ? '<p class="act-hint">Hay más resultados: afina la búsqueda.</p>' : ''}</div>
           </div>
           <div class="act-col">
@@ -253,8 +323,8 @@
             <label class="act-l">Centro al que se entrega
               <input id="act-centro" list="act-centros" value="${esc(borrador.centro)}" placeholder="Ej: Pomaire"><datalist id="act-centros">${CENTROS.map(c => `<option value="${esc(c)}">`).join('')}</datalist></label>
             <h4 class="act-h4">Productos entregados (${borrador.items.length})</h4>
-            ${borrador.items.length ? borrador.items.map((i, k) => `<div class="act-fila"><div class="act-fn">${esc(i.nombre)}<small>Stock: ${i.stock}</small></div>
-                <input type="number" min="1" max="${i.stock}" value="${i.cantidad}" class="act-qty act-edit" data-k="${k}" aria-label="Cantidad"><button type="button" class="btn btn-outline act-del" data-k="${k}" aria-label="Quitar">✕</button></div>`).join('') : '<p class="act-hint">Aún no agregas productos.</p>'}
+            ${borrador.items.length ? borrador.items.map((i, k) => `<div class="act-fila"><div class="act-fn">${esc(i.nombre)}${i.manual ? ' <small>(manual · provisional)</small>' : ''}<small>Disponible: ${num(i.stock)}${num(i.cantidad) > num(i.stock) ? ` · <span class="act-sin">sin respaldo: ${num(i.cantidad) - num(i.stock)}</span>` : ''}</small></div>
+                <input type="number" min="1" value="${i.cantidad}" class="act-qty act-edit" data-k="${k}" aria-label="Cantidad"><button type="button" class="btn btn-outline act-del" data-k="${k}" aria-label="Quitar">✕</button></div>`).join('') : '<p class="act-hint">Aún no agregas productos.</p>'}
             <details class="act-det"${borrador.pendientes.length ? ' open' : ''}><summary>Productos pendientes de entrega (opcional)</summary>
               ${borrador.pendientes.map((p, k) => `<div class="act-fila"><div class="act-fn">${esc(p.nombre)}</div><input type="number" min="1" value="${p.cantidad}" class="act-qty act-pedit" data-k="${k}"><button type="button" class="btn btn-outline act-pdel" data-k="${k}">✕</button></div>`).join('')}
               <div class="act-fila"><input id="act-pn" placeholder="Nombre del producto pendiente"><input id="act-pq" type="number" min="1" value="1" class="act-qty"><button type="button" class="btn btn-outline" id="act-padd">Añadir</button></div></details>
@@ -270,7 +340,7 @@
           </div>
         </div>
         <h3 class="act-h" style="margin-top:28px;">Actas emitidas</h3>
-        <div class="act-hist">${historial.length ? historial.map(a => `<div class="act-fila${a.estado === 'ANULADA' ? ' act-anulada' : ''}"><div class="act-fn"><strong>${esc(a.numero)}</strong> · ${esc(a.centro)}<small>${esc(a.fecha)} · ${a.tipo === 'OXIGENO' ? 'oxígeno · ' : ''}${(a.items || []).length} ${a.tipo === 'OXIGENO' ? 'balones' : 'productos'} · ${esc(a.bodegaOrigen)} · ${esc(a.creadoPor || '')}${a.estado === 'ANULADA' ? ' · <b>ANULADA</b>' : ''}</small></div>
+        <div class="act-hist">${historial.length ? historial.map(a => `<div class="act-fila${a.estado === 'ANULADA' ? ' act-anulada' : ''}"><div class="act-fn"><strong>${esc(a.numero)}</strong> · ${esc(a.centro)}<small>${esc(a.fecha)} · ${a.tipo === 'OXIGENO' ? 'oxígeno · ' : ''}${(a.items || []).length} ${a.tipo === 'OXIGENO' ? 'balones' : 'productos'} · ${esc(a.bodegaOrigen)} · ${esc(a.creadoPor || '')}${a.estado === 'ANULADA' ? ' · <b>ANULADA</b>' : ''}${a.conSobregiro ? ' · <b class="act-sin">con sobregiro</b>' : ''}</small></div>
             <button type="button" class="btn btn-outline act-dl" data-n="${esc(a.numero)}" data-f="pdf">PDF</button><button type="button" class="btn btn-outline act-dl" data-n="${esc(a.numero)}" data-f="docx">Word</button>
             ${esAdmin() && a.estado !== 'ANULADA' && a.tipo !== 'OXIGENO' ? `<button type="button" class="btn btn-outline act-an" data-n="${esc(a.numero)}">Anular</button>` : ''}</div>`).join('') : '<p class="act-hint">Todavía no hay actas emitidas.</p>'}</div>`;
         enlazar();
@@ -299,15 +369,24 @@
             const s = stock.find(x => x.id === b.dataset.id); const inp = r.querySelector(`.act-qty[data-qid="${CSS.escape(b.dataset.id)}"]`);
             const c = Math.floor(num(inp && inp.value));
             if (!s || !(c > 0)) { toast('Cantidad', 'Indica una cantidad mayor que 0.', 'warning'); return; }
-            if (c > s.quantity) { toast('Stock', `Solo hay ${s.quantity} de ${s.name}.`, 'warning'); return; }
             if (borrador.items.length >= MAX_ITEMS) { toast('Límite', `Máximo ${MAX_ITEMS} productos por acta.`, 'warning'); return; }
-            borrador.items.push({ id: s.id, nombre: s.name, cantidad: c, stock: s.quantity }); refrescar();
+            if (s.controlado && c > s.disp) { toast('Medicamento controlado', 'No puede entregarse sin stock en sistema.', 'error'); return; }
+            borrador.items.push({ id: s.id, nombre: s.name, cantidad: c, stock: s.disp, controlado: s.controlado }); refrescar();
         }));
         $$('.act-edit').forEach(i => i.addEventListener('change', () => { borrador.items[+i.dataset.k].cantidad = Math.floor(num(i.value)); refrescar(); }));
         $$('.act-del').forEach(b => b.addEventListener('click', () => { borrador.items.splice(+b.dataset.k, 1); refrescar(); }));
         $$('.act-pedit').forEach(i => i.addEventListener('change', () => { borrador.pendientes[+i.dataset.k].cantidad = Math.floor(num(i.value)) || 1; refrescar(); }));
         $$('.act-pdel').forEach(b => b.addEventListener('click', () => { borrador.pendientes.splice(+b.dataset.k, 1); refrescar(); }));
         $$('.act-ddel').forEach(b => b.addEventListener('click', () => { borrador.documentos.splice(+b.dataset.k, 1); refrescar(); }));
+        $('#act-madd').addEventListener('click', () => {
+            const n = $('#act-mn').value.trim().toUpperCase(); const c = Math.floor(num($('#act-mq').value));
+            if (n.length < 3 || !(c > 0)) { toast('Ingreso manual', 'Escribe el nombre del insumo y una cantidad mayor que 0.', 'warning'); return; }
+            if ($('#act-mc').checked) { toast('Medicamento controlado', 'No se permite sin stock en sistema: use el circuito con folio DAU.', 'error'); return; }
+            if (borrador.items.length >= MAX_ITEMS) { toast('Límite', `Máximo ${MAX_ITEMS} productos por acta.`, 'warning'); return; }
+            const par = stock.find(x => x.name.toLowerCase() === n.toLowerCase());
+            if (par) { toast('Ya existe', `"${par.name}" ya está en esta bodega: agrégalo desde la lista.`, 'warning'); return; }
+            borrador.items.push({ id: null, manual: true, nombre: n, cantidad: c, stock: 0 }); refrescar();
+        });
         $('#act-padd').addEventListener('click', () => {
             const n = $('#act-pn').value.trim(); const c = Math.floor(num($('#act-pq').value));
             if (!n || !(c > 0)) { toast('Pendiente', 'Escribe el producto y una cantidad.', 'warning'); return; }
@@ -338,7 +417,9 @@
         const errores = validarBorrador(borrador);
         if (errores.length) { toast('Revisa el acta', errores[0], 'warning'); return; }
         const total = borrador.items.reduce((s, i) => s + num(i.cantidad), 0);
-        if (!confirm(`Se emitirá el acta para ${borrador.centro.trim()} con ${borrador.items.length} productos (${total} unidades) y se descontarán de ${borrador.origen}.\n\n¿Emitir?`)) return;
+        const sin = borrador.items.map(i => ({ n: i.nombre, f: Math.max(0, num(i.cantidad) - num(i.stock)) })).filter(x => x.f > 0);
+        const avisoSin = sin.length ? `\n\nSIN RESPALDO EN SISTEMA (quedan como sobregiro, saldo contable negativo hasta cuadrar con la OC/SDC):\n${sin.map(x => `• ${x.n}: ${x.f} u.`).join('\n')}` : '';
+        if (!confirm(`Se emitirá el acta para ${borrador.centro.trim()} con ${borrador.items.length} productos (${total} unidades) y se descontarán de ${borrador.origen}.${avisoSin}\n\n¿Emitir?`)) return;
         emitiendo = true; const btn = document.getElementById('act-emitir'); if (btn) btn.disabled = true;
         try {
             const acta = await emitir(borrador, usuarioEmail());
@@ -365,6 +446,6 @@
         pintar();
     }
 
-    window.SAR_ActasEntrega = { abrir, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, lotesDeDoc };
+    window.SAR_ActasEntrega = { abrir, planificar, cuadrar, restaurarConSobregiro, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, lotesDeDoc };
     if (typeof module !== 'undefined') module.exports = window.SAR_ActasEntrega;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: { dataset: {} } });

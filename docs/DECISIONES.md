@@ -176,3 +176,8 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 - Correo: Para Paulina Carrasco; Cc Daniela Medina, Carolina Ortiz, Nadia Sánchez, SAR Melipilla y Matías Bustos. Editable en cada envío; la lista fija puede cambiarse en `Config_Correo/principal.recepcionConforme {to, cc}`.
 - Se bloquea con incidencias abiertas; con unidades pendientes exige marcar "Recepción parcial". Los PDF no se guardan en la base de datos: queda tipo, número, fecha, quién recibe y el resultado del envío (visible en la OC y en la bitácora).
 - El envío con adjuntos requiere el script de Apps Script actualizado (Configurar correo → copiar código nuevo → nueva implementación). Si el script es antiguo, el sistema avisa "enviado SIN adjuntos".
+
+### 4.12 UX/UI — capa de interfaz (v20.46)
+- Portada: tarjeta "Compras y órdenes en curso" (OC por aceptar/atrasadas y alertas de compras ágiles), solo personal.
+- Capa de CSS al final de `style.css`: entrada de vistas y modales, realce de tarjetas, foco visible con teclado, cifras tabulares, cabeceras de tabla fijas, áreas táctiles de 44 px en móvil y respeto a "reducir movimiento".
+- No se agregan librerías ni dependencias de terceros: el sistema sigue siendo JavaScript simple con Firebase.

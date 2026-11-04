@@ -5015,3 +5015,50 @@ body[data-user-role="operador"] .home-only-admin { display: none !important; }
 .cag-al--alta { border-left-color: #DC2626 !important; background: #FEF2F2 !important; } .cag-al--media { border-left-color: #D97706 !important; background: #FFFBEB !important; }
 .cag-obs { color: #92400E; } .cag-f { display: flex; flex-direction: column; gap: 4px; font-size: 13px; margin-bottom: 8px; }
 .cag-f input, .cag-f select, .cag-f textarea { padding: 8px; border: 1px solid #CBD5E1; border-radius: 6px; font: inherit; }
+
+/* ==========================================================================
+   v20.46 — capa de UX: movimiento sobrio, foco visible y táctil cómodo
+   (se añade al final para no tocar el resto; respeta "reducir movimiento")
+   ========================================================================== */
+:root { --ux-ease: cubic-bezier(.2, .7, .2, 1); --ux-ring: 0 0 0 3px rgba(26, 54, 104, .35); }
+/* entrada de vistas: leve desplazamiento + aparición */
+.view-section.active { animation: uxVista .28s var(--ux-ease); }
+@keyframes uxVista { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+/* tarjetas y botones: respuesta al pasar y al presionar */
+.erp-card, .soc-card, .home-shortcuts > * { transition: box-shadow .18s var(--ux-ease), transform .18s var(--ux-ease), border-color .18s; }
+button.erp-card:hover, .soc-card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(15, 35, 75, .12); }
+.btn { transition: background-color .15s, border-color .15s, box-shadow .15s, transform .08s; }
+.btn:active:not(:disabled) { transform: scale(.97); }
+.btn:disabled { opacity: .55; cursor: not-allowed; }
+/* foco con teclado siempre visible */
+:where(a, button, input, select, textarea, summary, [tabindex]):focus-visible { outline: 2px solid var(--sar-blue, #1A3668); outline-offset: 2px; box-shadow: var(--ux-ring); border-radius: 6px; }
+/* cifras alineadas en KPI y tablas */
+.home-kpi, .home-kpi *, table td, table th, .soc-n { font-variant-numeric: tabular-nums; }
+/* cargando: esqueleto en vez de texto suelto */
+.home-empty { transition: opacity .2s; }
+.ux-skeleton { background: linear-gradient(90deg, #EEF2F9 25%, #F8FAFC 37%, #EEF2F9 63%); background-size: 400% 100%; animation: uxShimmer 1.4s ease infinite; border-radius: 6px; min-height: 14px; }
+@keyframes uxShimmer { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+/* tablas: cabecera fija al desplazar y filas con realce */
+.soc-tabla thead th { position: sticky; top: 0; background: #F8FAFC; z-index: 1; }
+.soc-tabla tbody tr { transition: background-color .12s; } .soc-tabla tbody tr:hover { background: #F5F8FD; }
+/* modales: entrada suave */
+.cierre-box { animation: uxModal .22s var(--ux-ease); } .cierre-overlay { animation: uxFade .18s ease; }
+@keyframes uxModal { from { opacity: 0; transform: translateY(10px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes uxFade { from { opacity: 0; } to { opacity: 1; } }
+/* móvil: áreas táctiles de al menos 44 px y sin salto de zoom en iOS */
+@media (max-width: 767px) {
+    .btn, .menu-item, #bottom-nav button, #bottom-nav a { min-height: 44px; }
+    input, select, textarea { font-size: 16px; }
+}
+/* portada: tarjeta de compras y órdenes */
+#home-compras { margin-bottom: 16px; }
+.hc-cab { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 10px; }
+.hc-cab h3 { margin: 0; font-size: 16px; font-weight: 800; color: var(--sar-blue, #1A3668); }
+.hc-fila { display: flex; flex-direction: column; gap: 2px; width: 100%; text-align: left; padding: 8px 12px; margin-bottom: 6px; border: 1px solid #E2E8F0; border-left: 4px solid #94A3B8; border-radius: 6px; background: #fff; cursor: pointer; transition: background-color .12s, transform .12s; }
+.hc-fila:hover { background: #F5F8FD; transform: translateX(2px); } .hc-fila span { font-size: 12px; color: #64748B; }
+.hc-fila--alta { border-left-color: #DC2626; background: #FEF2F2; } .hc-fila--media { border-left-color: #D97706; background: #FFFBEB; }
+.hc-mas { color: #64748B; }
+/* quien prefiere menos movimiento */
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
+}

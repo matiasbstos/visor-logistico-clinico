@@ -362,5 +362,38 @@
         });
     }
 
-    window.SAR_ComprasAgiles = { abrir, estadoCA, alertas, vbCompleto, prefijo, ofertaElegida, datosTermometros, distTotal, totalItems, _setOcs: (o) => { ocs = o; }, ocDe };
+    /** Empareja las líneas de la OC con los ítems de la compra ágil (misma cantidad; prefiere el mismo orden).
+     *  Devuelve { columnas, dist:[{key:cant}], compra } o { error }. Pura. */
+    function cuadroPara(ca, lineas) {
+        const items = ca.items || [];
+        if (!items.length || !(ca.columnas || []).length) return { error: 'La compra ágil no tiene cuadro de distribución cargado.' };
+        if ((lineas || []).length !== items.length) return { error: `La OC trae ${(lineas || []).length} producto(s) y la compra ágil ${items.length}.` };
+        const usados = new Set(), dist = [];
+        for (let i = 0; i < lineas.length; i++) {
+            const cant = num(lineas[i].cantidad);
+            let k = (!usados.has(i) && num(items[i].cantidad) === cant) ? i : items.findIndex((it, j) => !usados.has(j) && num(it.cantidad) === cant);
+            if (k < 0) return { error: `La cantidad del producto ${i + 1} (${cant}) no coincide con ningún ítem de la compra ágil.` };
+            usados.add(k); dist.push(items[k].dist || {});
+        }
+        const usadas = new Set(); dist.forEach(d => Object.keys(d).forEach(x => usadas.add(x)));
+        return { columnas: (ca.columnas || []).filter(c => usadas.has(c.key)).map(c => ({ memo: c.memo || 's/n', centro: c.centro, cdp: c.cdp || '', key: c.key })), dist, compra: ca.codigo };
+    }
+    /** Busca la compra ágil que corresponde a una OC (por prefijo) y arma el cuadro. Nunca lanza. */
+    async function cuadroParaOC(numeroOC, lineas) {
+        try {
+            const m = String(numeroOC || '').match(/^(\d+-\d+)-/); if (!m) return { error: 'sin compra ágil' };
+            const s = await fs().getDocs(fs().collection(db(), 'Compras_Agiles')); let ca = null;
+            s.forEach(d => { const x = d.data(); if (prefijo(x.codigo) === m[1]) ca = { id: d.id, ...x }; });
+            if (!ca) return { error: 'sin compra ágil' };
+            const r = cuadroPara(ca, lineas); return r.error ? { ...r, compra: ca.codigo } : { ...r, id: ca.id };
+        } catch (e) { return { error: 'sin compra ágil' }; }
+    }
+    async function vincularOC(idCompra, numeroOC) {
+        try {
+            const ref = fs().doc(db(), 'Compras_Agiles', idCompra); const s = await fs().getDoc(ref);
+            if (s.exists() && !s.data().ocNumero) { await guardar(idCompra, { ocNumero: numeroOC }); await evento(idCompra, 'HITO', `OC ingresada al seguimiento: ${numeroOC}.`); }
+        } catch (e) { /* best-effort */ }
+    }
+
+    window.SAR_ComprasAgiles = { cuadroPara, cuadroParaOC, vincularOC, abrir, estadoCA, alertas, vbCompleto, prefijo, ofertaElegida, datosTermometros, distTotal, totalItems, _setOcs: (o) => { ocs = o; }, ocDe };
 })(window, document);

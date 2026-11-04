@@ -5232,3 +5232,9 @@ button.erp-card:hover, .soc-card:hover { transform: translateY(-2px); box-shadow
 .cag-cob { margin: 6px 0 10px; padding: 8px 12px; border-radius: 8px; font-weight: 600; font-size: .9rem; }
 .cag-cob--ok { background: #DCFCE7; color: #166534; } .cag-cob--alerta { background: #FEF3C7; color: #92400E; } .cag-cob--info { background: #E0F2FE; color: #075985; }
 @media (max-width: 760px) { .cag-flujo { grid-template-columns: 1fr; } .cag-paso { grid-template-columns: 30px 1fr; justify-items: start; text-align: left; column-gap: 10px; } .cag-paso small { grid-column: 2; } .cag-paso::before { display: none; } }
+
+/* v20.55 — presupuesto CDP y entregas por centro */
+.cdp-exc td { background: #FEF2F2; }
+.soc-entrega { margin: 0 0 14px; padding-bottom: 10px; border-bottom: 1px dashed #DCE3EF; } .soc-entrega:last-of-type { border-bottom: 0; }
+.soc-entrega .soc-sub { flex-wrap: wrap; gap: 8px; align-items: center; }
+.soc-est--ok { color: #15803D; }

@@ -57,8 +57,11 @@
         r.formaPago = dato(/FORMA DE PAGO\s*:\s*([^\n]+)/);
         r.emailFactura = dato(/EMAIL ENVIO FACTURA\s*:\s*(\S+@\S+)/);
         r.fuenteFinanciamiento = dato(/Fuente Financiamento\s*:\s*(\S+)/);
-        r.memo = dato(/MEMO\s*N\s*[°º]?\s*(\d+)/);
-        r.descripcion = dato(/MEMO\s*N\s*[°º]?\s*\d+\s*-\s*([^\n]+)/);
+        // "MEMO N°36-68-5 - COMPRA DE INSUMOS…": puede traer varios memos (uno por centro/CDP) y a veces está en la 2.ª hoja
+        const mm = /MEMO\s*N\s*[°º]?\s*(\d+(?:\s*[-,/y]\s*\d+)*)(?:\s*-\s*([^\n]+))?/i.exec(todo);
+        r.memos = mm ? mm[1].split(/\s*[-,/y]\s*/).filter(Boolean) : [];
+        r.memo = r.memos.join('-');
+        r.descripcion = mm && mm[2] ? limpiar(mm[2]) : '';
         r.contraparte = dato(/CONTRAPARTE TECNICA\s*:\s*([^\n]+)/);
         r.contacto = dato(/CONTACTO\s*:\s*([^\n]+)/);
         r.horario = dato(/HORARIO\s*:\s*([^\n]+)/);
@@ -70,6 +73,7 @@
             return 0;
         };
         r.totalNeto = tot('Neto'); r.iva = tot('19% IVA'); r.total = tot('Total');
+        if (!r.iva && r.total && r.totalNeto) r.iva = r.total - r.totalNeto;
 
         // --- Tabla de productos: columnas según el encabezado ---
         const h = (re) => { for (const l of L) for (const i of l.items) if (re.test(limpiar(i.str))) return i; return null; };
@@ -108,6 +112,113 @@
         return r;
     }
 
+
+    // ------------------------------------------------------------------
+    // Lector: "Cuadro de distribución" de la orden (PDF, tabla apaisada)  — v20.55
+    // Columnas = memo/centro (cada una con su financiamiento y CDP). Se leen por posición:
+    // las columnas de cantidades salen del encabezado "CANTIDAD"; las filas de datos, de las etiquetas
+    // de la izquierda (FINANCIAMIENTO, CDP, NETO, IVA, TOTAL, DIRECCIÓN, CONTRAPARTE, CONTACTO, CORREO, HORARIO).
+    // ------------------------------------------------------------------
+    const entero = (s) => Number(String(s || '').replace(/[^\d]/g, '')) || 0;
+    function reconoceDistribucion(texto) { return /MEMO\s*N\s*[°º]?\s*\d+/i.test(texto) && /FINANCIAMIENTO/i.test(texto) && /\bCDP\b/.test(texto) && /CANTIDAD/i.test(texto); }
+    function extraerDistribucion(items) {
+        const r = { tipo: 'DIST_OC', avisos: [], columnas: [], lineas: [] };
+        const its = items.filter(i => limpiar(i.str));
+        // 1) columnas de cantidades: los "CANTIDAD" de una misma fila; el que va solo (con "TOTAL" debajo) es el total
+        const cants = its.filter(i => /^CANTIDAD$/i.test(limpiar(i.str)) && i.x > 330);
+        const porY = []; cants.forEach(i => { const g = porY.find(o => Math.abs(o.y - i.y) <= TOL); if (g) g.items.push(i); else porY.push({ y: i.y, items: [i] }); });
+        const gCols = porY.sort((a, b) => b.items.length - a.items.length)[0];
+        if (!gCols || gCols.items.length < 1) { r.avisos.push('No encontré las columnas de cantidades (encabezado "CANTIDAD").'); return r; }
+        const xs = gCols.items.map(i => i.x).sort((a, b) => a - b), CH = 19;                 // ≈ mitad del ancho del texto "CANTIDAD"
+        const total = cants.filter(i => !gCols.items.includes(i)).sort((a, b) => b.x - a.x)[0];
+        const xTotal = total ? total.x - 8 : xs[xs.length - 1] + 70;
+        const centros = xs.map(x => x + CH), paso = xs.length > 1 ? centros[1] - centros[0] : 90;
+        const lim = centros.map((c, k) => k === 0 ? c - paso / 2 : (centros[k - 1] + c) / 2); lim.push(xTotal);
+        const banda = (x) => { for (let k = 0; k < centros.length; k++) if (x >= lim[k] && x < lim[k + 1]) return k; return -1; };
+        const yEnc = gCols.y;
+        // 2) etiquetas de la izquierda
+        const ETQ = [['financiamiento', /^FINANCIAMIENTO$/i], ['cdp', /^CDP$/], ['neto', /^NETO$/], ['iva', /^IVA$/], ['total', /^TOTAL$/], ['direccion', /^DIRECCI[OÓ]N/i], ['contraparte', /^CONTRAPARTE/i], ['contacto', /^CONTACTO$/i], ['correo', /^(CORREO|EMAIL|E-MAIL)/i], ['horario', /^HORARIO/i]];
+        const etiquetas = []; ETQ.forEach(([k, re]) => { const it = its.filter(i => i.x < lim[0] - 20 && i.x > 250 && re.test(limpiar(i.str)) && (k === 'financiamiento' || k === 'cdp' ? i.y < yEnc : i.y > yEnc)).sort((a, b) => a.y - b.y)[0]; if (it) etiquetas.push({ k, y0: it.y, y1: it.y }); });
+        etiquetas.sort((a, b) => a.y0 - b.y0);
+        // etiquetas de dos líneas ("DIRECCION DE / DESPACHO"): su extensión llega hasta la última palabra de esa columna antes de la siguiente
+        const izq = its.filter(i => i.x > 250 && i.x < lim[0] - 20 && i.y > yEnc);
+        etiquetas.forEach((e, n) => { const sig = etiquetas[n + 1]; izq.forEach(i => { if (i.y > e.y1 && (!sig || i.y < sig.y0 - 3) && i.y - e.y1 < 20) e.y1 = i.y; }); });
+        const sec = {};
+        etiquetas.forEach((e, n) => {
+            const ant = etiquetas[n - 1], sig = etiquetas[n + 1];
+            const desde = ant && e.y0 - ant.y1 < 45 ? (ant.y1 + e.y0) / 2 : e.y0 - (e.k === 'neto' ? 9 : 18), hasta = sig ? (e.y1 + sig.y0) / 2 : e.y1 + 25;
+            sec[e.k] = [e.k === 'cdp' ? Math.max(desde, (ant ? ant.y1 + e.y0 : 0) / 2) : desde, e.k === 'cdp' ? Math.min(hasta, yEnc - 8) : hasta];
+        });
+        const encabezadoHasta = sec.financiamiento ? sec.financiamiento[0] : yEnc - 60;
+        const ysEnc = its.filter(i => i.y < encabezadoHasta && banda(i.x) >= 0);
+        const texto = (k, y0, y1, junta) => { const v = its.filter(i => i.y >= y0 && i.y < y1 && banda(i.x) === k).sort((a, b) => a.y - b.y || a.x - b.x).map(i => limpiar(i.str)); return limpiar(junta === '' ? v.join('').replace(/-\s+/g, '-') : v.join(' ')); };
+        // 3) columnas
+        const cols = centros.map((c, k) => {
+            const cab = texto(k, 0, encabezadoHasta); // "MEMO N°68 CESFAM BORIS SOLER"
+            const m = /MEMO\s*N\s*[°º]?\s*(\d+)\s*(.*)$/i.exec(cab);
+            const col = { memo: m ? m[1] : '', centro: m ? limpiar(m[2]).toUpperCase() : '', _k: k };
+            col.financiamiento = sec.financiamiento ? texto(k, sec.financiamiento[0], sec.financiamiento[1]) : '';
+            const cdpTxt = sec.cdp ? texto(k, sec.cdp[0], sec.cdp[1], '') : '';
+            col.cdps = (cdpTxt.match(/\d+/g) || []); col.cdp = col.cdps.join('-');
+            ['neto', 'iva', 'total'].forEach(n => { col[n] = sec[n] ? entero(its.filter(i => i.y >= sec[n][0] && i.y < sec[n][1] && banda(i.x) === k && /\d/.test(i.str)).map(i => i.str).join('')) : 0; });
+            col.direccion = sec.direccion ? texto(k, sec.direccion[0], sec.direccion[1]) : '';
+            col.contraparte = sec.contraparte ? texto(k, sec.contraparte[0], sec.contraparte[1]) : '';
+            col.contacto = sec.contacto ? texto(k, sec.contacto[0], sec.contacto[1]) : '';
+            col.correo = sec.correo ? texto(k, sec.correo[0], sec.correo[1], '') : '';
+            col.horario = sec.horario ? texto(k, sec.horario[0], sec.horario[1]) : '';
+            return col;
+        });
+        // celdas combinadas (dirección, contraparte… de dos columnas del mismo centro; el horario suele abarcar todo): se heredan
+        cols.forEach((c, k) => { if (k) ['direccion', 'contraparte', 'contacto', 'correo', 'horario'].forEach(f => { const p = cols[k - 1]; if (!c[f] && p[f] && (f === 'horario' || p.centro === c.centro)) c[f] = p[f]; }); });
+        cols.forEach(c => { if (!c.memo) r.avisos.push(`No se leyó el memo de la columna ${c._k + 1}.`); c.key = `${slug(c.centro) || 'col' + (c._k + 1)}-${c.memo || c._k + 1}`; });
+        // 4) filas de productos: cada ID (código MP) ancla una fila; el resto del texto se asigna a la fila más cercana
+        const ids = its.filter(i => i.x < 100 && /^\d{5,9}$/.test(limpiar(i.str)) && i.y > yEnc + 8 && (!etiquetas[0] || i.y < (sec.neto ? sec.neto[0] : 1e9))).sort((a, b) => a.y - b.y);
+        const yFinTabla = sec.neto ? sec.neto[0] : Infinity;
+        const cercana = (y) => { let b = 0, d = Infinity; ids.forEach((x, n) => { const dd = Math.abs(x.y - y); if (dd < d) { d = dd; b = n; } }); return b; };
+        const zona = its.filter(i => i.y > yEnc + 8 && i.y < yFinTabla);
+        r.lineas = ids.map(() => ({ id: '', descripcion: [], valorNeto: 0, dist: {}, totalDeclarado: null }));
+        ids.forEach((x, n) => { r.lineas[n].id = limpiar(x.str); });
+        zona.filter(i => i.x >= 100 && i.x < 280).sort((a, b) => a.y - b.y).forEach(i => { if (ids.length) r.lineas[cercana(i.y)].descripcion.push(limpiar(i.str)); });
+        zona.filter(i => i.x >= 330 && i.x < lim[0] - 4 && /\d/.test(i.str)).forEach(i => { if (ids.length && !r.lineas[cercana(i.y)].valorNeto) r.lineas[cercana(i.y)].valorNeto = entero(i.str); });
+        zona.filter(i => /^\d+$/.test(limpiar(i.str)) && i.x >= lim[0] - 4).forEach(i => {
+            if (!ids.length) return; const l = r.lineas[cercana(i.y)], q = Number(limpiar(i.str)), k = banda(i.x);
+            if (k >= 0) l.dist[cols[k].key] = (l.dist[cols[k].key] || 0) + q; else if (i.x >= xTotal) l.totalDeclarado = q;
+        });
+        r.lineas.forEach(l => { l.descripcion = limpiar(l.descripcion.join(' ')); });
+        r.columnas = cols.map(({ _k, ...c }) => c);
+        // 5) controles
+        if (!r.columnas.length) r.avisos.push('No se detectaron columnas de memo/centro.');
+        if (!r.lineas.length) r.avisos.push('No se detectaron productos en el cuadro.');
+        r.lineas.forEach(l => { const s = Object.values(l.dist).reduce((t, x) => t + x, 0); if (l.totalDeclarado != null && s !== l.totalDeclarado) r.avisos.push(`"${l.descripcion.slice(0, 40)}": las columnas suman ${s} y el cuadro declara ${l.totalDeclarado}.`); });
+        r.columnas.forEach(c => {
+            const calc = r.lineas.reduce((t, l) => t + (l.dist[c.key] || 0) * l.valorNeto, 0);
+            if (c.neto && calc && Math.abs(calc - c.neto) > 1) r.avisos.push(`Memo ${c.memo}: cantidades × precio = ${calc.toLocaleString('es-CL')} y el cuadro indica neto ${c.neto.toLocaleString('es-CL')}.`);
+            if (!c.cdp) r.avisos.push(`Memo ${c.memo}: no se leyó el CDP.`);
+        });
+        return r;
+    }
+    /** Cruza el cuadro con las líneas de la OC (por código MP, o por parecido de la descripción).
+     *  Devuelve {columnas, dist:[{key:cant}…] (una por línea de la OC), avisos}. Puro. */
+    function unirDistribucion(oc, dist) {
+        const avisos = [], usada = new Set();
+        const toks = (t) => new Set(String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter(x => x.length > 1));
+        const sim = (a, b) => { const A = toks(a), B = toks(b); let i = 0; A.forEach(x => { if (B.has(x)) i++; }); return A.size + B.size - i ? i / (A.size + B.size - i) : 0; };
+        const distLineas = dist.lineas.map((d, n) => ({ d, n }));
+        const out = (oc.lineas || []).map(l => {
+            let hit = distLineas.find(x => !usada.has(x.n) && l.codigoMP && x.d.id === String(l.codigoMP));
+            if (!hit) { let mejor = 0; distLineas.forEach(x => { if (usada.has(x.n)) return; const s = sim(l.descripcion, x.d.descripcion); if (s > mejor && s >= 0.5) { mejor = s; hit = x; } }); }
+            if (!hit) { avisos.push(`"${String(l.descripcion).slice(0, 50)}" no aparece en el cuadro de distribución.`); return {}; }
+            usada.add(hit.n);
+            const sum = Object.values(hit.d.dist).reduce((t, x) => t + x, 0);
+            if (sum !== Number(l.cantidad)) avisos.push(`"${String(l.descripcion).slice(0, 40)}": la orden dice ${l.cantidad} y el cuadro reparte ${sum}.`);
+            return { ...hit.d.dist };
+        });
+        distLineas.forEach(x => { if (!usada.has(x.n)) avisos.push(`El cuadro trae un producto que no está en la orden: ${x.d.descripcion}.`); });
+        const omemos = oc.memos || [];
+        if (omemos.length) dist.columnas.forEach(c => { if (c.memo && !omemos.includes(c.memo)) avisos.push(`El memo ${c.memo} del cuadro no figura en las observaciones de la orden (${omemos.join('-')}).`); });
+        return { columnas: dist.columnas, dist: out, avisos };
+    }
+
     /** Lee el correo pegado (opcional): plazo de aceptación y de entrega. */
     function extraerCorreo(texto) {
         const t = String(texto || ''), out = {};
@@ -118,7 +229,8 @@
         return out;
     }
 
-    const LECTORES = { OC_MP: { nombre: 'Orden de compra (Mercado Público)', reconoce: reconoceOC, extraer: extraerOC } };
+    const slug = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const LECTORES = { OC_MP: { nombre: 'Orden de compra (Mercado Público)', reconoce: reconoceOC, extraer: extraerOC }, DIST_OC: { nombre: 'Cuadro de distribución de la orden', reconoce: reconoceDistribucion, extraer: extraerDistribucion } };
     function detectar(items) { const txt = lineas(items).map(l => l.texto).join('\n'); return Object.keys(LECTORES).find(k => LECTORES[k].reconoce(txt)) || null; }
     function leer(items) {
         const k = detectar(items);
@@ -152,7 +264,8 @@
         return out;
     }
     async function leerArchivo(file) { return leer(await itemsDePDF(await file.arrayBuffer())); }
+    async function leerDistribucion(file) { const it = await itemsDePDF(await file.arrayBuffer()); const r = leer(it); if (r.tipo !== 'DIST_OC') throw new Error('Ese PDF no es un cuadro de distribución (busco columnas "MEMO N° …", FINANCIAMIENTO y CDP).'); return r; }
 
-    window.SAR_Lector = { leer, leerArchivo, detectar, extraerOC, extraerCorreo, lineas, LECTORES };
+    window.SAR_Lector = { leer, leerArchivo, leerDistribucion, extraerDistribucion, unirDistribucion, detectar, extraerOC, extraerCorreo, lineas, LECTORES };
     if (typeof module !== 'undefined') module.exports = window.SAR_Lector;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

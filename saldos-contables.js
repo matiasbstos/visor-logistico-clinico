@@ -22,8 +22,9 @@
         const q = num(d.quantity), sg = num(d.sobregiro), pu = num(d.unitPrice);
         const contable = q - sg;
         const estado = sg > 0 ? (q > 0 ? 'LISTO' : 'SIN_RESPALDO') : (d.provisional ? 'PROVISIONAL' : 'OK');
-        return { id, nombre: d.name || '', bodega: d.location || '', q, sg, contable, disp: Math.max(0, contable), pu, valSg: sg * pu, valContable: contable * pu, valDisp: Math.max(0, contable) * pu, estado, provisional: !!d.provisional };
+        return { id, nombre: d.name || '', bodega: d.location || '', q, sg, contable, disp: Math.max(0, contable), pu, valSg: sg * pu, valContable: contable * pu, valDisp: Math.max(0, contable) * pu, estado, provisional: !!d.provisional, actas: (window.SAR_ActasEntrega && window.SAR_ActasEntrega.detalleDe ? window.SAR_ActasEntrega.detalleDe(d) : []) };
     }
+    const actasTxt = (r) => (r.actas || []).map(a => `${a.acta} (${a.qty})`).join(', ');
     const ETIQ = { SIN_RESPALDO: 'Sin respaldo', LISTO: 'Listo para cuadrar', PROVISIONAL: 'Provisional', OK: 'OK' };
 
     async function cargar() {
@@ -46,21 +47,21 @@
             const d = sn.data(), c = A.cuadrar(d);
             if (!(c.cuadrado > 0)) throw new Error('No hay nada que cuadrar (aún no ingresa stock al sistema).');
             const limite = num(d.criticalLimit || d.stock_minimo || 50);
-            tx.update(insRef, { quantity: c.quantity, batches: c.batches, sobregiro: c.sobregiro, isCritical: c.quantity <= limite, updatedAt: f.serverTimestamp() });
-            tx.set(hist, { insumoName: d.name, quantity: c.cuadrado, type: 'CUADRE_SOBREGIRO', user: usuario(), date: f.serverTimestamp(), document: ref || '', batch: 'MULTI-LOTE', origin: d.location || '', lotes: c.usados, idInsumoOrigen: id, observacion: `Cuadre de sobregiro${ref ? ' con ' + ref : ''}: ${c.cuadrado} u. ya entregadas se descuentan del stock ingresado` });
+            tx.update(insRef, { quantity: c.quantity, batches: c.batches, sobregiro: c.sobregiro, sobregiroDetalle: c.sobregiroDetalle, isCritical: c.quantity <= limite, updatedAt: f.serverTimestamp() });
+            c.cubiertas.forEach((cu, k) => tx.set(k === 0 ? hist : f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name, quantity: cu.qty, type: 'CUADRE_SOBREGIRO', user: usuario(), date: f.serverTimestamp(), document: ref || '', batch: 'MULTI-LOTE', origin: d.location || '', idInsumoOrigen: id, observacion: `Cuadre del acta ${cu.acta}${ref ? ' con ' + ref : ''}: ${cu.qty} u. ya entregadas se descuentan del stock ingresado`, actaId: cu.acta }));
             return c;
         });
     }
 
     function csv(tipo) {
         const cab = tipo === 'contable'
-            ? ['Insumo', 'Bodega', 'En sistema', 'Sobregiro', 'Saldo contable', 'Precio unitario', 'Valor contable', 'Estado']
-            : ['Insumo', 'Bodega', 'En sistema', 'Sobregiro', 'Disponible', 'Precio unitario', 'Valor disponible', 'Estado'];
+            ? ['Insumo', 'Bodega', 'En sistema', 'Sobregiro', 'Saldo contable', 'Precio unitario', 'Valor contable', 'Estado', 'Actas con sobregiro (unidades)']
+            : ['Insumo', 'Bodega', 'En sistema', 'Sobregiro', 'Disponible', 'Precio unitario', 'Valor disponible', 'Estado', 'Actas con sobregiro (unidades)'];
         const celda = (v) => { const t = String(v == null ? '' : v); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
         const l = filas.map(r => tipo === 'contable'
-            ? [r.nombre, r.bodega, r.q, r.sg, r.contable, r.pu, r.valContable, ETIQ[r.estado]]
-            : [r.nombre, r.bodega, r.q, r.sg, r.disp, r.pu, r.valDisp, ETIQ[r.estado]]);
-        const tot = tipo === 'contable' ? ['TOTAL', '', '', filas.reduce((s, r) => s + r.sg, 0), filas.reduce((s, r) => s + r.contable, 0), '', filas.reduce((s, r) => s + r.valContable, 0), ''] : ['TOTAL', '', '', filas.reduce((s, r) => s + r.sg, 0), filas.reduce((s, r) => s + r.disp, 0), '', filas.reduce((s, r) => s + r.valDisp, 0), ''];
+            ? [r.nombre, r.bodega, r.q, r.sg, r.contable, r.pu, r.valContable, ETIQ[r.estado], actasTxt(r)]
+            : [r.nombre, r.bodega, r.q, r.sg, r.disp, r.pu, r.valDisp, ETIQ[r.estado], actasTxt(r)]);
+        const tot = tipo === 'contable' ? ['TOTAL', '', '', filas.reduce((s, r) => s + r.sg, 0), filas.reduce((s, r) => s + r.contable, 0), '', filas.reduce((s, r) => s + r.valContable, 0), '', ''] : ['TOTAL', '', '', filas.reduce((s, r) => s + r.sg, 0), filas.reduce((s, r) => s + r.disp, 0), '', filas.reduce((s, r) => s + r.valDisp, 0), '', ''];
         return '﻿' + [cab, ...l, tot].map(x => x.map(celda).join(';')).join('\r\n');
     }
     function descargar(tipo) {
@@ -68,6 +69,57 @@
         const hoy = new Date().toISOString().slice(0, 10);
         const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv(tipo)], { type: 'text/csv;charset=utf-8' }));
         a.download = `Informe_${tipo}_${hoy}.csv`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    }
+
+    // ---- seguimiento por ID de acta ----
+    let segId = '', seg = null, segCargando = false;
+    async function seguir() {
+        const f = fs(); seg = null;
+        if (!segId) { pintar(); return; }
+        segCargando = true; pintar();
+        try {
+            const aq = await f.getDocs(f.query(f.collection(db(), 'Actas_Entrega'), f.where('numero', '==', segId), f.limit(1)));
+            if (aq.empty) { seg = { vacio: true }; }
+            else {
+                const acta = aq.docs[0].data(); const ins = {};
+                for (const it of acta.items || []) { try { const sn = await f.getDoc(f.doc(f.collection(db(), 'Insumos'), it.id)); if (sn.exists()) ins[it.id] = sn.data(); } catch (e) { /* sin permiso o borrado */ } }
+                const hq = await f.getDocs(f.query(f.collection(db(), 'Historial_Movimientos'), f.where('actaId', '==', segId), f.limit(200)));
+                const movs = []; hq.forEach(d => { const m = d.data(); const t = m.date && m.date.toDate ? m.date.toDate().getTime() : (Date.parse(m.date) || 0); movs.push({ ...m, _t: t }); });
+                movs.sort((a, b) => a._t - b._t);
+                seg = { acta, ins, movs };
+            }
+        } catch (e) { toast('Seguimiento', 'No se pudo buscar: ' + e.message, 'error'); seg = null; }
+        segCargando = false; pintar();
+    }
+    const TIPOS = { ENTREGA_ACTA: 'Entrega', CUADRE_SOBREGIRO: 'Cuadre de sobregiro', ANULACION_ACTA: 'Anulación' };
+    const fh = (m) => m._t ? new Date(m._t).toLocaleString('es-CL') : '';
+    function itemsSeg() {
+        return (seg.acta.items || []).map(it => {
+            const d = seg.ins[it.id] || {}; const det = (window.SAR_ActasEntrega && d ? window.SAR_ActasEntrega.detalleDe(d) : []);
+            const pend = seg.acta.estado === 'ANULADA' ? 0 : det.filter(x => x.acta === seg.acta.numero).reduce((t, x) => t + x.qty, 0);
+            const sin = num(it.sinRespaldo), cubierto = seg.acta.estado === 'ANULADA' ? 0 : Math.max(0, sin - pend);
+            return { nombre: it.nombre, entregado: num(it.cantidad), conRespaldo: num(it.cantidad) - sin, sin, cubierto, pend, enSistema: num(d.quantity), sobregiroInsumo: num(d.sobregiro) };
+        });
+    }
+    function segHtml() {
+        if (segCargando) return '<p class="act-hint">Buscando…</p>';
+        if (!seg) return '';
+        if (seg.vacio) return `<p class="act-err" style="padding-left:0">No existe el acta ${esc(segId)}.</p>`;
+        const a = seg.acta, its = itemsSeg(), pend = its.reduce((t, x) => t + x.pend, 0);
+        const estado = a.estado === 'ANULADA' ? 'ANULADA' : !a.conSobregiro ? 'Entregada con respaldo' : pend > 0 ? `Sobregiro pendiente: ${pend} u.` : 'Cuadrada';
+        return `<div class="seg-cab"><b>${esc(a.numero)}</b> · ${esc(a.centro)} · ${esc(a.fecha)} · ${esc(a.bodegaOrigen)} · ${esc(a.creadoPor || '')}<span class="sal-e sal-e--${a.estado === 'ANULADA' ? 'SIN_RESPALDO' : pend > 0 ? 'PROVISIONAL' : 'LISTO'}">${esc(estado)}</span></div>
+        <div class="sal-tabla"><div class="sal-fila sal-cab seg-f"><span>Insumo</span><span>Entregado</span><span>Con respaldo</span><span>Sin respaldo</span><span>Cuadrado</span><span>Pendiente</span></div>
+        ${its.map(x => `<div class="sal-fila seg-f"><span class="sal-n">${esc(x.nombre)}</span><span>${x.entregado}</span><span>${x.conRespaldo}</span><span class="${x.sin ? 'act-sin' : ''}">${x.sin}</span><span>${x.cubierto}</span><span class="${x.pend ? 'act-sin' : ''}">${x.pend}</span></div>`).join('')}</div>
+        <h4 class="act-h4">Movimientos</h4>
+        ${seg.movs.length ? `<ul class="seg-mov">${seg.movs.map(m => `<li><b>${esc(TIPOS[m.type] || m.type)}</b> · ${esc(m.insumoName || '')} · ${num(m.quantity)} u.<span>${esc(fh(m))} · ${esc(m.user || '')}${m.document && m.type === 'CUADRE_SOBREGIRO' ? ' · ref. ' + esc(m.document) : ''}</span>${m.observacion ? `<small>${esc(m.observacion)}</small>` : ''}</li>`).join('')}</ul>` : '<p class="act-hint">Sin movimientos registrados.</p>'}`;
+    }
+    function descargarSeg() {
+        if (!seg || !seg.acta) return;
+        const celda = (v) => { const t = String(v == null ? '' : v); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+        const its = itemsSeg();
+        const filasCsv = [[`Seguimiento del acta ${seg.acta.numero}`, seg.acta.centro, seg.acta.fecha, seg.acta.bodegaOrigen, seg.acta.estado], [], ['Insumo', 'Entregado', 'Con respaldo', 'Sin respaldo', 'Cuadrado', 'Pendiente (sobregiro)', 'En sistema hoy'], ...its.map(x => [x.nombre, x.entregado, x.conRespaldo, x.sin, x.cubierto, x.pend, x.enSistema]), [], ['Fecha', 'Movimiento', 'Insumo', 'Cantidad', 'Usuario', 'Referencia', 'Detalle'], ...seg.movs.map(m => [fh(m), TIPOS[m.type] || m.type, m.insumoName || '', num(m.quantity), m.user || '', m.type === 'CUADRE_SOBREGIRO' ? (m.document || '') : '', m.observacion || ''])];
+        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + filasCsv.map(x => x.map(celda).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+        a.download = `Seguimiento_${seg.acta.numero}.csv`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
     }
 
     const root = () => document.getElementById('sal-root');
@@ -78,6 +130,10 @@
         const sum = (k) => vis.reduce((s, x) => s + x[k], 0);
         const listos = vis.filter(x => x.estado === 'LISTO');
         r.innerHTML = `
+        <h3 class="act-h" style="margin-top:34px;">Seguimiento de un acta</h3>
+        <p class="act-hint">Escribe el ID del acta (ej. <b>AE-2026-0001</b>) para ver todo su movimiento: entrega, sobregiro, cuadres y anulación.</p>
+        <div class="sal-barra"><input id="seg-q" type="search" placeholder="AE-2026-0001" value="${esc(segId)}" autocomplete="off" style="max-width:220px"><button type="button" class="btn btn-primary" id="seg-b">Buscar</button>${seg && seg.acta ? '<button type="button" class="btn btn-outline" id="seg-csv">Descargar seguimiento (Excel)</button>' : ''}</div>
+        <div id="seg-res">${segHtml()}</div>
         <h3 class="act-h" style="margin-top:34px;">Saldos contables y disponibles</h3>
         <p class="act-hint">Lo entregado sin stock en sistema queda como <b>sobregiro</b>. <b>Saldo contable</b> = en sistema − sobregiro (puede ser negativo). Al ingresar la OC/SDC se <b>cuadra</b>: se descuenta lo ya entregado y queda lo disponible.</p>
         <div class="sal-barra">
@@ -91,7 +147,10 @@
         <div class="sal-res"><div><b>${vis.filter(x => x.sg > 0).length}</b><span>insumos con sobregiro</span></div><div><b>${sum('sg')}</b><span>unidades sin respaldo</span></div><div><b>${clp(vis.reduce((s, x) => s + x.valSg, 0))}</b><span>valor sin respaldo</span></div><div><b>${listos.length}</b><span>listos para cuadrar</span></div></div>
         ${cargando ? '<p class="act-hint">Cargando…</p>' : !vis.length ? '<p class="act-hint">Sin insumos en sobregiro. Todo cuadrado.</p>' : `
         <div class="sal-tabla"><div class="sal-fila sal-cab"><span>Insumo</span><span>En sistema</span><span>Sobregiro</span><span>Contable</span><span>Disponible</span><span>Estado</span><span></span></div>
-        ${vis.slice(0, 300).map(x => `<div class="sal-fila"><span class="sal-n">${esc(x.nombre)}<small>${esc(x.bodega)}</small></span><span>${x.q}</span><span class="${x.sg > 0 ? 'act-sin' : ''}">${x.sg}</span><span class="${x.contable < 0 ? 'act-sin' : ''}">${x.contable}</span><span>${x.disp}</span><span><i class="sal-e sal-e--${x.estado}">${ETIQ[x.estado]}</i></span><span>${x.estado === 'LISTO' ? `<button type="button" class="btn btn-outline sal-q" data-id="${esc(x.id)}">Cuadrar</button>` : ''}</span></div>`).join('')}</div>${vis.length > 300 ? '<p class="act-hint">Se muestran 300; el informe Excel incluye todos.</p>' : ''}`}`;
+        ${vis.slice(0, 300).map(x => `<div class="sal-fila"><span class="sal-n">${esc(x.nombre)}<small>${esc(x.bodega)}${x.actas.length ? ' · ' + esc(actasTxt(x)) : ''}</small></span><span>${x.q}</span><span class="${x.sg > 0 ? 'act-sin' : ''}">${x.sg}</span><span class="${x.contable < 0 ? 'act-sin' : ''}">${x.contable}</span><span>${x.disp}</span><span><i class="sal-e sal-e--${x.estado}">${ETIQ[x.estado]}</i></span><span>${x.estado === 'LISTO' ? `<button type="button" class="btn btn-outline sal-q" data-id="${esc(x.id)}">Cuadrar</button>` : ''}</span></div>`).join('')}</div>${vis.length > 300 ? '<p class="act-hint">Se muestran 300; el informe Excel incluye todos.</p>' : ''}`}`;
+        const sq = r.querySelector('#seg-q'); const go = () => { segId = sq.value.trim().toUpperCase(); seguir(); };
+        r.querySelector('#seg-b').addEventListener('click', go); sq.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+        const sc = r.querySelector('#seg-csv'); if (sc) sc.addEventListener('click', descargarSeg);
         r.querySelector('#sal-b').addEventListener('change', (e) => { bodega = e.target.value; pintar(); });
         r.querySelector('#sal-sp').addEventListener('change', (e) => { soloPend = e.target.checked; cargar(); });
         r.querySelector('#sal-act').addEventListener('click', cargar);
@@ -112,5 +171,5 @@
         });
     }
     function abrir() { cargar(); }
-    window.SAR_Saldos = { abrir, fila, csv: (t) => csv(t), _set: (f) => { filas = f; } };
+    window.SAR_Saldos = { abrir, seguir, _id: (v) => { segId = v; }, fila, csv: (t) => csv(t), _set: (f) => { filas = f; } };
 })(window, document);

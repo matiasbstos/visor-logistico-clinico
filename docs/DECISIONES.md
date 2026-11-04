@@ -170,3 +170,9 @@ Proveedor → Bodega Central → Bodega Transitoria → Transitoria de Farmacia 
 - Alertas automáticas: sobre presupuesto, plazo/vigencia fuera de bases, documento vencido antes de la oferta, certificado de habilidad con más de 30 días, ficha técnica faltante por ítem, observaciones de equivalencia, cuenta bancaria a nombre de un tercero, OC que no llega 5+ días hábiles después del V°B°.
 - Las alertas informan; la decisión de adjudicar o pagar sigue siendo de las personas autorizadas.
 - Al ingresar la OC desde el PDF, si existe la compra ágil con el mismo prefijo y las cantidades calzan (mismo orden o por cantidad), el cuadro por centro (memo/CDP) se copia a la OC y las dos quedan enlazadas (v20.43). Si no calza, se ingresa todo al SAR y se avisa.
+
+### 4.11 Recepción conforme y correo con documentos — v20.44
+- Botón "Recepción conforme" en el seguimiento de OC: genera el acta de recepción conforme (PDF) y toma la guía de despacho o factura (PDF). El archivo se nombra con su número (`Guia_<N°>.pdf` / `Factura_<N°>.pdf`).
+- Correo: Para Paulina Carrasco; Cc Daniela Medina, Carolina Ortiz, Nadia Sánchez, SAR Melipilla y Matías Bustos. Editable en cada envío; la lista fija puede cambiarse en `Config_Correo/principal.recepcionConforme {to, cc}`.
+- Se bloquea con incidencias abiertas; con unidades pendientes exige marcar "Recepción parcial". Los PDF no se guardan en la base de datos: queda tipo, número, fecha, quién recibe y el resultado del envío (visible en la OC y en la bitácora).
+- El envío con adjuntos requiere el script de Apps Script actualizado (Configurar correo → copiar código nuevo → nueva implementación). Si el script es antiguo, el sistema avisa "enviado SIN adjuntos".

@@ -264,6 +264,7 @@
                 <p>Plazos, recepciones por centro, discrepancias, notas y avisos por correo.</p></div>
                 <div class="soc-acc"><button type="button" class="btn btn-primary" id="soc-pdf"><i class="ph-bold ph-file-pdf"></i> Ingresar desde PDF</button>
                 <button type="button" class="btn btn-outline" id="soc-nueva"><i class="ph-bold ph-microsoft-excel-logo"></i> Con cuadro Excel</button></div></div>
+            <div class="soc-buscar"><input type="search" id="soc-buscar" placeholder="Buscar orden por número, proveedor o descripción…" aria-label="Buscar orden" autocomplete="off"></div>
             <div class="soc-lista">${lista.length ? lista.map(oc => {
                 const pl = estadoPlazo(oc), tot = totalesPorCentro(oc), mio = tot.find(t => t.centro === CENTRO_PROPIO) || tot[0];
                 const pct = mio && mio.pedido ? Math.min(100, Math.round(mio.recibido * 100 / mio.pedido)) : 0;
@@ -278,6 +279,9 @@
         root().querySelector('#soc-nueva').addEventListener('click', formNueva);
         root().querySelector('#soc-pdf').addEventListener('click', formDesdePDF);
         root().querySelectorAll('[data-oc]').forEach(b => b.addEventListener('click', () => abrirDetalle(b.dataset.oc)));
+        marcarMigas(false);
+        const bus = root().querySelector('#soc-buscar');
+        if (bus) bus.addEventListener('input', () => { const t = norm(bus.value); root().querySelectorAll('.soc-lista .soc-card').forEach(c => { c.style.display = !t || norm(c.textContent).includes(t) ? '' : 'none'; }); });
     }
 
     /** Abre la ficha de una orden recién creada apenas llegue en la lista (tiempo real). */
@@ -339,6 +343,7 @@
             <div class="soc-pie">${esAdmin() ? '<button type="button" class="btn btn-outline btn-sm" id="soc-multa">Registrar decisión de multa</button> <button type="button" class="btn btn-outline btn-sm" id="soc-cerrar">' + (oc.cerrada ? 'Reabrir seguimiento' : 'Cerrar seguimiento') + '</button> <button type="button" class="btn btn-outline btn-sm" id="soc-config">Configurar correo</button>' : ''}</div>`;
         const q = (s) => root().querySelector(s);
         q('#soc-volver').addEventListener('click', () => { ocActual = null; pintarLista(); });
+        marcarMigas(true);
         const tdo = q('#soc-todos'); if (tdo) tdo.addEventListener('change', (e) => { verTodos = e.target.checked; pintarDetalle(); });
         const bs = q('#soc-sig'); if (bs) bs.addEventListener('click', () => { const t = q(bs.dataset.go); if (t) t.click(); else if (bs.dataset.go.startsWith('#view')) window.location.hash = bs.dataset.go.slice(1); });
         q('#soc-recep').addEventListener('click', formRecepcion);
@@ -355,12 +360,14 @@
     }
 
     /** Banner con el siguiente paso según el estado de la orden. */
+    /** El título de la ruta superior ("Seguimiento de OC") vuelve a la lista cuando hay una ficha abierta. */
+    function marcarMigas(on) { const bc = document.getElementById('erp-breadcrumb-current'); if (bc) { bc.classList.toggle('soc-bc-link', !!on); bc.title = on ? 'Volver a la lista de órdenes' : ''; } }
+    document.addEventListener('click', (e) => { if (ocActual && e.target.closest && e.target.closest('#erp-breadcrumb-current.soc-bc-link')) { ocActual = null; pintarLista(); } });
     function bannerSiguiente(oc, pl) {
         if (oc.cerrada) return '';
         const pend = pendientesDe(oc).filter(x => x.pendiente > 0).length > 0, hayStock = (oc.lineas || []).some(l => Object.keys(l.ingresado || {}).some(k => num(l.ingresado[k]) > num(l.entregado && l.entregado[k])));
         let txt, btn, go;
-        if (!oc.aceptada) { txt = 'Siguiente paso: registra cuándo aceptó la orden el proveedor.'; btn = 'Registrar aceptación'; go = '#soc-acepta'; }
-        else if (pend) { txt = 'Siguiente paso: cuando llegue la mercadería, regístrala (puedes hacerlo por partes).'; btn = 'Recibir mercadería'; go = '#soc-recep'; }
+        if (pend) { txt = 'Siguiente paso: cuando llegue la mercadería, regístrala (puedes hacerlo por partes). La aceptación del proveedor es opcional.'; btn = 'Recibir mercadería'; go = '#soc-recep'; }
         else if (!oc.recepcionConforme) { txt = 'Todo recibido. Siguiente paso: la recepción conforme con la guía o factura.'; btn = 'Recepción conforme'; go = '#soc-conforme'; }
         else { txt = 'Recepción conforme lista. Ya puedes entregar a los centros desde las actas.'; btn = 'Ir a Actas de entrega'; go = '#view-actas-entrega'; }
         const extra = hayStock && pend ? ' Lo ya recibido está en Bodega Central y se entrega desde Actas de entrega.' : '';
@@ -421,7 +428,7 @@
             const A = window.SAR_ActasEntrega, borrador = { origen, centro: o.querySelector('#a-centro').value.trim(), items, pendientes: [], documentos: [{ tipo: 'OC', numero: oc.numeroOC, detalle: `memo ${c.memo}` }], recibe: { nombre: o.querySelector('#a-rn').value.trim(), cargo: o.querySelector('#a-rc').value.trim() }, oc: { id: oc.id, numeroOC: oc.numeroOC, key, memo: c.memo, cdp: c.cdp } };
             const err = A.validarBorrador(borrador); if (err.length) { toast('Revisa el acta', err[0], 'warning'); return false; }
             const total = items.reduce((t, x) => t + x.cantidad, 0);
-            if (!window.confirm(`Se emitirá el acta para ${borrador.centro} (${total} unidades) y se descontará de ${origen}. ¿Emitir?`)) return false;
+            if (!(await confirmar('Emitir acta', `Se emitirá el acta para ${borrador.centro} (${total} unidades) y se descontará de ${origen}.`, 'Emitir acta'))) return false;
             const acta = await A.emitir(borrador, usuario());
             toast('Acta emitida', `${acta.numero} · stock descontado y orden actualizada.`, 'success');
             try { await A.descargarActa(acta, 'pdf'); } catch (e) { toast('Descarga', 'El acta se emitió; descárgala desde "Actas emitidas": ' + e.message, 'warning'); }
@@ -486,6 +493,20 @@
             toast('Registrado', c ? ({ enviado: 'Nota guardada y correo enviado.', borrador: 'Nota guardada; se abrió un borrador de correo.', error: 'Nota guardada, pero el correo no se pudo enviar.', sin_destinatarios: 'Nota guardada. No hay destinatarios para el correo.' })[c.estado] : 'Nota guardada.', c && c.estado === 'error' ? 'warning' : 'success');
         } catch (e) { toast('No se guardó', (e.code || '') + ' ' + e.message, 'error'); }
         btn.disabled = false;
+    }
+
+    /** Aviso de confirmación con la identidad visual del sitio (reemplaza window.confirm). */
+    function confirmar(titulo, texto, ok) {
+        return new Promise((res) => {
+            const ov = document.createElement('div'); ov.className = 'cierre-overlay';
+            ov.innerHTML = `<div class="cierre-box cierre-box--aviso" role="alertdialog" aria-modal="true" aria-label="${esc(titulo)}"><h3>${esc(titulo)}</h3><p class="cierre-hint" style="white-space:pre-line">${esc(texto)}</p><div class="cierre-acciones"><button type="button" class="btn btn-outline" data-x>Cancelar</button><button type="button" class="btn btn-primary" data-ok>${esc(ok || 'Aceptar')}</button></div></div>`;
+            document.body.appendChild(ov);
+            const fin = (v) => { ov.remove(); res(v); };
+            ov.querySelector('[data-x]').addEventListener('click', () => fin(false));
+            ov.querySelector('[data-ok]').addEventListener('click', () => fin(true));
+            ov.addEventListener('click', (e) => { if (e.target === ov) fin(false); });
+            ov.querySelector('[data-ok]').focus();
+        });
     }
 
     // --- ventanas de formulario simples ---
@@ -605,7 +626,7 @@
             if ((await fs().getDoc(ref)).exists()) { toast('Ya existe', 'Esa orden ya está en seguimiento.', 'warning'); return false; }
             if (window.SAR_CDP) {                       // presupuesto CDP (opcional): avisa si esta orden lo sobregira
                 const al = await window.SAR_CDP.alertaNuevaOC({ ...oc, id }, lista);
-                if (al.length && !window.confirm('Atención con el presupuesto:\n\n' + al.join('\n') + '\n\n¿Ingresar la orden de todos modos?')) return false;
+                if (al.length && !(await confirmar('Atención con el presupuesto', al.join('\n') + '\n\n¿Ingresar la orden de todos modos?', 'Ingresar igual'))) return false;
             }
             oc.destinatarios = [...(configCorreo.destinatariosBase || [])]; oc.creadoPor = usuario(); oc.creadoEn = fs().serverTimestamp();
             await fs().runTransaction(db(), async (tx) => {
@@ -713,7 +734,7 @@
         det.forEach(d => { const l = lineas[d.i]; l.recibido[key] = num(l.recibido[key]) + d.cantidad; if (ingresaStock) l.ingresado[key] = num(l.ingresado[key]) + d.cantidad; if (d.insumoName) l.insumoName = d.insumoName; });
         return { lineas, incidencias: [...(data.incidencias || []), ...incidencias.map((n, k) => ({ id: `inc-${Date.now()}-${k}`, ...n, estado: 'ABIERTA', fecha: hoyISO(), ...(extra || {}) }))] };
     }
-    async function recepcionConStock(oc, { key, det, incidencias, guia, fecha, obs, notificar, ingresaStock, central, texto, titulo }) {
+    async function recepcionConStock(oc, { recId, hora, key, det, incidencias, guia, fecha, obs, notificar, ingresaStock, central, texto, titulo }) {
         const f = fs();
         const aplicadoLocal = aplicarRecepcion(oc, key, det, incidencias, null, ingresaStock);
         let correo = null;
@@ -737,7 +758,7 @@
             const fresca = os.data();
             det.forEach(d => { const l = (fresca.lineas || [])[d.i] || {}, pe = num(l.dist && l.dist[key]) - num(l.recibido && l.recibido[key]); if (d.cantidad > Math.max(0, pe)) throw new Error(`"${String(l.descripcion || '').slice(0, 40)}": solo quedan ${Math.max(0, pe)} por recibir (otra recepción se registró antes). Cierra y vuelve a abrir.`); });
             tx.update(ocRef, { ...aplicarRecepcion(fresca, key, det, incidencias, null, ingresaStock), ...(guia ? { ultimaGuia: guia } : {}), ultimaRecepcion: fecha, actualizadoEn: f.serverTimestamp() });
-            tx.set(evRef, { tipo: 'RECEPCION', texto, autor: usuario(), fecha: f.serverTimestamp(), ...(correo ? { correo } : {}), columna: key, guia, fechaRecepcion: fecha, ingresoAStock: !!ingresaStock, detalle: det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })), incidencias: incidencias.map(n => ({ producto: n.producto, tipo: n.tipo, detalle: n.detalle })) });
+            tx.set(evRef, { tipo: 'RECEPCION', texto, autor: usuario(), fecha: f.serverTimestamp(), ...(correo ? { correo } : {}), columna: key, guia, recId, horaLlegada: hora, fechaRecepcion: fecha, ingresoAStock: !!ingresaStock, detalle: det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })), incidencias: incidencias.map(n => ({ producto: n.producto, tipo: n.tipo, detalle: n.detalle })) });
             lecturas.forEach(([g, snap]) => {
                 const actual = snap.exists() ? snap.data() : null, m = mezclarIngreso(actual, g.ingresos);
                 const limite = num(actual && (actual.criticalLimit || actual.stock_minimo)) || 50;
@@ -746,7 +767,7 @@
                 if (actual) tx.update(g.ref, base); else tx.set(g.ref, { name: g.nombre, name_lowercase: String(g.nombre).toLowerCase(), location: central, criticalLimit: 50, ...base });
                 g.ingresos.forEach(ing => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), {
                     insumoName: g.nombre, item: g.nombre, quantity: ing.cantidad, type: 'INGRESO_OC', batch: ing.lote, expirationDate: ing.vence, destination: central, dest: central, origin: oc.proveedor || 'Proveedor',
-                    provider: oc.proveedor || 'S/I', user: usuario(), date: f.serverTimestamp(), document: `OC ${oc.numeroOC}${guia ? ' · guía ' + guia : ''}`, observacion: obs || '', ocId: oc.id, idInsumoDestino: g.ref.id }));
+                    provider: oc.proveedor || 'S/I', user: usuario(), date: f.serverTimestamp(), document: `${recId} · OC ${oc.numeroOC}${guia ? ' · guía ' + guia : ''}`, observacion: obs || '', ocId: oc.id, idInsumoDestino: g.ref.id }));
             });
         });
         if (notificar) { try { correo = await enviarCorreo(oc.destinatarios || [], armarCorreo({ ...oc, ...aplicadoLocal }, titulo, texto, usuario())); } catch (e) { toast('Recepción guardada', 'No se pudo preparar el correo: ' + e.message, 'warning'); } }
@@ -784,6 +805,7 @@
             <div class="soc-fila"><label>N° guía de despacho<input type="text" id="r-guia" autocomplete="off"></label><label>Fecha<input type="date" id="r-fecha" value="${hoyISO()}"></label></div>
             <div class="soc-barra-rec"><button type="button" class="btn btn-outline btn-sm" id="r-total"><i class="ph-bold ph-checks"></i> Marcar todo recibido</button><button type="button" class="btn btn-outline btn-sm" id="r-nada">Limpiar</button><span id="r-resumen" class="soc-resumen-rec"></span></div>
             <div id="r-lineas"></div>
+            <label class="soc-toggle"><input type="checkbox" id="r-lv"> Anotar lote y vencimiento ahora (también se puede hacer después)</label>
             <label class="soc-toggle" id="r-stock-w"><input type="checkbox" id="r-stock" checked> Ingresar lo recibido al stock de ${esc(central)} (así se descuenta al entregarlo por acta)</label>
             <label>Observación (opcional)<input type="text" id="r-obs" maxlength="300"></label>
             <label class="soc-toggle"><input type="checkbox" id="r-correo" checked> Avisar por correo a la lista</label>
@@ -807,23 +829,24 @@
                 if (ingresaStock) {
                     const nuevos = det.filter(d => !conoce.has(norm(d.insumoName))).map(d => d.insumoName);
                     if (nuevos.length) avisos.push(`${nuevos.length} producto(s) no existen en el inventario y se crearían como nuevos: ${nuevos.slice(0, 3).join(', ')}${nuevos.length > 3 ? '…' : ''}`);
-                    const sinV = det.filter(d => !d.vence).length; if (sinV) avisos.push(`${sinV} línea(s) sin fecha de vencimiento (quedarán sin vencimiento)`);
+                    
                 }
                 const guiaN = q('#r-guia').value.trim();
                 if (guiaN && eventos.some(e => e.tipo === 'RECEPCION' && String(e.guia || '') === guiaN)) avisos.push(`la guía N° ${guiaN} ya se registró en esta orden`);
                 const firma = avisos.join('|');
                 if (avisos.length && o.dataset.aviso !== firma) { o.dataset.aviso = firma; toast('Revisa antes de guardar', avisos.join('. ') + '. Si es correcto, pulsa Guardar recepción otra vez.', 'warning'); return false; }
-                const texto = `Recepción en ${col.centro}${col.memo ? ' (memo ' + col.memo + (col.cdp ? ', CDP ' + col.cdp : '') + ')' : ''} el ${fmtFecha(fecha)}${guia ? ' · guía N° ' + guia : ''}:\n` +
+                const nRec = eventos.filter(e => e.tipo === 'RECEPCION').length + 1, recId = `REC-${String(oc.numeroOC).replace(/[^A-Za-z0-9-]+/g, '')}-${String(nRec).padStart(2, '0')}`, hora = new Date().toTimeString().slice(0, 5);
+                const texto = `${recId} · Recepción en ${col.centro}${col.memo ? ' (memo ' + col.memo + (col.cdp ? ', CDP ' + col.cdp : '') + ')' : ''} el ${fmtFecha(fecha)} a las ${hora}${guia ? ' · guía N° ' + guia : ''}:\n` +
                     (det.length ? det.map(d => `- ${oc.lineas[d.i].descripcion}: ${d.cantidad} un.${d.lote ? ' · lote ' + d.lote : ''}${d.vence ? ' · vence ' + fmtFecha(d.vence) : ''}`).join('\n') : '- (sin unidades recibidas)') +
                     (incidencias.length ? '\nINCIDENCIAS:\n' + incidencias.map(n => `- ${n.producto}: ${INCIDENCIAS[n.tipo]}${n.detalle ? ' — ' + n.detalle : ''}`).join('\n') : '') + (obs ? '\nObs.: ' + obs : '') + (ingresaStock ? `\nIngresado al stock de ${central}.` : '');
-                await recepcionConStock(oc, { key, det, incidencias, guia, fecha, obs, notificar: q('#r-correo').checked, ingresaStock, central, texto, titulo: incidencias.length ? `Recepción con incidencias en ${col.centro}` : `Recepción en ${col.centro}` });
+                await recepcionConStock(oc, { recId, hora, key, det, incidencias, guia, fecha, obs, notificar: q('#r-correo').checked, ingresaStock, central, texto, titulo: incidencias.length ? `Recepción con incidencias en ${col.centro}` : `Recepción en ${col.centro}` });
                 toast('Recepción registrada', ingresaStock ? `Lo recibido quedó en el stock de ${central}. Entrégalo a los centros desde Actas de entrega.` : 'Se actualizó lo recibido.', 'success');
             }, { ancho: true, ok: 'Guardar recepción' });
         const pintar = () => {
-            const key = ov.querySelector('#r-col').value, st = ov.querySelector('#r-stock').checked;
-            ov.querySelector('#r-lineas').innerHTML = '<div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Recibido</th><th>Pendiente</th><th>Llega ahora</th>' + (st ? '<th>Producto en inventario</th><th>Lote</th><th>Vence</th>' : '') + '<th>Incidencia</th></tr></thead><tbody>' +
+            const key = ov.querySelector('#r-col').value, st = ov.querySelector('#r-stock').checked, lv = ov.querySelector('#r-lv').checked;
+            ov.querySelector('#r-lineas').innerHTML = '<div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Recibido</th><th>Pendiente</th><th>Llega ahora</th>' + (st ? '<th>Producto en inventario</th>' + (lv ? '<th>Lote</th><th>Vence</th>' : '') : '') + '<th>Incidencia</th></tr></thead><tbody>' +
                 oc.lineas.map((l, i) => { const p = num(l.dist && l.dist[key]), ya = num(l.recibido && l.recibido[key]), pe = Math.max(0, p - ya); return p ? `<tr data-i="${i}" data-pe="${pe}"><td class="r-prod" data-l="Producto">${esc(l.descripcion)}</td><td data-l="Pedido">${p}</td><td data-l="Recibido">${ya}</td><td data-l="Pendiente"><strong>${pe}</strong></td><td class="r-celda" data-l="Llega ahora"><input type="number" min="0" max="${pe}" class="r-c" value="" aria-label="Unidades que llegaron"><button type="button" class="btn btn-outline btn-sm r-ok" title="Llegó completo"${pe ? '' : ' disabled'}>✔ ${pe || 'listo'}</button></td>` +
-                    (st ? `<td data-l="Producto en inventario"><input class="r-n" list="r-inv" aria-label="Producto en inventario" value="${esc(l.insumoName || l.descripcion)}"></td><td data-l="Lote"><input class="r-l" aria-label="Lote" placeholder="S/L"></td><td data-l="Vence"><input type="date" class="r-v" aria-label="Fecha de vencimiento"></td>` : '') +
+                    (st ? `<td data-l="Producto en inventario"><input class="r-n" list="r-inv" aria-label="Producto en inventario" value="${esc(l.insumoName || l.descripcion)}"></td>` + (lv ? `<td data-l="Lote"><input class="r-l" aria-label="Lote" placeholder="S/L"></td><td data-l="Vence"><input type="date" class="r-v" aria-label="Fecha de vencimiento"></td>` : '') : '') +
                     `<td data-l="Incidencia"><select class="r-t" aria-label="Incidencia"><option value="">Sin incidencia</option>${Object.entries(INCIDENCIAS).map(([k, t]) => `<option value="${k}">${esc(t)}</option>`).join('')}</select><input class="r-td" aria-label="Detalle de la incidencia" placeholder="Detalle"></td></tr>` : ''; }).join('') + '</tbody></table></div>';
         };
         const resumen = () => {
@@ -836,7 +859,7 @@
             if (e.target.closest('#r-total')) { ov.querySelectorAll('tr[data-i]').forEach(tr => { if (num(tr.dataset.pe)) tr.querySelector('.r-c').value = tr.dataset.pe; }); resumen(); }
             if (e.target.closest('#r-nada')) { ov.querySelectorAll('.r-c').forEach(i => { i.value = ''; }); resumen(); }
         });
-        ov.querySelector('#r-col').addEventListener('change', () => { pintar(); resumen(); }); ov.querySelector('#r-stock').addEventListener('change', () => { pintar(); resumen(); });
+        ov.querySelector('#r-col').addEventListener('change', () => { pintar(); resumen(); }); ov.querySelector('#r-stock').addEventListener('change', () => { pintar(); resumen(); }); ov.querySelector('#r-lv').addEventListener('change', () => { pintar(); resumen(); });
         const sel = ov.querySelector('#r-col'); const iPropia = cols.findIndex(c => c.centro === CENTRO_PROPIO); if (iPropia > 0) sel.selectedIndex = iPropia;
         pintar(); resumen();
     }
@@ -860,7 +883,7 @@
     async function alternarCierre() {
         const nuevo = !ocActual.cerrada;
         const pu = pendientesDe(ocActual).reduce((t, x) => t + x.pendiente, 0);
-        if (!window.confirm(nuevo ? (pu ? `¿Cerrar el seguimiento? Quedan ${pu} unidades sin recibir y dejarán de aparecer como pendientes.` : '¿Cerrar el seguimiento de esta orden?') : '¿Reabrir el seguimiento de esta orden?')) return;
+        if (!(await confirmar(nuevo ? 'Cerrar seguimiento' : 'Reabrir seguimiento', nuevo ? (pu ? `Quedan ${pu} unidades sin recibir y dejarán de aparecer como pendientes.` : 'La orden dejará de aparecer entre las activas.') : 'La orden volverá a estar en seguimiento.', nuevo ? 'Cerrar' : 'Reabrir'))) return;
         try { await registrarEvento(ocActual, { tipo: 'ESTADO', texto: nuevo ? `Seguimiento cerrado${pu ? ` con ${pu} unidades sin recibir` : ''}.` : 'Seguimiento reabierto.', notificar: false, cambiosOC: { cerrada: nuevo } }); }
         catch (e) { toast('Error', e.message, 'error'); }
     }

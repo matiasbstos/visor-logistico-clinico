@@ -5355,3 +5355,25 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
     #r-lineas td[data-l]::before { content: attr(data-l); display: block; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; }
 }
 @media (max-width: 480px) { .soc-chip { white-space: normal; } }
+
+/* v20.65.1 · tabla de recepción: el input "Llega ahora" no debe ocupar todo el ancho (tapaba el ✔) */
+.cierre-box .r-celda { white-space: nowrap; min-width: 150px; }
+.cierre-box .r-celda .r-c { width: 76px; min-width: 76px; display: inline-block; }
+.cierre-box .r-celda .r-ok { display: inline-flex; vertical-align: middle; }
+.cierre-box .soc-tabla input.r-n { min-width: 200px; }
+.cierre-box .soc-tabla input.r-l { min-width: 90px; }
+.cierre-box .soc-tabla input[type=date] { min-width: 140px; }
+.cierre-box .soc-tabla td.r-prod { min-width: 220px; }
+.cierre-box .soc-tabla select.r-t { min-width: 130px; }
+
+/* v20.66 · seguimiento de OC y menú lateral */
+#btn-desktop-sidebar-toggle { display: none !important; }   /* un solo botón para expandir/contraer: el del menú lateral */
+.sidebar-header { gap: 8px; }
+.sidebar-logo { min-width: 0; flex: 1 1 auto; }
+.sidebar-logo-text-wrap { min-width: 0; overflow: hidden; }
+.sidebar-subtitle { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.soc-buscar { margin: 0 0 14px; }
+.soc-buscar input { width: 100%; max-width: 520px; padding: 10px 14px; border: 1px solid var(--border-color, #CBD5E1); border-radius: 8px; font: inherit; }
+.soc-bc-link { cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.cierre-box--aviso { width: min(440px, 94vw); }
+.cierre-box--aviso .cierre-hint { margin: 4px 0 8px; font-size: 14px; color: #334155; }

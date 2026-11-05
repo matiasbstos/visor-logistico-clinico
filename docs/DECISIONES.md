@@ -251,3 +251,12 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - Insumos nuevos llevan name_lowercase; se guarda ultimaGuia (prefill en Recepción conforme); al ingresar una OC desde PDF se abre su ficha.
 - Pendiente: descuento de CDP/presupuesto, "por recibir" en Existencias, adjuntar guía, anular recepción, multi-lote por línea, actas ligadas a OC.
 
+
+### 4.25 v20.66 — Ajustes tras la prueba de recepción (video del usuario)
+- Seguimiento de OC: buscador de órdenes en la lista; el título de la ruta superior vuelve a la lista cuando hay una ficha abierta.
+- Menú lateral: queda un solo botón de expandir/contraer (el del menú); ya no tapa el texto "ERP MÉDICO • RED ASISTENCIAL".
+- La aceptación del proveedor es opcional: el banner lleva directo a "Recibir mercadería"; "Registrar aceptación" queda en un solo lugar.
+- Avisos de confirmación (cerrar seguimiento, emitir acta, presupuesto) con ventana centrada de la identidad visual (sin window.confirm).
+- Recibir mercadería: lote y vencimiento son opcionales (casilla "Anotar lote y vencimiento ahora"); la hora de llegada la pone el sistema; cada recepción tiene ID propio `REC-<orden>-NN` (evento, historial y texto).
+- Recepción conforme: archivo `RC_<orden>.pdf`; Total/Parcial viene preseleccionado según lo pendiente.
+- Pendiente: editar lote/vencimiento después del ingreso, reportar REC-ID en Auditoría, destinatarios fijos (compras, M. Quintanilla, M. Bustos) cargados en la lista de la orden.

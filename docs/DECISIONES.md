@@ -385,3 +385,5 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - Animación del logo (SAR_Progreso) también en entrega y acciones de oxígeno.
 
 - v20.95: botón "Cargar productos y fotos" también en Catálogo de Insumos; la etiqueta "Pendiente de recepción" reconoce la columna SAR por nombre.
+
+- v20.96: el script de Apps Script descubre solo las tiendas de Convenio Marco y busca el código en todas (antes solo aseo3); recuerda resultados 6 h.

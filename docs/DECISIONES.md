@@ -413,3 +413,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Ingreso manual en un acta: pide nombre (con sugerencias del catálogo) e ID; si falta el ID pregunta antes de seguir. Al emitir, el nombre y el ID quedan en el catálogo (`sinOrden`, origen MANUAL) y el insumo provisional lleva el ID.
 - Al recibir una orden, si ya existe un insumo con ese ID (p. ej. el ingresado a mano) se suma a ese mismo insumo y se cuadra el sobregiro.
 - Acta: cada producto admite "Pedido" (total solicitado) y "Entregar"; la diferencia queda como pendiente y el acta muestra "Solicitado | Entregado | Pendiente" (modelo ANIDES).
+
+### 4.56 Animación en bodegas y "Asignar ID" en informes (v21.01)
+- Guardar nombre y configuración de bodegas, y cuadrar un insumo, usan la animación única de avance.
+- En el informe contable/disponible, los insumos provisionales sin ID tienen "Asignar ID": guarda el ID en el insumo y en el catálogo; al recibir la orden con ese ID se suman al mismo insumo.

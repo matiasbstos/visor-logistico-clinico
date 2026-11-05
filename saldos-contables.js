@@ -186,7 +186,7 @@
         <div class="sal-res"><div><b>${vis.filter(x => x.sg > 0).length}</b><span>insumos con sobregiro</span></div><div><b>${sum('sg')}</b><span>unidades sin respaldo</span></div><div><b>${clp(vis.reduce((s, x) => s + x.valSg, 0))}</b><span>valor sin respaldo</span></div><div><b>${listos.length}</b><span>listos para cuadrar</span></div></div>
         ${cargando ? '<p class="act-hint">Cargando…</p>' : !vis.length ? '<p class="act-hint">Sin insumos en sobregiro. Todo cuadrado.</p>' : `
         <div class="sal-tabla"><div class="sal-fila sal-cab"><span>Insumo</span><span>En sistema</span><span>Sobregiro</span><span>Contable</span><span>Disponible</span><span>Estado</span><span></span></div>
-        ${vis.slice(0, 300).map(x => `<div class="sal-fila"><span class="sal-n">${esc(x.nombre)}<small>${x.codigo ? 'ID ' + esc(x.codigo) + ' · ' : (x.provisional ? 'sin ID · ' : '')}${esc(x.bodega)}${x.actas.length ? ' · ' + esc(actasTxt(x)) : ''}</small></span><span>${x.q}</span><span class="${x.sg > 0 ? 'act-sin' : ''}">${x.sg}</span><span class="${x.contable < 0 ? 'act-sin' : ''}">${x.contable}</span><span>${x.disp}</span><span><i class="sal-e sal-e--${x.estado}">${ETIQ[x.estado]}</i></span><span>${x.estado === 'LISTO' ? `<button type="button" class="btn btn-outline sal-q" data-id="${esc(x.id)}">Cuadrar</button>` : ''}</span></div>`).join('')}</div>${vis.length > 300 ? '<p class="act-hint">Se muestran 300; el informe Excel incluye todos.</p>' : ''}`}`;
+        ${vis.slice(0, 300).map(x => `<div class="sal-fila"><span class="sal-n">${esc(x.nombre)}<small>${x.codigo ? 'ID ' + esc(x.codigo) + ' · ' : (x.provisional ? 'sin ID · ' : '')}${esc(x.bodega)}${x.actas.length ? ' · ' + esc(actasTxt(x)) : ''}</small></span><span>${x.q}</span><span class="${x.sg > 0 ? 'act-sin' : ''}">${x.sg}</span><span class="${x.contable < 0 ? 'act-sin' : ''}">${x.contable}</span><span>${x.disp}</span><span><i class="sal-e sal-e--${x.estado}">${ETIQ[x.estado]}</i></span><span>${x.estado === 'LISTO' ? `<button type="button" class="btn btn-outline sal-q" data-id="${esc(x.id)}">Cuadrar</button>` : ''}${x.provisional && !x.codigo ? `<button type="button" class="btn btn-outline sal-id" data-id="${esc(x.id)}" data-n="${esc(x.nombre)}">Asignar ID</button>` : ''}</span></div>`).join('')}</div>${vis.length > 300 ? '<p class="act-hint">Se muestran 300; el informe Excel incluye todos.</p>' : ''}`}`;
         r.insertAdjacentHTML('beforeend', '<div id="rec-aud"></div>'); pintarRec();
         r.querySelector('#sal-b').addEventListener('change', (e) => { bodega = e.target.value; pintar(); });
         r.querySelector('#sal-sp').addEventListener('change', (e) => { soloPend = e.target.checked; cargar(); });
@@ -196,8 +196,23 @@
         r.querySelectorAll('.sal-q').forEach(b => b.addEventListener('click', async () => {
             const ref = (prompt('N° de la OC/SDC con que ingresó este stock (opcional):') || '').trim();
             b.disabled = true;
-            try { const c = await cuadrarUno(b.dataset.id, ref); toast('Cuadrado', `${c.cuadrado} u. descontadas; sobregiro restante: ${c.sobregiro}.`, 'success'); await cargar(); }
+            try { const c = await window.SAR_Progreso.correr('Cuadrando el insumo…', () => cuadrarUno(b.dataset.id, ref), (x) => `${x.cuadrado} u. descontadas; sobregiro restante: ${x.sobregiro}`, { informe: true }); await cargar(); }
             catch (e) { toast('No se cuadró', e.message, 'error'); b.disabled = false; }
+        }));
+        // Producto ingresado a mano sin ID: se le asigna el ID de Mercado Público para asociarlo a la orden de compra y a su foto
+        r.querySelectorAll('.sal-id').forEach(b => b.addEventListener('click', async () => {
+            const cod = (prompt(`ID del producto (Mercado Público) para "${b.dataset.n}":`) || '').replace(/\D/g, '');
+            if (!cod) return;
+            b.disabled = true;
+            try {
+                await window.SAR_Progreso.correr('Asignando el ID al producto…', async () => {
+                    const f = fs();
+                    await f.updateDoc(f.doc(f.collection(db(), 'Insumos'), b.dataset.id), { codigoMP: cod });
+                    const id = (String(cod).normalize('NFD').replace(/[^a-z0-9]+/gi, '-').toLowerCase()).slice(0, 60);
+                    await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: b.dataset.n, descripcion_lower: String(b.dataset.n).toLowerCase(), codigoMP: cod, insumoName: b.dataset.n, sinOrden: true, origen: 'MANUAL', actualizado: f.serverTimestamp() }, { merge: true });
+                }, `ID ${cod} asignado a ${b.dataset.n}`);
+                await cargar();
+            } catch (e) { toast('No se asignó el ID', e.message || String(e), 'error'); b.disabled = false; }
         }));
         const t = r.querySelector('#sal-todo');
         if (t) t.addEventListener('click', async () => {

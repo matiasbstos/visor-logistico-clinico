@@ -39,7 +39,7 @@
         const n = String(numero || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9-]+/g, '').slice(0, 40);
         return `${tipo === 'FACTURA' ? 'Factura' : 'Guia'}_${n}.${ext || 'pdf'}`;
     }
-    function nombreActa(oc) { return `Acta_Recepcion_Conforme_OC_${String(oc.numeroOC || '').replace(/[^A-Za-z0-9-]+/g, '')}.pdf`; }
+    function nombreActa(oc) { return `RC_${String(oc.numeroOC || '').replace(/[^A-Za-z0-9-]+/g, '')}.pdf`; }
     /** Líneas para el acta: lo recibido por el SAR en esta OC. */
     function lineasActa(oc, centro) {
         const cols = (oc.columnas || []).filter(c => c.centro === centro);
@@ -150,14 +150,14 @@ SAR Arpillerista Elsa Romo Aravena`;
             <p class="cierre-hint">Genera el acta de recepción conforme y envía el correo con el acta y la guía/factura. Revisa los destinatarios.</p>
             <div class="soc-fila"><label>Documento del proveedor<select id="rc-tipo"><option value="GUIA">Guía de despacho</option><option value="FACTURA">Factura</option></select></label>${f('rc-num', 'N° del documento', oc.ultimaGuia || '')}${f('rc-fec', 'Fecha de recepción', hoyISO(), 'date')}</div>
             <label>PDF de la guía o factura<input type="file" id="rc-file" accept="application/pdf"></label>
-            ${pend > 0 ? `<label class="soc-toggle"><input type="checkbox" id="rc-parcial"> Recepción parcial: faltan ${pend} unidad(es) por recibir</label>` : ''}
+            <label>Tipo de recepción<select id="rc-parcial"><option value="0"${pend > 0 ? '' : ' selected'}>Total</option><option value="1"${pend > 0 ? ' selected' : ''}>Parcial${pend > 0 ? ` (faltan ${pend} unidades)` : ''}</option></select></label>
             <div class="soc-fila">${f('rc-fn', 'Firma: nombre', FIRMA_BASE.nombre)}${f('rc-fc', 'Cargo', FIRMA_BASE.cargo)}</div>
             <label>Observaciones (opcional)<textarea id="rc-obs" rows="2"></textarea></label>
             <label>Para<input type="text" id="rc-to" value="${esc(to.join(', '))}"></label>
             <label>Cc<input type="text" id="rc-cc" value="${esc(cc.join(', '))}"></label>
             <div id="rc-error" class="cierre-error"></div>`, async (o) => {
             const g = (id) => (o.querySelector('#' + id) || {}).value || '';
-            const d = { tipoDoc: g('rc-tipo'), numeroDoc: g('rc-num').trim(), fecha: g('rc-fec') || hoyISO(), archivo: (o.querySelector('#rc-file').files || [])[0] || null, parcial: !!(o.querySelector('#rc-parcial') || {}).checked,
+            const d = { tipoDoc: g('rc-tipo'), numeroDoc: g('rc-num').trim(), fecha: g('rc-fec') || hoyISO(), archivo: (o.querySelector('#rc-file').files || [])[0] || null, parcial: (o.querySelector('#rc-parcial') || {}).value === '1',
                 firmaNombre: g('rc-fn').trim() || FIRMA_BASE.nombre, firmaCargo: g('rc-fc').trim() || FIRMA_BASE.cargo, observaciones: g('rc-obs').trim(), to: lista(g('rc-to')), cc: lista(g('rc-cc')) };
             const err = validar(oc, d, centro);
             o.querySelector('#rc-error').innerHTML = err.map(e => `<div>${esc(e)}</div>`).join('');

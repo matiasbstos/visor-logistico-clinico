@@ -75,17 +75,19 @@
     /** Archivo de la tienda para un código: tabla incluida o Apps Script (códigos nuevos). */
     /** Devuelve {archivo, origen}: 'semilla' (tabla ya verificada contra la tienda), 'tienda' (Apps Script) o 'supuesto' (se probó el nombre habitual). */
     async function buscarFoto(codigo, cfg) {
-        const c = String(codigo || '').replace(/\D/g, ''); if (!c) return { archivo: '', origen: '' };
+        const c = String(codigo || '').replace(/\D/g, ''); if (!c) return { archivo: '', origen: '', motivo: 'sin_codigo' };
         if (!listo) await cargar();
         if (semilla[c]) return { archivo: semilla[c], origen: 'semilla' };
+        let motivo = 'no_en_tiendas';
         if (cfg && cfg.webhookUrl && cfg.token) {
             try {
                 const r = await fetch(cfg.webhookUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ token: cfg.token, accion: 'imagenes', codigos: [c] }) });
                 const j = await r.json(); const f = j && j.ok && j.imagenes && j.imagenes[c]; if (f) return { archivo: f, origen: 'tienda' };
-            } catch (e) { /* sin acceso a la tienda */ }
-        }
+                if (!(j && j.ok)) motivo = 'script_rechazo:' + String((j && j.error) || 'respuesta no válida');
+            } catch (e) { motivo = 'script_inaccesible:' + String((e && e.message) || e); }
+        } else motivo = 'sin_script';
         const g = await adivinar(c); if (g) return { archivo: g, origen: 'supuesto' };
-        return { archivo: '', origen: '' };
+        return { archivo: '', origen: '', motivo };
     }
     const archivoPara = async (codigo, cfg) => (await buscarFoto(codigo, cfg)).archivo;
     /** Sin Apps Script: prueba los nombres de archivo habituales (código−7, con o sin _1) cargando la imagen. */

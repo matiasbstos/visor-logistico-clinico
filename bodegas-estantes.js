@@ -121,7 +121,11 @@
         }
         const admin = esAdmin();
         const usa = bodega.usaEstantes === true;
+        const sinNombre = !String(bodega.name || '').trim();
         sec.innerHTML = `
+            ${admin ? `<div class="bodega-estantes__row be-nombre"><label class="bodega-estantes__prefijo" style="flex:1">Nombre de la bodega${sinNombre ? ' <strong style="color:#c0392b">(falta)</strong>' : ''}
+                <input type="text" id="be-nombre" maxlength="60" value="${esc(sinNombre ? 'Bodega Central' : bodega.name)}" placeholder="Ej.: Bodega Central"></label>
+                <button type="button" class="btn btn-outline" id="be-guardar-nombre">Guardar nombre</button></div>` : ''}
             <h4 class="bodega-estantes__title"><i class="ph-bold ph-stack"></i> Estantes y etiquetas</h4>
             <div class="bodega-estantes__row">
                 <label class="bodega-estantes__switch">
@@ -153,6 +157,33 @@
                 toast('Bodega reactivada', 'Vuelve a figurar como activa.', 'success');
                 renderSeccion(bodega);
             } catch (e) { toast('No se reactivó', `${e.code || 'error'}: ${e.message}`, 'error'); reactivar.disabled = false; }
+        });
+
+        const gn = sec.querySelector('#be-guardar-nombre');
+        if (gn) gn.addEventListener('click', async () => {
+            const nuevo = sec.querySelector('#be-nombre').value.trim().replace(/\s+/g, ' ');
+            if (!nuevo) { toast('Falta el nombre', 'Escribe el nombre de la bodega.', 'warning'); return; }
+            const antes = String(bodega.name || '').trim() || 'Bodega Central';
+            gn.disabled = true; gn.textContent = 'Guardando…';
+            try {
+                const todas = await fs().getDocs(fs().collection(db(), 'Bodegas'));
+                let repetido = false; todas.forEach(d => { if (d.id !== bodega.id && String(d.data().name || '').trim().toLowerCase() === nuevo.toLowerCase()) repetido = true; });
+                if (repetido) throw new Error('Ya existe otra bodega con ese nombre.');
+                const ref = fs().doc(fs().collection(db(), 'Bodegas'), bodega.id);
+                await fs().setDoc(ref, { name: nuevo, ...(bodega.type ? {} : { type: 'principal' }) }, { merge: true });
+                let movidos = 0;
+                if (antes.toLowerCase() !== nuevo.toLowerCase()) {      // el stock que estaba en la bodega sigue con ella
+                    const ins = await fs().getDocs(fs().query(fs().collection(db(), 'Insumos'), fs().where('location', '==', antes), fs().limit(1500)));
+                    for (const d of ins.docs) { await fs().updateDoc(d.ref, { location: nuevo }); movidos++; }
+                }
+                const leido = (await fs().getDoc(ref)).data() || {};
+                if (leido.name !== nuevo) throw new Error('el dato no quedó guardado');
+                bodega.name = nuevo; if (!bodega.type) bodega.type = 'principal';
+                const t = document.getElementById('modal-bodega-name'); if (t) t.innerText = nuevo;
+                const m = document.getElementById('bodega-modal'); if (m) m.dataset.currentBodegaName = nuevo;
+                toast('Nombre guardado', movidos ? `${nuevo}. ${movidos} producto(s) pasaron a esta bodega con su nuevo nombre.` : nuevo, 'success');
+                renderSeccion(bodega);
+            } catch (e) { toast('No se guardó el nombre', e.message || String(e), 'error'); gn.disabled = false; gn.textContent = 'Guardar nombre'; }
         });
 
         const guardar = sec.querySelector('#be-guardar');

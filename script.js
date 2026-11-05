@@ -5062,7 +5062,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 card.innerHTML = `
                 <div class="card-title" style="color:${b.type === 'principal' ? 'var(--primary)' : 'var(--purple)'}">${window.escapeHTML((b.type || 'S/I').toUpperCase())}</div>
-                <div class="card-value" style="font-size:20px; margin: 8px 0;">${window.escapeHTML(b.name)}</div>
+                <div class="card-value" style="font-size:20px; margin: 8px 0;">${window.escapeHTML(b.name || 'Sin nombre (ábrela y ponle nombre)')}</div>
                 <div class="flex-bet text-sm text-muted"><span>Cap: ${window.escapeHTML(b.capacityMetrics || 'S/I')}</span><span class="badge-green">${b.isActive ? 'Activa' : 'Inactiva'}</span></div>
             `;
 
@@ -5082,7 +5082,7 @@ document.addEventListener('DOMContentLoaded', () => {
             theadRow.innerHTML = '<th>INSUMO</th>';
             bodegas.forEach(b => {
                 const th = document.createElement('th');
-                th.textContent = (b.name || 'S/I').toUpperCase();
+                th.textContent = (b.name || 'Sin nombre').toUpperCase();
                 theadRow.appendChild(th);
             });
             theadRow.insertAdjacentHTML('beforeend', '<th>TOTAL</th>');
@@ -5121,7 +5121,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         function openBodegaDetail(bodega) {
-            document.getElementById('modal-bodega-name').innerText = bodega.name;
+            document.getElementById('modal-bodega-name').innerText = bodega.name || 'Bodega sin nombre';
             document.getElementById('modal-bodega-type').innerText = (bodega.type || 'S/I').toUpperCase();
 
             const modal = document.getElementById('bodega-modal');

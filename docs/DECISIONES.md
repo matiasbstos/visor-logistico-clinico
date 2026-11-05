@@ -318,3 +318,7 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 ### 4.37 Acta de entrega según el modelo del 03-11-2026 (v20.78)
 - Cada producto entregado dice "— Entregado: N unidades con fecha del dd/mm/aa". El archivo se llama "ACTA DE ENTREGA - <BODEGA DE ORIGEN> - dd-mm-aaaa".
 - Si el acta se emite desde una orden de compra, el PDF queda guardado además en "Archivos de la orden".
+
+### 4.38 Nombre de la bodega editable (v20.79)
+- La bodega activa existente no tenía nombre (se veía "S/I" y no aparecía en Actas ni en la tabla de stock). En la ficha de cada bodega, el administrador puede poner/cambiar el nombre (por defecto propone "Bodega Central"); si cambia, el stock que figuraba con el nombre anterior pasa al nuevo. Las bodegas sin nombre se muestran como "Sin nombre".
+- "Stock Local por Sucursal" pasa a "Stock Local por Bodega".

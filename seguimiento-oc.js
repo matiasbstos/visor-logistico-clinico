@@ -831,7 +831,7 @@
                 const actual = snap.exists() ? snap.data() : null, m = mezclarIngreso(actual, g.ingresos);
                 const limite = num(actual && (actual.criticalLimit || actual.stock_minimo)) || 50;
                 const prox = m.batches[0];
-                const base = { quantity: m.quantity, batches: m.batches, isCritical: m.quantity <= limite, batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', provider: oc.proveedor || (actual && actual.provider) || 'S/I', updatedAt: f.serverTimestamp() };
+                const base = { origenOC: true, quantity: m.quantity, batches: m.batches, isCritical: m.quantity <= limite, batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', provider: oc.proveedor || (actual && actual.provider) || 'S/I', updatedAt: f.serverTimestamp() };
                 if (actual) tx.update(g.ref, base); else tx.set(g.ref, { name: g.nombre, name_lowercase: String(g.nombre).toLowerCase(), location: central, criticalLimit: 50, ...base });
                 g.ingresos.forEach(ing => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), {
                     insumoName: g.nombre, item: g.nombre, quantity: ing.cantidad, type: 'INGRESO_OC', batch: ing.lote, expirationDate: ing.vence, destination: central, dest: central, origin: oc.proveedor || 'Proveedor',

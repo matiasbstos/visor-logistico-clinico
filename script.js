@@ -1,8 +1,45 @@
 // Importación de Firebase desde la CDN (Módulo)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, runTransaction, writeBatch, serverTimestamp, getDoc, setDoc, query, where, orderBy, limit, limitToLast, startAfter, endBefore, startAt, endAt, getDocs, deleteDoc, addDoc, updateDoc, increment, onSnapshot } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, runTransaction, writeBatch, serverTimestamp, getDoc, setDoc, query, where, orderBy, limit, limitToLast, startAfter, endBefore, startAt, endAt, getDocs as _getDocs, deleteDoc, addDoc, updateDoc, increment, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 import { generarPlantillaExcel, procesarExcelCargaMasiva, excelSerialDateToJS, exportarInventarioResguardo } from './excelUtils.js';
+
+// ---------------------------------------------------------------------------
+// Fase "órdenes de compra" (v20.73): mientras solo se carga lo que llega por OC, los medicamentos de
+// prueba y las bandejas de turno existentes no se muestran (no se borra nada). Cada ingreso por OC marca
+// el insumo con origenOC:true y desde ahí aparece en todo el sistema. Para volver a mostrar todo: false.
+// ---------------------------------------------------------------------------
+const FASE_SOLO_OC = true;
+window.FASE_SOLO_OC = FASE_SOLO_OC;
+const _fueraDeFase = (d) => {
+    try {
+        const p = (d && d.ref && d.ref.path) || '';
+        if (p.startsWith('Bandejas_Turno/')) return true;
+        if (/^Insumos\/[^/]+$/.test(p)) return d.data().origenOC !== true;
+    } catch (e) { /* sin ruta: se muestra */ }
+    return false;
+};
+function _soloFase(snap) {
+    if (!FASE_SOLO_OC || !snap || !Array.isArray(snap.docs)) return snap;
+    const docs = snap.docs.filter(d => !_fueraDeFase(d));
+    if (docs.length === snap.docs.length) return snap;
+    return new Proxy(snap, {
+        get(t, k) {
+            if (k === 'docs') return docs;
+            if (k === 'size') return docs.length;
+            if (k === 'empty') return !docs.length;
+            if (k === 'forEach') return (fn, th) => docs.forEach(fn, th);
+            if (k === 'docChanges') return (...a) => t.docChanges(...a).filter(c => !_fueraDeFase(c.doc));
+            const v = t[k]; return typeof v === 'function' ? v.bind(t) : v;
+        }
+    });
+}
+const getDocs = async (...a) => _soloFase(await _getDocs(...a));
+const onSnapshot = (ref, ...rest) => _onSnapshot(ref, ...rest.map(a => {
+    if (typeof a === 'function') return (x, ...r) => a(_soloFase(x), ...r);
+    if (a && typeof a.next === 'function') return { ...a, next: (x, ...r) => a.next(_soloFase(x), ...r) };
+    return a;
+}));
 
 window.addEventListener('error', function (event) {
     console.error("Error Global Interceptado:", event.error || event.message);

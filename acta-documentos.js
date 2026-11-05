@@ -30,7 +30,13 @@
     }
     const fechaCorta2 = (iso) => { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : ''; };
     // Modelo: "PILA ALCALINA BLISTER AAA 2 UN — Entregado: 24 unidades con fecha del 03/11/26"
-    const lineaItem = (it, acta) => `${lim(it.nombre)} — Entregado: ${it.cantidad} ${Number(it.cantidad) === 1 ? 'unidad' : 'unidades'}${acta && acta.fecha ? ' con fecha del ' + fechaCorta2(acta.fecha) : ''}`;
+    const lineaItem = (it, acta) => {
+        // Entrega parcial de una orden (modelo ANIDES): "— Solicitado: 10 | Entregado: 4 | Pendiente: 6"
+        const sol = Number(it.solicitado) || 0, ent = Number(it.entregadoTotal) || 0;
+        if (sol > 0 && ent > 0 && ent < sol) return `${lim(it.nombre)} — Solicitado: ${sol} | Entregado: ${ent} | Pendiente: ${sol - ent}`;
+        return lineaItemSimple(it, acta);
+    };
+    const lineaItemSimple = (it, acta) => `${lim(it.nombre)} — Entregado: ${it.cantidad} ${Number(it.cantidad) === 1 ? 'unidad' : 'unidades'}${acta && acta.fecha ? ' con fecha del ' + fechaCorta2(acta.fecha) : ''}`;
     const lineaPend = (it) => `${lim(it.nombre)} — Pendiente: ${it.cantidad}`;
     const lineaDoc = (d) => `${lim(d.tipo)}${d.numero ? ' N° ' + lim(d.numero) : ''}${d.detalle ? ' — ' + lim(d.detalle) : ''}`;
     const docsValidos = (acta) => (acta.documentos || []).filter(d => lim(d.tipo) || lim(d.numero));

@@ -322,3 +322,6 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 ### 4.38 Nombre de la bodega editable (v20.79)
 - La bodega activa existente no tenía nombre (se veía "S/I" y no aparecía en Actas ni en la tabla de stock). En la ficha de cada bodega, el administrador puede poner/cambiar el nombre (por defecto propone "Bodega Central"); si cambia, el stock que figuraba con el nombre anterior pasa al nuevo. Las bodegas sin nombre se muestran como "Sin nombre".
 - "Stock Local por Sucursal" pasa a "Stock Local por Bodega".
+
+### 4.39 Pendientes en el acta de entrega desde una orden (v20.80)
+- Modelo ANIDES (16-10-2026): si una línea se entrega solo en parte, el acta dice "— Solicitado: S | Entregado: E | Pendiente: P" (E acumulado de la orden para ese centro). Lo solicitado que no entra en el acta (no llegó o no se entrega ahora) se agrega solo a "PRODUCTOS SOLICITADOS QUE AÚN NO LLEGAN (pendientes de entrega)" con su cantidad pendiente.

@@ -537,11 +537,11 @@
         evs.filter(e => e.tipo === 'RECEPCION' && e.ingresoAStock).forEach(e => (e.detalle || []).forEach(d => {
             if (d.lote || d.vence) return;
             const nombre = d.insumoName || ((oc.lineas || []).find(l => l.descripcion === d.descripcion) || {}).insumoName || d.descripcion;
-            const key = k(nombre, d.descripcion), x = m.get(key) || { insumoName: nombre, descripcion: d.descripcion, cantidad: 0 };
+            const bodega = d.bodega || e.bodegaDestino || 'Bodega Central', key = k(nombre + '@' + bodega, d.descripcion), x = m.get(key) || { insumoName: nombre, descripcion: d.descripcion, bodega, cantidad: 0 };
             x.cantidad += num(d.cantidad); m.set(key, x);
         }));
         evs.filter(e => e.tipo === 'LOTE').forEach(e => (e.detalle || []).forEach(d => {
-            const x = m.get(k(d.insumoName, d.descripcion)); if (x) x.cantidad -= num(d.cantidad);
+            const x = m.get(k(d.insumoName + '@' + (d.bodega || 'Bodega Central'), d.descripcion)); if (x) x.cantidad -= num(d.cantidad);
         }));
         return [...m.values()].filter(x => x.cantidad > 0);
     }
@@ -549,7 +549,7 @@
         const oc = ocActual, pend = lotesPendientes(oc, eventos);
         if (!pend.length) { toast('Todo al día', 'No hay unidades recibidas sin lote o vencimiento.', 'info'); return; }
         const ov = modal('Lotes y vencimientos', `<p class="cierre-hint">Completa el lote y el vencimiento de lo que ya ingresó al stock. Puedes asignar solo una parte de las unidades.</p>
-            <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Sin lote</th><th>Unidades</th><th>Lote</th><th>Vence</th></tr></thead><tbody>${pend.map((x, n) => `<tr data-n="${n}"><td>${esc(x.insumoName)}</td><td>${x.cantidad}</td><td><input type="number" class="l-c" min="0" max="${x.cantidad}" value="${x.cantidad}" aria-label="Unidades"></td><td><input class="l-l" placeholder="Lote" aria-label="Lote"></td><td><input type="date" class="l-v" aria-label="Vencimiento"></td></tr>`).join('')}</tbody></table></div>`, async (o) => {
+            <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Bodega</th><th>Sin lote</th><th>Unidades</th><th>Lote</th><th>Vence</th></tr></thead><tbody>${pend.map((x, n) => `<tr data-n="${n}"><td>${esc(x.insumoName)}</td><td>${esc(x.bodega)}</td><td>${x.cantidad}</td><td><input type="number" class="l-c" min="0" max="${x.cantidad}" value="${x.cantidad}" aria-label="Unidades"></td><td><input class="l-l" placeholder="Lote" aria-label="Lote"></td><td><input type="date" class="l-v" aria-label="Vencimiento"></td></tr>`).join('')}</tbody></table></div>`, async (o) => {
             const cambios = [];
             o.querySelectorAll('tr[data-n]').forEach(tr => {
                 const x = pend[+tr.dataset.n], c = num(tr.querySelector('.l-c').value), l = tr.querySelector('.l-l').value.trim().toUpperCase(), v = tr.querySelector('.l-v').value;
@@ -564,13 +564,12 @@
         return ov;
     }
     async function asignarLotes(oc, cambios) {
-        const f = fs(); let central = 'Bodega Central';
-        const bs = await f.getDocs(f.collection(db(), 'Bodegas')); bs.forEach(d => { const b = d.data(); if (/central/i.test(String(b.name || '')) && b.isActive !== false) central = b.name; });
+        const f = fs();
         const refs = [];
         for (const c of cambios) {
             const snap = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('name', '==', c.insumoName), f.limit(10)));
-            let ref = null; snap.forEach(x => { const l = x.data().location; if (!ref && (l === central || !l)) ref = f.doc(f.collection(db(), 'Insumos'), x.id); });
-            if (!ref) throw new Error(`No se encontró "${c.insumoName}" en ${central}.`);
+            let ref = null; snap.forEach(x => { const l = x.data().location; if (!ref && (l === c.bodega || !l)) ref = f.doc(f.collection(db(), 'Insumos'), x.id); });
+            if (!ref) throw new Error(`No se encontró "${c.insumoName}" en ${c.bodega}.`);
             refs.push(ref);
         }
         await f.runTransaction(db(), async (tx) => {
@@ -587,7 +586,7 @@
             });
             docs.forEach(d => { const b = d.data.batches; if (typeof window.fefoCompare === 'function') b.sort(window.fefoCompare); const prox = b[0]; tx.update(d.ref, { batches: b, batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A' }); });
         });
-        await registrarEvento(oc, { tipo: 'LOTE', texto: 'Lote/vencimiento asignado:\n' + cambios.map(c => `- ${c.insumoName}: ${c.asignar} un. · lote ${c.lote} · vence ${c.vence === 'N/A' ? 's/v' : fmtFecha(c.vence)}`).join('\n'), extra: { detalle: cambios.map(c => ({ insumoName: c.insumoName, descripcion: c.descripcion, cantidad: c.asignar, lote: c.lote, vence: c.vence })) } });
+        await registrarEvento(oc, { tipo: 'LOTE', texto: 'Lote/vencimiento asignado:\n' + cambios.map(c => `- ${c.insumoName} (${c.bodega}): ${c.asignar} un. · lote ${c.lote} · vence ${c.vence === 'N/A' ? 's/v' : fmtFecha(c.vence)}`).join('\n'), extra: { detalle: cambios.map(c => ({ bodega: c.bodega, insumoName: c.insumoName, descripcion: c.descripcion, cantidad: c.asignar, lote: c.lote, vence: c.vence })) } });
     }
 
     function formNueva() {
@@ -827,7 +826,7 @@
             const fresca = os.data();
             det.forEach(d => { const l = (fresca.lineas || [])[d.i] || {}, pe = num(l.dist && l.dist[key]) - num(l.recibido && l.recibido[key]); if (d.cantidad > Math.max(0, pe)) throw new Error(`"${String(l.descripcion || '').slice(0, 40)}": solo quedan ${Math.max(0, pe)} por recibir (otra recepción se registró antes). Cierra y vuelve a abrir.`); });
             tx.update(ocRef, { ...aplicarRecepcion(fresca, key, det, incidencias, null, ingresaStock), ...(guia ? { ultimaGuia: guia } : {}), ultimaRecepcion: fecha, recepciones: [...(fresca.recepciones || []), { recId, fecha, hora, guia: guia || '', columna: key, usuario: usuario(), unidades: det.reduce((t, d) => t + d.cantidad, 0), detalle: det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad })) }], actualizadoEn: f.serverTimestamp() });
-            tx.set(evRef, { tipo: 'RECEPCION', texto, autor: usuario(), fecha: f.serverTimestamp(), ...(correo ? { correo } : {}), columna: key, guia, recId, horaLlegada: hora, fechaRecepcion: fecha, ingresoAStock: !!ingresaStock, detalle: det.map(d => ({ i: d.i, insumoName: d.insumoName || '', descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })), incidencias: incidencias.map(n => ({ producto: n.producto, tipo: n.tipo, detalle: n.detalle })) });
+            tx.set(evRef, { tipo: 'RECEPCION', texto, autor: usuario(), fecha: f.serverTimestamp(), ...(correo ? { correo } : {}), columna: key, guia, recId, horaLlegada: hora, bodegaDestino: central, fechaRecepcion: fecha, ingresoAStock: !!ingresaStock, detalle: det.map(d => ({ i: d.i, bodega: central, insumoName: d.insumoName || '', descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })), incidencias: incidencias.map(n => ({ producto: n.producto, tipo: n.tipo, detalle: n.detalle })) });
             lecturas.forEach(([g, snap]) => {
                 const actual = snap.exists() ? snap.data() : null, m = mezclarIngreso(actual, g.ingresos);
                 const limite = num(actual && (actual.criticalLimit || actual.stock_minimo)) || 50;
@@ -862,14 +861,14 @@
 
     async function formRecepcion() {
         const oc = ocActual; const cols = oc.columnas || [];
-        let central = 'Bodega Central', nombresInv = [];
+        let central = 'Bodega Central', nombresInv = [], bodegasLista = [];
+        const cargaNombres = async () => { try { const ins = await fs().getDocs(fs().query(fs().collection(db(), 'Insumos'), fs().where('location', '==', central), fs().limit(1500))); const set = new Set(); ins.forEach(d => { if (d.data().name) set.add(d.data().name); }); nombresInv = [...set].sort((a, b) => a.localeCompare(b, 'es')); } catch (e) { nombresInv = []; } };
         const propia = (key) => { const c = cols.find(x => x.key === key); return !!c && c.centro === CENTRO_PROPIO; };
         const cargaInv = (async () => {
             try {
-                const bs = await fs().getDocs(fs().collection(db(), 'Bodegas')); bs.forEach(d => { const b = d.data(); if (/central/i.test(String(b.name || '')) && b.isActive !== false) central = b.name; });
-                const ins = await fs().getDocs(fs().query(fs().collection(db(), 'Insumos'), fs().where('location', '==', central), fs().limit(1500)));
-                const set = new Set(); ins.forEach(d => { if (d.data().name) set.add(d.data().name); }); nombresInv = [...set].sort((a, b) => a.localeCompare(b, 'es'));
-            } catch (e) { /* sin lista de inventario: se escribe a mano */ }
+                const bs = await fs().getDocs(fs().collection(db(), 'Bodegas')); bs.forEach(d => { const b = d.data(); if (b.name && b.isActive !== false) bodegasLista.push(b.name); if (/central/i.test(String(b.name || '')) && b.isActive !== false) central = b.name; });
+            } catch (e) { /* sin lista de bodegas: queda la central */ }
+            await cargaNombres();
         })();
         const ov = modal('Recibir mercadería', `
             <label${cols.length === 1 ? ' hidden' : ''}>¿Qué memo/CDP se recibió?<select id="r-col">${cols.map(c => `<option value="${esc(c.key)}">${esc(c.centro)} · memo ${esc(c.memo)}${c.cdp ? ' · CDP ' + esc(c.cdp) : ''}</option>`).join('')}</select></label>
@@ -877,12 +876,13 @@
             <div class="soc-barra-rec"><button type="button" class="btn btn-outline btn-sm" id="r-total"><i class="ph-bold ph-checks"></i> Marcar todo recibido</button><button type="button" class="btn btn-outline btn-sm" id="r-nada">Limpiar</button><span id="r-resumen" class="soc-resumen-rec"></span></div>
             <div id="r-lineas"></div>
             <label class="soc-toggle"><input type="checkbox" id="r-lv"> Anotar lote y vencimiento ahora (también se puede hacer después)</label>
+            <label>Bodega de destino<select id="r-dest"><option>${esc(central)}</option></select></label>
             <label class="soc-toggle" id="r-stock-w"><input type="checkbox" id="r-stock" checked> Ingresar lo recibido al stock de ${esc(central)} (así se descuenta al entregarlo por acta)</label>
             <label>Observación (opcional)<input type="text" id="r-obs" maxlength="300"></label>
             <label class="soc-toggle"><input type="checkbox" id="r-correo" checked> Avisar por correo a la lista</label>
             <datalist id="r-inv">${nombresInv.map(n => `<option value="${esc(n)}">`).join('')}</datalist>`,
             async (o) => {
-                const q = (s) => o.querySelector(s), key = q('#r-col').value, ingresaStock = q('#r-stock').checked;
+                const q = (s) => o.querySelector(s), key = q('#r-col').value, ingresaStock = q('#r-stock').checked; central = q('#r-dest').value || central;
                 const det = [], incidencias = [];
                 o.querySelectorAll('tr[data-i]').forEach(tr => {
                     const v = num(tr.querySelector('.r-c').value), tipo = tr.querySelector('.r-t').value, i = Number(tr.dataset.i);
@@ -930,11 +930,17 @@
             if (e.target.closest('#r-total')) { ov.querySelectorAll('tr[data-i]').forEach(tr => { if (num(tr.dataset.pe)) tr.querySelector('.r-c').value = tr.dataset.pe; }); resumen(); }
             if (e.target.closest('#r-nada')) { ov.querySelectorAll('.r-c').forEach(i => { i.value = ''; }); resumen(); }
         });
+        ov.querySelector('#r-dest').addEventListener('change', async (e) => {
+            central = e.target.value; await cargaNombres();
+            const dl = ov.querySelector('#r-inv'); if (dl) dl.innerHTML = nombresInv.map(n => `<option value="${esc(n)}">`).join('');
+            const w = ov.querySelector('#r-stock-w'); if (w && w.lastChild) w.lastChild.textContent = ` Ingresar lo recibido al stock de ${central} (así se descuenta al entregarlo por acta)`;
+        });
         ov.querySelector('#r-col').addEventListener('change', () => { pintar(); resumen(); }); ov.querySelector('#r-stock').addEventListener('change', () => { pintar(); resumen(); }); ov.querySelector('#r-lv').addEventListener('change', () => { pintar(); resumen(); });
         const sel = ov.querySelector('#r-col'); const iPropia = cols.findIndex(c => c.centro === CENTRO_PROPIO); if (iPropia > 0) sel.selectedIndex = iPropia;
         pintar(); resumen();
         cargaInv.then(() => {
             const dl = ov.querySelector('#r-inv'); if (dl) dl.innerHTML = nombresInv.map(n => `<option value="${esc(n)}">`).join('');
+            const sel = ov.querySelector('#r-dest'); if (sel) { const opts = [...new Set([central, ...bodegasLista])].sort((a, b) => (/central/i.test(b) - /central/i.test(a)) || a.localeCompare(b, 'es')); sel.innerHTML = opts.map(b => `<option${b === central ? ' selected' : ''}>${esc(b)}</option>`).join(''); }
             const w = ov.querySelector('#r-stock-w'); if (w && w.lastChild) w.lastChild.textContent = ` Ingresar lo recibido al stock de ${central} (así se descuenta al entregarlo por acta)`;
         });
     }

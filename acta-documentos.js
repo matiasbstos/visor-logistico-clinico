@@ -23,10 +23,14 @@
     }
     const lim = (s) => String(s == null ? '' : s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '').replace(/\s+/g, ' ').trim();
     function nombreArchivo(acta, ext) {
+        const b = lim(acta.bodegaOrigen), m = String(acta.fecha || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (b && m) return `ACTA DE ENTREGA - ${b.toUpperCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[\\/:*?"<>|]+/g, ' ')} - ${m[3]}-${m[2]}-${m[1]}.${ext}`;
         const centro = lim(acta.centro).normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '');
         return `Acta_${lim(acta.numero)}${centro ? '_' + centro : ''}.${ext}`;
     }
-    const lineaItem = (it) => `${lim(it.nombre)} — Entregado: ${it.cantidad}`;
+    const fechaCorta2 = (iso) => { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[3]}/${m[2]}/${m[1].slice(2)}` : ''; };
+    // Modelo: "PILA ALCALINA BLISTER AAA 2 UN — Entregado: 24 unidades con fecha del 03/11/26"
+    const lineaItem = (it, acta) => `${lim(it.nombre)} — Entregado: ${it.cantidad} ${Number(it.cantidad) === 1 ? 'unidad' : 'unidades'}${acta && acta.fecha ? ' con fecha del ' + fechaCorta2(acta.fecha) : ''}`;
     const lineaPend = (it) => `${lim(it.nombre)} — Pendiente: ${it.cantidad}`;
     const lineaDoc = (d) => `${lim(d.tipo)}${d.numero ? ' N° ' + lim(d.numero) : ''}${d.detalle ? ' — ' + lim(d.detalle) : ''}`;
     const docsValidos = (acta) => (acta.documentos || []).filter(d => lim(d.tipo) || lim(d.numero));
@@ -85,7 +89,7 @@
 
         // Lo entregado
         (acta.items || []).forEach((it, i) => {
-            const hf = fct(lineaItem(it)), ls = envolver(lineaItem(it), 12, false, MR - 121, hf);
+            const hf = fct(lineaItem(it, acta)), ls = envolver(lineaItem(it, acta), 12, false, MR - 121, hf);
             necesita(ls.length * 15.8 + 5);
             texto(`${i + 1}.`, 108, y, 12, false);
             ls.forEach((l, k) => texto(l, 121, y + k * 15.8, 12, false, hf));
@@ -171,7 +175,7 @@
         cuerpo.push(`<w:p><w:pPr><w:tabs><w:tab w:val="right" w:pos="8820"/></w:tabs><w:spacing w:before="240" w:after="160"/></w:pPr>${run(`N° ${acta.numero}`, { b: true })}<w:r><w:tab/></w:r>${run(fechaLarga(acta.fecha), { sz: 32 })}</w:p>`);
         cuerpo.push(par(run('ACTA DE ENTREGA', { b: true, u: true, sz: 32 }), { jc: 'center', antes: 28, despues: 770 }));
         cuerpo.push(par(run(`Se hace entrega al centro ${lim(acta.centro)} de lo siguiente:`), { despues: 270 }));
-        (acta.items || []).forEach((it, i) => cuerpo.push(par(run(`${i + 1}.`) + '<w:r><w:tab/></w:r>' + run(lineaItem(it)), { ind: { left: 720, hanging: 270 }, despues: 90 })));
+        (acta.items || []).forEach((it, i) => cuerpo.push(par(run(`${i + 1}.`) + '<w:r><w:tab/></w:r>' + run(lineaItem(it, acta)), { ind: { left: 720, hanging: 270 }, despues: 90 })));
         if ((acta.pendientes || []).length) {
             cuerpo.push(par(run('PRODUCTOS SOLICITADOS QUE AÚN NO LLEGAN (pendientes de entrega):', { b: true }), { antes: 240, despues: 40, keep: true }));
             acta.pendientes.forEach(it => cuerpo.push(par(run('• ' + lineaPend(it)), { despues: 0 })));

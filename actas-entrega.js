@@ -338,7 +338,9 @@
         const logoBytes = await cargarLogo();
         if (formato === 'pdf') {
             const PDFLib = await cargarPDFLib();
-            bajar(await D.generarPDF(acta, { PDFLib, logoBytes }), D.nombreArchivo(acta, 'pdf'), 'application/pdf');
+            const bytes = await D.generarPDF(acta, { PDFLib, logoBytes });
+            bajar(bytes, D.nombreArchivo(acta, 'pdf'), 'application/pdf');
+            return { bytes, nombre: D.nombreArchivo(acta, 'pdf') };
         } else {
             bajar(D.generarDOCX(acta, { logoBytes }), D.nombreArchivo(acta, 'docx'), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
         }
@@ -491,7 +493,13 @@
             borrador = { ...vacio(), origen: borrador.origen, centro: '' }; guardarBorrador();
             await Promise.all([cargarStock(), cargarHistorial()]);
             pintar();
-            try { await descargar(actaParaDoc(acta), 'pdf'); } catch (e) { toast('Descarga', 'El acta se emitió, pero el PDF no se pudo generar: ' + e.message + ' Descárgalo desde "Actas emitidas".', 'warning'); }
+            try {
+                const r = await descargar(actaParaDoc(acta), 'pdf');
+                if (r && acta.oc && acta.oc.id && window.SAR_SeguimientoOC && window.SAR_SeguimientoOC.guardarArchivo) {   // queda adosada a la orden
+                    try { await window.SAR_SeguimientoOC.guardarArchivo(acta.oc.id, { nombre: r.nombre, categoria: 'Acta de entrega ' + acta.numero, bytes: r.bytes }); toast('Acta guardada en la orden', `Quedó en los archivos de la OC ${acta.oc.numeroOC || ''}.`, 'success'); }
+                    catch (e2) { toast('Acta no guardada en la orden', e2.message || String(e2), 'warning'); }
+                }
+            } catch (e) { toast('Descarga', 'El acta se emitió, pero el PDF no se pudo generar: ' + e.message + ' Descárgalo desde "Actas emitidas".', 'warning'); }
         } catch (e) { toast('No se emitió', e.message, 'error'); if (btn) btn.disabled = false; }
         finally { emitiendo = false; }
     }

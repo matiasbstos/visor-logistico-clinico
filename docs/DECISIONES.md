@@ -277,3 +277,6 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - "Pedido y recibido" es plegable (cerrado por defecto; recuerda lo que eliges) y muestra las unidades recibidas en el título.
 - "Recibir mercadería" abre al instante: el inventario y la bodega se leen en segundo plano; si algo falla se muestra un aviso en vez de quedar mudo.
 - Pendiente de diseño: guardar productos y proveedores de cada OC en un catálogo propio (con foto por ID de producto).
+
+### 4.29 v20.70 — Pulido UX de la ficha (revisión del agente ux-ui-flujo)
+- "Registrar aceptación" pasa al banner como botón secundario (la tarjeta de plazo queda pareja); pie administrativo separado con "Cerrar seguimiento" a la derecha; títulos de tarjeta en azul de marca; "Registrar nota" más discreto; radios con --shape-card.

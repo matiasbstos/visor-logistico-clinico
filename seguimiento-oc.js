@@ -309,7 +309,7 @@
                 <div class="soc-resumen-orden__top"><span class="soc-resumen-orden__t">Plazo de la orden</span>${chip(pl)}</div>
                 <div class="soc-fechas">
                     <div><small>Emitida</small><strong>${fmtFecha(oc.emitida)}</strong></div>
-                    <div><small>Aceptada (opcional)</small>${oc.aceptada ? `<strong>${fmtFecha(oc.aceptada)}</strong>` : `<strong>—</strong>${oc.aceptarLimite ? `<small>hasta el ${fmtFecha(oc.aceptarLimite)}</small>` : ''}<button type="button" class="soc-link" id="soc-acepta">Registrar aceptación</button>`}</div>
+                    <div><small>Aceptada (opcional)</small>${oc.aceptada ? `<strong>${fmtFecha(oc.aceptada)}</strong>` : `<strong>—</strong>${oc.aceptarLimite ? `<small>hasta el ${fmtFecha(oc.aceptarLimite)}</small>` : ''}`}</div>
                     <div><small>Plazo de entrega</small><strong>${num(oc.plazoDiasHabiles) || 5} días hábiles</strong></div>
                     <div><small>Vence</small><strong>${oc.aceptada ? fmtFecha(pl.limite) : '—'}</strong></div>
                     <div><small>Multa</small><strong>${esc(({ por_evaluar: 'Por evaluar', no_se_cursa: 'No se cursa', cursada: 'Cursada' })[(oc.multa && oc.multa.estado) || 'por_evaluar'])}${oc.multa && oc.multa.monto ? ' · ' + peso(oc.multa.monto) : ''}</strong></div>
@@ -378,6 +378,7 @@
         } else if (!oc.recepcionConforme) { txt = 'Todo recibido. Siguiente paso: la recepción conforme con la guía o factura.'; btns = B('soc-conforme', 'Recepción conforme', true); }
         else { txt = 'Recepción conforme lista. Ya puedes entregar a los centros desde las actas.'; btns = B('soc-sig', 'Ir a Actas de entrega', true, '#view-actas-entrega'); }
         const extra = hayStock && pend ? ' Lo ya recibido está en Bodega Central y se entrega desde Actas de entrega.' : '';
+        if (!oc.aceptada) btns += B('soc-acepta', 'Registrar aceptación', false);
         return `<div class="soc-siguiente"><span>${esc(txt)}${esc(extra)}</span><span class="soc-siguiente__btns">${btns}</span></div>`;
     }
     function memosCDPHTML(oc) {

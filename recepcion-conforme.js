@@ -148,7 +148,7 @@ SAR Arpillerista Elsa Romo Aravena`;
         const f = (id, et, v, tipo, extra) => `<label>${et}<input type="${tipo || 'text'}" id="${id}" value="${esc(v == null ? '' : v)}" ${extra || ''}></label>`;
         const ov = modal('Recepción conforme', `
             <p class="cierre-hint">Genera el acta de recepción conforme y envía el correo con el acta y la guía/factura. Revisa los destinatarios.</p>
-            <div class="soc-fila"><label>Documento del proveedor<select id="rc-tipo"><option value="GUIA">Guía de despacho</option><option value="FACTURA">Factura</option></select></label>${f('rc-num', 'N° del documento', '')}${f('rc-fec', 'Fecha de recepción', hoyISO(), 'date')}</div>
+            <div class="soc-fila"><label>Documento del proveedor<select id="rc-tipo"><option value="GUIA">Guía de despacho</option><option value="FACTURA">Factura</option></select></label>${f('rc-num', 'N° del documento', oc.ultimaGuia || '')}${f('rc-fec', 'Fecha de recepción', hoyISO(), 'date')}</div>
             <label>PDF de la guía o factura<input type="file" id="rc-file" accept="application/pdf"></label>
             ${pend > 0 ? `<label class="soc-toggle"><input type="checkbox" id="rc-parcial"> Recepción parcial: faltan ${pend} unidad(es) por recibir</label>` : ''}
             <div class="soc-fila">${f('rc-fn', 'Firma: nombre', FIRMA_BASE.nombre)}${f('rc-fc', 'Cargo', FIRMA_BASE.cargo)}</div>

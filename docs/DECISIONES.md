@@ -305,3 +305,8 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - Cada archivo cargado en una orden (PDF de la OC, cuadro de distribución, guía de despacho, acta y guía/factura de la recepción conforme) se guarda en `Seguimiento_OC/{id}/Archivos` (contenido en `Partes`, trozos de ~700 KB; máx. 8 MB). Se listan en la ficha ("Archivos de la orden") y se pueden abrir cuando se necesite. No se modifican; solo un administrador puede borrar. Requiere desplegar `firestore.rules`.
 - Recepción conforme: casilla "Enviar correo a la lista" siempre marcada por defecto; si se desmarca, el acta se emite y se guarda sin enviar correo.
 - Los datos viven en Firestore: los despliegues del sitio (hosting) no los tocan. BigQuery no es necesario por ahora; una copia periódica de Firestore queda como opción.
+
+### 4.35 Catálogo de productos (v20.76)
+- Colección `Catalogo_Productos` (clave: código Mercado Público, o la descripción). Se alimenta sola al ingresar cada orden (descripción, código, proveedor, última OC, neto) y aprende el nombre de inventario usado al recibir; en la recepción ese nombre se autocompleta y se sugiere en la lista.
+- Botón "Catálogo de productos" en Seguimiento de órdenes: búsqueda y foto opcional por producto (reducida a ~220 px y guardada en el propio documento).
+- Notas, incidencias y recepciones siguen quedando en la bitácora inmutable de la orden (`Eventos`) y en `incidencias`/`recepciones`.

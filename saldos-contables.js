@@ -102,7 +102,7 @@
         } catch (e) { toast('Seguimiento', 'No se pudo buscar: ' + e.message, 'error'); seg = null; }
         segCargando = false; pintar();
     }
-    const TIPOS = { ENTREGA_ACTA: 'Entrega', CUADRE_SOBREGIRO: 'Cuadre de sobregiro', ANULACION_ACTA: 'Anulación', ACTA_PRUEBA: 'Acta de prueba' };
+    const TIPOS = { ENTREGA_ACTA: 'Entrega', CUADRE_SOBREGIRO: 'Cuadre de sobregiro', ANULACION_ACTA: 'Anulación', EDICION_ACTA: 'Edición del acta', ACTA_PRUEBA: 'Acta de prueba' };
     const fh = (m) => m._t ? new Date(m._t).toLocaleString('es-CL') : '';
     function itemsSeg() {
         return (seg.acta.items || []).map(it => {

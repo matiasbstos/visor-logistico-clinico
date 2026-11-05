@@ -5556,3 +5556,5 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .act-fila .act-qty { max-width: 78px; }
 .sar-cargando { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; padding: 56px 16px; color: #1A3668; text-align: center; }
 .sar-cargando strong { font-size: 15px; font-weight: 600; }
+.soc-rec-anul { opacity: .6; text-decoration: line-through; }
+.soc-rec-anul b { text-decoration: none; display: inline-block; }

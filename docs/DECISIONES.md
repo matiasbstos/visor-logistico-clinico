@@ -421,3 +421,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.57 Toda pantalla que carga muestra la animación de la marca (v21.02)
 - `SAR_Progreso.cargando(texto)` pinta el logo SAR con anillo girando dentro de la pantalla mientras carga. Reemplaza los textos "Cargando…" sueltos (actas, oxígeno, informes, órdenes, compras ágiles, bodegas, catálogo). Toda pantalla nueva que cargue datos debe usarlo.
 - Actas de entrega carga catálogo, bodegas, centros e historial en paralelo para abrir más rápido.
+
+### 4.58 Anular una recepción de mercadería (v21.03)
+- Solo administradores. En la ficha de la orden, "Recepciones registradas" → Anular (pide motivo). Lo recibido vuelve a "por recibir", se retira del stock lo que ingresó (primero el lote registrado, luego S/L, luego FEFO inverso) y queda en la bitácora ("Recepción anulada"), en el historial (ANULACION_RECEPCION) y en el informe de recepciones con estado ANULADA.
+- Se bloquea si ese stock ya se usó (actas de entrega u otros movimientos): primero se eliminan esas actas. La recepción conforme ya emitida no cambia sola: se edita o regenera aparte.
+- Las recepciones anteriores al registro detallado (sin detalle por línea en la bitácora) no se pueden anular automáticamente.

@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=20.71",
+                "./script.js": "./script.js?v=20.72",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -65,7 +65,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
     <meta name="theme-color" content="#1A3668">
-    <link rel="stylesheet" href="style.css?v=20.71">
+    <link rel="stylesheet" href="style.css?v=20.72">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -258,7 +258,7 @@
                     </a>
                 </div>
 
-                <div class="sidebar-box">
+                <div class="sidebar-box oculto-fase">
                     <div class="sidebar-group-title">
                         <i class="ph-bold ph-first-aid-kit"></i>
                         <span class="menu-label">TURNO CLÍNICO</span>
@@ -385,7 +385,10 @@
                             <i class="ph-bold ph-lightning"></i><span>Accesos</span>
                         </button>
                         <div class="quick-access__menu" id="quick-access-menu" role="menu" hidden>
-                            <button type="button" role="menuitem" data-go="view-bandejas"><i class="ph-bold ph-briefcase-medical"></i>Bandejas de turno</button>
+                            <button type="button" role="menuitem" data-oc-accion="pdf"><i class="ph-bold ph-file-pdf"></i>Ingresar orden de compra (PDF)</button>
+                            <button type="button" role="menuitem" data-go="view-seguimiento-oc"><i class="ph-bold ph-clipboard-text"></i>Seguimiento de órdenes de compra</button>
+                            <button type="button" role="menuitem" data-go="view-bodegas"><i class="ph-bold ph-buildings"></i>Bodegas</button>
+                            <button type="button" role="menuitem" data-go="view-actas-entrega"><i class="ph-bold ph-file-text"></i>Actas de entrega</button>
                             <button type="button" role="menuitem" class="home-only-staff" data-go="view-toma-inventario"><i class="ph-bold ph-clipboard-text"></i>Conteos de inventario</button>
                             <button type="button" role="menuitem" class="home-only-staff" data-go-erp="erp-panel-tablero"><i class="ph-bold ph-kanban"></i>Tablero SDC / OC</button>
                             <button type="button" role="menuitem" class="home-only-staff" data-go-erp="erp-panel-recepcion"><i class="ph-bold ph-package"></i>Recepción dinámica</button>
@@ -423,6 +426,13 @@
                                 <i class="ph-fill ph-sparkle"></i>Análisis IA
                             </button>
                         </div>
+                    </div>
+
+                    <div class="qa-grid" id="inicio-accesos" aria-label="Accesos rápidos">
+                        <button type="button" class="qa-btn qa-btn--principal" data-oc-accion="pdf"><i class="ph-bold ph-file-pdf"></i><span><b>Ingresar orden de compra</b><small>Desde el PDF de Mercado Público</small></span></button>
+                        <button type="button" class="qa-btn" data-go="view-seguimiento-oc"><i class="ph-bold ph-clipboard-text"></i><span><b>Seguimiento de órdenes</b><small>Recibir mercadería y recepción conforme</small></span></button>
+                        <button type="button" class="qa-btn" data-go="view-bodegas"><i class="ph-bold ph-buildings"></i><span><b>Bodegas</b><small>Crear bodegas y estantes</small></span></button>
+                        <button type="button" class="qa-btn" data-go="view-actas-entrega"><i class="ph-bold ph-file-text"></i><span><b>Actas de entrega</b><small>Entregar a los centros</small></span></button>
                     </div>
 
                     <div class="home-status">
@@ -5844,24 +5854,24 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=20.71"></script>
-    <script type="module" src="patch-plantillas.js?v=20.71"></script>
+    <script type="module" src="script.js?v=20.72"></script>
+    <script type="module" src="patch-plantillas.js?v=20.72"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="bodegas-estantes.js?v=20.71"></script>
-    <script src="bodegas-cierre.js?v=20.71"></script>
-    <script src="oc-lector.js?v=20.71"></script>
-    <script src="anonimizar-pacientes.js?v=20.71"></script>
-    <script src="cdp-presupuesto.js?v=20.71"></script>
-    <script src="seguimiento-oc.js?v=20.71"></script>
-    <script src="compras-agiles.js?v=20.71"></script>
-    <script src="home-compras.js?v=20.71"></script>
-    <script src="login-animado.js?v=20.71"></script>
-    <script src="errores.js?v=20.71"></script>
-    <script src="saldos-contables.js?v=20.71"></script>
-    <script src="recepcion-conforme.js?v=20.71"></script>
-    <script src="acta-documentos.js?v=20.71"></script>
-    <script src="actas-entrega.js?v=20.71"></script>
-    <script src="oxigeno.js?v=20.71"></script>
-    <script src="visor-adquisiciones.js?v=20.71"></script>
+    <script src="bodegas-estantes.js?v=20.72"></script>
+    <script src="bodegas-cierre.js?v=20.72"></script>
+    <script src="oc-lector.js?v=20.72"></script>
+    <script src="anonimizar-pacientes.js?v=20.72"></script>
+    <script src="cdp-presupuesto.js?v=20.72"></script>
+    <script src="seguimiento-oc.js?v=20.72"></script>
+    <script src="compras-agiles.js?v=20.72"></script>
+    <script src="home-compras.js?v=20.72"></script>
+    <script src="login-animado.js?v=20.72"></script>
+    <script src="errores.js?v=20.72"></script>
+    <script src="saldos-contables.js?v=20.72"></script>
+    <script src="recepcion-conforme.js?v=20.72"></script>
+    <script src="acta-documentos.js?v=20.72"></script>
+    <script src="actas-entrega.js?v=20.72"></script>
+    <script src="oxigeno.js?v=20.72"></script>
+    <script src="visor-adquisiciones.js?v=20.72"></script>
 </body>
 </html>

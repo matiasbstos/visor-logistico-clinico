@@ -859,6 +859,30 @@
         a.download = `Pendientes_${oc.numeroOC}.csv`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
     }
 
+    /** Accesos rápidos: "Ingresar orden de compra (PDF)" abre Seguimiento de OC y el ingreso desde PDF. */
+    document.addEventListener('click', (e) => {
+        const b = e.target.closest && e.target.closest('[data-oc-accion="pdf"]'); if (!b) return;
+        const m = document.querySelector('.menu-item[data-target="view-seguimiento-oc"]'); if (m) m.click();
+        let n = 0; const t = setInterval(() => { const x = document.getElementById('soc-pdf'); if (x) { clearInterval(t); x.click(); } else if (++n > 20) clearInterval(t); }, 250);
+    });
+    /** Crea una bodega desde la recepción (misma colección que la sección Bodegas). */
+    function formNuevaBodega(alCrear) {
+        const rol = String(document.body.dataset.userRole || '').toLowerCase();
+        if (rol !== 'admin' && rol !== 'superadmin') { toast('Solo administradores', 'Pide a un administrador que cree la bodega.', 'warning'); return; }
+        modal('Nueva bodega', `
+            <label>Nombre de la bodega<input type="text" id="nb-n" placeholder="Ej. Bodega Insumos" autocomplete="off"></label>
+            <label>Tipo<select id="nb-t"><option value="principal">Bodega principal</option><option value="transitoria">Bodega transitoria (stock de turno)</option><option value="satelite">Bodega satélite</option><option value="despacho">Farmacia / despacho</option><option value="externa">Centro externo</option></select></label>
+            <label class="soc-toggle"><input type="checkbox" id="nb-e"> Usa estantes y ubicaciones (por ahora solo la bodega transitoria)</label>`, async (o) => {
+            const nombre = o.querySelector('#nb-n').value.trim();
+            if (!nombre) { toast('Falta el nombre', 'Escribe el nombre de la bodega.', 'warning'); return false; }
+            const f = fs();
+            const ya = await f.getDocs(f.collection(db(), 'Bodegas')); let existe = false; ya.forEach(d => { if (norm(d.data().name) === norm(nombre)) existe = true; });
+            if (existe) { toast('Ya existe', 'Hay una bodega con ese nombre. Elígela en la lista.', 'warning'); return false; }
+            await f.addDoc(f.collection(db(), 'Bodegas'), { name: nombre, type: o.querySelector('#nb-t').value, managerId: '', capacityMetrics: '', prefijo: '', usaEstantes: o.querySelector('#nb-e').checked, isActive: true, createdAt: f.serverTimestamp() });
+            toast('Bodega creada', `${nombre} ya aparece en Bodegas.`, 'success');
+            alCrear(nombre);
+        }, { ok: 'Crear bodega' });
+    }
     async function formRecepcion() {
         const oc = ocActual; const cols = oc.columnas || [];
         let central = 'Bodega Central', nombresInv = [], bodegasLista = [];
@@ -876,7 +900,7 @@
             <div class="soc-barra-rec"><button type="button" class="btn btn-outline btn-sm" id="r-total"><i class="ph-bold ph-checks"></i> Marcar todo recibido</button><button type="button" class="btn btn-outline btn-sm" id="r-nada">Limpiar</button><span id="r-resumen" class="soc-resumen-rec"></span></div>
             <div id="r-lineas"></div>
             <label class="soc-toggle"><input type="checkbox" id="r-lv"> Anotar lote y vencimiento ahora (también se puede hacer después)</label>
-            <label>Bodega de destino<select id="r-dest"><option>${esc(central)}</option></select></label>
+            <label>Bodega de destino<span class="r-dest-fila"><select id="r-dest"><option>${esc(central)}</option></select><button type="button" class="btn btn-outline btn-sm" id="r-nueva-b">+ Nueva bodega</button></span></label>
             <label class="soc-toggle" id="r-stock-w"><input type="checkbox" id="r-stock" checked> Ingresar lo recibido al stock de ${esc(central)} (así se descuenta al entregarlo por acta)</label>
             <label>Observación (opcional)<input type="text" id="r-obs" maxlength="300"></label>
             <label class="soc-toggle"><input type="checkbox" id="r-correo" checked> Avisar por correo a la lista</label>
@@ -930,6 +954,9 @@
             if (e.target.closest('#r-total')) { ov.querySelectorAll('tr[data-i]').forEach(tr => { if (num(tr.dataset.pe)) tr.querySelector('.r-c').value = tr.dataset.pe; }); resumen(); }
             if (e.target.closest('#r-nada')) { ov.querySelectorAll('.r-c').forEach(i => { i.value = ''; }); resumen(); }
         });
+        ov.querySelector('#r-nueva-b').addEventListener('click', () => formNuevaBodega((nombre) => {
+            bodegasLista.push(nombre); const sel = ov.querySelector('#r-dest'); sel.insertAdjacentHTML('beforeend', `<option>${esc(nombre)}</option>`); sel.value = nombre; sel.dispatchEvent(new Event('change'));
+        }));
         ov.querySelector('#r-dest').addEventListener('change', async (e) => {
             central = e.target.value; await cargaNombres();
             const dl = ov.querySelector('#r-inv'); if (dl) dl.innerHTML = nombresInv.map(n => `<option value="${esc(n)}">`).join('');

@@ -5415,3 +5415,17 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 #soc-root .erp-card > h3 { margin: 0 0 12px; }
 #soc-guardar-nota { min-height: 36px; padding: 6px 14px; font-size: 13px; }
 .soc-buscar input, #soc-texto { border-radius: var(--shape-card, 8px); }
+
+/* v20.72 · fase actual: solo órdenes de compra → se oculta lo clínico mientras no haya datos reales */
+.oculto-fase, #view-panel .erp-kpi-grid-4, #view-panel .erp-dashboard-mid-grid, #card-dash-urgencias, #card-dash-precaucion, #view-panel .home-status__meta { display: none !important; }
+.qa-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin: 0 0 16px; }
+.qa-btn { display: flex; align-items: center; gap: 12px; text-align: left; padding: 14px 16px; background: #fff; border: 1px solid #DCE3EF; border-radius: var(--shape-card, 8px 8px 8px 0); cursor: pointer; font: inherit; color: var(--brand-blue, #1A3668); min-height: 64px; transition: box-shadow .15s, transform .15s; }
+.qa-btn:hover { box-shadow: 0 6px 16px rgba(26, 54, 104, .12); transform: translateY(-1px); }
+.qa-btn i { font-size: 24px; flex-shrink: 0; }
+.qa-btn span { display: flex; flex-direction: column; gap: 2px; }
+.qa-btn b { font-size: 15px; }
+.qa-btn small { color: #64748B; font-size: 12px; }
+.qa-btn--principal { background: var(--brand-blue, #1A3668); color: #fff; border-color: var(--brand-blue, #1A3668); }
+.qa-btn--principal small { color: #DCE3EF; }
+.r-dest-fila { display: flex; gap: 8px; align-items: center; }
+.r-dest-fila select { flex: 1; }

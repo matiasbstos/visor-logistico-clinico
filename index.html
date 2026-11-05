@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=20.62",
+                "./script.js": "./script.js?v=20.63",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -65,7 +65,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
     <meta name="theme-color" content="#1A3668">
-    <link rel="stylesheet" href="style.css?v=20.62">
+    <link rel="stylesheet" href="style.css?v=20.63">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -216,8 +216,8 @@
                     <a href="#" class="menu-item normal" data-target="view-inventario" data-title="Existencias">
                         <i class="ph-bold ph-archive-box"></i><span class="menu-label">Existencias</span>
                     </a>
-                    <a href="#" class="menu-item normal" data-target="view-toma-inventario" data-title="Conteos de Inventario">
-                        <i class="ph-bold ph-clipboard-text"></i><span class="menu-label">Conteos de Inventario</span>
+                    <a href="#" class="menu-item normal" data-target="view-toma-inventario" data-title="Toma de Inventario">
+                        <i class="ph-bold ph-clipboard-text"></i><span class="menu-label">Toma de Inventario</span>
                     </a>
                     <a href="#" class="menu-item normal" data-target="view-donde-esta" data-title="¿Dónde está?">
                         <i class="ph-bold ph-map-pin-line"></i><span class="menu-label">¿Dónde está?</span>
@@ -919,27 +919,33 @@
                                 <span class="status-indicator-dot"></span>
                                 <span id="toma-sheets-status-text">Google Sheets: No configurado</span>
                             </div>
-                            <button type="button" class="btn btn-outline" id="btn-push-all-to-sheets" style="border-color:#059669; color:#047857; font-weight:700; background:#f0fdf4;" title="Enviar y registrar todos los medicamentos de esta sesión hacia Google Sheets">
-                                <i class="ph ph-cloud-arrow-up"></i> 📤 Enviar Todo a Sheets
-                            </button>
-                            <button type="button" class="btn btn-outline" id="btn-pull-from-sheets" style="border-color:#8b5cf6; color:#7c3aed; font-weight:600;" title="Sincronizar cambios y ediciones realizadas directamente en Google Sheets">
-                                <i class="ph ph-arrows-clockwise"></i> Sincronizar desde Sheets
-                            </button>
-                            <button type="button" class="btn btn-outline" id="btn-sync-sheets-dashboard" style="border-color:#2563eb; color:#1d4ed8; font-weight:700;" title="Generar / Actualizar la hoja 📊 DASHBOARD en Google Sheets">
-                                <i class="ph ph-chart-polar"></i> Actualizar Dashboard en Sheets
-                            </button>
-                            <button type="button" class="btn btn-outline" id="btn-restore-cloud-toma" style="border-color:#16a34a; color:#15803d; font-weight:600; font-size:12px;" title="Restaurar sesión desde el último respaldo en la nube">
-                                <i class="ph ph-cloud-arrow-down"></i> Restaurar Respaldo
-                            </button>
-                            <button type="button" class="btn btn-outline" id="btn-open-config-sheets" style="border-color:var(--primary); color:var(--primary); font-weight:600;">
-                                <i class="ph ph-google-logo"></i> Configurar Google Sheets
-                            </button>
                             <button type="button" class="btn btn-outline" id="btn-export-toma-excel" style="border-color:var(--success); color:var(--success); font-weight:600;">
                                 <i class="ph ph-file-arrow-down"></i> Exportar Resguardo
                             </button>
-                            <button type="button" class="btn btn-outline" id="btn-clear-toma-session" style="color:var(--text-muted);" title="Reiniciar lista de la jornada">
+                            <details class="menu-acc"><summary class="btn btn-outline"><i class="ph ph-google-logo"></i> Google Sheets <i class="ph ph-caret-down"></i></summary>
+                                <div class="menu-acc__lista">
+                                <button type="button" class="btn btn-outline menu-acc__item" id="btn-push-all-to-sheets" title="Enviar y registrar todos los medicamentos de esta sesión hacia Google Sheets">
+                                <i class="ph ph-cloud-arrow-up"></i> Enviar Todo a Sheets
+                            </button>
+                                <button type="button" class="btn btn-outline menu-acc__item" id="btn-pull-from-sheets" title="Sincronizar cambios y ediciones realizadas directamente en Google Sheets">
+                                <i class="ph ph-arrows-clockwise"></i> Sincronizar desde Sheets
+                            </button>
+                                <button type="button" class="btn btn-outline menu-acc__item" id="btn-sync-sheets-dashboard" title="Generar / Actualizar la hoja 📊 DASHBOARD en Google Sheets">
+                                <i class="ph ph-chart-polar"></i> Actualizar Dashboard en Sheets
+                            </button>
+                                <button type="button" class="btn btn-outline menu-acc__item" id="btn-open-config-sheets">
+                                <i class="ph ph-google-logo"></i> Configurar Google Sheets
+                            </button>
+                                </div></details>
+                            <details class="menu-acc"><summary class="btn btn-outline" aria-label="Más acciones"><i class="ph ph-dots-three-bold"></i> Más <i class="ph ph-caret-down"></i></summary>
+                                <div class="menu-acc__lista">
+                                <button type="button" class="btn btn-outline menu-acc__item" id="btn-restore-cloud-toma" title="Restaurar sesión desde el último respaldo en la nube">
+                                <i class="ph ph-cloud-arrow-down"></i> Restaurar Respaldo
+                            </button>
+                                <button type="button" class="btn btn-outline menu-acc__item" id="btn-clear-toma-session" title="Reiniciar lista de la jornada">
                                 <i class="ph ph-trash"></i> Limpiar Sesión
                             </button>
+                                </div></details>
                         </div>
                     </div>
 
@@ -983,7 +989,7 @@
                     <div class="toma-layout-grid">
                         <!-- Panel Izquierdo: Formulario de Registro Rápido -->
                         <div class="toma-form-panel">
-                            <div class="card form-card" style="position:sticky; top:15px; border-top: 4px solid var(--primary);">
+                            <div class="card form-card toma-sticky" style="border-top: 4px solid var(--primary);">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px; border-bottom:1px solid #f1f5f9; padding-bottom:12px;">
                                     <h3 style="margin:0; font-size:16px; font-weight:700; color:var(--text-main); display:flex; align-items:center; gap:8px;">
                                         <i class="ph ph-plus-circle" style="color:var(--primary);"></i> Ingreso de Existencias
@@ -5838,24 +5844,24 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=20.62"></script>
-    <script type="module" src="patch-plantillas.js?v=20.62"></script>
+    <script type="module" src="script.js?v=20.63"></script>
+    <script type="module" src="patch-plantillas.js?v=20.63"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="bodegas-estantes.js?v=20.62"></script>
-    <script src="bodegas-cierre.js?v=20.62"></script>
-    <script src="oc-lector.js?v=20.62"></script>
-    <script src="anonimizar-pacientes.js?v=20.62"></script>
-    <script src="cdp-presupuesto.js?v=20.62"></script>
-    <script src="seguimiento-oc.js?v=20.62"></script>
-    <script src="compras-agiles.js?v=20.62"></script>
-    <script src="home-compras.js?v=20.62"></script>
-    <script src="login-animado.js?v=20.62"></script>
-    <script src="errores.js?v=20.62"></script>
-    <script src="saldos-contables.js?v=20.62"></script>
-    <script src="recepcion-conforme.js?v=20.62"></script>
-    <script src="acta-documentos.js?v=20.62"></script>
-    <script src="actas-entrega.js?v=20.62"></script>
-    <script src="oxigeno.js?v=20.62"></script>
-    <script src="visor-adquisiciones.js?v=20.62"></script>
+    <script src="bodegas-estantes.js?v=20.63"></script>
+    <script src="bodegas-cierre.js?v=20.63"></script>
+    <script src="oc-lector.js?v=20.63"></script>
+    <script src="anonimizar-pacientes.js?v=20.63"></script>
+    <script src="cdp-presupuesto.js?v=20.63"></script>
+    <script src="seguimiento-oc.js?v=20.63"></script>
+    <script src="compras-agiles.js?v=20.63"></script>
+    <script src="home-compras.js?v=20.63"></script>
+    <script src="login-animado.js?v=20.63"></script>
+    <script src="errores.js?v=20.63"></script>
+    <script src="saldos-contables.js?v=20.63"></script>
+    <script src="recepcion-conforme.js?v=20.63"></script>
+    <script src="acta-documentos.js?v=20.63"></script>
+    <script src="actas-entrega.js?v=20.63"></script>
+    <script src="oxigeno.js?v=20.63"></script>
+    <script src="visor-adquisiciones.js?v=20.63"></script>
 </body>
 </html>

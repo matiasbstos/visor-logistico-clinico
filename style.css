@@ -5308,3 +5308,20 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .act-tab em { font-style: normal; font-size: 11px; font-weight: 700; background: #EEF2F7; color: var(--brand-blue); border-radius: 999px; padding: 1px 8px; }
 [data-act-tab][hidden] { display: none !important; }
 @media (max-width: 600px) { .act-tab { padding: 9px 10px; font-size: 13px; } .act-tab span { white-space: nowrap; } }
+
+/* v20.63 · UX: menús desplegables de acciones secundarias, panel de toma sin recortes, objetivos táctiles */
+.menu-acc { position: relative; display: inline-block; }
+.menu-acc > summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.menu-acc > summary::-webkit-details-marker { display: none; }
+.menu-acc[open] > summary { background: #F8FAFC; border-color: var(--brand-blue); }
+.menu-acc__lista { position: absolute; right: 0; top: calc(100% + 6px); z-index: 60; min-width: 270px; display: flex; flex-direction: column; gap: 4px; padding: 8px; background: #fff; border: 1px solid #E2E8F0; border-radius: var(--r-md); box-shadow: var(--sh-2); }
+.menu-acc__item { width: 100%; justify-content: flex-start; text-align: left; border-color: transparent !important; background: transparent !important; color: var(--brand-blue) !important; font-weight: 600 !important; font-size: 13px !important; min-height: 40px; }
+.menu-acc__item:hover { background: #F8FAFC !important; }
+#btn-clear-toma-session.menu-acc__item { color: var(--sar-red) !important; }
+.toma-form-panel .form-card.toma-sticky { position: sticky !important; top: 12px !important; max-height: calc(100vh - 24px); overflow-y: auto; }
+@media (max-height: 800px), (max-width: 900px) { .toma-form-panel .form-card.toma-sticky { position: static !important; max-height: none; overflow: visible; } }
+.table-footer .table-link, #btn-nueva-categoria-toma { display: inline-flex; align-items: center; min-height: 40px; padding: 0 8px; }
+.scan-input-group { cursor: text; }
+.scan-input-group input { align-self: stretch; min-height: 32px; }
+#view-toma-inventario select.form-control, #view-inventario-semanal select.form-control, [id^="semanal-select-"] { min-height: 40px; }
+#toma-table-search { min-height: 40px; }

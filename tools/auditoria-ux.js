@@ -16,7 +16,7 @@ const port = process.argv[2] || '8790';
       const r = await p.evaluate((id) => {
         document.querySelectorAll('.view-section').forEach(s => s.style.display = s.id === id ? 'block' : 'none');
         const sec = document.getElementById(id), res = [];
-        const vis = (e) => { const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
+        const vis = (e) => { const r = e.getBoundingClientRect(); const cs = getComputedStyle(e); if (e.closest('details:not([open])') && !e.closest('summary')) return false; return r.width > 0 && r.height > 0 && cs.visibility !== 'hidden' && cs.display !== 'none'; };
         const sel = (e) => e.id ? '#' + e.id : (e.tagName.toLowerCase() + (e.className && typeof e.className === 'string' ? '.' + e.className.trim().split(/\s+/)[0] : '')) + ((e.textContent || '').trim().slice(0, 24) ? ` «${e.textContent.trim().slice(0, 24)}»` : '');
         const ctl = [...sec.querySelectorAll('button, a.btn, input, select, textarea, [role=tab]')].filter(vis);
         for (let i = 0; i < ctl.length; i++) for (let j = i + 1; j < ctl.length; j++) {

@@ -386,6 +386,18 @@
         if (!w) { const l = document.createElement('a'); l.href = url; l.download = a.nombre; document.body.appendChild(l); l.click(); l.remove(); }
         setTimeout(() => URL.revokeObjectURL(url), 60000);
     }
+    /** Agrega a la orden un archivo que se cargó antes (orden de compra, cuadro, guía, factura…). */
+    function formAgregarArchivo() {
+        const cats = ['Orden de compra', 'Cuadro de distribución', 'Guía de despacho', 'Factura', 'Recepción conforme', 'Otro'];
+        modal('Agregar archivo a la orden', `<p class="cierre-hint">Queda guardado en esta orden y se puede abrir cuando se necesite. Máximo 8 MB.</p>
+            <label>Tipo de documento<select id="aa-cat">${cats.map(c => `<option>${esc(c)}</option>`).join('')}</select></label>
+            <label>Archivo (PDF, Excel o imagen)<input type="file" id="aa-file" accept="application/pdf,.xlsx,.xls,image/*"></label>`, async (o) => {
+            const file = (o.querySelector('#aa-file').files || [])[0]; if (!file) { toast('Falta el archivo', 'Elige el archivo.', 'warning'); return false; }
+            const ok = await guardarFile(ocActual.id, file, o.querySelector('#aa-cat').value);
+            if (!ok) return false;
+            toast('Archivo guardado', `${file.name} quedó en la orden.`, 'success');
+        }, { ok: 'Guardar archivo' });
+    }
     let archivos = [], unsubArchivos = null;
     function pintarArchivos() {
         const host = root() && root().querySelector('#soc-archivos'); if (!host) return;
@@ -435,7 +447,10 @@
                 ${[['Despacho', oc.datos.direccionDespacho], ['Contraparte técnica', oc.datos.contraparte], ['Contacto', oc.datos.contacto], ['Horario', oc.datos.horario], ['Forma de pago', oc.datos.formaPago], ['Factura a', oc.datos.emailFactura], ['Memo', oc.datos.memo ? 'N° ' + oc.datos.memo + (oc.descripcion ? ' · ' + oc.descripcion : '') : ''], ['Total (con IVA)', oc.datos.total ? peso(oc.datos.total) : '']].filter(x => x[1]).map(x => `<div><small>${x[0]}</small><span>${esc(x[1])}</span></div>`).join('')}</div></div>` : ''}
             ${memosCDPHTML(oc)}${entregasHTML(oc)}
             </details>
-            <details class="erp-card soc-det" open><summary><h3>Archivos de la orden</h3></summary><div id="soc-archivos"></div></details>
+            <details class="erp-card soc-det" open><summary><h3>Archivos de la orden</h3></summary>
+                <div class="soc-arch-acc"><button type="button" class="btn btn-outline btn-sm" id="soc-arch-add"><i class="ph-bold ph-paperclip"></i> Agregar archivo</button>
+                ${oc.recepcionConforme ? '<button type="button" class="btn btn-outline btn-sm" id="soc-rc-regen"><i class="ph-bold ph-arrows-clockwise"></i> Regenerar recepción conforme (modelo vigente)</button>' : ''}</div>
+                <div id="soc-archivos"></div></details>
             <div class="erp-card"><h3>Notas y avisos</h3>
                 <textarea id="soc-texto" rows="3" maxlength="1500" placeholder="Escribe la nota o aviso (ej.: proveedor informa despacho por Pullman Cargo, OT …)"></textarea>
                 <div class="soc-componer"><label class="soc-toggle"><input type="checkbox" id="soc-correo" checked> Enviar correo a la lista</label>
@@ -451,6 +466,12 @@
         const bre = q('#soc-recep'); if (bre) bre.addEventListener('click', () => { formRecepcion().catch(e => toast('No se pudo abrir la recepción', e.message || String(e), 'error')); });
         const bpe = q('#soc-pend'); if (bpe) bpe.addEventListener('click', () => { if (!pendientesDe(ocActual).some(x => x.pendiente > 0)) { toast('Sin pendientes', 'Todo lo de SAR ya fue recibido.', 'success'); return; } descargarPendientes(ocActual); });
         const blo = q('#soc-lotes'); if (blo) blo.addEventListener('click', formLotes);
+        const baa = q('#soc-arch-add'); if (baa) baa.addEventListener('click', formAgregarArchivo);
+        const brg = q('#soc-rc-regen'); if (brg) brg.addEventListener('click', () => {
+            if (!window.SAR_RecepcionConforme || !window.SAR_RecepcionConforme.regenerar) { toast('No disponible', 'El módulo de recepción conforme no está cargado.', 'warning'); return; }
+            brg.disabled = true;
+            window.SAR_RecepcionConforme.regenerar({ oc: ocActual, toast, guardarArchivo, centroPropio: CENTRO_PROPIO, usuario: usuario() }).catch(e => toast('No se pudo regenerar', e.message || String(e), 'error')).finally(() => { brg.disabled = false; });
+        });
         const bco = q('#soc-conforme'); if (bco) bco.addEventListener('click', () => { if (window.SAR_RecepcionConforme) window.SAR_RecepcionConforme.abrir({ oc: ocActual, modal, toast, enviarCorreo, guardarArchivo, config: configCorreo, usuario: usuario(), fmtFecha, peso, totalesPorCentro, centroPropio: CENTRO_PROPIO }); });
         root().querySelectorAll('[data-acta]').forEach(b => b.addEventListener('click', () => formActaCentro(b.dataset.acta)));
         const ac = q('#soc-acepta'); if (ac) ac.addEventListener('click', formAceptacion);

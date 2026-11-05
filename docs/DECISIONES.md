@@ -330,3 +330,7 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - El acta de recepción conforme lleva la firma y timbre de la contraparte técnica (Mariel Quintanilla L.) tomados del modelo vigente (`assets/firma-contraparte-mariel.png`); solo se incluye si la contraparte es ella y la casilla está marcada. Texto "Que se recibió conforme en forma Parcial/Total de los productos…" y "(CANTIDAD:n)" como en el modelo RC128355-684-AG26.
 - Ficha de bodega: modal ancho en dos columnas (datos a la izquierda, estantes a la derecha) con scroll.
 - Actas de entrega: lista de centros = base + centros guardados (`Centros_Entrega`) + centros de actas anteriores; botón "+ Guardar este centro" y guardado automático al emitir. Requiere desplegar `firestore.rules`.
+
+### 4.41 Agregar archivos a una orden y regenerar la recepción conforme (v20.84)
+- "Archivos de la orden" tiene "Agregar archivo" (orden de compra, cuadro, guía, factura, etc.) para documentos cargados antes de existir esta función.
+- "Regenerar recepción conforme (modelo vigente)" rehace el acta de una recepción ya registrada con el modelo actual (firma y timbre incluidos), la descarga y la guarda como `RC<orden>.pdf`; la versión anterior queda en los archivos y el evento queda en la bitácora.

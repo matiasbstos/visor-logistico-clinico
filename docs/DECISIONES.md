@@ -394,3 +394,8 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - Correo tipo (copiado del enviado por Compras SAR): asunto `RC<N° de orden>`; cuerpo "Estimada: / Espero se encuentre bien. Adjunto RC<N° de orden> de <PROVEEDOR> / Saludos Cordiales. / <nombre>."; firma HTML con logo SAR, "Compras SAR · Analista de compras y adquisiciones · Real audiencia #980, Melipilla · 2 2568 8652 · www.corpomelipilla.cl". Adjuntos: acta `RC<N° de orden>.pdf` y la guía/factura. Para: Paulina Carrasco; Cc: lista base (configurable).
 - Apps Script: remitente visible "Compras SAR" y Responder-a compras.sar@cormumel.cl. El envío sale de la cuenta donde corre el script (hoy datosgestionsaraera@gmail.com); para que salga desde compras.sar@cormumel.cl el script debe correr en esa cuenta (requiere que TI de la Corporación permita scripts propios) o configurarse como alias "Enviar como".
 - "Buscar fotos de esta orden" explica el resultado: productos sin código, ya con foto, encontrados, y por qué no se encontró (tienda, clave o conexión).
+
+### 4.53 Bitácora de la orden con comentarios, etapa y archivos (v20.99)
+- La bitácora de cada orden (también cerradas o históricas) admite comentarios con fecha, hora y autor, etapa opcional (en proceso, despachada…), y archivos adjuntos que se abren desde el propio comentario.
+- "Agregar archivo" acepta un comentario y deja un evento "Archivo" en la bitácora. Todo es inmutable.
+- El envío de correo en los comentarios queda desmarcado por defecto; el correo automático sigue pendiente por decisión del usuario.

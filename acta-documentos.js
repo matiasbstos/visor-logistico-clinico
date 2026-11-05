@@ -34,6 +34,7 @@
         // Entrega parcial de una orden (modelo ANIDES): "— Solicitado: 10 | Entregado: 4 | Pendiente: 6"
         const sol = Number(it.solicitado) || 0, ent = Number(it.entregadoTotal) || 0;
         if (sol > 0 && ent > 0 && ent < sol) return `${lim(it.nombre)} — Solicitado: ${sol} | Entregado: ${ent} | Pendiente: ${sol - ent}`;
+        if (sol > 0 && ent >= sol) return `${lim(it.nombre)} — Cantidad: ${Number(it.cantidad) || 0}`;   // modelo ANIDES: entrega completa de lo solicitado
         return lineaItemSimple(it, acta);
     };
     const lineaItemSimple = (it, acta) => `${lim(it.nombre)} — Entregado: ${it.cantidad} ${Number(it.cantidad) === 1 ? 'unidad' : 'unidades'}${acta && acta.fecha ? ' con fecha del ' + fechaCorta2(acta.fecha) : ''}`;

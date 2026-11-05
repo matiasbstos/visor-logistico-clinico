@@ -399,3 +399,11 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - La bitácora de cada orden (también cerradas o históricas) admite comentarios con fecha, hora y autor, etapa opcional (en proceso, despachada…), y archivos adjuntos que se abren desde el propio comentario.
 - "Agregar archivo" acepta un comentario y deja un evento "Archivo" en la bitácora. Todo es inmutable.
 - El envío de correo en los comentarios queda desmarcado por defecto; el correo automático sigue pendiente por decisión del usuario.
+
+### 4.54 PENDIENTE para la próxima fase: insumos sin orden, ID de producto y actas con pendientes (pedido 05-11-2026)
+Registrado para retomarlo cuando haya sistema; aún NO implementado.
+1. **Insumo no existente en el catálogo (al crear un acta):** si el usuario ingresa un insumo que no viene de ninguna orden, el sistema guarda su nombre en el catálogo para futuras coincidencias/referencias y pide en ese momento el **ID del producto** (Mercado Público; después sirve para asociar la foto).
+2. **Productos ingresados a mano ("sin respaldo"):** deben quedar en una lista para poder **asociarlos después a una orden de compra**. Lo mismo para las actas con productos pendientes (sea un producto ya en el sistema o uno nuevo que no estaba).
+3. **Stock al agregar un producto al acta:** el sistema pregunta cuánto se agrega: stock total (ej. 30), cantidad entregada, y el **pendiente** se toma de la diferencia. El acta queda con la subdivisión entregado/pendiente y se hace la cuadratura completa ya acordada (stock, contable/disponible, auditoría).
+4. **Buscador de productos en el acta:** cada resultado muestra **disponible, descripción completa, fotografía e ID**.
+5. **El ID del producto debe mostrarse en todos los lugares donde aparece un producto** (existencias, actas, recepción, catálogo, toma de inventario, ¿Dónde está?, etc.).

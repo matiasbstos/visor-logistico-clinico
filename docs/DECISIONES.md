@@ -367,3 +367,8 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - Una foto de Mercado Público solo se muestra si está **confirmada**. Las de la tabla `assets/imagenes-mp.json` (verificadas contra la tienda) entran confirmadas; las que obtiene el Apps Script o las que se "suponen" por el nombre de archivo quedan `por_confirmar` y NO se ven en ninguna pantalla.
 - Si la descripción ya existe en el catálogo con otro código, el producto nuevo queda con `avisoCodigo` y su foto `por_confirmar`; además la búsqueda por nombre nunca devuelve la foto de un producto con otro código.
 - Catálogo de productos → "Fotos por confirmar": muestra el candidato, enlace a la tienda ("Ver en la tienda") y los botones "Es este producto" / "No es" (descartada). Queda quién confirmó (`confirmadaPor`).
+
+### 4.49 Avance con la marca, foto candidata en la orden y totales coherentes (v20.92)
+- `progreso.js` (`SAR_Progreso`): una sola animación con el logo SAR (anillo que gira, pasos, ✔ final y aviso al costado) para ingresar orden, recepción, emitir/eliminar acta, acta de prueba, regenerar recepción conforme y actualizar catálogo. Toda carga, guardado o modificación nueva debe usarla.
+- En "Pedido y recibido" (y en las tablas de la orden) la foto aparece aunque esté por confirmar: con borde punteado y "?" (título "Foto por confirmar"); al ampliarla avisa que falta confirmar. En el resto del sistema solo se ven las confirmadas.
+- Cuadro de distribución: IVA y total de cada columna se verifican (IVA = 19 % del neto, total = neto + IVA); si lo leído no cuadra (celdas pegadas, p. ej. $138.623.686.281) se corrige y se avisa.

@@ -18,7 +18,7 @@
     const fs = () => window.firebaseFirestore, db = () => window.firebaseDb;
     const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    let descartados = new Set();
+    let descartados = new Set(), candidatas = new Map();
     let semilla = {}, porCodigo = new Map(), porNombre = new Map(), cargando = null, listo = false;
 
     function urlMP(archivo, tam) { const t = tam || 120; return `${BASE}${archivo}?width=${t}&height=${t}&canvas=${t},${t}&quality=80&fit=bounds`; }
@@ -27,8 +27,9 @@
     const sinConfirmar = (c) => c.fotoEstado === 'por_confirmar' || c.fotoEstado === 'descartada';
     function entrada(c) { return { codigo: c.codigoMP ? String(c.codigoMP) : '', imagen: c.imagen || '', archivo: sinConfirmar(c) ? '' : (c.imagenMP || (c.codigoMP && semilla[String(c.codigoMP)]) || '') }; }
     function indexar(lista) {
-        porCodigo = new Map(); porNombre = new Map(); descartados = new Set();
+        porCodigo = new Map(); porNombre = new Map(); descartados = new Set(); candidatas = new Map();
         lista.forEach(c => {
+            if (c.codigoMP && c.fotoEstado === 'por_confirmar' && c.imagenMP) candidatas.set(String(c.codigoMP), { codigo: String(c.codigoMP), imagen: '', archivo: c.imagenMP, pendiente: true });
             if (c.codigoMP && sinConfirmar(c)) descartados.add(String(c.codigoMP));
             const e = entrada(c); if (!e.imagen && !e.archivo) return;
             if (c.codigoMP) porCodigo.set(String(c.codigoMP), e);
@@ -54,18 +55,21 @@
         const e = porNombre.get(norm(nombre)) || null;
         return e && (!c || !e.codigo || e.codigo === c) ? e : null;
     }
+    /** Como buscar(), pero si no hay foto confirmada devuelve la candidata marcada como "por confirmar" (solo para la orden en curso). */
+    function buscarConCandidata(nombre, codigo) { return buscar(nombre, codigo) || (codigo ? candidatas.get(String(codigo)) || null : null); }
     function src(e, tam) { return e ? (e.imagen || (e.archivo ? urlMP(e.archivo, tam) : '')) : ''; }
     function imgHTML(e, tam, alt) { const s = src(e, tam); return s ? `<img src="${esc(s)}" alt="${esc(alt || '')}" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode&&this.parentNode.classList.add('prod-img--sin');this.remove()">` : ''; }
     /** Marcador con la foto del producto (se completa solo cuando el catálogo termina de cargar). */
     function thumb(nombre, opc) {
         const o = opc || {}; if (!listo) cargar().catch(() => {});
-        const e = listo ? buscar(nombre, o.codigo) : null;
-        return `<span class="prod-img${o.grande ? ' prod-img--g' : ''}" data-img-name="${esc(nombre)}" data-img-code="${esc(o.codigo || '')}">${imgHTML(e, o.grande ? 240 : 96, nombre)}</span>`;
+        const e = listo ? (o.candidata ? buscarConCandidata(nombre, o.codigo) : buscar(nombre, o.codigo)) : null;
+        return `<span class="prod-img${o.grande ? ' prod-img--g' : ''}${e && e.pendiente ? ' prod-img--pend' : ''}" data-img-name="${esc(nombre)}" data-img-code="${esc(o.codigo || '')}"${o.candidata ? ' data-img-cand="1"' : ''}${e && e.pendiente ? ' title="Foto por confirmar"' : ''}>${imgHTML(e, o.grande ? 240 : 96, nombre)}</span>`;
     }
     function rellenar(raiz) {
         if (!listo) return;
         (raiz || document).querySelectorAll('.prod-img[data-img-name]:not(:has(img)):not(.prod-img--sin)').forEach(sp => {
-            const h = imgHTML(buscar(sp.dataset.imgName, sp.dataset.imgCode), sp.classList.contains('prod-img--g') ? 240 : 96, sp.dataset.imgName); if (h) sp.innerHTML = h;
+            const e = sp.dataset.imgCand ? buscarConCandidata(sp.dataset.imgName, sp.dataset.imgCode) : buscar(sp.dataset.imgName, sp.dataset.imgCode);
+            const h = imgHTML(e, sp.classList.contains('prod-img--g') ? 240 : 96, sp.dataset.imgName); if (h) { sp.innerHTML = h; if (e && e.pendiente) { sp.classList.add('prod-img--pend'); sp.title = 'Foto por confirmar'; } }
         });
     }
     /** Archivo de la tienda para un código: tabla incluida o Apps Script (códigos nuevos). */
@@ -99,7 +103,7 @@
         const sp = img.closest('.prod-img'), nombre = (sp && sp.dataset.imgName) || img.alt || '';
         const s = img.src.replace(/width=\d+&height=\d+&canvas=\d+,\d+/, 'width=900&height=900&canvas=900,900');
         const ov = document.createElement('div'); ov.className = 'prod-zoom'; ov.setAttribute('role', 'dialog');
-        ov.innerHTML = `<div class="prod-zoom-box"><button type="button" class="prod-zoom-x" aria-label="Cerrar">×</button><img src="${esc(s)}" alt="${esc(nombre)}" referrerpolicy="no-referrer"><p>${esc(nombre)}</p></div>`;
+        ov.innerHTML = `<div class="prod-zoom-box"><button type="button" class="prod-zoom-x" aria-label="Cerrar">×</button><img src="${esc(s)}" alt="${esc(nombre)}" referrerpolicy="no-referrer"><p>${esc(nombre)}${sp && sp.classList.contains('prod-img--pend') ? '<br><small>Foto por confirmar: compárala con la tienda (Catálogo de productos → Fotos por confirmar).</small>' : ''}</p></div>`;
         const cerrar = () => { ov.remove(); document.removeEventListener('keydown', tecla); };
         const tecla = (e) => { if (e.key === 'Escape') cerrar(); };
         ov.addEventListener('click', (e) => { if (e.target === ov || e.target.classList.contains('prod-zoom-x')) cerrar(); });

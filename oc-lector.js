@@ -264,8 +264,18 @@
         });
         return r;
     }
+    /** Montos de cada columna coherentes: IVA = 19 % del neto y total = neto + IVA. Si lo leído no cuadra (celdas pegadas), se corrige y se avisa. */
+    function cuadrarTotales(r) {
+        (r.columnas || []).forEach(c => {
+            if (!c.neto) return;
+            const iva = Math.round(c.neto * 0.19), tot = c.neto + iva;
+            if (Math.abs((c.iva || 0) - iva) > 2) { if (c.iva) r.avisos.push(`Memo ${c.memo} ${c.centro}: el IVA leído (${c.iva.toLocaleString('es-CL')}) no cuadra; se usó ${iva.toLocaleString('es-CL')}.`); c.iva = iva; }
+            if (Math.abs((c.total || 0) - tot) > 2) { if (c.total) r.avisos.push(`Memo ${c.memo} ${c.centro}: el total leído (${c.total.toLocaleString('es-CL')}) no cuadra con neto + IVA; se usó ${tot.toLocaleString('es-CL')}.`); c.total = tot; }
+        });
+        return r;
+    }
     /** Elige la variante del cuadro según lo que trae el documento. */
-    function extraerDistribucionAuto(items) { const t = items.map(i => i.str).join(' '); return /FINANCIAMIENTO/i.test(t) ? extraerDistribucion(items) : extraerDistribucionB(items); }
+    function extraerDistribucionAuto(items) { const t = items.map(i => i.str).join(' '); return cuadrarTotales(/FINANCIAMIENTO/i.test(t) ? extraerDistribucion(items) : extraerDistribucionB(items)); }
 
     /** Cruza el cuadro con las líneas de la OC (por código MP, o por parecido de la descripción).
      *  Devuelve {columnas, dist:[{key:cant}…] (una por línea de la OC), avisos}. Puro. */
@@ -335,6 +345,7 @@
             if (Object.keys(l.dist).length || l.valorNeto) r.lineas.push(l);
         }
         r.columnas = grupos.map(g => { const c = { memo: g.memo, centro: g.centro, financiamiento: '', cdps: g.cdps, cdp: g.cdps.join('-'), key: g.key }; Object.keys(ETQ).forEach(k => { const v = pie[ETQ[k]]; if (v) c[ETQ[k]] = Math.round(g.idx.reduce((t, i) => t + num(v[i]), 0)); }); return c; });
+        cuadrarTotales(r);
         if (!r.lineas.length) r.avisos.push('No se detectaron productos en el Excel.');
         r.lineas.forEach(l => { const sm = Object.values(l.dist).reduce((t, x) => t + x, 0); if (l.totalDeclarado != null && sm !== l.totalDeclarado) r.avisos.push(`"${l.descripcion.slice(0, 40)}": las columnas suman ${sm} y el cuadro indica ${l.totalDeclarado}.`); });
         r.columnas.forEach(c => {

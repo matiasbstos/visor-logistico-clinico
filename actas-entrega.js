@@ -501,12 +501,14 @@
         $$('.act-an').forEach(b => b.addEventListener('click', async () => {
             const motivo = (prompt(`Eliminar el acta ${b.dataset.n}: se borra su archivo, el stock vuelve a la bodega de origen y lo entregado vuelve a quedar pendiente en la orden. Queda el registro en el historial.\n\nMotivo:`, 'Acta mal generada') || '').trim();
             if (!motivo) return;
+            const prog = window.SAR_Progreso.iniciar('Eliminando el acta…', ['Devolviendo el stock a la bodega de origen…']);
             try {
                 const a = historial.find(x => x.numero === b.dataset.n);
                 await anular(b.dataset.n, motivo, usuarioEmail());
+                prog.paso('Quitando el archivo de la orden…');
                 let arch = 0; if (a && a.oc && a.oc.id && window.SAR_SeguimientoOC && window.SAR_SeguimientoOC.eliminarArchivosActa) { try { arch = await window.SAR_SeguimientoOC.eliminarArchivosActa(a.oc.id, a.numero); } catch (e2) { toast('Archivo no eliminado', 'El stock se devolvió, pero el archivo de la orden no se pudo borrar: ' + (e2.message || e2), 'warning'); } }
-                toast('Acta eliminada', `${b.dataset.n}: stock devuelto${arch ? ' y archivo borrado de la orden' : ''}.`, 'success'); await Promise.all([cargarHistorial(), cargarStock()]); borrador.items = []; guardarBorrador(); pintar(); }
-            catch (e) { toast('No se anuló', e.message, 'error'); }
+                prog.listo(`Acta ${b.dataset.n} eliminada: stock devuelto${arch ? ' y archivo borrado de la orden' : ''}`, { informe: true }); await Promise.all([cargarHistorial(), cargarStock()]); borrador.items = []; guardarBorrador(); pintar(); }
+            catch (e) { prog.error(); toast('No se anuló', e.message, 'error'); }
         }));
     }
 
@@ -531,13 +533,15 @@
         }
         const acta = { numero, fecha: hoy.toISOString().slice(0, 10), centro: (b.centro || '').trim() || 'CENTRO (prueba)', bodegaOrigen: b.origen || '', estado: 'PRUEBA', items, pendientes,
             documentos: b.documentos.map(d => ({ tipo: d.tipo, numero: d.numero, detalle: d.detalle || '' })), entrega: { nombre: firma.nombre, cargo: firma.cargo }, recibe: { nombre: (b.recibe && b.recibe.nombre) || '', cargo: (b.recibe && b.recibe.cargo) || '' } };
+        const prog = window.SAR_Progreso.iniciar('Generando el acta de prueba…', [`Armando el documento ${formato.toUpperCase()}…`]);
         try { await descargar(actaParaDoc(acta), formato); }
-        catch (e) { toast('Acta de prueba', 'No se pudo generar: ' + (e.message || e), 'error'); return; }
+        catch (e) { prog.error(); toast('Acta de prueba', 'No se pudo generar: ' + (e.message || e), 'error'); return; }
+        prog.paso('Registrando la prueba en el historial…');
         try {
             await f.setDoc(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: 'ACTA DE PRUEBA (sin efecto en stock)', quantity: items.reduce((s, i) => s + i.cantidad, 0), type: 'ACTA_PRUEBA', user: usuario, date: f.serverTimestamp(), document: numero, batch: 'N/A', origin: b.origen || '', dest: acta.centro, actaId: numero, sinEfectoStock: true,
                 observacion: `Acta de prueba ${numero} (${formato.toUpperCase()}): ${items.map(i => i.nombre + ' x' + i.cantidad).join('; ')}`.slice(0, 900) });
-            toast('Acta de prueba generada', `${numero}: no se descontó stock. Quedó registrada en el historial.`, 'success');
-        } catch (e) { toast('Acta de prueba', 'Se generó el documento, pero no se pudo registrar en el historial: ' + (e.message || e), 'warning'); }
+            prog.listo(`Acta de prueba ${numero} generada (sin descontar stock)`, { informe: true });
+        } catch (e) { prog.error(); toast('Acta de prueba', 'Se generó el documento, pero no se pudo registrar en el historial: ' + (e.message || e), 'warning'); }
     }
 
     let emitiendo = false;
@@ -551,9 +555,11 @@
         const avisoSin = sin.length ? `\n\nSIN RESPALDO EN SISTEMA (quedan como sobregiro, saldo contable negativo hasta cuadrar con la OC/SDC):\n${sin.map(x => `• ${x.n}: ${x.f} u.`).join('\n')}` : '';
         if (!confirm(`Se emitirá el acta para ${borrador.centro.trim()} con ${borrador.items.length} productos (${total} unidades) y se descontarán de ${borrador.origen}.${avisoSin}\n\n¿Emitir?`)) return;
         emitiendo = true; const btn = document.getElementById('act-emitir'); if (btn) btn.disabled = true;
+        const prog = window.SAR_Progreso.iniciar('Emitiendo el acta de entrega…', ['Numerando el acta y descontando el stock…']);
         try {
             const centroNuevo = borrador.centro;
             const acta = await emitir(borrador, usuarioEmail());
+            prog.paso('Generando el documento PDF…');
             guardarCentro(centroNuevo).catch(() => {});
             toast('Acta emitida', `${acta.numero} · stock descontado.`, 'success');
             borrador = { ...vacio(), origen: borrador.origen, centro: '' }; guardarBorrador();
@@ -566,7 +572,8 @@
                     catch (e2) { toast('Acta no guardada en la orden', e2.message || String(e2), 'warning'); }
                 }
             } catch (e) { toast('Descarga', 'El acta se emitió, pero el PDF no se pudo generar: ' + e.message + ' Descárgalo desde "Actas emitidas".', 'warning'); }
-        } catch (e) { toast('No se emitió', e.message, 'error'); if (btn) btn.disabled = false; }
+            prog.listo(`Acta ${acta.numero} emitida y registrada`, { informe: true });
+        } catch (e) { prog.error(); toast('No se emitió', e.message, 'error'); if (btn) btn.disabled = false; }
         finally { emitiendo = false; }
     }
 

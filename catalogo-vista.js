@@ -40,7 +40,7 @@
         const bs = grid.querySelector('#cv-sync'); if (bs) bs.addEventListener('click', () => { if (window.SAR_SeguimientoOC) window.SAR_SeguimientoOC.formCatalogo().then(() => { datos = null; }).catch(() => {}); });
     }
     async function render(grid) {
-        if (!datos) { grid.innerHTML = '<div class="erp-card" style="grid-column:1/-1;text-align:center;padding:32px;color:#64748B">Cargando catálogo…</div>'; await cargar(); }
+        if (!datos) { grid.innerHTML = '<div class="erp-card" style="grid-column:1/-1">' + (window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando el catálogo…') : 'Cargando catálogo…') + '</div>'; await cargar(); }
         kpis(); pintar(grid);
     }
     window.SAR_CatalogoVista = { render, recargar: () => { datos = null; } };

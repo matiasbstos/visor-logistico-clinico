@@ -304,7 +304,7 @@
 
     async function abrir() {
         const r = root(); if (!r) return;
-        r.innerHTML = '<p class="act-hint" style="padding:24px;">Cargando…</p>';
+        r.innerHTML = (window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando los equipos de oxígeno…') : 'Cargando los equipos de oxígeno…');
         try { await cargar(); } catch (e) { r.innerHTML = `<p class="act-err" style="padding:24px;">No se pudo cargar: ${esc(e.message)}</p>`; return; }
         pintar();
     }

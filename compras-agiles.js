@@ -158,7 +158,7 @@
     async function abrir() {
         if (!root()) return;
         if (unsubLista) { try { unsubLista(); } catch (e) { /* noop */ } }
-        root().innerHTML = '<div class="home-empty">Cargando compras ágiles…</div>';
+        root().innerHTML = (window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando las compras ágiles…') : 'Cargando las compras ágiles…');
         try { const s = await fs().getDocs(fs().collection(db(), 'Seguimiento_OC')); ocs = []; s.forEach(d => ocs.push({ id: d.id, ...d.data() })); } catch (e) { ocs = []; }
         unsubLista = fs().onSnapshot(fs().collection(db(), 'Compras_Agiles'), (snap) => {
             lista = []; snap.forEach(d => lista.push({ id: d.id, ...d.data() }));

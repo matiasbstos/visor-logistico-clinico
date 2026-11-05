@@ -3895,7 +3895,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const tbody = document.getElementById('critico-table-body');
                 if (!tbody) throw new Error('No se encontró el elemento critico-table-body.');
 
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;"><i class="ph-spinner ph-spin"></i> Cargando...</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6">' + (window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando…') : 'Cargando...') + '</td></tr>';
 
                 if (!db) throw new Error('La variable db es undefined o null.');
 
@@ -9878,7 +9878,7 @@ window.firebaseAuth = auth;
 window.abrirRecepcionOperador = async function (docId) {
     window._bandejaOperadorId = docId;
     const container = document.getElementById('lista-medicamentos-recepcion-operador');
-    container.innerHTML = '<div class="text-center"><i class="ph-spinner ph-spin"></i> Cargando...</div>';
+    container.innerHTML = window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando…') : '<div class="text-center">Cargando...</div>';
     document.getElementById('modal-recepcion-operador').style.display = 'flex';
 
     try {

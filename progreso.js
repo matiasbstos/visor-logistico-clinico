@@ -28,5 +28,9 @@
     async function correr(titulo, fn, okTxt, opc) {
         const prog = iniciar(titulo); try { const r = await fn(prog); prog.listo(typeof okTxt === 'function' ? okTxt(r) : (okTxt || 'Listo'), opc); return r; } catch (e) { prog.error(); throw e; }
     }
-    window.SAR_Progreso = { iniciar, correr };
+    /** Bloque de carga para dentro de una pantalla (no tapa nada): logo con anillo girando + texto. */
+    function cargando(texto) {
+        return `<div class="sar-cargando" role="status" aria-live="polite"><div class="sar-prog__marca" aria-hidden="true"><span class="sar-prog__anillo"></span><img src="assets/logo-sar.png" alt=""></div><strong>${esc(texto || 'Cargando…')}</strong></div>`;
+    }
+    window.SAR_Progreso = { iniciar, correr, cargando };
 })(window, document);

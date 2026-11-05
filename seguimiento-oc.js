@@ -818,8 +818,8 @@
         let rev = { lineas: [], aceptarHoras: 48, entregaDias: 2, origen: 'MANUAL' };
         const campo = (id, et, v, tipo) => `<label>${et}<input type="${tipo || 'text'}" id="${id}" value="${esc(v == null ? '' : v)}"></label>`;
         const ov = modal('Ingresar orden de compra', `
-            <label>PDF de la orden (Mercado Público)<input type="file" id="p-file" accept="application/pdf"></label>
-            <label>Cuadro de distribución (PDF, opcional): lee memos, CDP, cantidades por centro y montos<input type="file" id="p-dist" accept="application/pdf"></label>
+            <label>Orden de compra (Mercado Público): PDF o Excel<input type="file" id="p-file" accept="application/pdf,.xlsx,.xls"></label>
+            <label>Cuadro de distribución (PDF o Excel, opcional): lee memos, CDP, cantidades por centro y montos<input type="file" id="p-dist" accept="application/pdf,.xlsx,.xls"></label>
             <div id="p-dist-est" class="cierre-hint"></div>
             <label>Correo del despacho (opcional: pega el texto para leer los plazos)<textarea id="p-correo" rows="3" placeholder="Pega aquí el correo con el plazo de aceptación y los días de entrega"></textarea></label>
             <div id="p-estado" class="cierre-hint">Sube el PDF y revisa lo que se leyó. También puedes completar todo a mano.</div>
@@ -876,10 +876,15 @@
             try {
                 if (!window.SAR_Lector) throw new Error('El lector de documentos no está cargado.');
                 const r = await window.SAR_Lector.leerArchivo(f);
+                if (r.tipo === 'DIST_OC') {             // pusieron el cuadro en el recuadro de la orden: se acomoda solo
+                    leerRev(ov); rev.distrib = r; mostrarDist(r); q('#p-file').value = '';
+                    est.innerHTML = '<strong>Ese archivo es el cuadro de distribución</strong>: lo puse en el recuadro del cuadro. Falta subir la orden de compra.'; return;
+                }
                 const c = window.SAR_Lector.extraerCorreo(q('#p-correo').value);
                 rev = { ...rev, ...r, aceptarHoras: c.aceptarHoras || rev.aceptarHoras || 48, entregaDias: c.entregaDias || rev.entregaDias || 2, contraparte: c.contraparte || r.contraparte, horario: c.horario || r.horario, origen: 'OC_MP' };
                 est.innerHTML = `<strong>Leído:</strong> ${esc(r.numeroOC || '—')} · ${r.lineas.length} producto(s). Revisa cada dato antes de guardar.`;
                 pintarRev(r.avisos);
+                if (rev.distrib) mostrarDist(rev.distrib);
             } catch (err) { est.innerHTML = `<span class="cierre-error">${esc(err.message)}</span>`; }
         });
         q('#p-dist').addEventListener('change', async (e) => {
@@ -888,15 +893,20 @@
             try {
                 if (!window.SAR_Lector) throw new Error('El lector de documentos no está cargado.');
                 leerRev(ov);
-                const d = await window.SAR_Lector.leerDistribucion(f); rev.distrib = d;
+                const d = await window.SAR_Lector.leerDistribucion(f); rev.distrib = d; mostrarDist(d);
+            } catch (err) { rev.distrib = null; est.innerHTML = `<span class="cierre-error">${esc(err.message)}</span>`; }
+        });
+        function mostrarDist(d) {
+            const est = q('#p-dist-est');
+            {
                 const lineasOk = rev.lineas.filter(l => String(l.descripcion || '').trim() && num(l.cantidad) > 0);
                 const u = lineasOk.length ? window.SAR_Lector.unirDistribucion({ lineas: lineasOk, memos: memosDe(rev) }, d) : { avisos: ['Sube primero el PDF de la orden para cruzar los productos.'] };
                 const av = [...d.avisos, ...u.avisos];
                 est.innerHTML = `<strong>Cuadro leído:</strong> ${d.columnas.length} columna(s) · ${d.lineas.length} producto(s)
                     <div class="soc-tabla"><table><thead><tr><th>Memo</th><th>Centro</th><th>Financiamiento</th><th>CDP</th><th>Neto</th><th>Total</th></tr></thead><tbody>${d.columnas.map(c => `<tr><td>${esc(c.memo)}</td><td>${esc(c.centro)}</td><td>${esc(c.financiamiento)}</td><td>${esc(c.cdp)}</td><td>${peso(c.neto)}</td><td>${peso(c.total)}</td></tr>`).join('')}</tbody></table></div>
                     ${av.length ? '<ul class="cierre-error">' + av.map(a => `<li>${esc(a)}</li>`).join('') + '</ul>' : ''}`;
-            } catch (err) { rev.distrib = null; est.innerHTML = `<span class="cierre-error">${esc(err.message)}</span>`; }
-        });
+            }
+        }
         q('#p-correo').addEventListener('change', () => { const c = window.SAR_Lector && window.SAR_Lector.extraerCorreo(q('#p-correo').value); if (!c) return; leerRev(ov); if (c.aceptarHoras) rev.aceptarHoras = c.aceptarHoras; if (c.entregaDias) rev.entregaDias = c.entregaDias; if (c.contraparte && !rev.contraparte) rev.contraparte = c.contraparte; if (c.horario && !rev.horario) rev.horario = c.horario; pintarRev([]); });
     }
 

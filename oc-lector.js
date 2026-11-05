@@ -77,17 +77,18 @@
 
         // --- Tabla de productos: columnas según el encabezado ---
         const h = (re) => { for (const l of L) for (const i of l.items) if (re.test(limpiar(i.str))) return i; return null; };
-        const hProd = h(/^Producto$/), hCant = h(/^Cantidad$/);
+        const hProd = h(/^Producto$/), hCant = h(/^Cantidad(\s*\/)?$/);
         const hEsp = L.flatMap(l => l.items).filter(i => /^Especificaciones$/.test(limpiar(i.str)) && hCant && Math.abs(i.y - hCant.y) <= TOL).sort((a, b) => a.x - b.x);
         const hPrecio = h(/^Precio$/), hTotal = h(/Valor Total/);
         if (!hProd || !hCant || !hPrecio || !hTotal) { r.avisos.push('No se reconoció la tabla de productos: ingrésalos a mano.'); r.lineas = []; return r; }
         const yH = Math.max(hCant.y, hPrecio.y, hTotal.y) + 18;          // bajo las dos líneas del encabezado
         const finTabla = L.find(l => l.y > yH && l.items.some(i => /^Orden de Compra/.test(limpiar(i.str)) && i.x > 250));
-        const yFin = finTabla ? finTabla.y - 1 : Infinity;
+        const finNeto = L.find(l => l.y > yH && l.items.some(i => /^Neto$/i.test(limpiar(i.str)) && i.x > 380));   // formato "compra ágil": sin pie "Orden de Compra…"
+        const yFin = finTabla ? finTabla.y - 1 : finNeto ? finNeto.y - 2 : Infinity;
         const xProd = hProd.x, xCant = hCant.x, xEspC = hEsp[0] ? hEsp[0].x : xCant + 45, xPrecio = hPrecio.x - 12;
         const enTabla = items.filter(i => i.y >= yH - 12 && i.y < yFin && limpiar(i.str));
         // Filas: cada cantidad entera en la columna "Cantidad" inicia un producto
-        const starts = enTabla.filter(i => i.x >= xCant - 6 && i.x < xEspC - 6 && /^\d+$/.test(limpiar(i.str)) && i.y >= yH - 12).sort((a, b) => a.y - b.y);
+        const starts = enTabla.filter(i => i.x >= xCant - 6 && i.x < xEspC - 6 && /^\d+(\s+[A-Za-zÁÉÍÓÚáéíóú.]+)?$/.test(limpiar(i.str)) && i.y >= yH - 12).sort((a, b) => a.y - b.y);
         r.lineas = starts.map((s, k) => {
             const y0 = s.y - TOL, y1 = k + 1 < starts.length ? starts[k + 1].y - TOL : yFin;
             const fila = enTabla.filter(i => i.y >= y0 && i.y < y1);
@@ -98,8 +99,9 @@
             const cod = /^\((\d{4,9})\)\s*/.exec(comprador);
             const nums = fila.filter(i => i.x >= xPrecio && Math.abs(i.y - s.y) <= TOL + 1).sort((a, b) => a.x - b.x).map(i => limpiar(i.str)).filter(t => /^[\d.,]+$/.test(t));
             const producto = limpiar(col(xProd - 4, xCant - 4).map(i => i.str).join(' '));
-            const desc = limpiar(comprador.replace(/^\(\d+\)\s*/, '')) || producto;
-            const cantidad = Number(limpiar(s.str));
+            const recorte = (t) => limpiar(String(t).replace(/\s*(PRESUPUESTO\s+(M[AÁ]XIMO|DISPONIBLE)|\*\s*EL PROVEEDOR).*$/i, ''));   // quita las notas de presupuesto de la compra ágil
+            const desc = recorte(limpiar(comprador.replace(/^\(\d+\)\s*/, ''))) || producto;
+            const cantidad = Number(limpiar(s.str).split(/\s+/)[0]);
             const precio = monto(nums[0]), valor = monto(nums[nums.length - 1]);
             const linea = { descripcion: desc, codigoMP: cod ? cod[1] : '', licitacion: col0.find(t => /^\d+-\d+-[A-Z]+\d+$/.test(t)) || '', cantidad, valorNeto: precio, totalLinea: valor };
             if (precio && valor && Math.round(precio * cantidad) !== Math.round(valor)) r.avisos.push(`Línea "${desc.slice(0, 40)}": cantidad × precio (${Math.round(precio * cantidad).toLocaleString('es-CL')}) no coincide con el valor total (${valor.toLocaleString('es-CL')}). Revísala.`);
@@ -297,12 +299,97 @@
         return out;
     }
 
+    // ------------------------------------------------------------------
+    // Hojas de Excel (v20.88): el cuadro de distribución también viene en Excel; la orden puede venir en Excel.
+    // Entrada: filas ya convertidas a arreglos (XLSX.utils.sheet_to_json con header:1).
+    // ------------------------------------------------------------------
+    const celda = (v) => (v == null ? '' : String(v)).replace(/\s+/g, ' ').trim();
+    function extraerDistribucionExcel(filas) {
+        const r = { tipo: 'DIST_OC', avisos: [], columnas: [], lineas: [], variante: 'EXCEL' };
+        const iCab = filas.findIndex((f, n) => n < 15 && (f || []).some(c => /MEMO\s*N/i.test(celda(c))));
+        if (iCab < 0) { r.avisos.push('No encontré las columnas "MEMO N° …" en el Excel.'); return r; }
+        const cab = filas[iCab] || [];
+        const grupos = [];                       // una columna por memo+centro; si el centro trae varios CDP (columnas) se juntan
+        cab.forEach((c, i) => {
+            const t = celda(c); const m = /MEMO\s*N\s*[°º.]?\s*(\d+)\s*(.*?)\s*(?:CDP\s*N?\s*[°º.]?\s*([\d\s\-–y,]+))?$/i.exec(t); if (!m) return;
+            const centro = limpiar(String(m[2]).replace(/^CENTRO\s+/i, '')).toUpperCase(), cdps = m[3] ? (m[3].match(/\d+/g) || []) : [];
+            let g = grupos.find(x => x.memo === m[1] && x.centro === centro);
+            if (!g) { g = { memo: m[1], centro, financiamiento: '', cdps: [], idx: [], key: `${slug(centro) || 'col' + (grupos.length + 1)}-${m[1]}` }; grupos.push(g); }
+            cdps.forEach(d => { if (!g.cdps.includes(d)) g.cdps.push(d); }); g.idx.push(i);
+        });
+        if (!grupos.length) { r.avisos.push('No se leyó ningún memo en el encabezado del Excel.'); return r; }
+        // fila de títulos (DESCRIPCION / VALOR NETO / CANTIDAD…)
+        const iTit = filas.findIndex((f, n) => n >= iCab && (f || []).some(c => /^descripci/i.test(celda(c))));
+        const tit = filas[iTit >= 0 ? iTit : iCab + 1] || [];
+        const cDesc = Math.max(0, tit.findIndex(c => /^descripci/i.test(celda(c)))), cNeto = tit.findIndex(c => /valor\s*neto|precio/i.test(celda(c))), cTot = tit.findIndex(c => /cantidad\s*total/i.test(celda(c)));
+        const num = (v) => typeof v === 'number' ? v : (Number(String(v == null ? '' : v).replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.')) || 0);
+        const ETQ = { NETO: 'neto', IVA: 'iva', TOTAL: 'total', PRESUPUESTO: 'presupuesto', SALDO: 'saldo' };
+        const pie = {};
+        for (let n = (iTit >= 0 ? iTit : iCab + 1) + 1; n < filas.length; n++) {
+            const f = filas[n] || [], d = celda(f[cDesc]), e = ETQ[celda(f[cDesc + 1]).toUpperCase()] || ETQ[d.toUpperCase()];
+            if (e && (!d || ETQ[d.toUpperCase()])) { pie[e] = f; continue; }
+            if (!d || (cNeto >= 0 && f[cNeto] != null && typeof f[cNeto] !== 'number' && num(f[cNeto]) === 0)) continue;
+            const id = (/^\((\d{5,9})\)/.exec(d) || [])[1] || '';
+            const l = { id, descripcion: limpiar(d.replace(/^\(\d+\)\s*/, '')), valorNeto: cNeto >= 0 ? num(f[cNeto]) : 0, dist: {}, totalDeclarado: cTot >= 0 && f[cTot] != null && f[cTot] !== '' ? num(f[cTot]) : null };
+            grupos.forEach(g => { const q = g.idx.reduce((t, i) => t + num(f[i]), 0); if (q > 0) l.dist[g.key] = q; });
+            if (Object.keys(l.dist).length || l.valorNeto) r.lineas.push(l);
+        }
+        r.columnas = grupos.map(g => { const c = { memo: g.memo, centro: g.centro, financiamiento: '', cdps: g.cdps, cdp: g.cdps.join('-'), key: g.key }; Object.keys(ETQ).forEach(k => { const v = pie[ETQ[k]]; if (v) c[ETQ[k]] = Math.round(g.idx.reduce((t, i) => t + num(v[i]), 0)); }); return c; });
+        if (!r.lineas.length) r.avisos.push('No se detectaron productos en el Excel.');
+        r.lineas.forEach(l => { const sm = Object.values(l.dist).reduce((t, x) => t + x, 0); if (l.totalDeclarado != null && sm !== l.totalDeclarado) r.avisos.push(`"${l.descripcion.slice(0, 40)}": las columnas suman ${sm} y el cuadro indica ${l.totalDeclarado}.`); });
+        r.columnas.forEach(c => {
+            const calc = r.lineas.reduce((t, l) => t + (l.dist[c.key] || 0) * l.valorNeto, 0);
+            if (c.neto && calc && Math.abs(calc - c.neto) > 1) r.avisos.push(`Memo ${c.memo} ${c.centro}: cantidades × precio = ${calc.toLocaleString('es-CL')} y el cuadro indica neto ${c.neto.toLocaleString('es-CL')}.`);
+            if (!c.cdp) r.avisos.push(`Memo ${c.memo} ${c.centro}: no se leyó el CDP.`);
+        });
+        return r;
+    }
+    /** Orden de compra en Excel (lectura genérica: busca el N° de orden y la tabla Producto/Cantidad/Precio). */
+    function extraerOCExcel(filas) {
+        const r = { tipo: 'OC_MP', avisos: ['Orden leída desde Excel: revisa cada dato.'], lineas: [], memos: [] };
+        const todo = filas.map(f => (f || []).map(celda).join(' | ')).join('\n');
+        r.numeroOC = ((/(\d{3,8}-\d{1,5}-[A-Z]{2}\d{2})/.exec(todo)) || [])[1] || '';
+        const dato = (re) => { const m = re.exec(todo); return m ? limpiar(m[1]) : ''; };
+        r.proveedor = dato(/(?:SE[ÑN]OR\s*\(ES\)|PROVEEDOR)\s*:?\s*\|?\s*([^|\n]+)/i);
+        r.rutProveedor = ((/(\d{1,2}\.\d{3}\.\d{3}-[\dkK])/.exec(todo)) || [])[1] || '';
+        const fe = /(\d{2}-\d{2}-\d{4})/.exec(dato(/FECHA\s*(?:ENV[IÍ]O|EMISI[OÓ]N)[^|\n]*\|?\s*([^|\n]+)/i)); r.emitida = fe ? fechaISO(fe[1]) : '';
+        const mm = /MEMO\s*N\s*[°º]?\s*(\d+(?:\s*[-,/y]\s*\d+)*)(?:\s*-\s*([^|\n]+))?/i.exec(todo);
+        r.memos = mm ? mm[1].split(/\s*[-,/y]\s*/).filter(Boolean) : []; r.memo = r.memos.join('-'); r.descripcion = mm && mm[2] ? limpiar(mm[2]) : '';
+        const iH = filas.findIndex(f => { const t = (f || []).map(celda).join('|'); return /producto|descripci/i.test(t) && /cantidad/i.test(t) && /precio|valor|neto/i.test(t); });
+        if (iH < 0) { r.avisos.push('No encontré la tabla de productos (Producto / Cantidad / Precio): ingrésalos a mano.'); return r; }
+        const h = (filas[iH] || []).map(celda), col = (re) => h.findIndex(c => re.test(c));
+        const cD = col(/descripci|producto|especificaciones\s*comprador/i), cQ = col(/^cantidad/i), cP = col(/precio|neto\s*unit|valor\s*neto/i), cT = col(/valor\s*total|^total/i), cC = col(/c[oó]digo|^id$/i);
+        const nm = (v) => typeof v === 'number' ? v : (Number(String(v == null ? '' : v).replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.')) || 0);
+        for (let n = iH + 1; n < filas.length; n++) {
+            const f = filas[n] || [], d = celda(f[cD]), q = nm(f[cQ]); if (!d && !q) { if (r.lineas.length) break; else continue; } if (!d || !(q > 0) || /^(neto|total|iva|subtotal)/i.test(d)) { if (r.lineas.length) break; else continue; }
+            const cod = /^\((\d{4,9})\)/.exec(d);
+            r.lineas.push({ descripcion: limpiar(d.replace(/^\(\d+\)\s*/, '')), codigoMP: cod ? cod[1] : '', licitacion: '', cantidad: q, valorNeto: nm(f[cP]), totalLinea: cT >= 0 ? nm(f[cT]) : 0 });
+        }
+        if (!r.lineas.length) r.avisos.push('No se detectaron productos: ingrésalos a mano.');
+        ['numeroOC', 'proveedor'].forEach(k => { if (!r[k]) r.avisos.push(`No se encontró: ${k === 'numeroOC' ? 'N° de orden' : 'proveedor'}.`); });
+        return r;
+    }
+    /** Dice qué parece ser un texto que no se reconoció (para un mensaje útil). */
+    function parecidoA(texto) {
+        const t = String(texto || '');
+        if (/RECEPCI[OÓ]N\s+CONFORME/i.test(t)) return 'una Recepción conforme (se sube en la propia orden, no al ingresarla)';
+        if (/GU[IÍ]A\s+DE\s+DESPACHO/i.test(t)) return 'una guía de despacho (se sube al recibir la mercadería)';
+        if (/FACTURA/i.test(t)) return 'una factura';
+        if (/ACTA\s+DE\s+ENTREGA/i.test(t)) return 'un acta de entrega';
+        return '';
+    }
+    function leerHoja(filas) {
+        const d = extraerDistribucionExcel(filas);
+        if (d.columnas.length && d.lineas.length) return d;
+        const o = extraerOCExcel(filas); if (o.lineas.length || o.numeroOC) return o;
+        throw new Error('No reconozco este Excel. Busco un cuadro de distribución (columnas "MEMO N° … CDP N° …") o una orden de compra (tabla Producto / Cantidad / Precio).');
+    }
     const slug = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const LECTORES = { OC_MP: { nombre: 'Orden de compra (Mercado Público)', reconoce: reconoceOC, extraer: extraerOC }, DIST_OC: { nombre: 'Cuadro de distribución de la orden', reconoce: reconoceDistribucion, extraer: extraerDistribucionAuto } };
     function detectar(items) { const txt = lineas(items).map(l => l.texto).join('\n'); return Object.keys(LECTORES).find(k => LECTORES[k].reconoce(txt)) || null; }
     function leer(items) {
         const k = detectar(items);
-        if (!k) throw new Error('No reconozco este documento. Por ahora solo leo órdenes de compra de Mercado Público; puedes ingresar los datos a mano.');
+        if (!k) { const p = parecidoA(lineas(items).map(l => l.texto).join('\n')); throw new Error(p ? `Este archivo parece ${p}. Aquí va la orden de compra de Mercado Público (o su cuadro de distribución).` : 'No reconozco este documento. Leo órdenes de compra de Mercado Público y cuadros de distribución; puedes ingresar los datos a mano.'); }
         return LECTORES[k].extraer(items);
     }
 
@@ -331,9 +418,17 @@
         }
         return out;
     }
-    async function leerArchivo(file) { return leer(await itemsDePDF(await file.arrayBuffer())); }
-    async function leerDistribucion(file) { const it = await itemsDePDF(await file.arrayBuffer()); const r = leer(it); if (r.tipo !== 'DIST_OC') throw new Error('Ese PDF no es un cuadro de distribución (busco columnas "MEMO N° …", FINANCIAMIENTO y CDP).'); return r; }
+    const esExcel = (f) => /\.(xlsx|xls|xlsm)$/i.test(f.name || '') || /spreadsheet|excel/i.test(f.type || '');
+    async function filasDeExcel(file) {
+        if (typeof XLSX === 'undefined') throw new Error('No cargó la librería de Excel.');
+        const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
+        for (const n of wb.SheetNames) { const filas = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: null }); try { return leerHoja(filas); } catch (e) { /* prueba la hoja siguiente */ } }
+        throw new Error('No reconozco este Excel. Busco un cuadro de distribución (columnas "MEMO N° … CDP N° …") o una orden de compra (tabla Producto / Cantidad / Precio).');
+    }
+    /** PDF o Excel: devuelve la orden (OC_MP) o el cuadro (DIST_OC), según lo que sea el archivo. */
+    async function leerArchivo(file) { return esExcel(file) ? filasDeExcel(file) : leer(await itemsDePDF(await file.arrayBuffer())); }
+    async function leerDistribucion(file) { const r = await leerArchivo(file); if (r.tipo === 'OC_MP') throw new Error('Ese archivo es una orden de compra: súbelo en el primer recuadro (el cuadro va aquí).'); if (r.tipo !== 'DIST_OC') throw new Error('Ese archivo no es un cuadro de distribución (busco columnas "MEMO N° …", FINANCIAMIENTO y CDP).'); return r; }
 
-    window.SAR_Lector = { leer, leerArchivo, leerDistribucion, extraerDistribucion, extraerDistribucionB, unirDistribucion, detectar, extraerOC, extraerCorreo, lineas, LECTORES };
+    window.SAR_Lector = { leerHoja, extraerDistribucionExcel, extraerOCExcel, esExcel, leer, leerArchivo, leerDistribucion, extraerDistribucion, extraerDistribucionB, unirDistribucion, detectar, extraerOC, extraerCorreo, lineas, LECTORES };
     if (typeof module !== 'undefined') module.exports = window.SAR_Lector;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

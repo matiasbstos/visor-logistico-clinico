@@ -263,6 +263,7 @@
             <div class="page-header mb-24"><div class="page-title"><h1>Seguimiento de órdenes de compra</h1>
                 <p>Plazos, recepciones por centro, discrepancias, notas y avisos por correo.</p></div>
                 <div class="soc-acc"><button type="button" class="btn btn-primary" id="soc-pdf"><i class="ph-bold ph-file-pdf"></i> Ingresar desde PDF</button>
+                <button type="button" class="btn btn-outline" id="soc-catalogo"><i class="ph-bold ph-images"></i> Catálogo de productos</button>
                 <button type="button" class="btn btn-outline" id="soc-nueva"><i class="ph-bold ph-microsoft-excel-logo"></i> Con cuadro Excel</button></div></div>
             <div class="soc-buscar"><input type="search" id="soc-buscar" placeholder="Buscar orden por número, proveedor o descripción…" aria-label="Buscar orden" autocomplete="off"></div>
             <div class="soc-lista">${lista.length ? lista.map(oc => {
@@ -276,6 +277,7 @@
             ${pendienteHTML()}
             ${window.SAR_CDP ? `<details class="soc-det soc-det--cdp"><summary>Presupuesto por CDP (opcional)</summary>${window.SAR_CDP.cardHTML(lista)}</details>` : ''}`;
         if (window.SAR_CDP) window.SAR_CDP.enlazar(root(), lista, modal, toast, pintarLista);
+        root().querySelector('#soc-catalogo').addEventListener('click', () => formCatalogo().catch(e => toast('No se pudo abrir el catálogo', e.message || String(e), 'error')));
         root().querySelector('#soc-nueva').addEventListener('click', formNueva);
         root().querySelector('#soc-pdf').addEventListener('click', formDesdePDF);
         root().querySelectorAll('[data-oc]').forEach(b => b.addEventListener('click', () => abrirDetalle(b.dataset.oc)));
@@ -299,6 +301,58 @@
             archivos = []; snap.forEach(d => archivos.push({ id: d.id, ...d.data() })); if (ocActual) pintarArchivos();
         }, () => { /* sin permiso */ });
         pintarDetalle();
+    }
+
+    // ---------------------------------------------------------------
+    // Catálogo de productos (v20.76): se alimenta solo con cada orden ingresada y aprende el
+    // nombre del inventario que se usó al recibir. Clave: código de Mercado Público (o la descripción).
+    // ---------------------------------------------------------------
+    const catId = (l) => slug(String(l.codigoMP || l.descripcion || '').trim()).slice(0, 120);
+    async function registrarCatalogo(oc) {
+        const f = fs(); let n = 0;
+        for (const l of (oc.lineas || [])) {
+            const id = catId(l); if (!id || !String(l.descripcion || '').trim()) continue;
+            try {
+                await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: l.descripcion, descripcion_lower: String(l.descripcion).toLowerCase(), codigoMP: l.codigoMP || '', proveedor: oc.proveedor || '', ultimaOC: oc.numeroOC || '', valorNeto: num(l.valorNeto), actualizado: f.serverTimestamp() }, { merge: true }); n++;
+            } catch (e) { /* el catálogo nunca debe frenar el ingreso de la orden */ }
+        }
+        return n;
+    }
+    async function aprenderNombres(oc, det) {
+        const f = fs();
+        for (const d of det) {
+            const l = (oc.lineas || [])[d.i], nombre = String(d.insumoName || '').trim(); if (!l || !nombre) continue;
+            const id = catId(l); if (!id) continue;
+            try { await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: l.descripcion, descripcion_lower: String(l.descripcion).toLowerCase(), codigoMP: l.codigoMP || '', insumoName: nombre, actualizado: f.serverTimestamp() }, { merge: true }); } catch (e) { /* noop */ }
+        }
+    }
+    async function cargarCatalogo() {
+        const m = new Map(); try { const sn = await fs().getDocs(fs().query(fs().collection(db(), 'Catalogo_Productos'), fs().limit(3000))); sn.forEach(d => m.set(d.id, { id: d.id, ...d.data() })); } catch (e) { /* sin catálogo */ }
+        return m;
+    }
+    /** Reduce la foto a ~220 px (JPEG) para guardarla dentro del producto. */
+    function reducirImagen(file) {
+        return new Promise((ok, mal) => {
+            const img = new Image(), url = URL.createObjectURL(file);
+            img.onload = () => { const k = Math.min(1, 220 / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url); ok(c.toDataURL('image/jpeg', 0.8)); };
+            img.onerror = () => { URL.revokeObjectURL(url); mal(new Error('No se pudo leer la imagen.')); }; img.src = url;
+        });
+    }
+    async function formCatalogo() {
+        const items = [...(await cargarCatalogo()).values()].sort((a, b) => String(a.descripcion || '').localeCompare(String(b.descripcion || '')));
+        const fila = (c) => `<li data-id="${esc(c.id)}" data-t="${esc((c.descripcion || '') + ' ' + (c.insumoName || '') + ' ' + (c.codigoMP || '') + ' ' + (c.proveedor || '')).toLowerCase()}">
+            <span class="cat-img">${c.imagen ? `<img src="${esc(c.imagen)}" alt="">` : '<i class="ph-bold ph-image"></i>'}</span>
+            <div><strong>${esc(c.descripcion || '')}</strong><small>${c.codigoMP ? 'Cód. MP ' + esc(c.codigoMP) + ' · ' : ''}${esc(c.proveedor || 's/proveedor')}${c.insumoName ? ' · Inventario: ' + esc(c.insumoName) : ''}${num(c.valorNeto) ? ' · ' + peso(c.valorNeto) + ' neto' : ''}</small></div>
+            <label class="btn btn-outline btn-sm cat-foto">Foto<input type="file" accept="image/*" hidden></label></li>`;
+        const ov = modal('Catálogo de productos', `<p class="cierre-hint">Se completa solo con cada orden que ingresas. Agrega una foto para reconocer cada producto.</p>
+            <input type="search" id="cat-q" placeholder="Buscar por nombre, código o proveedor…" autocomplete="off">
+            <ul class="soc-arch cat-lista" id="cat-l">${items.length ? items.map(fila).join('') : '<li>Aún no hay productos. Aparecerán al ingresar la próxima orden.</li>'}</ul>`, async () => true, { ancho: true, ok: 'Cerrar' });
+        ov.querySelector('#cat-q').addEventListener('input', (e) => { const t = e.target.value.trim().toLowerCase(); ov.querySelectorAll('#cat-l li[data-id]').forEach(li => { li.hidden = !!t && !li.dataset.t.includes(t); }); });
+        ov.querySelectorAll('.cat-foto input').forEach(inp => inp.addEventListener('change', async () => {
+            const li = inp.closest('li'), file = inp.files[0]; if (!file) return;
+            try { const img = await reducirImagen(file); await fs().setDoc(fs().doc(fs().collection(db(), 'Catalogo_Productos'), li.dataset.id), { imagen: img, actualizado: fs().serverTimestamp() }, { merge: true }); li.querySelector('.cat-img').innerHTML = `<img src="${img}" alt="">`; toast('Foto guardada', 'La imagen quedó en el catálogo.', 'success'); }
+            catch (e) { toast('No se guardó la foto', e.message || String(e), 'error'); }
+        }));
     }
 
     // ---------------------------------------------------------------
@@ -661,6 +715,7 @@
                     tx.set(ref, oc);
                     tx.set(fs().doc(fs().collection(db(), 'Seguimiento_OC', id, 'Eventos')), { tipo: 'CREACION', texto: `Orden ingresada: ${cuadro.lineas.length} productos, ${cuadro.columnas.length} memos/CDP. Vence el ${fmtFecha(oc.fechaLimite)}.`, autor: usuario(), fecha: fs().serverTimestamp() });
                 });
+                await registrarCatalogo({ ...oc, id });
                 await guardarFile(id, q('#n-file').files[0], 'Cuadro de distribución');
                 toast('Orden ingresada', `Vence el ${fmtFecha(oc.fechaLimite)}.`, 'success');
             });
@@ -749,6 +804,7 @@
                 tx.set(fs().doc(fs().collection(db(), 'Seguimiento_OC', id, 'Eventos')), { tipo: 'CREACION', texto: `Orden ingresada${oc.origen === 'OC_MP' ? ' desde el PDF' : ''}: ${oc.lineas.length} producto(s). El proveedor debe aceptarla hasta el ${fmtFecha(oc.aceptarLimite)}; entrega en ${oc.plazoDiasHabiles} días hábiles desde la aceptación.`, autor: usuario(), fecha: fs().serverTimestamp() });
             });
             if (usoCuadro) window.SAR_ComprasAgiles.vincularOC(usoCuadro.id, oc.numeroOC);
+            await registrarCatalogo({ ...oc, id });
             const fOC = (o.querySelector('#p-file') || {}).files, fDist = (o.querySelector('#p-dist') || {}).files;
             await guardarFile(id, fOC && fOC[0], 'Orden de compra'); await guardarFile(id, fDist && fDist[0], 'Cuadro de distribución');
             abrirCuando(id);
@@ -950,7 +1006,9 @@
     }
     async function formRecepcion() {
         const oc = ocActual; const cols = oc.columnas || [];
-        let central = 'Bodega Central', nombresInv = [], bodegasLista = [];
+        let central = 'Bodega Central', nombresInv = [], bodegasLista = [], catalogo = new Map();
+        cargarCatalogo().then(m => { catalogo = m; const lv = ov && ov.querySelector('#r-lineas'); if (lv) lv.querySelectorAll('tr[data-i] .r-n').forEach(inp => { const c = catalogo.get(catId(oc.lineas[+inp.closest('tr').dataset.i] || {})); if (c && c.insumoName && inp.value === (oc.lineas[+inp.closest('tr').dataset.i] || {}).descripcion) inp.value = c.insumoName; }); const dl = ov && ov.querySelector('#r-inv'); if (dl) dl.innerHTML = nombresAuto().map(n => `<option value="${esc(n)}">`).join(''); }).catch(() => {});
+        const nombresAuto = () => [...new Set([...nombresInv, ...[...catalogo.values()].map(c => c.insumoName).filter(Boolean)])];
         const cargaNombres = async () => { try { const ins = await fs().getDocs(fs().query(fs().collection(db(), 'Insumos'), fs().where('location', '==', central), fs().limit(1500))); const set = new Set(); ins.forEach(d => { if (d.data().name) set.add(d.data().name); }); nombresInv = [...set].sort((a, b) => a.localeCompare(b, 'es')); } catch (e) { nombresInv = []; } };
         const propia = (key) => { const c = cols.find(x => x.key === key); return !!c && c.centro === CENTRO_PROPIO; };
         const cargaInv = (async () => {
@@ -970,7 +1028,7 @@
             <label class="soc-toggle" id="r-stock-w"><input type="checkbox" id="r-stock" checked> Ingresar lo recibido al stock de ${esc(central)} (así se descuenta al entregarlo por acta)</label>
             <label>Observación (opcional)<input type="text" id="r-obs" maxlength="300"></label>
             <label class="soc-toggle"><input type="checkbox" id="r-correo" checked> Avisar por correo a la lista</label>
-            <datalist id="r-inv">${nombresInv.map(n => `<option value="${esc(n)}">`).join('')}</datalist>`,
+            <datalist id="r-inv">${nombresAuto().map(n => `<option value="${esc(n)}">`).join('')}</datalist>`,
             async (o) => {
                 const q = (s) => o.querySelector(s), key = q('#r-col').value, ingresaStock = q('#r-stock').checked; central = q('#r-dest').value || central;
                 const det = [], incidencias = [];
@@ -1005,6 +1063,7 @@
                 try {
                 const fGuia = (q('#r-file').files || [])[0];
                 await recepcionConStock(oc, { onPaso: prog.paso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar: q('#r-correo').checked, ingresaStock, central, texto, titulo: incidencias.length ? `Recepción con incidencias en ${col.centro}` : `Recepción en ${col.centro}` });
+                if (ingresaStock) await aprenderNombres(oc, det);
                 if (fGuia) { prog.paso('Guardando la guía en la orden…'); await guardarFile(oc.id, fGuia, 'Guía de despacho ' + recId); }
                 } catch (err) { prog.error(err); throw err; }
                 prog.listo(`Listo: ${recId} · ${unidades} unidades${ingresaStock ? ` en ${central}` : ''}. Quedó registrada en Auditoría y en los informes contable y disponible.`);
@@ -1015,7 +1074,7 @@
             const key = ov.querySelector('#r-col').value, st = ov.querySelector('#r-stock').checked, lv = ov.querySelector('#r-lv').checked;
             ov.querySelector('#r-lineas').innerHTML = '<div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Recibido</th><th>Pendiente</th><th>Llega ahora</th>' + (st ? '<th>Producto en inventario</th>' + (lv ? '<th>Lote</th><th>Vence</th>' : '') : '') + '<th>Incidencia</th></tr></thead><tbody>' +
                 oc.lineas.map((l, i) => { const p = num(l.dist && l.dist[key]), ya = num(l.recibido && l.recibido[key]), pe = Math.max(0, p - ya); return p ? `<tr data-i="${i}" data-pe="${pe}"><td class="r-prod" data-l="Producto">${esc(l.descripcion)}</td><td data-l="Pedido">${p}</td><td data-l="Recibido">${ya}</td><td data-l="Pendiente"><strong>${pe}</strong></td><td class="r-celda" data-l="Llega ahora"><input type="number" min="0" max="${pe}" class="r-c" value="" aria-label="Unidades que llegaron"><button type="button" class="btn btn-outline btn-sm r-ok" title="Llegó completo"${pe ? '' : ' disabled'}>✔ ${pe || 'listo'}</button></td>` +
-                    (st ? `<td data-l="Producto en inventario"><input class="r-n" list="r-inv" aria-label="Producto en inventario" value="${esc(l.insumoName || l.descripcion)}"></td>` + (lv ? `<td data-l="Lote"><input class="r-l" aria-label="Lote" placeholder="S/L"></td><td data-l="Vence"><input type="date" class="r-v" aria-label="Fecha de vencimiento"></td>` : '') : '') +
+                    (st ? `<td data-l="Producto en inventario"><input class="r-n" list="r-inv" aria-label="Producto en inventario" value="${esc(l.insumoName || ((catalogo.get(catId(l)) || {}).insumoName) || l.descripcion)}"></td>` + (lv ? `<td data-l="Lote"><input class="r-l" aria-label="Lote" placeholder="S/L"></td><td data-l="Vence"><input type="date" class="r-v" aria-label="Fecha de vencimiento"></td>` : '') : '') +
                     `<td data-l="Incidencia"><select class="r-t" aria-label="Incidencia"><option value="">Sin incidencia</option>${Object.entries(INCIDENCIAS).map(([k, t]) => `<option value="${k}">${esc(t)}</option>`).join('')}</select><input class="r-td" aria-label="Detalle de la incidencia" placeholder="Detalle"></td></tr>` : ''; }).join('') + '</tbody></table></div>';
         };
         const resumen = () => {
@@ -1033,14 +1092,14 @@
         }));
         ov.querySelector('#r-dest').addEventListener('change', async (e) => {
             central = e.target.value; await cargaNombres();
-            const dl = ov.querySelector('#r-inv'); if (dl) dl.innerHTML = nombresInv.map(n => `<option value="${esc(n)}">`).join('');
+            const dl = ov.querySelector('#r-inv'); if (dl) dl.innerHTML = nombresAuto().map(n => `<option value="${esc(n)}">`).join('');
             const w = ov.querySelector('#r-stock-w'); if (w && w.lastChild) w.lastChild.textContent = ` Ingresar lo recibido al stock de ${central} (así se descuenta al entregarlo por acta)`;
         });
         ov.querySelector('#r-col').addEventListener('change', () => { pintar(); resumen(); }); ov.querySelector('#r-stock').addEventListener('change', () => { pintar(); resumen(); }); ov.querySelector('#r-lv').addEventListener('change', () => { pintar(); resumen(); });
         const sel = ov.querySelector('#r-col'); const iPropia = cols.findIndex(c => c.centro === CENTRO_PROPIO); if (iPropia > 0) sel.selectedIndex = iPropia;
         pintar(); resumen();
         cargaInv.then(() => {
-            const dl = ov.querySelector('#r-inv'); if (dl) dl.innerHTML = nombresInv.map(n => `<option value="${esc(n)}">`).join('');
+            const dl = ov.querySelector('#r-inv'); if (dl) dl.innerHTML = nombresAuto().map(n => `<option value="${esc(n)}">`).join('');
             const sel = ov.querySelector('#r-dest'); if (sel) { const opts = [...new Set([central, ...bodegasLista])].sort((a, b) => (/central/i.test(b) - /central/i.test(a)) || a.localeCompare(b, 'es')); sel.innerHTML = opts.map(b => `<option${b === central ? ' selected' : ''}>${esc(b)}</option>`).join(''); }
             const w = ov.querySelector('#r-stock-w'); if (w && w.lastChild) w.lastChild.textContent = ` Ingresar lo recibido al stock de ${central} (así se descuenta al entregarlo por acta)`;
         });
@@ -1118,5 +1177,5 @@ function salida(o) { return ContentService.createTextOutput(JSON.stringify(o)).s
         ov.querySelector('#c-copiar').addEventListener('click', async () => { try { await navigator.clipboard.writeText(SCRIPT_GAS); toast('Copiado', 'Código copiado.', 'success'); } catch (e) { ov.querySelector('#c-script').select(); } });
     }
 
-    window.SAR_SeguimientoOC = { guardarArchivo, abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
+    window.SAR_SeguimientoOC = { formCatalogo, registrarCatalogo, guardarArchivo, abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
 })(window, document);

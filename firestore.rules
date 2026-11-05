@@ -192,6 +192,11 @@ service cloud.firestore {
         }
       }
     }
+    // CATÁLOGO DE PRODUCTOS (v20.76): se alimenta con las órdenes; foto opcional
+    match /Catalogo_Productos/{id} {
+      allow read, create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
     // PRESUPUESTO POR CDP (v20.55): opcional; lo comprometido se calcula desde las órdenes
     match /CDP_Presupuesto/{id} {
       allow read, create, update: if isStaff();

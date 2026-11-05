@@ -5377,3 +5377,9 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .soc-bc-link { cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .cierre-box--aviso { width: min(440px, 94vw); }
 .cierre-box--aviso .cierre-hint { margin: 4px 0 8px; font-size: 14px; color: #334155; }
+
+/* v20.68 · ficha de la orden: estado dentro de la tarjeta, acciones por etapa */
+.soc-fechas__estado { grid-column: 1 / -1; display: flex; }
+.soc-siguiente__btns { display: inline-flex; gap: 8px; flex-wrap: wrap; }
+.soc-dest-fijos { font-size: 12.5px; line-height: 1.6; background: #F1F5F9; border-radius: 8px; padding: 10px 12px; color: #334155; }
+.soc-dest-fijos span { color: #64748B; font-weight: 600; }

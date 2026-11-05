@@ -479,6 +479,7 @@
             ${(oc.otrosCentros || []).length && !verTodos ? `<p class="soc-card__sub">La orden también incluye productos de ${esc(oc.otrosCentros.map(c => c.centro + ' (memo ' + c.memo + ')').join(', '))}: no se muestran aquí.</p>` : ''}
             <details class="erp-card soc-det soc-ped" id="soc-ped"${verPedido ? ' open' : ''}><summary><h3>Pedido y recibido</h3><span class="soc-n">${(tot.find(t => t.centro === CENTRO_PROPIO) || tot[0] || { recibido: 0, pedido: 0 }).recibido} de ${(tot.find(t => t.centro === CENTRO_PROPIO) || tot[0] || { pedido: 0 }).pedido} un. recibidas</span></summary><div class="soc-sub">
                 ${(oc.columnas || []).length > 1 ? `<label class="soc-toggle"><input type="checkbox" id="soc-todos" ${verTodos ? 'checked' : ''}> Ver otros centros</label>` : ''}
+                <button type="button" class="btn btn-outline btn-sm" id="soc-fotos"><i class="ph-bold ph-images"></i> Buscar fotos de esta orden</button>
                 ${hayRecibido(oc) ? `<button type="button" class="btn btn-outline btn-sm" id="soc-lotes"><i class="ph-bold ph-barcode"></i> Lotes y vencimientos</button>
                 <button type="button" class="btn btn-outline btn-sm" id="soc-pend"><i class="ph-bold ph-file-csv"></i> Descargar pendientes</button>` : ''}</div>
                 ${oc.recepcionConforme ? `<p class="soc-card__sub">Recepción conforme registrada el ${fmtFecha(oc.recepcionConforme.fecha)} (${esc(oc.recepcionConforme.tipoDoc === 'FACTURA' ? 'factura' : 'guía')} ${esc(oc.recepcionConforme.numeroDoc)}). Correo: ${({ enviado: 'enviado', borrador: 'borrador abierto', error: 'NO se envió', sin_adjuntos: 'enviado SIN adjuntos', sin_destinatarios: 'sin destinatarios' })[(oc.recepcionConforme.correo || {}).estado] || '—'}.</p>` : ''}
@@ -512,6 +513,14 @@
         const ped = q('#soc-ped'); if (ped) ped.addEventListener('toggle', () => { verPedido = ped.open; });
         const tdo = q('#soc-todos'); if (tdo) tdo.addEventListener('change', (e) => { verTodos = e.target.checked; pintarDetalle(); });
         const bs = q('#soc-sig'); if (bs) bs.addEventListener('click', () => { window.location.hash = bs.dataset.go.slice(1); });
+        const bft = q('#soc-fotos'); if (bft) bft.addEventListener('click', async () => {
+            bft.disabled = true;
+            try {
+                await window.SAR_Progreso.correr('Buscando las fotos de esta orden…', async () => { await registrarCatalogo({ ...ocActual, id: ocActual.id }); if (window.SAR_Imagenes) await window.SAR_Imagenes.recargar(); }, 'Fotos buscadas');
+                toast('Fotos buscadas', 'Las que se encontraron quedan "por confirmar" en el Catálogo de productos; confírmalas ahí. Las que no, se pueden pegar o subir a mano.', 'success');
+                pintarDetalle();
+            } catch (e) { toast('No se pudo buscar', e.message || String(e), 'error'); } finally { bft.disabled = false; }
+        });
         const bre = q('#soc-recep'); if (bre) bre.addEventListener('click', () => { formRecepcion().catch(e => toast('No se pudo abrir la recepción', e.message || String(e), 'error')); });
         const bpe = q('#soc-pend'); if (bpe) bpe.addEventListener('click', () => { if (!pendientesDe(ocActual).some(x => x.pendiente > 0)) { toast('Sin pendientes', 'Todo lo de SAR ya fue recibido.', 'success'); return; } descargarPendientes(ocActual); });
         const blo = q('#soc-lotes'); if (blo) blo.addEventListener('click', formLotes);

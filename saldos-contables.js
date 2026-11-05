@@ -22,7 +22,7 @@
         const q = num(d.quantity), sg = num(d.sobregiro), pu = num(d.unitPrice);
         const contable = q - sg;
         const estado = sg > 0 ? (q > 0 ? 'LISTO' : 'SIN_RESPALDO') : (d.provisional ? 'PROVISIONAL' : 'OK');
-        return { id, nombre: d.name || '', bodega: d.location || '', q, sg, contable, disp: Math.max(0, contable), pu, valSg: sg * pu, valContable: contable * pu, valDisp: Math.max(0, contable) * pu, estado, provisional: !!d.provisional, actas: (window.SAR_ActasEntrega && window.SAR_ActasEntrega.detalleDe ? window.SAR_ActasEntrega.detalleDe(d) : []) };
+        return { id, nombre: d.name || '', bodega: d.location || '', q, sg, contable, disp: Math.max(0, contable), pu, valSg: sg * pu, valContable: contable * pu, valDisp: Math.max(0, contable) * pu, estado, codigo: String(d.codigoMP || ''), provisional: !!d.provisional, actas: (window.SAR_ActasEntrega && window.SAR_ActasEntrega.detalleDe ? window.SAR_ActasEntrega.detalleDe(d) : []) };
     }
     const actasTxt = (r) => (r.actas || []).map(a => `${a.acta} (${a.qty})`).join(', ');
     const ETIQ = { SIN_RESPALDO: 'Sin respaldo', LISTO: 'Listo para cuadrar', PROVISIONAL: 'Provisional', OK: 'OK' };
@@ -56,13 +56,13 @@
     function csv(tipo, extra) {
         const filasX = (extra && extra.filas) || filas, recepciones = (extra && extra.recs) || [];
         const cab = tipo === 'contable'
-            ? ['Insumo', 'Bodega', 'En sistema', 'Sobregiro', 'Saldo contable', 'Precio unitario', 'Valor contable', 'Estado', 'Actas con sobregiro (unidades)']
-            : ['Insumo', 'Bodega', 'En sistema', 'Sobregiro', 'Disponible', 'Precio unitario', 'Valor disponible', 'Estado', 'Actas con sobregiro (unidades)'];
+            ? ['Insumo', 'ID producto', 'Bodega', 'En sistema', 'Sobregiro', 'Saldo contable', 'Precio unitario', 'Valor contable', 'Estado', 'Actas con sobregiro (unidades)']
+            : ['Insumo', 'ID producto', 'Bodega', 'En sistema', 'Sobregiro', 'Disponible', 'Precio unitario', 'Valor disponible', 'Estado', 'Actas con sobregiro (unidades)'];
         const celda = (v) => { const t = String(v == null ? '' : v); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
         const l = filasX.map(r => tipo === 'contable'
-            ? [r.nombre, r.bodega, r.q, r.sg, r.contable, r.pu, r.valContable, ETIQ[r.estado], actasTxt(r)]
-            : [r.nombre, r.bodega, r.q, r.sg, r.disp, r.pu, r.valDisp, ETIQ[r.estado], actasTxt(r)]);
-        const tot = tipo === 'contable' ? ['TOTAL', '', '', filasX.reduce((s, r) => s + r.sg, 0), filasX.reduce((s, r) => s + r.contable, 0), '', filasX.reduce((s, r) => s + r.valContable, 0), '', ''] : ['TOTAL', '', '', filasX.reduce((s, r) => s + r.sg, 0), filasX.reduce((s, r) => s + r.disp, 0), '', filasX.reduce((s, r) => s + r.valDisp, 0), '', ''];
+            ? [r.nombre, r.codigo, r.bodega, r.q, r.sg, r.contable, r.pu, r.valContable, ETIQ[r.estado], actasTxt(r)]
+            : [r.nombre, r.codigo, r.bodega, r.q, r.sg, r.disp, r.pu, r.valDisp, ETIQ[r.estado], actasTxt(r)]);
+        const tot = tipo === 'contable' ? ['TOTAL', '', '', '', filasX.reduce((s, r) => s + r.sg, 0), filasX.reduce((s, r) => s + r.contable, 0), '', filasX.reduce((s, r) => s + r.valContable, 0), '', ''] : ['TOTAL', '', '', '', filasX.reduce((s, r) => s + r.sg, 0), filasX.reduce((s, r) => s + r.disp, 0), '', filasX.reduce((s, r) => s + r.valDisp, 0), '', ''];
         const rec = recepciones.length ? [[], ['RECEPCIONES DE ORDEN DE COMPRA'], ['ID recepción', 'Orden', 'Fecha', 'Hora', 'Guía', 'Bodega', 'Producto', 'Unidades', 'Lote', 'Vence', 'Registró'],
             ...recepciones.flatMap(x => (x.detalle || []).map(d => [x.recId, x.numeroOC, x.fecha, x.hora || '', x.guia || '', x.bodega || '', d.insumoName || d.descripcion, d.cantidad, d.lote || 'S/L', d.vence || 'N/A', x.usuario || '']))] : [];
         return '﻿' + [cab, ...l, tot, ...rec].map(x => x.map(celda).join(';')).join('\r\n');
@@ -186,7 +186,7 @@
         <div class="sal-res"><div><b>${vis.filter(x => x.sg > 0).length}</b><span>insumos con sobregiro</span></div><div><b>${sum('sg')}</b><span>unidades sin respaldo</span></div><div><b>${clp(vis.reduce((s, x) => s + x.valSg, 0))}</b><span>valor sin respaldo</span></div><div><b>${listos.length}</b><span>listos para cuadrar</span></div></div>
         ${cargando ? '<p class="act-hint">Cargando…</p>' : !vis.length ? '<p class="act-hint">Sin insumos en sobregiro. Todo cuadrado.</p>' : `
         <div class="sal-tabla"><div class="sal-fila sal-cab"><span>Insumo</span><span>En sistema</span><span>Sobregiro</span><span>Contable</span><span>Disponible</span><span>Estado</span><span></span></div>
-        ${vis.slice(0, 300).map(x => `<div class="sal-fila"><span class="sal-n">${esc(x.nombre)}<small>${esc(x.bodega)}${x.actas.length ? ' · ' + esc(actasTxt(x)) : ''}</small></span><span>${x.q}</span><span class="${x.sg > 0 ? 'act-sin' : ''}">${x.sg}</span><span class="${x.contable < 0 ? 'act-sin' : ''}">${x.contable}</span><span>${x.disp}</span><span><i class="sal-e sal-e--${x.estado}">${ETIQ[x.estado]}</i></span><span>${x.estado === 'LISTO' ? `<button type="button" class="btn btn-outline sal-q" data-id="${esc(x.id)}">Cuadrar</button>` : ''}</span></div>`).join('')}</div>${vis.length > 300 ? '<p class="act-hint">Se muestran 300; el informe Excel incluye todos.</p>' : ''}`}`;
+        ${vis.slice(0, 300).map(x => `<div class="sal-fila"><span class="sal-n">${esc(x.nombre)}<small>${x.codigo ? 'ID ' + esc(x.codigo) + ' · ' : (x.provisional ? 'sin ID · ' : '')}${esc(x.bodega)}${x.actas.length ? ' · ' + esc(actasTxt(x)) : ''}</small></span><span>${x.q}</span><span class="${x.sg > 0 ? 'act-sin' : ''}">${x.sg}</span><span class="${x.contable < 0 ? 'act-sin' : ''}">${x.contable}</span><span>${x.disp}</span><span><i class="sal-e sal-e--${x.estado}">${ETIQ[x.estado]}</i></span><span>${x.estado === 'LISTO' ? `<button type="button" class="btn btn-outline sal-q" data-id="${esc(x.id)}">Cuadrar</button>` : ''}</span></div>`).join('')}</div>${vis.length > 300 ? '<p class="act-hint">Se muestran 300; el informe Excel incluye todos.</p>' : ''}`}`;
         r.insertAdjacentHTML('beforeend', '<div id="rec-aud"></div>'); pintarRec();
         r.querySelector('#sal-b').addEventListener('change', (e) => { bodega = e.target.value; pintar(); });
         r.querySelector('#sal-sp').addEventListener('change', (e) => { soloPend = e.target.checked; cargar(); });

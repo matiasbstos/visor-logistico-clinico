@@ -155,6 +155,14 @@
     let historial = [];
     let busqueda = '';
     let centrosGuardados = [];
+    let catalogo = [], catCargado = false;   // Catalogo_Productos: nombre <-> ID del producto (Mercado Público)
+    const slugC = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+    const normN = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const codDe = (nombre) => { const n = normN(nombre); const c = catalogo.find(x => x.codigoMP && (normN(x.insumoName) === n || normN(x.descripcion) === n)); return c ? String(c.codigoMP) : ''; };
+    async function cargarCatalogo() {
+        if (catCargado) return; catCargado = true;
+        try { const sn = await fs().getDocs(fs().query(fs().collection(db(), 'Catalogo_Productos'), fs().limit(3000))); catalogo = []; sn.forEach(d => catalogo.push({ id: d.id, ...d.data() })); } catch (e) { catCargado = false; }
+    }
     let pdfLibPromesa = null, logoPromesa = null;
 
     const usuarioEmail = () => { const a = window.firebaseAuth; return (a && a.currentUser && a.currentUser.email) || 'Usuario'; };
@@ -199,9 +207,10 @@
     async function cargarStock() {
         stock = [];
         if (!borrador.origen) return;
+        await cargarCatalogo();
         const f = fs();
         const snap = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('location', '==', borrador.origen), f.limit(1500)));
-        snap.forEach(d => { const x = d.data(); if (x.status !== 'CUARENTENA') stock.push({ id: d.id, name: x.name || '', quantity: num(x.quantity), sobregiro: num(x.sobregiro), disp: Math.max(0, num(x.quantity) - num(x.sobregiro)), controlado: !!x.controlado, provisional: !!x.provisional, batches: lotesDeDoc(x) }); });
+        snap.forEach(d => { const x = d.data(); if (x.status !== 'CUARENTENA') stock.push({ id: d.id, codigo: String(x.codigoMP || '') || codDe(x.name), name: x.name || '', quantity: num(x.quantity), sobregiro: num(x.sobregiro), disp: Math.max(0, num(x.quantity) - num(x.sobregiro)), controlado: !!x.controlado, provisional: !!x.provisional, batches: lotesDeDoc(x) }); });
         stock.sort((a, b) => (b.disp > 0) - (a.disp > 0) || a.name.localeCompare(b.name, 'es'));
     }
     async function cargarHistorial() {
@@ -226,7 +235,7 @@
             else { i.nuevo = true; i.nombre = nombre; }
         }
         const refs = items.map(i => ({ i, ref: i.nuevo ? f.doc(f.collection(db(), 'Insumos')) : f.doc(f.collection(db(), 'Insumos'), i.id), hist: f.doc(f.collection(db(), 'Historial_Movimientos')), histC: f.doc(f.collection(db(), 'Historial_Movimientos')) }));
-        return f.runTransaction(db(), async (tx) => {
+        const resultado = await f.runTransaction(db(), async (tx) => {
             const cs = await tx.get(ctrRef);
             const n = (cs.exists() ? num(cs.data().ultimo) : 0) + 1;
             const numero = numeroActa(anio, n);
@@ -251,7 +260,7 @@
                 autoPend = ocLineas.map((l, idx) => ({ idx, l, p: num(l.dist && l.dist[b.oc.key]) - num(l.entregado[b.oc.key]) }))
                     .filter(x => !yaEn.has(x.idx) && x.p > 0).map(x => ({ nombre: String(x.l.descripcion || '').toUpperCase(), cantidad: x.p }));
             }
-            const base = (r) => ({ name: r.i.nombre, name_lowercase: String(r.i.nombre).toLowerCase(), location: b.origen, quantity: 0, batches: [], sobregiro: 0, provisional: true, category: 'Provisional', criticalLimit: 50, isCritical: true, unitPrice: 0, status: 'ACTIVO', createdAt: f.serverTimestamp(), createdBy: usuario });
+            const base = (r) => ({ ...(r.i.codigo ? { codigoMP: String(r.i.codigo) } : {}), name: r.i.nombre, name_lowercase: String(r.i.nombre).toLowerCase(), location: b.origen, quantity: 0, batches: [], sobregiro: 0, provisional: true, category: 'Provisional', criticalLimit: 50, isCritical: true, unitPrice: 0, status: 'ACTIVO', createdAt: f.serverTimestamp(), createdBy: usuario });
             const datos = refs.map((r, k) => {
                 if (r.i.nuevo) return base(r);
                 if (!snaps[k].exists()) throw new Error(`${r.i.nombre} ya no existe en la bodega.`);
@@ -265,7 +274,7 @@
                 if (datos[k].controlado && p.faltante > 0) throw new Error(`${r.i.nombre} es medicamento controlado: no puede entregarse sin stock en sistema.`);
                 return p;
             });
-            const itemsActa = refs.map((r, k) => ({ id: r.ref.id, nombre: r.i.nombre, cantidad: num(r.i.cantidad), lotes: calc[k].usados, sinRespaldo: calc[k].faltante, ...(r.i.nuevo ? { provisional: true } : {}), ...(b.oc ? { ocI: r.i.ocI, solicitado: r.i.solicitado, entregadoTotal: r.i.entregadoTotal } : {}) }));
+            const itemsActa = refs.map((r, k) => ({ id: r.ref.id, nombre: r.i.nombre, cantidad: num(r.i.cantidad), lotes: calc[k].usados, sinRespaldo: calc[k].faltante, ...(datos[k].codigoMP || r.i.codigo ? { codigoMP: String(datos[k].codigoMP || r.i.codigo) } : {}), ...(!b.oc && num(r.i.solicitado) > num(r.i.cantidad) ? { solicitado: num(r.i.solicitado), entregadoTotal: num(r.i.cantidad) } : {}), ...(r.i.nuevo ? { provisional: true } : {}), ...(b.oc ? { ocI: r.i.ocI, solicitado: r.i.solicitado, entregadoTotal: r.i.entregadoTotal } : {}) }));
             refs.forEach((r, k) => {
                 const d = datos[k], c = calc[k];
                 const limite = num(d.criticalLimit || d.stock_minimo || 50);
@@ -297,6 +306,15 @@
             }
             return { ...acta, creadoEn: new Date().toISOString() };
         });
+        // Productos que no venían de ninguna orden: quedan en el catálogo (nombre + ID) para reconocerlos la próxima vez y asociarlos a una orden
+        for (const i of items.filter(x => x.nuevo)) {
+            try {
+                const cod = String(i.codigo || '').trim(), id = slugC(cod || i.nombre) || 'manual';
+                await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: i.nombre, descripcion_lower: String(i.nombre).toLowerCase(), codigoMP: cod, insumoName: i.nombre, sinOrden: true, origen: 'MANUAL', creadoEn: f.serverTimestamp(), creadoPor: usuario, actualizado: f.serverTimestamp() }, { merge: true });
+                catCargado = false;
+            } catch (e) { /* el acta ya se emitió */ }
+        }
+        return resultado;
     }
 
     /** Anula un acta emitida: devuelve el stock a la bodega de origen. */
@@ -379,7 +397,7 @@
     function pintar() {
         const r = root(); if (!r) return;
         const q = busqueda.trim().toLowerCase();
-        const lista = stock.filter(s => !q || s.name.toLowerCase().includes(q)).slice(0, 80);
+        const lista = stock.filter(s => !q || s.name.toLowerCase().includes(q) || String(s.codigo || '').includes(q)).slice(0, 80);
         const yaEsta = (id) => borrador.items.some(i => i.id === id);
         const errores = validarBorrador(borrador);
         r.innerHTML = `
@@ -392,15 +410,17 @@
             <h3 class="act-h">1 · Stock disponible</h3>
             <label class="act-l">Bodega de origen
               <select id="act-origen"><option value="">— elegir —</option>${bodegas.map(b => `<option value="${esc(b.name)}"${b.name === borrador.origen ? ' selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
-            <input id="act-buscar" type="search" placeholder="Buscar producto…" value="${esc(busqueda)}" autocomplete="off">
+            <input id="act-buscar" type="search" placeholder="Buscar por nombre o ID del producto…" value="${esc(busqueda)}" autocomplete="off">
             <details class="act-det act-manual"${borrador.items.some(i => i.manual) ? ' open' : ''}><summary>¿No está en el sistema? Ingreso manual</summary>
               <p class="act-hint">Se asume que lo tienes físicamente. Queda como insumo provisional y como <b>sobregiro</b> (saldo contable negativo) hasta que ingrese la OC/SDC y se cuadre.</p>
-              <div class="act-fila act-docs"><input id="act-mn" placeholder="Nombre del insumo"><input id="act-mq" type="number" min="1" value="1" class="act-qty" aria-label="Cantidad"><button type="button" class="btn btn-outline" id="act-madd">Agregar</button></div>
+              <div class="act-fila act-docs"><input id="act-mn" list="act-mnl" placeholder="Nombre del insumo" autocomplete="off"><datalist id="act-mnl">${catalogo.slice(0, 1500).map(c => `<option value="${esc(String(c.descripcion || c.insumoName || '').toUpperCase())}">`).join('')}</datalist><input id="act-mid" inputmode="numeric" placeholder="ID del producto (Mercado Público)" autocomplete="off"></div>
+              <div class="act-fila act-docs"><input id="act-ms" type="number" min="0" class="act-qty" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input id="act-mq" type="number" min="1" value="1" class="act-qty" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline" id="act-madd">Agregar</button></div>
+              <p class="act-hint">Pedido = lo solicitado en total (opcional); el segundo número es lo que entregas ahora. Lo que falte queda como pendiente en el acta. El nombre y el ID quedan guardados en el catálogo.</p>
               <label class="act-l act-chk"><input type="checkbox" id="act-mc"> Es medicamento controlado (no se permite sin stock)</label></details>
             <div class="act-stock">${!borrador.origen ? '<p class="act-hint">Elige una bodega para ver su stock.</p>' : !lista.length ? '<p class="act-hint">Sin resultados. Si no está en el sistema, agrégalo a mano abajo.</p>' : lista.map(s => `
-              <div class="act-fila${yaEsta(s.id) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(s.name) : ''}${esc(s.name)}${s.controlado ? ' <small>(controlado)</small>' : ''}${s.provisional ? ' <small>(provisional)</small>' : ''}<small>${s.disp > 0 ? 'Disponible: ' + s.disp : '<span class="act-sin">Sin stock en sistema</span>'}${s.sobregiro > 0 ? ' · sobregiro: ' + s.sobregiro : ''}</small></div>
-                ${yaEsta(s.id) ? '<span class="act-chip">agregado</span>' : `<input type="number" min="1" value="1" class="act-qty" data-qid="${esc(s.id)}" aria-label="Cantidad"><button type="button" class="btn btn-outline act-add" data-id="${esc(s.id)}">Agregar</button>`}</div>`).join('')}
-              ${stock.filter(s => !q || s.name.toLowerCase().includes(q)).length > 80 ? '<p class="act-hint">Hay más resultados: afina la búsqueda.</p>' : ''}</div>
+              <div class="act-fila${yaEsta(s.id) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(s.name, { codigo: s.codigo }) : ''}${esc(s.name)}${s.controlado ? ' <small>(controlado)</small>' : ''}${s.provisional ? ' <small>(provisional)</small>' : ''}<small>${s.codigo ? '<b>ID ' + esc(s.codigo) + '</b> · ' : '<span class="act-sin">sin ID</span> · '}${s.disp > 0 ? 'Disponible: ' + s.disp : '<span class="act-sin">Sin stock en sistema</span>'}${s.sobregiro > 0 ? ' · sobregiro: ' + s.sobregiro : ''}</small></div>
+                ${yaEsta(s.id) ? '<span class="act-chip">agregado</span>' : `<input type="number" min="0" class="act-qty" data-sid="${esc(s.id)}" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input type="number" min="1" value="1" class="act-qty" data-qid="${esc(s.id)}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-add" data-id="${esc(s.id)}">Agregar</button>`}</div>`).join('')}
+              ${stock.filter(s => !q || s.name.toLowerCase().includes(q) || String(s.codigo || '').includes(q)).length > 80 ? '<p class="act-hint">Hay más resultados: afina la búsqueda.</p>' : ''}</div>
           </div>
           <div class="act-col">
             <h3 class="act-h">2 · Acta</h3>
@@ -408,8 +428,8 @@
               <input id="act-centro" list="act-centros" value="${esc(borrador.centro)}" placeholder="Ej: Pomaire"><datalist id="act-centros">${listaCentros().map(c => `<option value="${esc(c)}">`).join('')}</datalist></label>
               <div class="act-centro-acc"><button type="button" class="btn btn-outline btn-sm" id="act-centro-add">+ Guardar este centro en la lista</button></div>
             <h4 class="act-h4">Productos entregados (${borrador.items.length})</h4>
-            ${borrador.items.length ? borrador.items.map((i, k) => `<div class="act-fila"><div class="act-fn">${esc(i.nombre)}${i.manual ? ' <small>(manual · provisional)</small>' : ''}<small>Disponible: ${num(i.stock)}${num(i.cantidad) > num(i.stock) ? ` · <span class="act-sin">sin respaldo: ${num(i.cantidad) - num(i.stock)}</span>` : ''}</small></div>
-                <input type="number" min="1" value="${i.cantidad}" class="act-qty act-edit" data-k="${k}" aria-label="Cantidad"><button type="button" class="btn btn-outline act-del" data-k="${k}" aria-label="Quitar">✕</button></div>`).join('') : '<p class="act-hint">Aún no agregas productos.</p>'}
+            ${borrador.items.length ? borrador.items.map((i, k) => `<div class="act-fila"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(i.nombre, { codigo: i.codigo }) : ''}${esc(i.nombre)}${i.manual ? ' <small>(manual · provisional)</small>' : ''}<small>${i.codigo ? '<b>ID ' + esc(i.codigo) + '</b> · ' : ''}Disponible: ${num(i.stock)}${num(i.solicitado) > num(i.cantidad) ? ` · pedido ${num(i.solicitado)} · <b>pendiente ${num(i.solicitado) - num(i.cantidad)}</b>` : ''}${num(i.cantidad) > num(i.stock) ? ` · <span class="act-sin">sin respaldo: ${num(i.cantidad) - num(i.stock)}</span>` : ''}</small></div>
+                <input type="number" min="0" value="${num(i.solicitado) > num(i.cantidad) ? num(i.solicitado) : ''}" class="act-qty act-sedit" data-k="${k}" placeholder="Pedido" aria-label="Cantidad pedida"><input type="number" min="1" value="${i.cantidad}" class="act-qty act-edit" data-k="${k}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-del" data-k="${k}" aria-label="Quitar">✕</button></div>`).join('') : '<p class="act-hint">Aún no agregas productos.</p>'}
             <details class="act-det"${borrador.pendientes.length ? ' open' : ''}><summary>Productos pendientes de entrega (opcional)</summary>
               ${borrador.pendientes.map((p, k) => `<div class="act-fila"><div class="act-fn">${esc(p.nombre)}</div><input type="number" min="1" value="${p.cantidad}" class="act-qty act-pedit" data-k="${k}"><button type="button" class="btn btn-outline act-pdel" data-k="${k}">✕</button></div>`).join('')}
               <div class="act-fila"><input id="act-pn" placeholder="Nombre del producto pendiente"><input id="act-pq" type="number" min="1" value="1" class="act-qty"><button type="button" class="btn btn-outline" id="act-padd">Añadir</button></div></details>
@@ -466,9 +486,17 @@
             if (!s || !(c > 0)) { toast('Cantidad', 'Indica una cantidad mayor que 0.', 'warning'); return; }
             if (borrador.items.length >= MAX_ITEMS) { toast('Límite', `Máximo ${MAX_ITEMS} productos por acta.`, 'warning'); return; }
             if (s.controlado && c > s.disp) { toast('Medicamento controlado', 'No puede entregarse sin stock en sistema.', 'error'); return; }
-            borrador.items.push({ id: s.id, nombre: s.name, cantidad: c, stock: s.disp, controlado: s.controlado }); refrescar();
+            const sp = r.querySelector(`.act-qty[data-sid="${CSS.escape(b.dataset.id)}"]`), sol = Math.floor(num(sp && sp.value));
+            borrador.items.push({ id: s.id, nombre: s.name, codigo: s.codigo || '', cantidad: c, solicitado: sol > c ? sol : 0, stock: s.disp, controlado: s.controlado }); refrescar();
         }));
         $$('.act-edit').forEach(i => i.addEventListener('change', () => { borrador.items[+i.dataset.k].cantidad = Math.floor(num(i.value)); refrescar(); }));
+        $$('.act-sedit').forEach(i => i.addEventListener('change', () => { const it = borrador.items[+i.dataset.k]; const v = Math.floor(num(i.value)); it.solicitado = v > num(it.cantidad) ? v : 0; refrescar(); }));
+        // Manual: al elegir un nombre del catálogo se completa el ID, y al escribir un ID conocido se completa el nombre
+        const mn = document.getElementById('act-mn'), mid = document.getElementById('act-mid');
+        if (mn && mid) {
+            mn.addEventListener('change', () => { if (!mid.value.trim()) { const c = codDe(mn.value); if (c) mid.value = c; } });
+            mid.addEventListener('change', () => { const v = mid.value.replace(/\D/g, ''); mid.value = v; const c = v && catalogo.find(x => String(x.codigoMP) === v); if (c && !mn.value.trim()) mn.value = String(c.descripcion || c.insumoName || '').toUpperCase(); });
+        }
         $$('.act-del').forEach(b => b.addEventListener('click', () => { borrador.items.splice(+b.dataset.k, 1); refrescar(); }));
         $$('.act-pedit').forEach(i => i.addEventListener('change', () => { borrador.pendientes[+i.dataset.k].cantidad = Math.floor(num(i.value)) || 1; refrescar(); }));
         $$('.act-pdel').forEach(b => b.addEventListener('click', () => { borrador.pendientes.splice(+b.dataset.k, 1); refrescar(); }));
@@ -478,9 +506,12 @@
             if (n.length < 3 || !(c > 0)) { toast('Ingreso manual', 'Escribe el nombre del insumo y una cantidad mayor que 0.', 'warning'); return; }
             if ($('#act-mc').checked) { toast('Medicamento controlado', 'No se permite sin stock en sistema: use el circuito con folio DAU.', 'error'); return; }
             if (borrador.items.length >= MAX_ITEMS) { toast('Límite', `Máximo ${MAX_ITEMS} productos por acta.`, 'warning'); return; }
-            const par = stock.find(x => x.name.toLowerCase() === n.toLowerCase());
+            const cod = String(($('#act-mid').value || '').replace(/\D/g, ''));
+            const par = stock.find(x => x.name.toLowerCase() === n.toLowerCase() || (cod && x.codigo === cod));
             if (par) { toast('Ya existe', `"${par.name}" ya está en esta bodega: agrégalo desde la lista.`, 'warning'); return; }
-            borrador.items.push({ id: null, manual: true, nombre: n, cantidad: c, stock: 0 }); refrescar();
+            if (!cod && !confirm('No indicaste el ID del producto. Sirve para asociar la foto y la orden de compra después. ¿Agregar sin ID?')) return;
+            const sol = Math.floor(num($('#act-ms').value));
+            borrador.items.push({ id: null, manual: true, nombre: n, codigo: cod, cantidad: c, solicitado: sol > c ? sol : 0, stock: 0 }); refrescar();
         });
         $('#act-padd').addEventListener('click', () => {
             const n = $('#act-pn').value.trim(); const c = Math.floor(num($('#act-pq').value));

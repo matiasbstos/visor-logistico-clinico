@@ -407,3 +407,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 3. **Stock al agregar un producto al acta:** el sistema pregunta cuánto se agrega: stock total (ej. 30), cantidad entregada, y el **pendiente** se toma de la diferencia. El acta queda con la subdivisión entregado/pendiente y se hace la cuadratura completa ya acordada (stock, contable/disponible, auditoría).
 4. **Buscador de productos en el acta:** cada resultado muestra **disponible, descripción completa, fotografía e ID**.
 5. **El ID del producto debe mostrarse en todos los lugares donde aparece un producto** (existencias, actas, recepción, catálogo, toma de inventario, ¿Dónde está?, etc.).
+
+### 4.55 Implementado (v21.00): ID de producto, insumos sin orden y pedido/pendiente en actas
+- El ID del producto (código Mercado Público) se guarda en cada insumo (`codigoMP`) y se muestra en el buscador del acta (con foto y disponible), en el acta, en Pedido y recibido/Recibir/Entregar de las órdenes, en Existencias y en los informes contable/disponible (columna "ID producto"). El buscador del acta también busca por ID.
+- Ingreso manual en un acta: pide nombre (con sugerencias del catálogo) e ID; si falta el ID pregunta antes de seguir. Al emitir, el nombre y el ID quedan en el catálogo (`sinOrden`, origen MANUAL) y el insumo provisional lleva el ID.
+- Al recibir una orden, si ya existe un insumo con ese ID (p. ej. el ingresado a mano) se suma a ese mismo insumo y se cuadra el sobregiro.
+- Acta: cada producto admite "Pedido" (total solicitado) y "Entregar"; la diferencia queda como pendiente y el acta muestra "Solicitado | Entregado | Pendiente" (modelo ANIDES).

@@ -39,7 +39,7 @@
                 const p = A.planificar({ ...d }, it.cantidad, numero);
                 if (d.controlado && p.faltante > 0) throw new Error(`${d.name} es medicamento controlado: no puede entregarse sin stock en sistema.`);
                 Object.assign(d, { quantity: p.quantity, batches: p.batches, sobregiro: p.sobregiro, sobregiroDetalle: p.sobregiroDetalle });
-                const row = { id: it.id, nombre: d.name, cantidad: num(it.cantidad), lotes: p.usados, sinRespaldo: p.faltante };
+                const row = { id: it.id, nombre: d.name, cantidad: num(it.cantidad), lotes: p.usados, sinRespaldo: p.faltante, ...(d.codigoMP ? { codigoMP: String(d.codigoMP) } : {}), ...(it.ocI == null && num(it.solicitado) > num(it.cantidad) ? { solicitado: num(it.solicitado), entregadoTotal: num(it.cantidad) } : {}) };
                 const l = it.ocI != null && ocLineas ? ocLineas[it.ocI] : null;
                 if (l) {
                     const disp = num(l.ingresado && l.ingresado[a.oc.columna]) - num(l.entregado[a.oc.columna]);
@@ -126,7 +126,7 @@
                 const prog = window.SAR_Progreso.iniciar(`Guardando los cambios del acta ${acta.numero}…`, [oxi ? 'Reajustando el estado de los balones…' : 'Reajustando el stock y la orden…']);
                 try {
                     const nueva = oxi ? await window.SAR_Oxigeno.editarActa(acta.numero, { centro: S.centro, fecha: S.fecha, ids: S.items.map(i => i.id), documentos: S.documentos, entrega: S.entrega, recibe: S.recibe })
-                        : await editarEntrega(acta.numero, { centro: S.centro, fecha: S.fecha, items: S.items.map(i => ({ id: i.id, nombre: i.nombre, cantidad: i.cantidad, ocI: i.ocI })), pendientes: S.pendientes, documentos: S.documentos, entrega: S.entrega, recibe: S.recibe });
+                        : await editarEntrega(acta.numero, { centro: S.centro, fecha: S.fecha, items: S.items.map(i => ({ id: i.id, nombre: i.nombre, cantidad: i.cantidad, ocI: i.ocI, solicitado: i.ocI == null ? i.solicitado : undefined })), pendientes: S.pendientes, documentos: S.documentos, entrega: S.entrega, recibe: S.recibe });
                     prog.paso('Rehaciendo el documento…');
                     let r = null; try { r = await window.SAR_ActasEntrega.descargarActa(nueva, 'pdf'); } catch (x) { toast('Documento', 'Se guardó el acta, pero el PDF no se pudo generar: ' + (x.message || x), 'warning'); }
                     const SO = window.SAR_SeguimientoOC;

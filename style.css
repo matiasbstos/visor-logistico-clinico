@@ -5403,3 +5403,15 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .soc-ped > summary h3 { margin: 0; }
 .soc-ped .soc-sub { margin-bottom: 12px; }
 .soc-ped > summary h3 { flex: 1; }
+
+/* v20.70 · pulido tras revisión UX */
+.soc-ped > summary h3 { flex: 0 1 auto; margin-right: auto; }
+.soc-siguiente { border-radius: var(--shape-card, 8px 8px 8px 0); }
+.soc-siguiente .btn-primary { background: var(--brand-blue, #1A3668); color: #fff; border-color: var(--brand-blue, #1A3668); }
+#soc-volver { margin-bottom: 8px; }
+.soc-pie { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border-color, #E2E8F0); justify-content: flex-start; gap: 8px; flex-wrap: wrap; }
+.soc-pie #soc-cerrar, .soc-pie [id*="cerrar"] { margin-left: auto; }
+#soc-root .erp-card > h3, #soc-root .soc-det > summary h3 { color: var(--brand-blue, #1A3668); font-size: 16px; }
+#soc-root .erp-card > h3 { margin: 0 0 12px; }
+#soc-guardar-nota { min-height: 36px; padding: 6px 14px; font-size: 13px; }
+.soc-buscar input, #soc-texto { border-radius: var(--shape-card, 8px); }

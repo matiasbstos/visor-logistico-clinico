@@ -423,9 +423,9 @@
         return n;
     }
     /** Guarda un File del navegador sin interrumpir el flujo si falla. */
-    async function guardarFile(ocId, file, categoria) {
+    async function guardarFile(ocId, file, categoria, nota) {
         if (!file) return false;
-        try { await guardarArchivo(ocId, { nombre: file.name, categoria, bytes: new Uint8Array(await file.arrayBuffer()), mime: file.type || 'application/octet-stream' }); return true; }
+        try { return await guardarArchivo(ocId, { nombre: file.name, categoria, bytes: new Uint8Array(await file.arrayBuffer()), mime: file.type || 'application/octet-stream', nota }); }
         catch (e) { toast('Archivo no guardado', `${file.name}: ${e.message || e}`, 'warning'); return false; }
     }
     async function verArchivo(a) {
@@ -443,10 +443,13 @@
         const cats = ['Orden de compra', 'Cuadro de distribución', 'Guía de despacho', 'Factura', 'Recepción conforme', 'Otro'];
         modal('Agregar archivo a la orden', `<p class="cierre-hint">Queda guardado en esta orden y se puede abrir cuando se necesite. Máximo 8 MB.</p>
             <label>Tipo de documento<select id="aa-cat">${cats.map(c => `<option>${esc(c)}</option>`).join('')}</select></label>
-            <label>Archivo (PDF, Excel o imagen)<input type="file" id="aa-file" accept="application/pdf,.xlsx,.xls,image/*"></label>`, async (o) => {
+            <label>Archivo (PDF, Excel o imagen)<input type="file" id="aa-file" accept="application/pdf,.xlsx,.xls,image/*"></label>
+            <label>Comentario (opcional, queda en la bitácora)<textarea id="aa-nota" rows="2" maxlength="500" placeholder="Ej.: guía corregida enviada por el proveedor"></textarea></label>`, async (o) => {
             const file = (o.querySelector('#aa-file').files || [])[0]; if (!file) { toast('Falta el archivo', 'Elige el archivo.', 'warning'); return false; }
-            const ok = await guardarFile(ocActual.id, file, o.querySelector('#aa-cat').value);
+            const cat = o.querySelector('#aa-cat').value, nota = o.querySelector('#aa-nota').value.trim();
+            const ok = await guardarFile(ocActual.id, file, cat, nota);
             if (!ok) return false;
+            try { await registrarEvento(ocActual, { tipo: 'ARCHIVO', texto: `Archivo agregado: ${file.name} (${cat})${nota ? ' — ' + nota : ''}`, extra: { archivoIds: [ok] } }); } catch (e) { /* el archivo ya quedó guardado */ }
             toast('Archivo guardado', `${file.name} quedó en la orden.`, 'success');
         }, { ok: 'Guardar archivo' });
     }
@@ -459,7 +462,8 @@
         host.querySelectorAll('[data-arch]').forEach(b => b.addEventListener('click', () => { const a = archivos.find(x => x.id === b.dataset.arch); if (a) verArchivo(a).catch(e => toast('No se pudo abrir', e.message || String(e), 'error')); }));
     }
 
-    let verTodos = false, verPedido = false;
+    let verTodos = false, verPedido = false, soloNotas = false;
+    const ETAPAS = ['En proceso', 'Aceptada', 'Despachada', 'En tránsito', 'Recibida parcial', 'Recibida', 'Con inconveniente', 'Reclamo al proveedor'];
     function pintarDetalle() {
         const oc = ocActual; if (!oc) return;
         const pl = estadoPlazo(oc), tot = totalesPorCentro(oc), disc = discrepancias(oc);
@@ -504,10 +508,14 @@
                 <div class="soc-arch-acc"><button type="button" class="btn btn-outline btn-sm" id="soc-arch-add"><i class="ph-bold ph-paperclip"></i> Agregar archivo</button>
                 ${oc.recepcionConforme ? '<button type="button" class="btn btn-outline btn-sm" id="soc-rc-edit"><i class="ph-bold ph-pencil-simple"></i> Editar recepción conforme</button> <button type="button" class="btn btn-outline btn-sm" id="soc-rc-regen"><i class="ph-bold ph-arrows-clockwise"></i> Regenerar recepción conforme (modelo vigente)</button>' : ''}</div>
                 <div id="soc-archivos"></div></details>
-            <div class="erp-card"><h3>Notas y avisos</h3>
-                <textarea id="soc-texto" rows="3" maxlength="1500" placeholder="Escribe la nota o aviso (ej.: proveedor informa despacho por Pullman Cargo, OT …)"></textarea>
-                <div class="soc-componer"><label class="soc-toggle"><input type="checkbox" id="soc-correo" checked> Enviar correo a la lista</label>
-                    <button type="button" class="btn btn-outline" id="soc-guardar-nota">Registrar nota</button></div>
+            <div class="erp-card"><h3>Bitácora de la orden <span class="soc-n">${eventos.length}</span></h3>
+                <p class="bodega-estantes__hint">Cada comentario queda con fecha, hora y autor, en orden cronológico. No se pueden editar ni borrar.</p>
+                <textarea id="soc-texto" rows="3" maxlength="1500" placeholder="Escribe el comentario (ej.: proveedor informa despacho por Pullman Cargo; hubo un problema con…)"></textarea>
+                <div class="soc-componer"><label>Etapa <select id="soc-etapa"><option value="">Sin etapa</option>${ETAPAS.map(x => `<option>${esc(x)}</option>`).join('')}</select></label>
+                    <label>Adjuntar archivo(s) <input type="file" id="soc-nota-file" multiple accept="application/pdf,.xlsx,.xls,image/*"></label>
+                    <label class="soc-toggle"><input type="checkbox" id="soc-correo"> Enviar correo a la lista</label>
+                    <button type="button" class="btn btn-outline" id="soc-guardar-nota">Registrar comentario</button></div>
+                <label class="soc-toggle"><input type="checkbox" id="soc-solo-notas" ${soloNotas ? 'checked' : ''}> Ver solo comentarios y archivos (ocultar movimientos automáticos)</label>
                 <div id="soc-bitacora"></div></div>
             <div class="soc-pie">${esAdmin() ? '<button type="button" class="btn btn-outline btn-sm" id="soc-multa">Registrar decisión de multa</button> <button type="button" class="btn btn-outline btn-sm" id="soc-cerrar">' + (oc.cerrada ? 'Reabrir seguimiento' : 'Cerrar seguimiento') + '</button> <button type="button" class="btn btn-outline btn-sm" id="soc-config">Configurar correo</button>' : ''}</div>`;
         const q = (s) => root().querySelector(s);
@@ -550,6 +558,7 @@
         const ac = q('#soc-acepta'); if (ac) ac.addEventListener('click', formAceptacion);
         root().querySelectorAll('[data-resolver]').forEach(b => b.addEventListener('click', () => formResolver(b.dataset.resolver)));
         q('#soc-guardar-nota').addEventListener('click', guardarNota);
+        q('#soc-solo-notas').addEventListener('change', (e) => { soloNotas = e.target.checked; pintarBitacora(); });
         const m = q('#soc-multa'); if (m) m.addEventListener('click', formMulta);
         const c = q('#soc-cerrar'); if (c) c.addEventListener('click', alternarCierre);
         const cf = q('#soc-config'); if (cf) cf.addEventListener('click', formConfig);
@@ -655,13 +664,16 @@
     }
 
     const DESTINO_RECEPCION = ['mariel.quintanilla@cormumel.cl', 'compras.sar@cormumel.cl', 'matias.bustos@cormumel.cl'];   // correo de cada recepción: siempre estos tres
-    const ICONOS = { LOTE: 'Lote y vencimiento', CONFORME: 'Recepción conforme', INCIDENCIA: 'Incidencia', ACEPTACION: 'Aceptación', NOTA: 'Nota', RECEPCION: 'Recepción', MULTA: 'Multa', ESTADO: 'Estado', CREACION: 'Ingreso' };
+    const ICONOS = { LOTE: 'Lote y vencimiento', CONFORME: 'Recepción conforme', INCIDENCIA: 'Incidencia', ACEPTACION: 'Aceptación', NOTA: 'Comentario', ARCHIVO: 'Archivo', RECEPCION: 'Recepción', MULTA: 'Multa', ESTADO: 'Estado', CREACION: 'Ingreso' };
     function pintarBitacora() {
         const host = root() && root().querySelector('#soc-bitacora'); if (!host) return;
-        host.innerHTML = eventos.length ? '<ul class="soc-bit">' + eventos.map(e => `<li><div><strong>${esc(ICONOS[e.tipo] || e.tipo)}</strong> · ${esc(e.autor || '')} · <small>${esc(fmtFechaHora(e.fecha))}</small></div>
+        const evs = soloNotas ? eventos.filter(e => e.tipo === 'NOTA' || e.tipo === 'ARCHIVO') : eventos;
+        host.innerHTML = evs.length ? '<ul class="soc-bit">' + evs.map(e => `<li><div><strong>${esc(ICONOS[e.tipo] || e.tipo)}</strong>${e.etapa ? ` <span class="soc-etapa">${esc(e.etapa)}</span>` : ''} · ${esc(e.autor || '')} · <small>${esc(fmtFechaHora(e.fecha))}</small></div>
             <div class="soc-bit__txt">${esc(e.texto || '')}</div>
+            ${(e.archivoIds || []).map(id => { const a = archivos.find(x => x.id === id); return a ? `<button type="button" class="btn btn-outline btn-sm soc-bit__arch" data-barch="${esc(id)}"><i class="ph-bold ph-paperclip"></i> ${esc(a.nombre)}</button>` : ''; }).join('')}
             ${e.correo ? `<small class="soc-correo soc-correo--${esc(e.correo.estado)}">${({ enviado: 'Correo enviado a ' + (e.correo.destinatarios || []).length + ' destinatario(s)', borrador: 'Borrador de correo abierto', error: 'El correo no se pudo enviar' + (e.correo.detalle ? ': ' + e.correo.detalle : ''), sin_destinatarios: 'Sin destinatarios: no se envió correo' })[e.correo.estado] || ''}</small>` : ''}</li>`).join('') + '</ul>'
-            : '<p class="bodega-estantes__hint">Aún no hay notas.</p>';
+            : '<p class="bodega-estantes__hint">Aún no hay comentarios.</p>';
+        host.querySelectorAll('[data-barch]').forEach(b => b.addEventListener('click', () => { const a = archivos.find(x => x.id === b.dataset.barch); if (a) verArchivo(a).catch(er => toast('No se pudo abrir', er.message || String(er), 'error')); }));
     }
 
     /** Registra un evento (con correo opcional). El evento se escribe una sola vez, con el resultado del envío. */
@@ -691,8 +703,10 @@
         if (!t) { toast('Falta el texto', 'Escribe la nota o el aviso.', 'warning'); return; }
         const btn = root().querySelector('#soc-guardar-nota'); btn.disabled = true;
         try {
-            const c = await registrarEvento(ocActual, { tipo: 'NOTA', texto: t, titulo: 'Aviso de seguimiento', notificar });
-            root().querySelector('#soc-texto').value = '';
+            const etapa = root().querySelector('#soc-etapa').value, fl = Array.from(root().querySelector('#soc-nota-file').files || []), ids = [];
+            for (const file of fl) { const id = await guardarFile(ocActual.id, file, 'Adjunto a comentario', t.slice(0, 120)); if (id) ids.push(id); }
+            const c = await registrarEvento(ocActual, { tipo: 'NOTA', texto: t, titulo: 'Aviso de seguimiento', notificar, extra: { ...(etapa ? { etapa } : {}), ...(ids.length ? { archivoIds: ids } : {}) } });
+            root().querySelector('#soc-texto').value = ''; root().querySelector('#soc-nota-file').value = '';
             toast('Registrado', c ? ({ enviado: 'Nota guardada y correo enviado.', borrador: 'Nota guardada; se abrió un borrador de correo.', error: 'Nota guardada, pero el correo no se pudo enviar.', sin_destinatarios: 'Nota guardada. No hay destinatarios para el correo.' })[c.estado] : 'Nota guardada.', c && c.estado === 'error' ? 'warning' : 'success');
         } catch (e) { toast('No se guardó', (e.code || '') + ' ' + e.message, 'error'); }
         btn.disabled = false;

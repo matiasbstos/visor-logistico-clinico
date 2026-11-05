@@ -5492,3 +5492,4 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .cv-card small{display:block;color:#64748B;font-size:11px;margin-top:4px}
 .act-prueba{margin-top:14px;padding:12px;border:1px dashed #94a3b8;border-radius:10px;background:#f8fafc;display:flex;flex-direction:column;gap:6px;font-size:13px}
 .act-prueba span{color:#475569}
+.cat-acc{display:inline-flex;gap:6px;flex-wrap:wrap}

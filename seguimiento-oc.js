@@ -345,7 +345,7 @@
         const fila = (c) => `<li data-id="${esc(c.id)}" data-t="${esc((c.descripcion || '') + ' ' + (c.insumoName || '') + ' ' + (c.codigoMP || '') + ' ' + (c.proveedor || '')).toLowerCase()}">
             <span class="cat-img">${(() => { const e = window.SAR_Imagenes && window.SAR_Imagenes.buscar(c.descripcion, c.codigoMP); const h = e ? window.SAR_Imagenes.imgHTML(e, 120, c.descripcion) : ''; return h || '<i class="ph-bold ph-image"></i>'; })()}</span>
             <div><strong>${esc(c.descripcion || '')}</strong><small>${c.codigoMP ? 'Cód. MP ' + esc(c.codigoMP) + ' · ' : ''}${esc(c.proveedor || 's/proveedor')}${c.insumoName ? ' · Inventario: ' + esc(c.insumoName) : ''}${num(c.valorNeto) ? ' · ' + peso(c.valorNeto) + ' neto' : ''}</small></div>
-            <label class="btn btn-outline btn-sm cat-foto">Foto<input type="file" accept="image/*" hidden></label></li>`;
+            <span class="cat-acc"><a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="https://www.google.com/search?tbm=isch&q=${encodeURIComponent(String(c.descripcion || '').replace(/\b(IGUAL O SUPERIOR A|RM)\b/gi, '').replace(/[,]/g, ' '))}">Buscar foto</a><button type="button" class="btn btn-outline btn-sm cat-pegar" title="Copia una imagen (clic derecho → Copiar imagen) y pégala aquí">Pegar</button><label class="btn btn-outline btn-sm cat-foto">Subir<input type="file" accept="image/*" hidden></label></span></li>`;
         const ov = modal('Catálogo de productos', `<p class="cierre-hint">Se completa solo con cada orden que ingresas. Agrega una foto para reconocer cada producto.</p>
             <div class="soc-arch-acc"><button type="button" class="btn btn-outline btn-sm" id="cat-sync"><i class="ph-bold ph-arrows-clockwise"></i> Cargar productos y fotos de las órdenes ya ingresadas</button></div>
                         <input type="search" id="cat-q" placeholder="Buscar por nombre, código o proveedor…" autocomplete="off">
@@ -356,6 +356,16 @@
             catch (err) { toast('No se pudo actualizar', err.message || String(err), 'error'); btn.disabled = false; }
         });
         ov.querySelector('#cat-q').addEventListener('input', (e) => { const t = e.target.value.trim().toLowerCase(); ov.querySelectorAll('#cat-l li[data-id]').forEach(li => { li.hidden = !!t && !li.dataset.t.includes(t); }); });
+        const guardarFoto = async (li, blob) => { const img = await reducirImagen(blob); await fs().setDoc(fs().doc(fs().collection(db(), 'Catalogo_Productos'), li.dataset.id), { imagen: img, actualizado: fs().serverTimestamp() }, { merge: true }); li.querySelector('.cat-img').innerHTML = `<img src="${img}" alt="">`; toast('Foto guardada', 'La imagen quedó en el producto.', 'success'); };
+        ov.querySelectorAll('.cat-pegar').forEach(b => b.addEventListener('click', async () => {
+            const li = b.closest('li');
+            try {
+                const its = await navigator.clipboard.read(); let blob = null;
+                for (const it of its) { const t = it.types.find(x => x.startsWith('image/')); if (t) { blob = await it.getType(t); break; } }
+                if (!blob) { toast('No hay imagen copiada', 'Busca la foto, clic derecho → "Copiar imagen" y vuelve a pulsar Pegar.', 'warning'); return; }
+                await guardarFoto(li, blob);
+            } catch (e) { toast('No se pudo pegar', (e && e.name === 'NotAllowedError') ? 'El navegador no dio permiso para leer el portapapeles: usa "Subir".' : (e.message || String(e)), 'error'); }
+        }));
         ov.querySelectorAll('.cat-foto input').forEach(inp => inp.addEventListener('change', async () => {
             const li = inp.closest('li'), file = inp.files[0]; if (!file) return;
             try { const img = await reducirImagen(file); await fs().setDoc(fs().doc(fs().collection(db(), 'Catalogo_Productos'), li.dataset.id), { imagen: img, actualizado: fs().serverTimestamp() }, { merge: true }); li.querySelector('.cat-img').innerHTML = `<img src="${img}" alt="">`; toast('Foto guardada', 'La imagen quedó en el catálogo.', 'success'); }

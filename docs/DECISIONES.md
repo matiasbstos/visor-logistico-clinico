@@ -270,3 +270,10 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - El estado de plazo (chip rojo/verde) va dentro de la tarjeta de fechas, no suelto en el encabezado.
 - Un solo botón "Recibir mercadería": vive en el banner "Siguiente paso". "Lotes y vencimientos" y "Descargar pendientes" aparecen recién cuando ya se recibió algo; "Recepción conforme" aparece en el banner (parcial si falta mercadería, normal si está todo).
 - La sección "Destinatarios del correo" sale de la ficha; los destinatarios fijos (recepción y recepción conforme) se muestran en "Configurar correo".
+
+### 4.28 v20.69 — Cabecera de la orden, lista y recibir mercadería
+- Tarjeta "Plazo de la orden": estado (chip) arriba a la derecha dentro del recuadro, fechas en rejilla pareja, "Registrar aceptación" como enlace discreto (aceptación opcional).
+- Lista de órdenes: tarjetas de 340 px mínimo; el chip de plazo baja bajo el número y ya no se sale de la tarjeta.
+- "Pedido y recibido" es plegable (cerrado por defecto; recuerda lo que eliges) y muestra las unidades recibidas en el título.
+- "Recibir mercadería" abre al instante: el inventario y la bodega se leen en segundo plano; si algo falla se muestra un aviso en vez de quedar mudo.
+- Pendiente de diseño: guardar productos y proveedores de cada OC en un catálogo propio (con foto por ID de producto).

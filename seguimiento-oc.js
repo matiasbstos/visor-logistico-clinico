@@ -296,7 +296,7 @@
         pintarDetalle();
     }
 
-    let verTodos = false;
+    let verTodos = false, verPedido = false;
     function pintarDetalle() {
         const oc = ocActual; if (!oc) return;
         const pl = estadoPlazo(oc), tot = totalesPorCentro(oc), disc = discrepancias(oc);
@@ -305,17 +305,19 @@
         root().innerHTML = `
             <div class="page-header mb-24"><div class="page-title"><button type="button" class="btn btn-outline btn-sm" id="soc-volver">← Órdenes</button>
                 <h1>OC ${esc(oc.numeroOC)}</h1><p>${esc(oc.proveedor || '')}${oc.descripcion ? ' · ' + esc(oc.descripcion) : ''}</p></div></div>
-            <div class="erp-card soc-fechas">
-                <div class="soc-fechas__estado">${chip(pl)}</div>
-                <div><small>Emitida</small><strong>${fmtFecha(oc.emitida)}</strong></div>
-                <div><small>Aceptada</small>${oc.aceptada ? `<strong>${fmtFecha(oc.aceptada)}</strong>` : `<strong>—</strong>${oc.aceptarLimite ? `<small>hasta el ${fmtFecha(oc.aceptarLimite)}</small>` : ''}<button type="button" class="btn btn-outline btn-sm" id="soc-acepta">Registrar aceptación</button>`}</div>
-                <div><small>Plazo de entrega</small><strong>${num(oc.plazoDiasHabiles) || 5} días hábiles</strong></div>
-                <div><small>Vence</small><strong>${oc.aceptada ? fmtFecha(pl.limite) : '—'}</strong></div>
-                <div><small>Multa</small><strong>${esc(({ por_evaluar: 'Por evaluar', no_se_cursa: 'No se cursa', cursada: 'Cursada' })[(oc.multa && oc.multa.estado) || 'por_evaluar'])}${oc.multa && oc.multa.monto ? ' · ' + peso(oc.multa.monto) : ''}</strong></div>
+            <div class="erp-card soc-resumen-orden">
+                <div class="soc-resumen-orden__top"><span class="soc-resumen-orden__t">Plazo de la orden</span>${chip(pl)}</div>
+                <div class="soc-fechas">
+                    <div><small>Emitida</small><strong>${fmtFecha(oc.emitida)}</strong></div>
+                    <div><small>Aceptada (opcional)</small>${oc.aceptada ? `<strong>${fmtFecha(oc.aceptada)}</strong>` : `<strong>—</strong>${oc.aceptarLimite ? `<small>hasta el ${fmtFecha(oc.aceptarLimite)}</small>` : ''}<button type="button" class="soc-link" id="soc-acepta">Registrar aceptación</button>`}</div>
+                    <div><small>Plazo de entrega</small><strong>${num(oc.plazoDiasHabiles) || 5} días hábiles</strong></div>
+                    <div><small>Vence</small><strong>${oc.aceptada ? fmtFecha(pl.limite) : '—'}</strong></div>
+                    <div><small>Multa</small><strong>${esc(({ por_evaluar: 'Por evaluar', no_se_cursa: 'No se cursa', cursada: 'Cursada' })[(oc.multa && oc.multa.estado) || 'por_evaluar'])}${oc.multa && oc.multa.monto ? ' · ' + peso(oc.multa.monto) : ''}</strong></div>
+                </div>
             </div>
             ${bannerSiguiente(oc, pl)}
             ${(oc.otrosCentros || []).length && !verTodos ? `<p class="soc-card__sub">La orden también incluye productos de ${esc(oc.otrosCentros.map(c => c.centro + ' (memo ' + c.memo + ')').join(', '))}: no se muestran aquí.</p>` : ''}
-            <div class="erp-card"><div class="soc-sub"><h3>Pedido y recibido</h3>
+            <details class="erp-card soc-det soc-ped" id="soc-ped"${verPedido ? ' open' : ''}><summary><h3>Pedido y recibido</h3><span class="soc-n">${(tot.find(t => t.centro === CENTRO_PROPIO) || tot[0] || { recibido: 0, pedido: 0 }).recibido} de ${(tot.find(t => t.centro === CENTRO_PROPIO) || tot[0] || { pedido: 0 }).pedido} un. recibidas</span></summary><div class="soc-sub">
                 ${(oc.columnas || []).length > 1 ? `<label class="soc-toggle"><input type="checkbox" id="soc-todos" ${verTodos ? 'checked' : ''}> Ver otros centros</label>` : ''}
                 ${hayRecibido(oc) ? `<button type="button" class="btn btn-outline btn-sm" id="soc-lotes"><i class="ph-bold ph-barcode"></i> Lotes y vencimientos</button>
                 <button type="button" class="btn btn-outline btn-sm" id="soc-pend"><i class="ph-bold ph-file-csv"></i> Descargar pendientes</button>` : ''}</div>
@@ -325,7 +327,7 @@
                     const p = num(l.dist && l.dist[c.key]), r = num(l.recibido && l.recibido[c.key]); if (!p && !r) return '<td class="soc-vacio">—</td>';
                     return `<td class="soc-est--${estadoLinea(p, r)}"><strong>${r}</strong> / ${p}</td>`; }).join('')}</tr>`).join('')}
                 </tbody></table></div>
-                <div class="soc-resumen">${tot.filter(t => verTodos || t.centro === CENTRO_PROPIO).map(t => `<span><strong>${esc(t.centro)}</strong>: pendiente ${t.pendiente} un. · ${peso(t.netoPend)} neto de ${peso(t.netoTotal)}</span>`).join('')}</div></div>
+                <div class="soc-resumen">${tot.filter(t => verTodos || t.centro === CENTRO_PROPIO).map(t => `<span><strong>${esc(t.centro)}</strong>: pendiente ${t.pendiente} un. · ${peso(t.netoPend)} neto de ${peso(t.netoTotal)}</span>`).join('')}</div></details>
             <div class="erp-card"><h3>Discrepancias <span class="soc-n">${disc.length}</span></h3>
                 ${disc.length ? '<ul class="soc-disc">' + disc.map(d => `<li class="soc-disc--${d.nivel}">${esc(d.texto)}</li>`).join('') + '</ul>' : '<p class="bodega-estantes__hint">Sin discrepancias.</p>'}
                 ${(oc.incidencias || []).filter(i => i.estado === 'ABIERTA').map(i => `<button type="button" class="btn btn-outline btn-sm" data-resolver="${esc(i.id)}">Resolver: ${esc(i.producto.slice(0, 30))}</button>`).join(' ')}</div>
@@ -343,9 +345,10 @@
         const q = (s) => root().querySelector(s);
         q('#soc-volver').addEventListener('click', () => { ocActual = null; pintarLista(); });
         marcarMigas(true);
+        const ped = q('#soc-ped'); if (ped) ped.addEventListener('toggle', () => { verPedido = ped.open; });
         const tdo = q('#soc-todos'); if (tdo) tdo.addEventListener('change', (e) => { verTodos = e.target.checked; pintarDetalle(); });
         const bs = q('#soc-sig'); if (bs) bs.addEventListener('click', () => { window.location.hash = bs.dataset.go.slice(1); });
-        const bre = q('#soc-recep'); if (bre) bre.addEventListener('click', formRecepcion);
+        const bre = q('#soc-recep'); if (bre) bre.addEventListener('click', () => { formRecepcion().catch(e => toast('No se pudo abrir la recepción', e.message || String(e), 'error')); });
         const bpe = q('#soc-pend'); if (bpe) bpe.addEventListener('click', () => { if (!pendientesDe(ocActual).some(x => x.pendiente > 0)) { toast('Sin pendientes', 'Todo lo de SAR ya fue recibido.', 'success'); return; } descargarPendientes(ocActual); });
         const blo = q('#soc-lotes'); if (blo) blo.addEventListener('click', formLotes);
         const bco = q('#soc-conforme'); if (bco) bco.addEventListener('click', () => { if (window.SAR_RecepcionConforme) window.SAR_RecepcionConforme.abrir({ oc: ocActual, modal, toast, enviarCorreo, config: configCorreo, usuario: usuario(), fmtFecha, peso, totalesPorCentro, centroPropio: CENTRO_PROPIO }); });
@@ -859,12 +862,14 @@
     async function formRecepcion() {
         const oc = ocActual; const cols = oc.columnas || [];
         let central = 'Bodega Central', nombresInv = [];
-        try {
-            const bs = await fs().getDocs(fs().collection(db(), 'Bodegas')); bs.forEach(d => { const b = d.data(); if (/central/i.test(String(b.name || '')) && b.isActive !== false) central = b.name; });
-            const ins = await fs().getDocs(fs().query(fs().collection(db(), 'Insumos'), fs().where('location', '==', central), fs().limit(1500)));
-            const set = new Set(); ins.forEach(d => { if (d.data().name) set.add(d.data().name); }); nombresInv = [...set].sort((a, b) => a.localeCompare(b, 'es'));
-        } catch (e) { /* sin lista de inventario: se escribe a mano */ }
         const propia = (key) => { const c = cols.find(x => x.key === key); return !!c && c.centro === CENTRO_PROPIO; };
+        const cargaInv = (async () => {
+            try {
+                const bs = await fs().getDocs(fs().collection(db(), 'Bodegas')); bs.forEach(d => { const b = d.data(); if (/central/i.test(String(b.name || '')) && b.isActive !== false) central = b.name; });
+                const ins = await fs().getDocs(fs().query(fs().collection(db(), 'Insumos'), fs().where('location', '==', central), fs().limit(1500)));
+                const set = new Set(); ins.forEach(d => { if (d.data().name) set.add(d.data().name); }); nombresInv = [...set].sort((a, b) => a.localeCompare(b, 'es'));
+            } catch (e) { /* sin lista de inventario: se escribe a mano */ }
+        })();
         const ov = modal('Recibir mercadería', `
             <label${cols.length === 1 ? ' hidden' : ''}>¿Qué memo/CDP se recibió?<select id="r-col">${cols.map(c => `<option value="${esc(c.key)}">${esc(c.centro)} · memo ${esc(c.memo)}${c.cdp ? ' · CDP ' + esc(c.cdp) : ''}</option>`).join('')}</select></label>
             <div class="soc-fila"><label>N° guía de despacho<input type="text" id="r-guia" autocomplete="off"></label><label>Fecha<input type="date" id="r-fecha" value="${hoyISO()}"></label></div>
@@ -927,6 +932,10 @@
         ov.querySelector('#r-col').addEventListener('change', () => { pintar(); resumen(); }); ov.querySelector('#r-stock').addEventListener('change', () => { pintar(); resumen(); }); ov.querySelector('#r-lv').addEventListener('change', () => { pintar(); resumen(); });
         const sel = ov.querySelector('#r-col'); const iPropia = cols.findIndex(c => c.centro === CENTRO_PROPIO); if (iPropia > 0) sel.selectedIndex = iPropia;
         pintar(); resumen();
+        cargaInv.then(() => {
+            const dl = ov.querySelector('#r-inv'); if (dl) dl.innerHTML = nombresInv.map(n => `<option value="${esc(n)}">`).join('');
+            const w = ov.querySelector('#r-stock-w'); if (w && w.lastChild) w.lastChild.textContent = ` Ingresar lo recibido al stock de ${central} (así se descuenta al entregarlo por acta)`;
+        });
     }
 
     function formMulta() {

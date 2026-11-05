@@ -855,6 +855,12 @@
             <label>Orden de compra (Mercado Público): PDF o Excel<input type="file" id="p-file" accept="application/pdf,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></label>
             <label>Cuadro de distribución (PDF o Excel, opcional): lee memos, CDP, cantidades por centro y montos<input type="file" id="p-dist" accept="application/pdf,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></label>
             <div id="p-dist-est" class="cierre-hint"></div>
+            <label class="soc-hist-chk"><input type="checkbox" id="p-hist"> <b>Orden histórica</b>: ya se recibió y procesó antes; se carga solo para trazabilidad (no suma ni descuenta stock)</label>
+            <div id="p-hist-box" hidden class="soc-hist">
+                <div class="soc-fila"><label>Fecha de recepción<input type="date" id="p-hist-fecha"></label><label>Guía / factura N°<input type="text" id="p-hist-doc"></label></div>
+                <label>Recepción conforme (PDF, opcional)<input type="file" id="p-hist-rc" accept="application/pdf,image/*"></label>
+                <label>Acta de entrega a centros (PDF, opcional)<input type="file" id="p-hist-acta" accept="application/pdf,image/*"></label>
+            </div>
             <label>Correo del despacho (opcional: pega el texto para leer los plazos)<textarea id="p-correo" rows="3" placeholder="Pega aquí el correo con el plazo de aceptación y los días de entrega"></textarea></label>
             <div id="p-estado" class="cierre-hint">Sube el PDF y revisa lo que se leyó. También puedes completar todo a mano.</div>
             <div id="p-rev"></div>`, async (o) => {
@@ -873,10 +879,17 @@
                 if (al.length && !(await confirmar('Atención con el presupuesto', al.join('\n') + '\n\n¿Ingresar la orden de todos modos?', 'Ingresar igual'))) return false;
             }
             oc.destinatarios = [...(configCorreo.destinatariosBase || [])]; oc.creadoPor = usuario(); oc.creadoEn = fs().serverTimestamp();
+            const hist = !!(o.querySelector('#p-hist') || {}).checked, hFecha = hist ? o.querySelector('#p-hist-fecha').value : '';
+            if (hist) {
+                if (!hFecha) { toast('Falta la fecha', 'Indica cuándo se recibió esta orden histórica.', 'warning'); return false; }
+                oc.historica = true; oc.cerrada = true; oc.aceptada = hFecha; oc.fechaLimite = hFecha; oc.recepcionHistorica = { fecha: hFecha, documento: o.querySelector('#p-hist-doc').value.trim() };
+                oc.lineas.forEach(l => { (oc.columnas || []).forEach(c => { if (Number(l.dist && l.dist[c.key]) > 0) l.recibido = { ...(l.recibido || {}), [c.key]: Number(l.dist[c.key]) }; }); });
+            }
             const prog = progresoRecepcion(o, ['Guardando la orden de compra…']);
             try {
             await fs().runTransaction(db(), async (tx) => {
                 tx.set(ref, oc);
+                if (hist) tx.set(fs().doc(fs().collection(db(), 'Seguimiento_OC', id, 'Eventos')), { tipo: 'ESTADO', texto: `Orden HISTÓRICA cargada para trazabilidad: recibida el ${fmtFecha(hFecha)}${oc.recepcionHistorica.documento ? ' (' + oc.recepcionHistorica.documento + ')' : ''}. No movió stock.`, autor: usuario(), fecha: fs().serverTimestamp() });
                 tx.set(fs().doc(fs().collection(db(), 'Seguimiento_OC', id, 'Eventos')), { tipo: 'CREACION', texto: `Orden ingresada${oc.origen === 'OC_MP' ? ' desde el PDF' : ''}: ${oc.lineas.length} producto(s). El proveedor debe aceptarla hasta el ${fmtFecha(oc.aceptarLimite)}; entrega en ${oc.plazoDiasHabiles} días hábiles desde la aceptación.`, autor: usuario(), fecha: fs().serverTimestamp() });
             });
             if (usoCuadro) window.SAR_ComprasAgiles.vincularOC(usoCuadro.id, oc.numeroOC);
@@ -885,6 +898,7 @@
             prog.paso('Guardando los archivos de la orden…');
             const fOC = (o.querySelector('#p-file') || {}).files, fDist = (o.querySelector('#p-dist') || {}).files;
             await guardarFile(id, fOC && fOC[0], 'Orden de compra'); await guardarFile(id, fDist && fDist[0], 'Cuadro de distribución');
+            if (hist) { const fr = o.querySelector('#p-hist-rc').files[0], fa = o.querySelector('#p-hist-acta').files[0]; if (fr) await guardarFile(id, fr, 'Recepción conforme'); if (fa) await guardarFile(id, fa, 'Acta de entrega'); }
             prog.listo(`Orden ${oc.numeroOC} ingresada`, true); await new Promise(r => setTimeout(r, 1300)); prog.error();
             } catch (e) { prog.error(); throw e; }
             abrirCuando(id);
@@ -910,6 +924,7 @@
             ov.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => { leerRev(ov); rev.lineas.splice(Number(b.dataset.del), 1); pintarRev(avisos); }));
         }
         pintarRev([]);
+        q('#p-hist').addEventListener('change', (e) => { q('#p-hist-box').hidden = !e.target.checked; });
         q('#p-file').addEventListener('change', async (e) => {
             const f = e.target.files[0]; if (!f) return;
             const est = q('#p-estado'); est.innerHTML = '<span class="r-prog__spin r-prog__spin--s"></span> Leyendo el archivo…';

@@ -378,3 +378,8 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - Actas de oxígeno: Editar permite quitar balones (vuelven a SAR como llenos), agregar balones llenos o cambiar la serie, y cambiar centro/documentos/firmas; cada balón deja su evento.
 - Recepción conforme: botón **Editar recepción conforme** (fecha, guía/factura y N°, contraparte, quien recibe, parcial, observaciones); rehace el acta y reemplaza el archivo. Productos y cantidades siguen lo recibido en la orden.
 - Catálogo de Insumos: los productos con recepción pendiente llevan "Pendiente de recepción: N un. (OC …) · aún no está en stock".
+
+### 4.51 Órdenes históricas y auditoría de ediciones (v20.94)
+- Al ingresar una orden, la casilla **Orden histórica** la carga solo para trazabilidad: queda cerrada, con lo pedido marcado como recibido en la fecha indicada, con orden, cuadro, recepción conforme y acta de entrega adjuntos, y **no mueve stock** (ese stock ya se consumió o se cuenta en la toma de inventario). Evento ESTADO "Orden HISTÓRICA".
+- Toda edición de acta de entrega/oxígeno pasa por la misma transacción que la emisión: lo quitado vuelve a bodega/lotes, lo agregado descuenta con FEFO y, si falta, queda como sobregiro visible; el movimiento EDICION_ACTA entra a los informes contable/disponible y al seguimiento del acta.
+- Animación del logo (SAR_Progreso) también en entrega y acciones de oxígeno.

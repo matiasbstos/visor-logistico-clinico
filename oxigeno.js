@@ -278,7 +278,7 @@
             ${a.pide === 'estadoDevuelto' ? `<label class="act-l">Vuelve<select id="oxi-dev"><option value="VACIO">Vacío</option><option value="LLENO">Lleno</option></select></label>` : ''}
             <label class="act-l">${a.nota ? 'Qué pasó (obligatorio)' : 'Detalle (opcional)'}<input id="oxi-t"></label>`, async (q) => {
             const g = (s) => { const n = q(s); return n ? n.value : ''; };
-            await registrarAccion(id, clave, { fecha: g('#oxi-f'), proveedor: g('#oxi-p'), documento: g('#oxi-d'), estadoDevuelto: g('#oxi-dev'), detalle: g('#oxi-t') });
+            await window.SAR_Progreso.correr('Registrando la acción del equipo…', () => registrarAccion(id, clave, { fecha: g('#oxi-f'), proveedor: g('#oxi-p'), documento: g('#oxi-d'), estadoDevuelto: g('#oxi-dev'), detalle: g('#oxi-t') }), 'Acción registrada');
             toast('Registrado', `${a.txt}: N° ${e.serie}.`, 'success'); delete eventosAbiertos[id]; await cargar(); pintar();
         });
     }
@@ -294,7 +294,7 @@
             const err = validarEntrega(centro, lista); if (err.length) throw new Error(err[0]);
             firma = { nombre: q('#oxi-en').value.trim(), cargo: q('#oxi-ec').value.trim() };
             const docTxt = q('#oxi-doc').value.trim();
-            const acta = await entregar(centro, lista, firma, { nombre: q('#oxi-rn').value.trim(), cargo: q('#oxi-rc').value.trim() }, docTxt ? [{ tipo: 'Documento', numero: docTxt, detalle: '' }] : []);
+            const acta = await window.SAR_Progreso.correr('Emitiendo el acta de oxígeno…', () => entregar(centro, lista, firma, { nombre: q('#oxi-rn').value.trim(), cargo: q('#oxi-rc').value.trim() }, docTxt ? [{ tipo: 'Documento', numero: docTxt, detalle: '' }] : []), 'Acta de oxígeno emitida');
             toast('Acta emitida', `${acta.numero} · ${lista.length} balón(es) a ${centro}.`, 'success');
             sel.clear(); await cargar(); pintar();
             const A = window.SAR_ActasEntrega;

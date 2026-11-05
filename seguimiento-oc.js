@@ -317,6 +317,7 @@
             <div class="erp-card"><div class="soc-sub"><h3>Pedido y recibido</h3>
                 ${(oc.columnas || []).length > 1 ? `<label class="soc-toggle"><input type="checkbox" id="soc-todos" ${verTodos ? 'checked' : ''}> Ver otros centros</label>` : ''}
                 <button type="button" class="btn btn-primary btn-sm" id="soc-recep"><i class="ph-bold ph-package"></i> Recibir mercadería</button>
+                <button type="button" class="btn btn-outline btn-sm" id="soc-lotes"><i class="ph-bold ph-barcode"></i> Lotes y vencimientos</button>
                 <button type="button" class="btn btn-outline btn-sm" id="soc-pend"><i class="ph-bold ph-file-csv"></i> Descargar pendientes</button>
                 <button type="button" class="btn btn-outline btn-sm" id="soc-conforme"><i class="ph-bold ph-seal-check"></i> Recepción conforme</button></div>
                 ${oc.recepcionConforme ? `<p class="soc-card__sub">Recepción conforme registrada el ${fmtFecha(oc.recepcionConforme.fecha)} (${esc(oc.recepcionConforme.tipoDoc === 'FACTURA' ? 'factura' : 'guía')} ${esc(oc.recepcionConforme.numeroDoc)}). Correo: ${({ enviado: 'enviado', borrador: 'borrador abierto', error: 'NO se envió', sin_adjuntos: 'enviado SIN adjuntos', sin_destinatarios: 'sin destinatarios' })[(oc.recepcionConforme.correo || {}).estado] || '—'}.</p>` : ''}
@@ -348,6 +349,7 @@
         const bs = q('#soc-sig'); if (bs) bs.addEventListener('click', () => { const t = q(bs.dataset.go); if (t) t.click(); else if (bs.dataset.go.startsWith('#view')) window.location.hash = bs.dataset.go.slice(1); });
         q('#soc-recep').addEventListener('click', formRecepcion);
         q('#soc-pend').addEventListener('click', () => { if (!pendientesDe(ocActual).some(x => x.pendiente > 0)) { toast('Sin pendientes', 'Todo lo de SAR ya fue recibido.', 'success'); return; } descargarPendientes(ocActual); });
+        q('#soc-lotes').addEventListener('click', formLotes);
         q('#soc-conforme').addEventListener('click', () => { if (window.SAR_RecepcionConforme) window.SAR_RecepcionConforme.abrir({ oc: ocActual, modal, toast, enviarCorreo, config: configCorreo, usuario: usuario(), fmtFecha, peso, totalesPorCentro, centroPropio: CENTRO_PROPIO }); });
         root().querySelectorAll('[data-acta]').forEach(b => b.addEventListener('click', () => formActaCentro(b.dataset.acta)));
         const ac = q('#soc-acepta'); if (ac) ac.addEventListener('click', formAceptacion);
@@ -452,7 +454,8 @@
         const b = host.querySelector('#soc-base'); if (b) b.addEventListener('click', () => guardar([...new Set([...dest, ...configCorreo.destinatariosBase])]));
     }
 
-    const ICONOS = { CONFORME: 'Recepción conforme', INCIDENCIA: 'Incidencia', ACEPTACION: 'Aceptación', NOTA: 'Nota', RECEPCION: 'Recepción', MULTA: 'Multa', ESTADO: 'Estado', CREACION: 'Ingreso' };
+    const DESTINO_RECEPCION = ['mariel.quintanilla@cormumel.cl', 'compras.sar@cormumel.cl', 'matias.bustos@cormumel.cl'];   // correo de cada recepción: siempre estos tres
+    const ICONOS = { LOTE: 'Lote y vencimiento', CONFORME: 'Recepción conforme', INCIDENCIA: 'Incidencia', ACEPTACION: 'Aceptación', NOTA: 'Nota', RECEPCION: 'Recepción', MULTA: 'Multa', ESTADO: 'Estado', CREACION: 'Ingreso' };
     function pintarBitacora() {
         const host = root() && root().querySelector('#soc-bitacora'); if (!host) return;
         host.innerHTML = eventos.length ? '<ul class="soc-bit">' + eventos.map(e => `<li><div><strong>${esc(ICONOS[e.tipo] || e.tipo)}</strong> · ${esc(e.autor || '')} · <small>${esc(fmtFechaHora(e.fecha))}</small></div>
@@ -519,6 +522,66 @@
         ov.querySelector('[data-x]').addEventListener('click', cerrar);
         ov.querySelector('[data-ok]').addEventListener('click', async (e) => { e.target.disabled = true; try { const r = await onListo(ov); if (r !== false) cerrar(); else e.target.disabled = false; } catch (err) { toast('Error', (err.code || '') + ' ' + err.message, 'error'); e.target.disabled = false; } });
         return ov;
+    }
+
+    /** Unidades ingresadas al stock sin lote/vencimiento, aún por completar (recepciones menos asignaciones ya hechas). */
+    function lotesPendientes(oc, evs) {
+        const m = new Map();
+        const k = (i, desc) => `${i}|${desc}`;
+        evs.filter(e => e.tipo === 'RECEPCION' && e.ingresoAStock).forEach(e => (e.detalle || []).forEach(d => {
+            if (d.lote || d.vence) return;
+            const nombre = d.insumoName || ((oc.lineas || []).find(l => l.descripcion === d.descripcion) || {}).insumoName || d.descripcion;
+            const key = k(nombre, d.descripcion), x = m.get(key) || { insumoName: nombre, descripcion: d.descripcion, cantidad: 0 };
+            x.cantidad += num(d.cantidad); m.set(key, x);
+        }));
+        evs.filter(e => e.tipo === 'LOTE').forEach(e => (e.detalle || []).forEach(d => {
+            const x = m.get(k(d.insumoName, d.descripcion)); if (x) x.cantidad -= num(d.cantidad);
+        }));
+        return [...m.values()].filter(x => x.cantidad > 0);
+    }
+    async function formLotes() {
+        const oc = ocActual, pend = lotesPendientes(oc, eventos);
+        if (!pend.length) { toast('Todo al día', 'No hay unidades recibidas sin lote o vencimiento.', 'info'); return; }
+        const ov = modal('Lotes y vencimientos', `<p class="cierre-hint">Completa el lote y el vencimiento de lo que ya ingresó al stock. Puedes asignar solo una parte de las unidades.</p>
+            <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Sin lote</th><th>Unidades</th><th>Lote</th><th>Vence</th></tr></thead><tbody>${pend.map((x, n) => `<tr data-n="${n}"><td>${esc(x.insumoName)}</td><td>${x.cantidad}</td><td><input type="number" class="l-c" min="0" max="${x.cantidad}" value="${x.cantidad}" aria-label="Unidades"></td><td><input class="l-l" placeholder="Lote" aria-label="Lote"></td><td><input type="date" class="l-v" aria-label="Vencimiento"></td></tr>`).join('')}</tbody></table></div>`, async (o) => {
+            const cambios = [];
+            o.querySelectorAll('tr[data-n]').forEach(tr => {
+                const x = pend[+tr.dataset.n], c = num(tr.querySelector('.l-c').value), l = tr.querySelector('.l-l').value.trim().toUpperCase(), v = tr.querySelector('.l-v').value;
+                if (c > 0 && (l || v)) cambios.push({ ...x, asignar: c, lote: l || 'S/L', vence: v || 'N/A' });
+            });
+            if (!cambios.length) { toast('Sin cambios', 'Indica lote o vencimiento en al menos una fila.', 'warning'); return false; }
+            if (cambios.some(c => !Number.isInteger(c.asignar) || c.asignar > c.cantidad)) { toast('Cantidad no válida', 'Las unidades deben ser enteras y no superar las que no tienen lote.', 'warning'); return false; }
+            if (cambios.some(c => c.vence !== 'N/A' && c.vence < hoyISO())) { toast('Vencimiento pasado', 'Hay una fecha anterior a hoy. Revísala.', 'warning'); return false; }
+            await asignarLotes(oc, cambios);
+            toast('Lotes actualizados', 'El stock quedó con los lotes y vencimientos indicados.', 'success');
+        }, { ancho: true, ok: 'Guardar' });
+        return ov;
+    }
+    async function asignarLotes(oc, cambios) {
+        const f = fs(); let central = 'Bodega Central';
+        const bs = await f.getDocs(f.collection(db(), 'Bodegas')); bs.forEach(d => { const b = d.data(); if (/central/i.test(String(b.name || '')) && b.isActive !== false) central = b.name; });
+        const refs = [];
+        for (const c of cambios) {
+            const snap = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('name', '==', c.insumoName), f.limit(10)));
+            let ref = null; snap.forEach(x => { const l = x.data().location; if (!ref && (l === central || !l)) ref = f.doc(f.collection(db(), 'Insumos'), x.id); });
+            if (!ref) throw new Error(`No se encontró "${c.insumoName}" en ${central}.`);
+            refs.push(ref);
+        }
+        await f.runTransaction(db(), async (tx) => {
+            const docs = new Map();
+            for (const r of refs) if (!docs.has(r.path)) docs.set(r.path, { ref: r, data: (await tx.get(r)).data() });
+            cambios.forEach((c, n) => {
+                const d = docs.get(refs[n].path), lotes = (Array.isArray(d.data.batches) ? d.data.batches : []).map(b => ({ ...b }));
+                const sin = lotes.find(b => (b.batch || 'S/L') === 'S/L' && (b.expirationDate || 'N/A') === 'N/A');
+                if (!sin || num(sin.quantity) < c.asignar) throw new Error(`"${c.insumoName}": ya no hay ${c.asignar} unidades sin lote en el stock.`);
+                sin.quantity = num(sin.quantity) - c.asignar;
+                const ex = lotes.find(b => b.batch === c.lote && (b.expirationDate || 'N/A') === c.vence);
+                if (ex) ex.quantity = num(ex.quantity) + c.asignar; else lotes.push({ batch: c.lote, quantity: c.asignar, expirationDate: c.vence });
+                d.data.batches = lotes.filter(b => num(b.quantity) > 0);
+            });
+            docs.forEach(d => { const b = d.data.batches; if (typeof window.fefoCompare === 'function') b.sort(window.fefoCompare); const prox = b[0]; tx.update(d.ref, { batches: b, batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A' }); });
+        });
+        await registrarEvento(oc, { tipo: 'LOTE', texto: 'Lote/vencimiento asignado:\n' + cambios.map(c => `- ${c.insumoName}: ${c.asignar} un. · lote ${c.lote} · vence ${c.vence === 'N/A' ? 's/v' : fmtFecha(c.vence)}`).join('\n'), extra: { detalle: cambios.map(c => ({ insumoName: c.insumoName, descripcion: c.descripcion, cantidad: c.asignar, lote: c.lote, vence: c.vence })) } });
     }
 
     function formNueva() {
@@ -757,8 +820,8 @@
             const lecturas = []; for (const g of grupos.values()) lecturas.push([g, await tx.get(g.ref)]);
             const fresca = os.data();
             det.forEach(d => { const l = (fresca.lineas || [])[d.i] || {}, pe = num(l.dist && l.dist[key]) - num(l.recibido && l.recibido[key]); if (d.cantidad > Math.max(0, pe)) throw new Error(`"${String(l.descripcion || '').slice(0, 40)}": solo quedan ${Math.max(0, pe)} por recibir (otra recepción se registró antes). Cierra y vuelve a abrir.`); });
-            tx.update(ocRef, { ...aplicarRecepcion(fresca, key, det, incidencias, null, ingresaStock), ...(guia ? { ultimaGuia: guia } : {}), ultimaRecepcion: fecha, actualizadoEn: f.serverTimestamp() });
-            tx.set(evRef, { tipo: 'RECEPCION', texto, autor: usuario(), fecha: f.serverTimestamp(), ...(correo ? { correo } : {}), columna: key, guia, recId, horaLlegada: hora, fechaRecepcion: fecha, ingresoAStock: !!ingresaStock, detalle: det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })), incidencias: incidencias.map(n => ({ producto: n.producto, tipo: n.tipo, detalle: n.detalle })) });
+            tx.update(ocRef, { ...aplicarRecepcion(fresca, key, det, incidencias, null, ingresaStock), ...(guia ? { ultimaGuia: guia } : {}), ultimaRecepcion: fecha, recepciones: [...(fresca.recepciones || []), { recId, fecha, hora, guia: guia || '', columna: key, usuario: usuario(), unidades: det.reduce((t, d) => t + d.cantidad, 0), detalle: det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad })) }], actualizadoEn: f.serverTimestamp() });
+            tx.set(evRef, { tipo: 'RECEPCION', texto, autor: usuario(), fecha: f.serverTimestamp(), ...(correo ? { correo } : {}), columna: key, guia, recId, horaLlegada: hora, fechaRecepcion: fecha, ingresoAStock: !!ingresaStock, detalle: det.map(d => ({ i: d.i, insumoName: d.insumoName || '', descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })), incidencias: incidencias.map(n => ({ producto: n.producto, tipo: n.tipo, detalle: n.detalle })) });
             lecturas.forEach(([g, snap]) => {
                 const actual = snap.exists() ? snap.data() : null, m = mezclarIngreso(actual, g.ingresos);
                 const limite = num(actual && (actual.criticalLimit || actual.stock_minimo)) || 50;
@@ -770,7 +833,7 @@
                     provider: oc.proveedor || 'S/I', user: usuario(), date: f.serverTimestamp(), document: `${recId} · OC ${oc.numeroOC}${guia ? ' · guía ' + guia : ''}`, observacion: obs || '', ocId: oc.id, idInsumoDestino: g.ref.id }));
             });
         });
-        if (notificar) { try { correo = await enviarCorreo(oc.destinatarios || [], armarCorreo({ ...oc, ...aplicadoLocal }, titulo, texto, usuario())); } catch (e) { toast('Recepción guardada', 'No se pudo preparar el correo: ' + e.message, 'warning'); } }
+        if (notificar) { try { correo = await enviarCorreo(DESTINO_RECEPCION, armarCorreo({ ...oc, ...aplicadoLocal }, titulo, texto, usuario())); } catch (e) { toast('Recepción guardada', 'No se pudo preparar el correo: ' + e.message, 'warning'); } }
         return correo;
     }
 

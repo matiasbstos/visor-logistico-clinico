@@ -383,3 +383,5 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - Al ingresar una orden, la casilla **Orden histórica** la carga solo para trazabilidad: queda cerrada, con lo pedido marcado como recibido en la fecha indicada, con orden, cuadro, recepción conforme y acta de entrega adjuntos, y **no mueve stock** (ese stock ya se consumió o se cuenta en la toma de inventario). Evento ESTADO "Orden HISTÓRICA".
 - Toda edición de acta de entrega/oxígeno pasa por la misma transacción que la emisión: lo quitado vuelve a bodega/lotes, lo agregado descuenta con FEFO y, si falta, queda como sobregiro visible; el movimiento EDICION_ACTA entra a los informes contable/disponible y al seguimiento del acta.
 - Animación del logo (SAR_Progreso) también en entrega y acciones de oxígeno.
+
+- v20.95: botón "Cargar productos y fotos" también en Catálogo de Insumos; la etiqueta "Pendiente de recepción" reconoce la columna SAR por nombre.

@@ -5470,3 +5470,10 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 
 /* v20.84 acciones de archivos de la orden */
 .soc-arch-acc{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+
+/* v20.85 fotos de productos */
+.prod-img{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:8px;overflow:hidden;background:#f3f4f6;vertical-align:middle;margin-right:10px;flex:none}
+.prod-img:empty,.prod-img--sin{display:none}
+.prod-img img{width:100%;height:100%;object-fit:contain;background:#fff}
+.act-fn .prod-img{float:left;margin-top:2px}
+.act-fn{overflow:hidden}

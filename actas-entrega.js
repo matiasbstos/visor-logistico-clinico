@@ -398,7 +398,7 @@
               <div class="act-fila act-docs"><input id="act-mn" placeholder="Nombre del insumo"><input id="act-mq" type="number" min="1" value="1" class="act-qty" aria-label="Cantidad"><button type="button" class="btn btn-outline" id="act-madd">Agregar</button></div>
               <label class="act-l act-chk"><input type="checkbox" id="act-mc"> Es medicamento controlado (no se permite sin stock)</label></details>
             <div class="act-stock">${!borrador.origen ? '<p class="act-hint">Elige una bodega para ver su stock.</p>' : !lista.length ? '<p class="act-hint">Sin resultados. Si no está en el sistema, agrégalo a mano abajo.</p>' : lista.map(s => `
-              <div class="act-fila${yaEsta(s.id) ? ' act-ya' : ''}"><div class="act-fn">${esc(s.name)}${s.controlado ? ' <small>(controlado)</small>' : ''}${s.provisional ? ' <small>(provisional)</small>' : ''}<small>${s.disp > 0 ? 'Disponible: ' + s.disp : '<span class="act-sin">Sin stock en sistema</span>'}${s.sobregiro > 0 ? ' · sobregiro: ' + s.sobregiro : ''}</small></div>
+              <div class="act-fila${yaEsta(s.id) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(s.name) : ''}${esc(s.name)}${s.controlado ? ' <small>(controlado)</small>' : ''}${s.provisional ? ' <small>(provisional)</small>' : ''}<small>${s.disp > 0 ? 'Disponible: ' + s.disp : '<span class="act-sin">Sin stock en sistema</span>'}${s.sobregiro > 0 ? ' · sobregiro: ' + s.sobregiro : ''}</small></div>
                 ${yaEsta(s.id) ? '<span class="act-chip">agregado</span>' : `<input type="number" min="1" value="1" class="act-qty" data-qid="${esc(s.id)}" aria-label="Cantidad"><button type="button" class="btn btn-outline act-add" data-id="${esc(s.id)}">Agregar</button>`}</div>`).join('')}
               ${stock.filter(s => !q || s.name.toLowerCase().includes(q)).length > 80 ? '<p class="act-hint">Hay más resultados: afina la búsqueda.</p>' : ''}</div>
           </div>
@@ -539,6 +539,7 @@
         borrador = cargarBorrador();
         r.innerHTML = '<p class="act-hint" style="padding:24px;">Cargando…</p>';
         try {
+            if (window.SAR_Imagenes) window.SAR_Imagenes.cargar().catch(() => {});
             await Promise.all([cargarBodegas(), cargarCentros(), cargarHistorial().catch(() => { historial = []; })]);
             if (!borrador.origen) { const c = bodegas.find(b => /central/i.test(b.name)); if (c) borrador.origen = c.name; }
             else if (!bodegas.some(b => b.name === borrador.origen)) { borrador.origen = null; borrador.items = []; }

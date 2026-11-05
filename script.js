@@ -3271,7 +3271,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const rowStyle = isQuarantined ? 'background-color: rgba(239, 68, 68, 0.1); border-left: 4px solid var(--danger);' : '';
                 const nameMarkup = isQuarantined ?
                     `<div class="item-name text-danger"><i class="ph-fill ph-warning"></i> ${window.escapeHTML(item.name) || 'Sin Nombre'} (CUARENTENA)</div>` :
-                    `<div class="item-name">${window.escapeHTML(item.name) || 'Sin Nombre'}</div>`;
+                    `<div class="item-name">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(item.name) : ''}${window.escapeHTML(item.name) || 'Sin Nombre'}</div>`;
 
                 // ==============================
                 // MULTI-LOTE RENDERING (FEFO)

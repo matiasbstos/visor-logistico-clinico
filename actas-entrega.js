@@ -217,7 +217,7 @@
             const snaps = [];
             for (const r of refs) snaps.push(r.i.nuevo ? null : await tx.get(r.ref));
             // Entrega desde una orden de compra (v20.55): se valida y se actualiza lo entregado de cada línea
-            let ocSnap = null, ocRef = null, ocLineas = null;
+            let ocSnap = null, ocRef = null, ocLineas = null, autoPend = [];
             if (b.oc) {
                 ocRef = f.doc(f.collection(db(), 'Seguimiento_OC'), b.oc.id); ocSnap = await tx.get(ocRef);
                 if (!ocSnap.exists()) throw new Error('La orden de compra ya no existe.');
@@ -227,7 +227,12 @@
                     const disp = num(l.ingresado && l.ingresado[b.oc.key]) - num(l.entregado[b.oc.key]);
                     if (num(i.cantidad) > disp) throw new Error(`${i.nombre}: solo quedan ${Math.max(0, disp)} u. por entregar de esta orden (alguien más pudo entregar antes). Actualiza la pantalla.`);
                     l.entregado[b.oc.key] = num(l.entregado[b.oc.key]) + num(i.cantidad);
+                    i.solicitado = num(l.dist && l.dist[b.oc.key]); i.entregadoTotal = l.entregado[b.oc.key];
                 });
+                // Lo solicitado que aún no se entrega (no llegó o queda fuera de esta acta) figura como pendiente en el acta
+                const yaEn = new Set(items.map(i => i.ocI));
+                autoPend = ocLineas.map((l, idx) => ({ idx, l, p: num(l.dist && l.dist[b.oc.key]) - num(l.entregado[b.oc.key]) }))
+                    .filter(x => !yaEn.has(x.idx) && x.p > 0).map(x => ({ nombre: String(x.l.descripcion || '').toUpperCase(), cantidad: x.p }));
             }
             const base = (r) => ({ name: r.i.nombre, name_lowercase: String(r.i.nombre).toLowerCase(), location: b.origen, quantity: 0, batches: [], sobregiro: 0, provisional: true, category: 'Provisional', criticalLimit: 50, isCritical: true, unitPrice: 0, status: 'ACTIVO', createdAt: f.serverTimestamp(), createdBy: usuario });
             const datos = refs.map((r, k) => {
@@ -243,7 +248,7 @@
                 if (datos[k].controlado && p.faltante > 0) throw new Error(`${r.i.nombre} es medicamento controlado: no puede entregarse sin stock en sistema.`);
                 return p;
             });
-            const itemsActa = refs.map((r, k) => ({ id: r.ref.id, nombre: r.i.nombre, cantidad: num(r.i.cantidad), lotes: calc[k].usados, sinRespaldo: calc[k].faltante, ...(r.i.nuevo ? { provisional: true } : {}), ...(b.oc ? { ocI: r.i.ocI } : {}) }));
+            const itemsActa = refs.map((r, k) => ({ id: r.ref.id, nombre: r.i.nombre, cantidad: num(r.i.cantidad), lotes: calc[k].usados, sinRespaldo: calc[k].faltante, ...(r.i.nuevo ? { provisional: true } : {}), ...(b.oc ? { ocI: r.i.ocI, solicitado: r.i.solicitado, entregadoTotal: r.i.entregadoTotal } : {}) }));
             refs.forEach((r, k) => {
                 const d = datos[k], c = calc[k];
                 const limite = num(d.criticalLimit || d.stock_minimo || 50);
@@ -262,7 +267,7 @@
             const acta = {
                 numero, fecha, centro: b.centro.trim(), bodegaOrigen: b.origen, estado: 'EMITIDA', stockDescontado: true,
                 conSobregiro: itemsActa.some(i => i.sinRespaldo > 0),
-                items: itemsActa, pendientes: b.pendientes.map(p => ({ nombre: p.nombre, cantidad: num(p.cantidad) })),
+                items: itemsActa, pendientes: [...b.pendientes.map(p => ({ nombre: p.nombre, cantidad: num(p.cantidad) })), ...autoPend],
                 documentos: b.documentos.map(d => ({ tipo: d.tipo, numero: d.numero, detalle: d.detalle || '' })),
                 entrega: { nombre: firma.nombre, cargo: firma.cargo }, recibe: { nombre: (b.recibe && b.recibe.nombre) || '', cargo: (b.recibe && b.recibe.cargo) || '' },
                 creadoPor: usuario, creadoEn: f.serverTimestamp()
@@ -345,7 +350,7 @@
             bajar(D.generarDOCX(acta, { logoBytes }), D.nombreArchivo(acta, 'docx'), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
         }
     }
-    const actaParaDoc = (a) => ({ ...a, items: (a.items || []).map(i => ({ nombre: i.nombre, cantidad: i.cantidad })) });
+    const actaParaDoc = (a) => ({ ...a, items: (a.items || []).map(i => ({ nombre: i.nombre, cantidad: i.cantidad, solicitado: i.solicitado, entregadoTotal: i.entregadoTotal })) });
 
     // ---------------------------------------------------------------
     // Interfaz

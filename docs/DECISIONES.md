@@ -280,3 +280,7 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 
 ### 4.29 v20.70 — Pulido UX de la ficha (revisión del agente ux-ui-flujo)
 - "Registrar aceptación" pasa al banner como botón secundario (la tarjeta de plazo queda pareja); pie administrativo separado con "Cerrar seguimiento" a la derecha; títulos de tarjeta en azul de marca; "Registrar nota" más discreto; radios con --shape-card.
+
+### 4.30 v20.71 — Bodega de destino en la recepción
+- "Recibir mercadería" pide la bodega de destino (por defecto Bodega Central, listada primero); el stock, el historial y el evento guardan esa bodega y la lista de productos corresponde a ella.
+- "Lotes y vencimientos" respeta la bodega de cada ingreso (las recepciones anteriores cuentan como Bodega Central).

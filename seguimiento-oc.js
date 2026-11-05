@@ -442,7 +442,7 @@
                 <button type="button" class="btn btn-outline btn-sm" id="soc-pend"><i class="ph-bold ph-file-csv"></i> Descargar pendientes</button>` : ''}</div>
                 ${oc.recepcionConforme ? `<p class="soc-card__sub">Recepción conforme registrada el ${fmtFecha(oc.recepcionConforme.fecha)} (${esc(oc.recepcionConforme.tipoDoc === 'FACTURA' ? 'factura' : 'guía')} ${esc(oc.recepcionConforme.numeroDoc)}). Correo: ${({ enviado: 'enviado', borrador: 'borrador abierto', error: 'NO se envió', sin_adjuntos: 'enviado SIN adjuntos', sin_destinatarios: 'sin destinatarios' })[(oc.recepcionConforme.correo || {}).estado] || '—'}.</p>` : ''}
                 <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Neto</th>${colsVis.map(c => `<th>${esc(c.centro)}<br><small>memo ${esc(c.memo)} · CDP ${esc(c.cdp)}</small></th>`).join('')}</tr></thead><tbody>
-                ${(oc.lineas || []).filter(l => colsVis.some(c => num(l.dist && l.dist[c.key]) || num(l.recibido && l.recibido[c.key]))).map(l => `<tr><td>${esc(l.descripcion)}</td><td>${peso(l.valorNeto)}</td>${colsVis.map(c => {
+                ${(oc.lineas || []).filter(l => colsVis.some(c => num(l.dist && l.dist[c.key]) || num(l.recibido && l.recibido[c.key]))).map(l => `<tr><td>${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(l.descripcion, { codigo: l.codigoMP }) : ''}${esc(l.descripcion)}</td><td>${peso(l.valorNeto)}</td>${colsVis.map(c => {
                     const p = num(l.dist && l.dist[c.key]), r = num(l.recibido && l.recibido[c.key]); if (!p && !r) return '<td class="soc-vacio">—</td>';
                     return `<td class="soc-est--${estadoLinea(p, r)}"><strong>${r}</strong> / ${p}</td>`; }).join('')}</tr>`).join('')}
                 </tbody></table></div>
@@ -532,7 +532,7 @@
                     <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Recibido</th><th>En bodega</th><th>Entregado</th><th>Pendiente</th></tr></thead><tbody>${(oc.lineas || []).map(l => {
                         const p = num(l.dist && l.dist[e.key]); if (!p) return '';
                         const r = num(l.recibido && l.recibido[e.key]), g = num(l.ingresado && l.ingresado[e.key]), en = num(l.entregado && l.entregado[e.key]);
-                        return `<tr><td>${esc(l.descripcion)}</td><td>${p}</td><td>${r}</td><td>${Math.max(0, g - en)}</td><td>${en}</td><td class="${p - en > 0 ? 'soc-est--parcial' : 'soc-est--ok'}"><strong>${Math.max(0, p - en)}</strong></td></tr>`; }).join('')}</tbody></table></div></div>`; }).join('')}
+                        return `<tr><td>${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(l.descripcion, { codigo: l.codigoMP }) : ''}${esc(l.descripcion)}</td><td>${p}</td><td>${r}</td><td>${Math.max(0, g - en)}</td><td>${en}</td><td class="${p - en > 0 ? 'soc-est--parcial' : 'soc-est--ok'}"><strong>${Math.max(0, p - en)}</strong></td></tr>`; }).join('')}</tbody></table></div></div>`; }).join('')}
             <p class="bodega-estantes__hint">"Recibido" = lo registrado en Recibir mercadería · "En bodega" = ingresado al stock y aún sin entregar · "Entregado" = en actas emitidas desde esta orden. Cada acta descuenta el stock y deja el saldo pendiente actualizado.</p></div>`;
     }
     /** Acta de entrega a un centro con lo que ya llegó a bodega y aún no se entrega. */
@@ -547,7 +547,7 @@
         modal(`Acta de entrega · ${c.centro} (memo ${c.memo})`, `
             <div class="soc-fila"><label>Bodega de origen<select id="a-bod">${bodegas.map(b => `<option>${esc(b)}</option>`).join('')}</select></label><label>Centro que recibe<input type="text" id="a-centro" value="${esc(c.centro)}"></label></div>
             <div class="soc-fila"><label>Recibe (nombre)<input type="text" id="a-rn" value="${esc(c.contraparte || '')}"></label><label>Cargo<input type="text" id="a-rc"></label></div>
-            <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>En bodega</th><th>Entregar ahora</th></tr></thead><tbody>${filas.map(x => `<tr data-i="${x.i}"><td>${esc(x.l.insumoName || x.l.descripcion)}</td><td>${x.disp}</td><td><input type="number" min="0" max="${x.disp}" class="a-c" value="${x.disp}"></td></tr>`).join('')}</tbody></table></div>
+            <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>En bodega</th><th>Entregar ahora</th></tr></thead><tbody>${filas.map(x => `<tr data-i="${x.i}"><td>${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.l.descripcion, { codigo: x.l.codigoMP }) : ''}${esc(x.l.insumoName || x.l.descripcion)}</td><td>${x.disp}</td><td><input type="number" min="0" max="${x.disp}" class="a-c" value="${x.disp}"></td></tr>`).join('')}</tbody></table></div>
             <small>Se emite el acta con el mismo formato de siempre, se descuenta el stock de la bodega (FEFO) y la orden queda con lo entregado y lo pendiente. Si entregas menos, el resto queda para otra acta.</small>`, async (o) => {
             const origen = o.querySelector('#a-bod').value, items = [];
             for (const tr of o.querySelectorAll('tr[data-i]')) {

@@ -304,8 +304,9 @@
         const colsVis = cols.length ? cols : (oc.columnas || []);
         root().innerHTML = `
             <div class="page-header mb-24"><div class="page-title"><button type="button" class="btn btn-outline btn-sm" id="soc-volver">← Órdenes</button>
-                <h1>OC ${esc(oc.numeroOC)}</h1><p>${esc(oc.proveedor || '')}${oc.descripcion ? ' · ' + esc(oc.descripcion) : ''}</p></div>${chip(pl)}</div>
+                <h1>OC ${esc(oc.numeroOC)}</h1><p>${esc(oc.proveedor || '')}${oc.descripcion ? ' · ' + esc(oc.descripcion) : ''}</p></div></div>
             <div class="erp-card soc-fechas">
+                <div class="soc-fechas__estado">${chip(pl)}</div>
                 <div><small>Emitida</small><strong>${fmtFecha(oc.emitida)}</strong></div>
                 <div><small>Aceptada</small>${oc.aceptada ? `<strong>${fmtFecha(oc.aceptada)}</strong>` : `<strong>—</strong>${oc.aceptarLimite ? `<small>hasta el ${fmtFecha(oc.aceptarLimite)}</small>` : ''}<button type="button" class="btn btn-outline btn-sm" id="soc-acepta">Registrar aceptación</button>`}</div>
                 <div><small>Plazo de entrega</small><strong>${num(oc.plazoDiasHabiles) || 5} días hábiles</strong></div>
@@ -316,10 +317,8 @@
             ${(oc.otrosCentros || []).length && !verTodos ? `<p class="soc-card__sub">La orden también incluye productos de ${esc(oc.otrosCentros.map(c => c.centro + ' (memo ' + c.memo + ')').join(', '))}: no se muestran aquí.</p>` : ''}
             <div class="erp-card"><div class="soc-sub"><h3>Pedido y recibido</h3>
                 ${(oc.columnas || []).length > 1 ? `<label class="soc-toggle"><input type="checkbox" id="soc-todos" ${verTodos ? 'checked' : ''}> Ver otros centros</label>` : ''}
-                <button type="button" class="btn btn-primary btn-sm" id="soc-recep"><i class="ph-bold ph-package"></i> Recibir mercadería</button>
-                <button type="button" class="btn btn-outline btn-sm" id="soc-lotes"><i class="ph-bold ph-barcode"></i> Lotes y vencimientos</button>
-                <button type="button" class="btn btn-outline btn-sm" id="soc-pend"><i class="ph-bold ph-file-csv"></i> Descargar pendientes</button>
-                <button type="button" class="btn btn-outline btn-sm" id="soc-conforme"><i class="ph-bold ph-seal-check"></i> Recepción conforme</button></div>
+                ${hayRecibido(oc) ? `<button type="button" class="btn btn-outline btn-sm" id="soc-lotes"><i class="ph-bold ph-barcode"></i> Lotes y vencimientos</button>
+                <button type="button" class="btn btn-outline btn-sm" id="soc-pend"><i class="ph-bold ph-file-csv"></i> Descargar pendientes</button>` : ''}</div>
                 ${oc.recepcionConforme ? `<p class="soc-card__sub">Recepción conforme registrada el ${fmtFecha(oc.recepcionConforme.fecha)} (${esc(oc.recepcionConforme.tipoDoc === 'FACTURA' ? 'factura' : 'guía')} ${esc(oc.recepcionConforme.numeroDoc)}). Correo: ${({ enviado: 'enviado', borrador: 'borrador abierto', error: 'NO se envió', sin_adjuntos: 'enviado SIN adjuntos', sin_destinatarios: 'sin destinatarios' })[(oc.recepcionConforme.correo || {}).estado] || '—'}.</p>` : ''}
                 <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Neto</th>${colsVis.map(c => `<th>${esc(c.centro)}<br><small>memo ${esc(c.memo)} · CDP ${esc(c.cdp)}</small></th>`).join('')}</tr></thead><tbody>
                 ${(oc.lineas || []).filter(l => colsVis.some(c => num(l.dist && l.dist[c.key]) || num(l.recibido && l.recibido[c.key]))).map(l => `<tr><td>${esc(l.descripcion)}</td><td>${peso(l.valorNeto)}</td>${colsVis.map(c => {
@@ -335,7 +334,6 @@
                 ${[['Despacho', oc.datos.direccionDespacho], ['Contraparte técnica', oc.datos.contraparte], ['Contacto', oc.datos.contacto], ['Horario', oc.datos.horario], ['Forma de pago', oc.datos.formaPago], ['Factura a', oc.datos.emailFactura], ['Memo', oc.datos.memo ? 'N° ' + oc.datos.memo + (oc.descripcion ? ' · ' + oc.descripcion : '') : ''], ['Total (con IVA)', oc.datos.total ? peso(oc.datos.total) : '']].filter(x => x[1]).map(x => `<div><small>${x[0]}</small><span>${esc(x[1])}</span></div>`).join('')}</div></div>` : ''}
             ${memosCDPHTML(oc)}${entregasHTML(oc)}
             </details>
-            <div class="erp-card"><h3>Destinatarios del correo</h3><div id="soc-dest"></div></div>
             <div class="erp-card"><h3>Notas y avisos</h3>
                 <textarea id="soc-texto" rows="3" maxlength="1500" placeholder="Escribe la nota o aviso (ej.: proveedor informa despacho por Pullman Cargo, OT …)"></textarea>
                 <div class="soc-componer"><label class="soc-toggle"><input type="checkbox" id="soc-correo" checked> Enviar correo a la lista</label>
@@ -346,11 +344,11 @@
         q('#soc-volver').addEventListener('click', () => { ocActual = null; pintarLista(); });
         marcarMigas(true);
         const tdo = q('#soc-todos'); if (tdo) tdo.addEventListener('change', (e) => { verTodos = e.target.checked; pintarDetalle(); });
-        const bs = q('#soc-sig'); if (bs) bs.addEventListener('click', () => { const t = q(bs.dataset.go); if (t) t.click(); else if (bs.dataset.go.startsWith('#view')) window.location.hash = bs.dataset.go.slice(1); });
-        q('#soc-recep').addEventListener('click', formRecepcion);
-        q('#soc-pend').addEventListener('click', () => { if (!pendientesDe(ocActual).some(x => x.pendiente > 0)) { toast('Sin pendientes', 'Todo lo de SAR ya fue recibido.', 'success'); return; } descargarPendientes(ocActual); });
-        q('#soc-lotes').addEventListener('click', formLotes);
-        q('#soc-conforme').addEventListener('click', () => { if (window.SAR_RecepcionConforme) window.SAR_RecepcionConforme.abrir({ oc: ocActual, modal, toast, enviarCorreo, config: configCorreo, usuario: usuario(), fmtFecha, peso, totalesPorCentro, centroPropio: CENTRO_PROPIO }); });
+        const bs = q('#soc-sig'); if (bs) bs.addEventListener('click', () => { window.location.hash = bs.dataset.go.slice(1); });
+        const bre = q('#soc-recep'); if (bre) bre.addEventListener('click', formRecepcion);
+        const bpe = q('#soc-pend'); if (bpe) bpe.addEventListener('click', () => { if (!pendientesDe(ocActual).some(x => x.pendiente > 0)) { toast('Sin pendientes', 'Todo lo de SAR ya fue recibido.', 'success'); return; } descargarPendientes(ocActual); });
+        const blo = q('#soc-lotes'); if (blo) blo.addEventListener('click', formLotes);
+        const bco = q('#soc-conforme'); if (bco) bco.addEventListener('click', () => { if (window.SAR_RecepcionConforme) window.SAR_RecepcionConforme.abrir({ oc: ocActual, modal, toast, enviarCorreo, config: configCorreo, usuario: usuario(), fmtFecha, peso, totalesPorCentro, centroPropio: CENTRO_PROPIO }); });
         root().querySelectorAll('[data-acta]').forEach(b => b.addEventListener('click', () => formActaCentro(b.dataset.acta)));
         const ac = q('#soc-acepta'); if (ac) ac.addEventListener('click', formAceptacion);
         root().querySelectorAll('[data-resolver]').forEach(b => b.addEventListener('click', () => formResolver(b.dataset.resolver)));
@@ -365,15 +363,19 @@
     /** El título de la ruta superior ("Seguimiento de OC") vuelve a la lista cuando hay una ficha abierta. */
     function marcarMigas(on) { const bc = document.getElementById('erp-breadcrumb-current'); if (bc) { bc.classList.toggle('soc-bc-link', !!on); bc.title = on ? 'Volver a la lista de órdenes' : ''; } }
     document.addEventListener('click', (e) => { if (ocActual && e.target.closest && e.target.closest('#erp-breadcrumb-current.soc-bc-link')) { ocActual = null; pintarLista(); } });
+    const hayRecibido = (oc) => (oc.lineas || []).some(l => Object.values(l.recibido || {}).some(v => num(v) > 0));
     function bannerSiguiente(oc, pl) {
         if (oc.cerrada) return '';
         const pend = pendientesDe(oc).filter(x => x.pendiente > 0).length > 0, hayStock = (oc.lineas || []).some(l => Object.keys(l.ingresado || {}).some(k => num(l.ingresado[k]) > num(l.entregado && l.entregado[k])));
-        let txt, btn, go;
-        if (pend) { txt = 'Siguiente paso: cuando llegue la mercadería, regístrala (puedes hacerlo por partes). La aceptación del proveedor es opcional.'; btn = 'Recibir mercadería'; go = '#soc-recep'; }
-        else if (!oc.recepcionConforme) { txt = 'Todo recibido. Siguiente paso: la recepción conforme con la guía o factura.'; btn = 'Recepción conforme'; go = '#soc-conforme'; }
-        else { txt = 'Recepción conforme lista. Ya puedes entregar a los centros desde las actas.'; btn = 'Ir a Actas de entrega'; go = '#view-actas-entrega'; }
+        const B = (id, t, pri, go) => `<button type="button" class="btn ${pri ? 'btn-primary' : 'btn-outline'} btn-sm" id="${id}"${go ? ` data-go="${go}"` : ''}>${esc(t)}</button>`;
+        let txt, btns;
+        if (pend) {
+            txt = hayRecibido(oc) ? 'Falta mercadería por recibir. Regístrala cuando llegue, o envía la recepción conforme parcial.' : 'Siguiente paso: cuando llegue la mercadería, regístrala (puedes hacerlo por partes). La aceptación del proveedor es opcional.';
+            btns = B('soc-recep', hayRecibido(oc) ? 'Recibir lo que falta' : 'Recibir mercadería', true) + (hayRecibido(oc) && !oc.recepcionConforme ? B('soc-conforme', 'Recepción conforme (parcial)', false) : '');
+        } else if (!oc.recepcionConforme) { txt = 'Todo recibido. Siguiente paso: la recepción conforme con la guía o factura.'; btns = B('soc-conforme', 'Recepción conforme', true); }
+        else { txt = 'Recepción conforme lista. Ya puedes entregar a los centros desde las actas.'; btns = B('soc-sig', 'Ir a Actas de entrega', true, '#view-actas-entrega'); }
         const extra = hayStock && pend ? ' Lo ya recibido está en Bodega Central y se entrega desde Actas de entrega.' : '';
-        return `<div class="soc-siguiente"><span>${esc(txt)}${esc(extra)}</span><button type="button" class="btn btn-primary btn-sm" id="soc-sig" data-go="${go}">${esc(btn)}</button></div>`;
+        return `<div class="soc-siguiente"><span>${esc(txt)}${esc(extra)}</span><span class="soc-siguiente__btns">${btns}</span></div>`;
     }
     function memosCDPHTML(oc) {
         const cols = oc.columnas || []; if (!cols.length) return '';
@@ -976,6 +978,9 @@ function salida(o) { return ContentService.createTextOutput(JSON.stringify(o)).s
         const c = configCorreo;
         const ov = modal('Configurar correo', `
             <p class="cierre-hint">El envío automático usa un Google Apps Script con tu cuenta de Gmail (gratis, sin plan Blaze). Pasos: 1) abre script.google.com, 2) pega el código de abajo, 3) cambia la clave, 4) Implementar → Nueva implementación → Aplicación web (ejecutar como "Yo", acceso "Cualquier persona"), 5) pega aquí la URL y la misma clave.</p>
+            <div class="soc-dest-fijos"><b>Quién recibe cada correo</b><br>
+                <span>Recepción de mercadería:</span> ${DESTINO_RECEPCION.map(esc).join(', ')}<br>
+                <span>Recepción conforme:</span> Para ${((window.SAR_RecepcionConforme && window.SAR_RecepcionConforme.DESTINATARIOS_BASE.to) || []).map(esc).join(', ')} · Cc ${((window.SAR_RecepcionConforme && window.SAR_RecepcionConforme.DESTINATARIOS_BASE.cc) || []).map(esc).join(', ')}</div>
             <textarea id="c-script" rows="9" readonly style="font-family:monospace;font-size:11px">${esc(SCRIPT_GAS)}</textarea>
             <button type="button" class="btn btn-outline btn-sm" id="c-copiar">Copiar código</button>
             <label>URL de la aplicación web<input type="text" id="c-url" value="${esc(c.webhookUrl || '')}" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></label>

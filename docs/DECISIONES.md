@@ -265,3 +265,8 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - Correo de cada recepción: siempre a mariel.quintanilla@, compras.sar@ y matias.bustos@ (cormumel.cl). Recepción conforme: Para paulina.carrasco@; Cc daniela.medina@, carolina.ortiz@, nadia.sanchez@, sar.melipilla@, matias.bustos@.
 - Botón "Lotes y vencimientos" en la ficha: completa lote/vencimiento de lo ingresado sin ellos (parcial o total); mueve unidades del lote "S/L" al nuevo en el stock y deja un evento LOTE en la bitácora.
 - Cada recepción guarda `recepciones[{recId, fecha, hora, guia, unidades, usuario, detalle}]` en la orden; Auditoría muestra "Recepciones de mercadería" con buscador por REC-ID, orden o guía.
+
+### 4.27 v20.68 — Ficha de la orden por etapas
+- El estado de plazo (chip rojo/verde) va dentro de la tarjeta de fechas, no suelto en el encabezado.
+- Un solo botón "Recibir mercadería": vive en el banner "Siguiente paso". "Lotes y vencimientos" y "Descargar pendientes" aparecen recién cuando ya se recibió algo; "Recepción conforme" aparece en el banner (parcial si falta mercadería, normal si está todo).
+- La sección "Destinatarios del correo" sale de la ficha; los destinatarios fijos (recepción y recepción conforme) se muestran en "Configurar correo".

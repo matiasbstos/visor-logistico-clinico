@@ -154,6 +154,7 @@
     let bodegas = [];
     let historial = [];
     let busqueda = '';
+    let centrosGuardados = [];
     let pdfLibPromesa = null, logoPromesa = null;
 
     const usuarioEmail = () => { const a = window.firebaseAuth; return (a && a.currentUser && a.currentUser.email) || 'Usuario'; };
@@ -178,6 +179,22 @@
         if (!bodegas.some(x => /central/i.test(String(x.name)))) bodegas.push({ id: 'loc_central', name: 'Bodega Central', derivada: true });
         const central = (b) => /central/i.test(String(b.name || ''));
         bodegas.sort((a, b) => (central(b) - central(a)) || String(a.name).localeCompare(String(b.name), 'es'));
+    }
+    // Centros a los que se entrega: los de siempre + los que se agregan (quedan guardados en Centros_Entrega) + los de actas anteriores
+    const normC = (t) => String(t || '').trim().replace(/\s+/g, ' ');
+    function listaCentros() {
+        const m = new Map(); [...CENTROS, ...centrosGuardados, ...historial.map(a => a.centro)].forEach(c => { const n = normC(c); if (n && !m.has(n.toLowerCase())) m.set(n.toLowerCase(), n); });
+        return [...m.values()].sort((a, b) => a.localeCompare(b, 'es'));
+    }
+    async function cargarCentros() {
+        try { const sn = await fs().getDocs(fs().collection(db(), 'Centros_Entrega')); centrosGuardados = []; sn.forEach(d => { if (d.data().nombre) centrosGuardados.push(d.data().nombre); }); } catch (e) { /* sin lista guardada */ }
+    }
+    async function guardarCentro(nombre) {
+        const n = normC(nombre); if (!n) return false;
+        if (listaCentros().some(c => c.toLowerCase() === n.toLowerCase()) && centrosGuardados.some(c => c.toLowerCase() === n.toLowerCase())) return false;
+        const id = n.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'centro';
+        await fs().setDoc(fs().doc(fs().collection(db(), 'Centros_Entrega'), id), { nombre: n, creadoPor: usuarioEmail(), creadoEn: fs().serverTimestamp() }, { merge: true });
+        centrosGuardados.push(n); return true;
     }
     async function cargarStock() {
         stock = [];
@@ -388,7 +405,8 @@
           <div class="act-col">
             <h3 class="act-h">2 · Acta</h3>
             <label class="act-l">Centro al que se entrega
-              <input id="act-centro" list="act-centros" value="${esc(borrador.centro)}" placeholder="Ej: Pomaire"><datalist id="act-centros">${CENTROS.map(c => `<option value="${esc(c)}">`).join('')}</datalist></label>
+              <input id="act-centro" list="act-centros" value="${esc(borrador.centro)}" placeholder="Ej: Pomaire"><datalist id="act-centros">${listaCentros().map(c => `<option value="${esc(c)}">`).join('')}</datalist></label>
+              <div class="act-centro-acc"><button type="button" class="btn btn-outline btn-sm" id="act-centro-add">+ Guardar este centro en la lista</button></div>
             <h4 class="act-h4">Productos entregados (${borrador.items.length})</h4>
             ${borrador.items.length ? borrador.items.map((i, k) => `<div class="act-fila"><div class="act-fn">${esc(i.nombre)}${i.manual ? ' <small>(manual · provisional)</small>' : ''}<small>Disponible: ${num(i.stock)}${num(i.cantidad) > num(i.stock) ? ` · <span class="act-sin">sin respaldo: ${num(i.cantidad) - num(i.stock)}</span>` : ''}</small></div>
                 <input type="number" min="1" value="${i.cantidad}" class="act-qty act-edit" data-k="${k}" aria-label="Cantidad"><button type="button" class="btn btn-outline act-del" data-k="${k}" aria-label="Quitar">✕</button></div>`).join('') : '<p class="act-hint">Aún no agregas productos.</p>'}
@@ -435,6 +453,10 @@
             guardarBorrador(); pintar();
         });
         $('#act-buscar').addEventListener('input', (e) => { busqueda = e.target.value; leerCampos(); const pos = e.target.selectionStart; pintar(); const n = document.getElementById('act-buscar'); n.focus(); n.setSelectionRange(pos, pos); });
+        const bca = document.getElementById('act-centro-add'); if (bca) bca.addEventListener('click', async () => {
+            leerCampos(); const n = normC(borrador.centro); if (!n) { toast('Falta el centro', 'Escribe el nombre del centro y luego guárdalo.', 'warning'); return; }
+            try { const nuevo = await guardarCentro(n); toast(nuevo ? 'Centro guardado' : 'Ya estaba en la lista', n, nuevo ? 'success' : 'info'); pintar(); } catch (e) { toast('No se guardó el centro', e.message || String(e), 'error'); }
+        });
         ['act-centro', 'act-rn', 'act-rc', 'act-en', 'act-ec'].forEach(id => { const e = document.getElementById(id); if (e) e.addEventListener('change', () => { leerCampos(); guardarBorrador(); if (id === 'act-centro') pintar(); }); });
         $$('.act-add').forEach(b => b.addEventListener('click', () => {
             const s = stock.find(x => x.id === b.dataset.id); const inp = r.querySelector(`.act-qty[data-qid="${CSS.escape(b.dataset.id)}"]`);
@@ -493,7 +515,9 @@
         if (!confirm(`Se emitirá el acta para ${borrador.centro.trim()} con ${borrador.items.length} productos (${total} unidades) y se descontarán de ${borrador.origen}.${avisoSin}\n\n¿Emitir?`)) return;
         emitiendo = true; const btn = document.getElementById('act-emitir'); if (btn) btn.disabled = true;
         try {
+            const centroNuevo = borrador.centro;
             const acta = await emitir(borrador, usuarioEmail());
+            guardarCentro(centroNuevo).catch(() => {});
             toast('Acta emitida', `${acta.numero} · stock descontado.`, 'success');
             borrador = { ...vacio(), origen: borrador.origen, centro: '' }; guardarBorrador();
             await Promise.all([cargarStock(), cargarHistorial()]);
@@ -515,7 +539,7 @@
         borrador = cargarBorrador();
         r.innerHTML = '<p class="act-hint" style="padding:24px;">Cargando…</p>';
         try {
-            await Promise.all([cargarBodegas(), cargarHistorial().catch(() => { historial = []; })]);
+            await Promise.all([cargarBodegas(), cargarCentros(), cargarHistorial().catch(() => { historial = []; })]);
             if (!borrador.origen) { const c = bodegas.find(b => /central/i.test(b.name)); if (c) borrador.origen = c.name; }
             else if (!bodegas.some(b => b.name === borrador.origen)) { borrador.origen = null; borrador.items = []; }
             await cargarStock();

@@ -5459,3 +5459,11 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .be-nombre label{display:flex;flex-direction:column;gap:6px;width:100%;font-weight:600}
 .be-nombre input#be-nombre{width:100%;min-width:0;max-width:none;box-sizing:border-box;font-size:16px;padding:10px 12px;font-weight:600}
 .be-nombre #be-guardar-nombre{align-self:flex-start}
+
+/* v20.82 modal de bodega: más ancho, en dos columnas y con scroll */
+#bodega-modal .modal-content{width:min(1100px,94vw);max-width:none;max-height:92vh;display:flex;flex-direction:column;padding:24px 28px}
+#bodega-modal .modal-body{overflow-y:auto;flex:1;min-height:0;display:grid;grid-template-columns:minmax(260px,1fr) minmax(0,1.7fr);gap:8px 28px;align-items:start}
+#bodega-modal .modal-body>*{grid-column:1}
+#bodega-modal .modal-body>#bodega-estantes-sec{grid-column:2;grid-row:1 / span 8}
+@media (max-width:820px){#bodega-modal .modal-body{display:block}}
+.act-centro-acc{margin:6px 0 4px}

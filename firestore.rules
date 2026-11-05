@@ -192,6 +192,11 @@ service cloud.firestore {
         }
       }
     }
+    // CENTROS DE ENTREGA (v20.82): lista que se amplía al agregar un centro en Actas de entrega
+    match /Centros_Entrega/{id} {
+      allow read, create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
     // CATÁLOGO DE PRODUCTOS (v20.76): se alimenta con las órdenes; foto opcional
     match /Catalogo_Productos/{id} {
       allow read, create, update: if isStaff();

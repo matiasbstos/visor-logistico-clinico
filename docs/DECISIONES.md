@@ -314,3 +314,7 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 ### 4.36 Acta de recepción conforme según modelo y bodegas en Actas (v20.77)
 - El PDF reproduce el modelo "Recepción conforme producto o servicio (parcial)" de la Corporación: logo Corpo, datos del proveedor (nombre, RUT, OC), fecha, caja "Que se recibió conforme en forma PARCIAL/TOTAL…" con viñetas "DESCRIPCIÓN (CANTIDAD: n)", línea de firma y "Nombre Contraparte Técnica: Mariel Quintanilla L." (editable). Archivo: `RC<N° orden>.pdf`.
 - Actas de entrega: la lista de bodegas de origen incluye las fichas de Bodegas más toda bodega con stock y la Central, para que lo recibido siempre se pueda entregar.
+
+### 4.37 Acta de entrega según el modelo del 03-11-2026 (v20.78)
+- Cada producto entregado dice "— Entregado: N unidades con fecha del dd/mm/aa". El archivo se llama "ACTA DE ENTREGA - <BODEGA DE ORIGEN> - dd-mm-aaaa".
+- Si el acta se emite desde una orden de compra, el PDF queda guardado además en "Archivos de la orden".

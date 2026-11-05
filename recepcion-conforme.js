@@ -19,6 +19,7 @@
         to: ['paulina.carrasco@cormumel.cl'],
         cc: ['daniela.medina@cormumel.cl', 'carolina.ortiz@cormumel.cl', 'nadia.sanchez@cormumel.cl', 'sar.melipilla@cormumel.cl', 'matias.bustos@cormumel.cl']
     };
+    const CONTRAPARTE_BASE = 'Mariel Quintanilla L.';
     const FIRMA_BASE = { nombre: 'Matías Bustos Huerta', cargo: 'Encargado de insumos' };
 
     const fs = () => window.firebaseFirestore;
@@ -39,7 +40,7 @@
         const n = String(numero || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^A-Za-z0-9-]+/g, '').slice(0, 40);
         return `${tipo === 'FACTURA' ? 'Factura' : 'Guia'}_${n}.${ext || 'pdf'}`;
     }
-    function nombreActa(oc) { return `RC_${String(oc.numeroOC || '').replace(/[^A-Za-z0-9-]+/g, '')}.pdf`; }
+    function nombreActa(oc) { return `RC${String(oc.numeroOC || '').replace(/[^A-Za-z0-9-]+/g, '')}.pdf`; }
     /** Líneas para el acta: lo recibido por el SAR en esta OC. */
     function lineasActa(oc, centro) {
         const cols = (oc.columnas || []).filter(c => c.centro === centro);
@@ -93,41 +94,53 @@ SAR Arpillerista Elsa Romo Aravena`;
         });
         return pdfLibPromesa;
     }
-    async function cargarLogo() { try { const r = await fetch('assets/logo-acta.png'); if (!r.ok) return null; return new Uint8Array(await r.arrayBuffer()); } catch (e) { return null; } }
+    async function cargarLogo() { try { const r = await fetch('assets/logo-corpo-melipilla.jpg'); if (!r.ok) return null; return new Uint8Array(await r.arrayBuffer()); } catch (e) { return null; } }
 
+    /** Productos recibidos (acumulado del SAR) para el acta: descripción + cantidad. */
+    function lineasRecibidas(oc, centro) { return lineasActa(oc, centro).filter(l => l.recibido > 0); }
+    const miles = (n) => String(Math.round(num(n))).replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    const fechaCorta = (iso) => { const [y, m, d] = String(iso).slice(0, 10).split('-'); return `${d}/${m}/${y}`; };
+
+    /** Reproduce "RECEPCIÓN CONFORME PRODUCTO O SERVICIO (PARCIAL)" del modelo de la Corporación. */
     async function generarActaPDF(oc, d, centro, { PDFLib, logoBytes }) {
         const { PDFDocument, StandardFonts, rgb } = PDFLib;
         const doc = await PDFDocument.create();
-        doc.setTitle(`Acta de recepción conforme OC ${oc.numeroOC}`); doc.setAuthor('SAR Arpillerista Elsa Romo Aravena'); doc.setCreator('Sistema de inventario SAR');
+        doc.setTitle(`Recepción conforme OC ${oc.numeroOC}`); doc.setAuthor('Corporación Municipal de Melipilla'); doc.setCreator('Sistema de inventario SAR');
         const F = await doc.embedFont(StandardFonts.Helvetica), FB = await doc.embedFont(StandardFonts.HelveticaBold);
-        const logo = logoBytes ? await doc.embedPng(logoBytes) : null;
-        const W = 612, H = 792, ML = 60, MR = 552, negro = rgb(0, 0, 0), gris = rgb(0.4, 0.4, 0.4);
+        let logo = null; if (logoBytes) { try { logo = await doc.embedJpg(logoBytes); } catch (e) { try { logo = await doc.embedPng(logoBytes); } catch (e2) { logo = null; } } }
+        const W = 612, H = 792, ML = 84, MR = 552, negro = rgb(0, 0, 0);
         const seguro = (font, s) => { const set = font.getCharacterSet(); return Array.from(String(s == null ? '' : s).replace(/³/g, '3').replace(/²/g, '2').replace(/\s+/g, ' ')).map(c => set.includes(c.codePointAt(0)) ? c : '?').join(''); };
-        let page = doc.addPage([W, H]), y = 50;
-        const T = (s, x, yy, size, bold, color) => page.drawText(seguro(bold ? FB : F, s), { x, y: H - yy, size, font: bold ? FB : F, color: color || negro });
+        let page = doc.addPage([W, H]);
+        const T = (s, x, yy, size, bold) => page.drawText(seguro(bold ? FB : F, s), { x, y: H - yy, size, font: bold ? FB : F, color: negro });
         const ancho = (s, size, bold) => (bold ? FB : F).widthOfTextAtSize(seguro(bold ? FB : F, s), size);
         const envolver = (s, size, bold, maxW) => { const out = []; let cur = ''; for (const w of String(s).split(' ')) { const t = cur ? cur + ' ' + w : w; if (ancho(t, size, bold) <= maxW || !cur) cur = t; else { out.push(cur); cur = w; } } if (cur) out.push(cur); return out; };
-        const raya = (yy, g) => page.drawLine({ start: { x: ML, y: H - yy }, end: { x: MR, y: H - yy }, thickness: g || 0.6, color: negro });
-        if (logo) { const h = 46, w = logo.width * h / logo.height; page.drawImage(logo, { x: ML, y: H - y - h, width: Math.min(w, 140), height: h }); }
-        const centroX = (s, size, bold, yy) => T(s, (W - ancho(s, size, bold)) / 2, yy, size, bold);
-        centroX('ACTA DE RECEPCIÓN CONFORME', 14, true, y + 70);
-        centroX('SAR Arpillerista Elsa Romo Aravena', 11, false, y + 88);
-        y += 118;
-        const filas = [['Orden de compra', oc.numeroOC], ['Proveedor', [oc.proveedor, oc.rutProveedor].filter(Boolean).join(' · ')], [d.tipoDoc === 'FACTURA' ? 'Factura N°' : 'Guía de despacho N°', d.numeroDoc], ['Fecha de recepción', fmtLarga(d.fecha)], ['Recepción', d.parcial ? 'Parcial (ver detalle)' : 'Total']];
-        filas.forEach(([k, v]) => { T(k + ':', ML, y, 10, true); T(String(v || '—'), ML + 135, y, 10, false); y += 16; });
-        y += 8; raya(y); y += 16;
-        T('Producto', ML, y, 9.5, true); T('Pedido', 410, y, 9.5, true); T('Recibido', 480, y, 9.5, true); y += 6; raya(y); y += 14;
-        lineasActa(oc, centro).forEach(l => {
-            const ls = envolver(l.producto, 9.5, false, 335); const alto = ls.length * 12 + 4;
-            if (y + alto > H - 170) { page = doc.addPage([W, H]); y = 60; T(`Acta de recepción conforme OC ${oc.numeroOC} (continuación)`, ML, y, 10, true); y += 28; }
-            ls.forEach((t, i) => T(t, ML, y + i * 12, 9.5, false)); T(String(l.pedido), 420, y, 9.5, false); T(String(l.recibido), 495, y, 9.5, l.recibido < l.pedido);
-            y += alto;
+        const centrar = (s, size, bold, yy, x0, x1) => T(s, (x0 + x1 - ancho(s, size, bold)) / 2, yy, size, bold);
+        if (logo) { const h = 66, w = logo.width * h / logo.height; page.drawImage(logo, { x: ML, y: H - 62 - h, width: w, height: h }); }
+        const titulo = 'RECEPCIÓN CONFORME PRODUCTO O SERVICIO' + (d.parcial ? ' PARCIAL' : '');
+        centrar(titulo, 10, true, 100, ML + 90, MR + 20);
+        let y = 150;
+        T('DATOS DEL PROVEEDOR', 160, y, 10.5, true); y += 24;
+        T('Nombre de la empresa: ' + (oc.proveedor || ''), ML, y, 10.5, true); y += 22;
+        T('RUT: ' + (oc.rutProveedor || ''), ML, y, 10.5, true); y += 22;
+        T('Orden de Compra: ' + (oc.numeroOC || ''), ML, y, 10.5, true); y += 22;
+        T(`Con fecha ${fechaCorta(d.fecha)}, en calidad de contraparte técnica, certifico lo siguiente:`, ML, y, 10.5, false); y += 22;
+        // Caja con lo recibido (se parte en otra página si es muy larga)
+        const items = lineasRecibidas(oc, centro).map(l => envolver(`${String(l.producto).toUpperCase()} (CANTIDAD: ${miles(l.recibido)})`, 9.5, false, MR - ML - 44));
+        const encab = `Que se recibió conforme en forma ${d.parcial ? 'PARCIAL' : 'TOTAL'} el producto, donde se recibió lo siguiente:`;
+        const caja = (x0, x1, yTop, yBot) => { const t = 0.8; [[x0, yTop, x1, yTop], [x0, yBot, x1, yBot], [x0, yTop, x0, yBot], [x1, yTop, x1, yBot]].forEach(([a, b, c, e]) => page.drawLine({ start: { x: a, y: H - b }, end: { x: c, y: H - e }, thickness: t, color: negro })); };
+        let top = y, cy = y + 16; T(encab, ML + 6, cy, 8.5, false); cy += 16;
+        items.forEach(ls => {
+            const alto = ls.length * 12.5 + 6;
+            if (cy + alto > H - 120) { caja(ML, MR, top, cy + 2); page = doc.addPage([W, H]); top = 60; cy = 76; T(`Recepción conforme OC ${oc.numeroOC} (continuación)`, ML + 6, cy, 8.5, true); cy += 16; }
+            page.drawCircle({ x: ML + 26, y: H - cy + 3, size: 2.2, color: negro });
+            ls.forEach((t, i) => T(t, ML + 40, cy + i * 12.5, 9.5, false)); cy += alto;
         });
-        raya(y); y += 18;
-        if (d.observaciones) { T('Observaciones:', ML, y, 10, true); y += 14; envolver(d.observaciones, 10, false, MR - ML).forEach(t => { T(t, ML, y, 10, false); y += 13; }); y += 6; }
-        T('Se deja constancia de que los productos individualizados fueron recibidos conforme a lo solicitado.', ML, y, 9, false, gris);
-        const yf = Math.max(y + 70, 640); page.drawLine({ start: { x: ML + 40, y: H - yf }, end: { x: ML + 240, y: H - yf }, thickness: 0.7, color: negro });
-        T(d.firmaNombre, ML + 40, yf + 14, 10, true); T(d.firmaCargo, ML + 40, yf + 27, 9.5, false); T('Firma:', ML, yf - 4, 9, false, gris);
+        if (d.observaciones) { envolver('Observaciones: ' + d.observaciones, 8.5, false, MR - ML - 12).forEach(t => { T(t, ML + 6, cy, 8.5, false); cy += 11; }); cy += 4; }
+        caja(ML, MR, top, cy + 2);
+        let yf = cy + 80; if (yf > H - 90) { page = doc.addPage([W, H]); yf = 160; }
+        page.drawLine({ start: { x: 190, y: H - yf }, end: { x: 420, y: H - yf }, thickness: 0.8, color: negro });
+        centrar('Firma contraparte técnica', 10.5, false, yf + 24, 0, W);
+        centrar('Nombre Contraparte Técnica: ' + (d.contraparte || CONTRAPARTE_BASE), 10.5, false, yf + 46, 0, W);
         return await doc.save();
     }
 
@@ -151,7 +164,8 @@ SAR Arpillerista Elsa Romo Aravena`;
             <div class="soc-fila"><label>Documento del proveedor<select id="rc-tipo"><option value="GUIA">Guía de despacho</option><option value="FACTURA">Factura</option></select></label>${f('rc-num', 'N° del documento', oc.ultimaGuia || '')}${f('rc-fec', 'Fecha de recepción', hoyISO(), 'date')}</div>
             <label>PDF de la guía o factura<input type="file" id="rc-file" accept="application/pdf"></label>
             <label>Tipo de recepción<select id="rc-parcial"><option value="0"${pend > 0 ? '' : ' selected'}>Total</option><option value="1"${pend > 0 ? ' selected' : ''}>Parcial${pend > 0 ? ` (faltan ${pend} unidades)` : ''}</option></select></label>
-            <div class="soc-fila">${f('rc-fn', 'Firma: nombre', FIRMA_BASE.nombre)}${f('rc-fc', 'Cargo', FIRMA_BASE.cargo)}</div>
+            ${f('rc-ct', 'Contraparte técnica (firma del acta)', CONTRAPARTE_BASE)}
+            <div class="soc-fila">${f('rc-fn', 'Correo firmado por', FIRMA_BASE.nombre)}${f('rc-fc', 'Cargo', FIRMA_BASE.cargo)}</div>
             <label>Observaciones (opcional)<textarea id="rc-obs" rows="2"></textarea></label>
             <label class="soc-toggle"><input type="checkbox" id="rc-enviar" checked> Enviar correo con el acta y la guía/factura a la lista</label>
             <label>Para<input type="text" id="rc-to" value="${esc(to.join(', '))}"></label>
@@ -159,7 +173,7 @@ SAR Arpillerista Elsa Romo Aravena`;
             <div id="rc-error" class="cierre-error"></div>`, async (o) => {
             const g = (id) => (o.querySelector('#' + id) || {}).value || '';
             const d = { tipoDoc: g('rc-tipo'), numeroDoc: g('rc-num').trim(), fecha: g('rc-fec') || hoyISO(), archivo: (o.querySelector('#rc-file').files || [])[0] || null, parcial: (o.querySelector('#rc-parcial') || {}).value === '1',
-                firmaNombre: g('rc-fn').trim() || FIRMA_BASE.nombre, firmaCargo: g('rc-fc').trim() || FIRMA_BASE.cargo, observaciones: g('rc-obs').trim(), to: lista(g('rc-to')), cc: lista(g('rc-cc')) };
+                contraparte: g('rc-ct').trim() || CONTRAPARTE_BASE, firmaNombre: g('rc-fn').trim() || FIRMA_BASE.nombre, firmaCargo: g('rc-fc').trim() || FIRMA_BASE.cargo, observaciones: g('rc-obs').trim(), to: lista(g('rc-to')), cc: lista(g('rc-cc')) };
             const err = validar(oc, d, centro);
             o.querySelector('#rc-error').innerHTML = err.map(e => `<div>${esc(e)}</div>`).join('');
             if (err.length) return false;

@@ -310,3 +310,7 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - Colección `Catalogo_Productos` (clave: código Mercado Público, o la descripción). Se alimenta sola al ingresar cada orden (descripción, código, proveedor, última OC, neto) y aprende el nombre de inventario usado al recibir; en la recepción ese nombre se autocompleta y se sugiere en la lista.
 - Botón "Catálogo de productos" en Seguimiento de órdenes: búsqueda y foto opcional por producto (reducida a ~220 px y guardada en el propio documento).
 - Notas, incidencias y recepciones siguen quedando en la bitácora inmutable de la orden (`Eventos`) y en `incidencias`/`recepciones`.
+
+### 4.36 Acta de recepción conforme según modelo y bodegas en Actas (v20.77)
+- El PDF reproduce el modelo "Recepción conforme producto o servicio (parcial)" de la Corporación: logo Corpo, datos del proveedor (nombre, RUT, OC), fecha, caja "Que se recibió conforme en forma PARCIAL/TOTAL…" con viñetas "DESCRIPCIÓN (CANTIDAD: n)", línea de firma y "Nombre Contraparte Técnica: Mariel Quintanilla L." (editable). Archivo: `RC<N° orden>.pdf`.
+- Actas de entrega: la lista de bodegas de origen incluye las fichas de Bodegas más toda bodega con stock y la Central, para que lo recibido siempre se pueda entregar.

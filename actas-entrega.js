@@ -168,7 +168,14 @@
     // ---------------------------------------------------------------
     async function cargarBodegas() {
         const snap = await fs().getDocs(fs().collection(db(), 'Bodegas'));
-        bodegas = []; snap.forEach(d => { const b = { id: d.id, ...d.data() }; if (b.isActive !== false) bodegas.push(b); });
+        bodegas = []; snap.forEach(d => { const b = { id: d.id, ...d.data() }; if (b.name && b.isActive !== false) bodegas.push(b); });
+        // También aparecen las bodegas que tienen stock (p. ej. donde ingresó una recepción) y la Central, aunque no tengan ficha en Bodegas
+        try {
+            const ins = await fs().getDocs(fs().query(fs().collection(db(), 'Insumos'), fs().limit(3000)));
+            const ya = new Set(bodegas.map(x => String(x.name).toLowerCase()));
+            ins.forEach(d => { const l = String(d.data().location || '').trim(); if (l && !ya.has(l.toLowerCase())) { ya.add(l.toLowerCase()); bodegas.push({ id: 'loc_' + l, name: l, derivada: true }); } });
+        } catch (e) { /* solo las fichas */ }
+        if (!bodegas.some(x => /central/i.test(String(x.name)))) bodegas.push({ id: 'loc_central', name: 'Bodega Central', derivada: true });
         const central = (b) => /central/i.test(String(b.name || ''));
         bodegas.sort((a, b) => (central(b) - central(a)) || String(a.name).localeCompare(String(b.name), 'es'));
     }

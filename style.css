@@ -5493,3 +5493,38 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .act-prueba{margin-top:14px;padding:12px;border:1px dashed #94a3b8;border-radius:10px;background:#f8fafc;display:flex;flex-direction:column;gap:6px;font-size:13px}
 .act-prueba span{color:#475569}
 .cat-acc{display:inline-flex;gap:6px;flex-wrap:wrap}
+
+/* v20.90 — ajustes móviles (revisión UX/UI) */
+@media (max-width: 767px) {
+    .cierre-box { max-height: 90dvh; }
+    .cierre-box input:not([type=checkbox]):not([type=radio]), .cierre-box select, .act-col input:not([type=checkbox]), .act-col select { min-height: 44px; }
+    input[type=checkbox] { width: 20px; height: 20px; }
+    .soc-toggle, .act-chk { min-height: 44px; display: flex; align-items: center; gap: 8px; }
+    .act-det > summary { min-height: 44px; display: flex; align-items: center; }
+    .r-celda .r-ok, #soc-guardar-nota { min-height: 44px; min-width: 56px; }
+    .act-fn small, .cv-card small, .act-chip { font-size: 12.5px; }
+}
+@media (max-width: 720px) {
+    .soc-apilar table, .soc-apilar thead, .soc-apilar tbody, .soc-apilar tr, .soc-apilar td { display: block; width: 100%; }
+    .soc-apilar thead { display: none; }
+    .soc-apilar tr { border: 1px solid #E2E8F0; border-radius: 8px; padding: 8px 10px; margin-bottom: 10px; }
+    .soc-apilar td { padding: 4px 0; border: 0; }
+    .soc-apilar td[data-l]::before { content: attr(data-l); display: block; font-size: 11px; font-weight: 700; color: #64748B; text-transform: uppercase; }
+    .soc-apilar input { width: 100%; min-width: 0; }
+    /* recepción: Pedido / Recibido / Pendiente en una sola fila */
+    #r-lineas tr { display: grid; grid-template-columns: repeat(3, 1fr); column-gap: 8px; }
+    #r-lineas td { width: auto; }
+    #r-lineas td.r-prod, #r-lineas td.r-celda, #r-lineas td[data-l="Producto en inventario"], #r-lineas td:nth-child(n+6) { grid-column: 1 / -1; }
+}
+@media (max-width: 600px) {
+    .soc-arch.cat-lista li { flex-wrap: wrap; }
+    .cat-lista li > div { flex: 1 1 calc(100% - 64px); min-width: 0; }
+    .cat-lista strong { white-space: normal; }
+    .cat-lista .cat-acc { flex: 1 1 100%; display: grid; grid-template-columns: repeat(3, 1fr); }
+    .act-tabs { flex-wrap: nowrap; overflow-x: auto; }
+    .act-tab { min-height: 44px; flex: 0 0 auto; }
+    .act-acc { flex-direction: column-reverse; }
+    .act-acc .btn { width: 100%; min-height: 44px; }
+    .act-an { margin-top: 12px; border-color: #dc2626; color: #dc2626; }
+}
+@media (pointer: coarse) { .cat-pegar { display: none; } }

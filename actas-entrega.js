@@ -342,6 +342,8 @@
     // Interfaz
     // ---------------------------------------------------------------
     const root = () => document.getElementById('act-root');
+    let tab = 'emitir';
+    const TABS = [['emitir', 'ph-file-plus', 'Emitir acta'], ['emitidas', 'ph-files', 'Actas emitidas'], ['seguimiento', 'ph-magnifying-glass', 'Seguimiento de acta']];
 
     function pintar() {
         const r = root(); if (!r) return;
@@ -352,6 +354,8 @@
         r.innerHTML = `
         <div class="page-header mb-24"><div class="page-title"><h2>Actas de entrega</h2>
             <p>Arma el acta desde el stock de la bodega. Al emitirla se descuenta el stock y queda con su número.</p></div></div>
+        <nav class="act-tabs" role="tablist" aria-label="Secciones de actas de entrega">${TABS.map(t => `<button type="button" role="tab" class="act-tab${t[0] === tab ? ' active' : ''}" data-tab="${t[0]}" aria-selected="${t[0] === tab}"><i class="ph-bold ${t[1]}"></i><span>${t[2]}</span>${t[0] === 'emitidas' ? `<em>${historial.length}</em>` : ''}</button>`).join('')}</nav>
+        <div data-act-tab="emitir"${tab === 'emitir' ? '' : ' hidden'}>
         <div class="act-grid">
           <div class="act-col">
             <h3 class="act-h">1 · Stock disponible</h3>
@@ -387,11 +391,15 @@
             <div class="act-acc"><button type="button" class="btn btn-outline" id="act-limpiar">Vaciar borrador</button>
               <button type="button" class="btn btn-primary" id="act-emitir"${errores.length ? ' disabled' : ''}>Emitir acta y descontar stock</button></div>
           </div>
-        </div>
-        <h3 class="act-h" style="margin-top:28px;">Actas emitidas</h3>
+        </div></div>
+        <div data-act-tab="emitidas"${tab === 'emitidas' ? '' : ' hidden'}>
+        <h3 class="act-h">Actas emitidas</h3>
         <div class="act-hist">${historial.length ? historial.map(a => `<div class="act-fila${a.estado === 'ANULADA' ? ' act-anulada' : ''}"><div class="act-fn"><strong>${esc(a.numero)}</strong> · ${esc(a.centro)}<small>${esc(a.fecha)} · ${a.tipo === 'OXIGENO' ? 'oxígeno · ' : ''}${(a.items || []).length} ${a.tipo === 'OXIGENO' ? 'balones' : 'productos'} · ${esc(a.bodegaOrigen)} · ${esc(a.creadoPor || '')}${a.estado === 'ANULADA' ? ' · <b>ANULADA</b>' : ''}${a.conSobregiro ? ' · <b class="act-sin">con sobregiro</b>' : ''}</small></div>
             <button type="button" class="btn btn-outline act-dl" data-n="${esc(a.numero)}" data-f="pdf">PDF</button><button type="button" class="btn btn-outline act-dl" data-n="${esc(a.numero)}" data-f="docx">Word</button>
-            ${esAdmin() && a.estado !== 'ANULADA' && a.tipo !== 'OXIGENO' ? `<button type="button" class="btn btn-outline act-an" data-n="${esc(a.numero)}">Anular</button>` : ''}</div>`).join('') : '<p class="act-hint">Todavía no hay actas emitidas.</p>'}</div>`;
+            ${esAdmin() && a.estado !== 'ANULADA' && a.tipo !== 'OXIGENO' ? `<button type="button" class="btn btn-outline act-an" data-n="${esc(a.numero)}">Anular</button>` : ''}</div>`).join('') : '<p class="act-hint">Todavía no hay actas emitidas.</p>'}</div></div>
+        <div data-act-tab="seguimiento" id="seg-root"${tab === 'seguimiento' ? '' : ' hidden'}></div>`;
+        r.querySelectorAll('.act-tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; pintar(); }));
+        if (window.SAR_Saldos && window.SAR_Saldos.pintarSeg) window.SAR_Saldos.pintarSeg();
         enlazar();
     }
 

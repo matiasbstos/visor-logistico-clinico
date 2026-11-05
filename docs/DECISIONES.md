@@ -242,3 +242,12 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - **Lector**: nueva variante B del cuadro (memo y CDP en el encabezado de la columna, código MP entre paréntesis, pie con NETO/IVA/TOTAL/PRESUPUESTO/SALDO). Presupuesto y saldo se leen y guardan en la columna, **sin descontar** todavía (el CDP se trabaja más adelante). Probado con la OC 1298355-911-CM26: 22 líneas SAR, sin avisos.
 - **Flujo**: llega la OC → se ingresa con su cuadro → al llegar el camión, **Recibir mercadería** (lista de pendientes con ✔ por línea, *Recepción total*, cantidades parciales, guía, lote y vencimiento, incidencias) → lo recibido entra al stock de Bodega Central → las actas de entrega descuentan desde ahí. Lo no recibido queda pendiente y se baja con **Pendientes (CSV)**.
 - Pendiente: vista "por recibir" en Existencias, adjuntar el archivo de la guía/factura.
+
+### 4.24 v20.65 — Recepción de OC: ficha y validaciones
+- Modal de recepción ancho, acciones fijas abajo, tarjetas en móvil; "Guardar recepción" con confirmación en dos pasos si hay avisos (producto nuevo, sin vencimiento, guía repetida).
+- Bloqueo duro: cantidad entera y sin superar lo pendiente (también dentro de la transacción); vencimiento pasado rechazado.
+- Ficha: banner "siguiente paso", datos/memos plegables, líneas sin SAR ocultas, aviso de otros centros; entregas solo si hay otros centros.
+- Aceptación implícita si ya se recibió mercadería; totales acotados por línea; correo se envía después de guardar; cerrar con pendientes advierte las unidades.
+- Insumos nuevos llevan name_lowercase; se guarda ultimaGuia (prefill en Recepción conforme); al ingresar una OC desde PDF se abre su ficha.
+- Pendiente: descuento de CDP/presupuesto, "por recibir" en Existencias, adjuntar guía, anular recepción, multi-lote por línea, actas ligadas a OC.
+

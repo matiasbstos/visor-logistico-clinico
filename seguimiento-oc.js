@@ -72,7 +72,7 @@
             let pedido = 0, recibido = 0, netoPend = 0, netoTotal = 0;
             (oc.lineas || []).forEach(l => ce.columnas.forEach(c => {
                 const p = num(l.dist && l.dist[c.key]), r = num(l.recibido && l.recibido[c.key]);
-                pedido += p; recibido += r; netoTotal += p * num(l.valorNeto); netoPend += Math.max(0, p - r) * num(l.valorNeto);
+                pedido += p; recibido += Math.min(p, r); netoTotal += p * num(l.valorNeto); netoPend += Math.max(0, p - r) * num(l.valorNeto);
             }));
             return { centro: ce.centro, pedido, recibido, pendiente: Math.max(0, pedido - recibido), netoPend, netoTotal, completo: pedido > 0 && recibido >= pedido };
         });
@@ -99,12 +99,13 @@
     /** Estado del plazo respecto de hoy. */
     function estadoPlazo(oc, hoy) {
         hoy = hoy || hoyISO();
-        const limite = oc.fechaLimite || (oc.aceptada ? sumarHabiles(oc.aceptada, num(oc.plazoDiasHabiles) || 5) : '');
+        const recibida = (oc.lineas || []).some(l => Object.values(l.recibido || {}).some(v => num(v) > 0));   // si ya llegó mercadería, la orden fue aceptada de hecho
+        const limite = oc.fechaLimite || (oc.aceptada ? sumarHabiles(oc.aceptada, num(oc.plazoDiasHabiles) || 5) : (recibida && oc.emitida ? sumarHabiles(oc.emitida, num(oc.plazoDiasHabiles) || 5) : ''));
         const tot = totalesPorCentro(oc);
         const pendiente = tot.some(t => t.pendiente > 0);
         if (oc.cerrada) return { codigo: 'CERRADA', limite, texto: 'Seguimiento cerrado', atraso: 0 };
         if (!pendiente && tot.length) return { codigo: 'COMPLETA', limite, texto: 'Recibida completa', atraso: 0 };
-        if (!oc.aceptada) {
+        if (!oc.aceptada && !recibida) {
             const lim = oc.aceptarLimite || '';
             if (lim && hoy > lim) return { codigo: 'ACEPT_VENCIDA', limite: lim, texto: 'Aceptación vencida: el proveedor no ha aceptado', atraso: 0 };
             return { codigo: 'POR_ACEPTAR', limite: lim, texto: lim ? `Por aceptar hasta el ${fmtFecha(lim)}` : 'Por aceptar', atraso: 0 };
@@ -249,9 +250,11 @@
     function pendienteHTML() {
         const pend = pendientesDeRecepcion(lista);
         if (!pend.length) return '';
-        const unidades = pend.reduce((t, x) => t + x.pendiente, 0);
-        return `<div class="erp-card soc-pend"><h3>Stock pendiente de recepción <span class="soc-n">${unidades} un.</span></h3>
-            <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pend.</th><th>Orden</th><th>Estado</th></tr></thead><tbody>${pend.map(x => `<tr data-oc="${esc(x.ocId)}" class="soc-pend__fila"><td>${esc(x.producto)}</td><td><strong>${x.pendiente}</strong> de ${x.pedido}</td><td>${esc(x.numeroOC)}<br><small>${esc(x.proveedor || '')}</small></td><td><span class="soc-chip soc-chip--${x.codigo.toLowerCase()}">${esc(x.aceptada ? (x.codigo === 'ATRASADA' ? 'Atrasada' : 'Vence ' + fmtFecha(x.limite)) : (x.codigo === 'ACEPT_VENCIDA' ? 'Sin aceptar: vencido' : 'Por aceptar'))}</span></td></tr>`).join('')}</tbody></table></div></div>`;
+        const unidades = pend.reduce((t, x) => t + x.pendiente, 0), por = new Map();
+        pend.forEach(x => { const g = por.get(x.ocId) || { ...x, pendiente: 0, productos: 0 }; g.pendiente += x.pendiente; g.productos++; por.set(x.ocId, g); });
+        return `<details class="erp-card soc-pend soc-det"><summary><h3>Stock pendiente de recepción <span class="soc-n">${unidades} un.</span></h3></summary>
+            <div class="soc-tabla"><table><thead><tr><th>Orden</th><th>Productos</th><th>Unidades pend.</th><th>Estado</th></tr></thead><tbody>${[...por.values()].map(x => { const pl = estadoPlazo(lista.find(o => o.id === x.ocId) || {});
+                return `<tr data-oc="${esc(x.ocId)}" class="soc-pend__fila"><td><strong>${esc(x.numeroOC)}</strong><br><small>${esc(x.proveedor || '')}</small></td><td>${x.productos}</td><td><strong>${x.pendiente}</strong></td><td>${chip(pl)}</td></tr>`; }).join('')}</tbody></table></div></details>`;
     }
 
     function pintarLista() {
@@ -261,8 +264,6 @@
                 <p>Plazos, recepciones por centro, discrepancias, notas y avisos por correo.</p></div>
                 <div class="soc-acc"><button type="button" class="btn btn-primary" id="soc-pdf"><i class="ph-bold ph-file-pdf"></i> Ingresar desde PDF</button>
                 <button type="button" class="btn btn-outline" id="soc-nueva"><i class="ph-bold ph-microsoft-excel-logo"></i> Con cuadro Excel</button></div></div>
-            ${pendienteHTML()}
-            ${window.SAR_CDP ? window.SAR_CDP.cardHTML(lista) : ''}
             <div class="soc-lista">${lista.length ? lista.map(oc => {
                 const pl = estadoPlazo(oc), tot = totalesPorCentro(oc), mio = tot.find(t => t.centro === CENTRO_PROPIO) || tot[0];
                 const pct = mio && mio.pedido ? Math.min(100, Math.round(mio.recibido * 100 / mio.pedido)) : 0;
@@ -270,13 +271,17 @@
                     <div class="soc-card__top"><strong>${esc(oc.numeroOC)}</strong>${chip(pl)}</div>
                     <div class="soc-card__sub">${esc(oc.proveedor || 'Proveedor sin indicar')} · ${oc.aceptada ? 'vence ' + fmtFecha(pl.limite) : (pl.limite ? 'acepta hasta ' + fmtFecha(pl.limite) : 'sin aceptar')}</div>
                     ${mio ? `<div class="soc-barra" title="${esc(mio.centro)}"><span style="width:${pct}%"></span></div><small>${esc(mio.centro)}: ${mio.recibido} de ${mio.pedido} unidades recibidas</small>` : ''}
-                </button>`; }).join('') : '<div class="home-empty">Aún no hay órdenes en seguimiento. Usa "Ingresar orden".</div>'}</div>`;
+                </button>`; }).join('') : '<div class="home-empty">Aún no hay órdenes en seguimiento. Usa "Ingresar desde PDF".</div>'}</div>
+            ${pendienteHTML()}
+            ${window.SAR_CDP ? `<details class="soc-det soc-det--cdp"><summary>Presupuesto por CDP (opcional)</summary>${window.SAR_CDP.cardHTML(lista)}</details>` : ''}`;
         if (window.SAR_CDP) window.SAR_CDP.enlazar(root(), lista, modal, toast, pintarLista);
         root().querySelector('#soc-nueva').addEventListener('click', formNueva);
         root().querySelector('#soc-pdf').addEventListener('click', formDesdePDF);
         root().querySelectorAll('[data-oc]').forEach(b => b.addEventListener('click', () => abrirDetalle(b.dataset.oc)));
     }
 
+    /** Abre la ficha de una orden recién creada apenas llegue en la lista (tiempo real). */
+    function abrirCuando(id, n) { n = n || 0; if (lista.some(x => x.id === id)) { abrirDetalle(id); return; } if (n < 15) setTimeout(() => abrirCuando(id, n + 1), 300); }
     function abrirDetalle(id) {
         ocActual = lista.find(x => x.id === id); if (!ocActual) return;
         if (unsubEventos) { try { unsubEventos(); } catch (e) { /* noop */ } }
@@ -303,34 +308,39 @@
                 <div><small>Vence</small><strong>${oc.aceptada ? fmtFecha(pl.limite) : '—'}</strong></div>
                 <div><small>Multa</small><strong>${esc(({ por_evaluar: 'Por evaluar', no_se_cursa: 'No se cursa', cursada: 'Cursada' })[(oc.multa && oc.multa.estado) || 'por_evaluar'])}${oc.multa && oc.multa.monto ? ' · ' + peso(oc.multa.monto) : ''}</strong></div>
             </div>
-            ${oc.datos ? `<div class="erp-card soc-datos"><h3>Datos de la orden</h3><div class="soc-datos__g">
-                ${[['Despacho', oc.datos.direccionDespacho], ['Contraparte técnica', oc.datos.contraparte], ['Contacto', oc.datos.contacto], ['Horario', oc.datos.horario], ['Forma de pago', oc.datos.formaPago], ['Factura a', oc.datos.emailFactura], ['Memo', oc.datos.memo ? 'N° ' + oc.datos.memo + (oc.descripcion ? ' · ' + oc.descripcion : '') : ''], ['Total (con IVA)', oc.datos.total ? peso(oc.datos.total) : '']].filter(x => x[1]).map(x => `<div><small>${x[0]}</small><span>${esc(x[1])}</span></div>`).join('')}</div></div>` : ''}
-            ${memosCDPHTML(oc)}${entregasHTML(oc)}
-            <div class="erp-card"><h3>Discrepancias <span class="soc-n">${disc.length}</span></h3>
-                ${disc.length ? '<ul class="soc-disc">' + disc.map(d => `<li class="soc-disc--${d.nivel}">${esc(d.texto)}</li>`).join('') + '</ul>' : '<p class="bodega-estantes__hint">Sin discrepancias.</p>'}
-                ${(oc.incidencias || []).filter(i => i.estado === 'ABIERTA').map(i => `<button type="button" class="btn btn-outline btn-sm" data-resolver="${esc(i.id)}">Resolver: ${esc(i.producto.slice(0, 30))}</button>`).join(' ')}</div>
+            ${bannerSiguiente(oc, pl)}
+            ${(oc.otrosCentros || []).length && !verTodos ? `<p class="soc-card__sub">La orden también incluye productos de ${esc(oc.otrosCentros.map(c => c.centro + ' (memo ' + c.memo + ')').join(', '))}: no se muestran aquí.</p>` : ''}
             <div class="erp-card"><div class="soc-sub"><h3>Pedido y recibido</h3>
-                <label class="soc-toggle"><input type="checkbox" id="soc-todos" ${verTodos ? 'checked' : ''}> Ver todos los centros</label>
+                ${(oc.columnas || []).length > 1 ? `<label class="soc-toggle"><input type="checkbox" id="soc-todos" ${verTodos ? 'checked' : ''}> Ver otros centros</label>` : ''}
                 <button type="button" class="btn btn-primary btn-sm" id="soc-recep"><i class="ph-bold ph-package"></i> Recibir mercadería</button>
-                <button type="button" class="btn btn-outline btn-sm" id="soc-pend"><i class="ph-bold ph-file-csv"></i> Pendientes (CSV)</button>
+                <button type="button" class="btn btn-outline btn-sm" id="soc-pend"><i class="ph-bold ph-file-csv"></i> Descargar pendientes</button>
                 <button type="button" class="btn btn-outline btn-sm" id="soc-conforme"><i class="ph-bold ph-seal-check"></i> Recepción conforme</button></div>
                 ${oc.recepcionConforme ? `<p class="soc-card__sub">Recepción conforme registrada el ${fmtFecha(oc.recepcionConforme.fecha)} (${esc(oc.recepcionConforme.tipoDoc === 'FACTURA' ? 'factura' : 'guía')} ${esc(oc.recepcionConforme.numeroDoc)}). Correo: ${({ enviado: 'enviado', borrador: 'borrador abierto', error: 'NO se envió', sin_adjuntos: 'enviado SIN adjuntos', sin_destinatarios: 'sin destinatarios' })[(oc.recepcionConforme.correo || {}).estado] || '—'}.</p>` : ''}
                 <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Neto</th>${colsVis.map(c => `<th>${esc(c.centro)}<br><small>memo ${esc(c.memo)} · CDP ${esc(c.cdp)}</small></th>`).join('')}</tr></thead><tbody>
-                ${(oc.lineas || []).map(l => `<tr><td>${esc(l.descripcion)}</td><td>${peso(l.valorNeto)}</td>${colsVis.map(c => {
+                ${(oc.lineas || []).filter(l => colsVis.some(c => num(l.dist && l.dist[c.key]) || num(l.recibido && l.recibido[c.key]))).map(l => `<tr><td>${esc(l.descripcion)}</td><td>${peso(l.valorNeto)}</td>${colsVis.map(c => {
                     const p = num(l.dist && l.dist[c.key]), r = num(l.recibido && l.recibido[c.key]); if (!p && !r) return '<td class="soc-vacio">—</td>';
                     return `<td class="soc-est--${estadoLinea(p, r)}"><strong>${r}</strong> / ${p}</td>`; }).join('')}</tr>`).join('')}
                 </tbody></table></div>
                 <div class="soc-resumen">${tot.filter(t => verTodos || t.centro === CENTRO_PROPIO).map(t => `<span><strong>${esc(t.centro)}</strong>: pendiente ${t.pendiente} un. · ${peso(t.netoPend)} neto de ${peso(t.netoTotal)}</span>`).join('')}</div></div>
+            <div class="erp-card"><h3>Discrepancias <span class="soc-n">${disc.length}</span></h3>
+                ${disc.length ? '<ul class="soc-disc">' + disc.map(d => `<li class="soc-disc--${d.nivel}">${esc(d.texto)}</li>`).join('') + '</ul>' : '<p class="bodega-estantes__hint">Sin discrepancias.</p>'}
+                ${(oc.incidencias || []).filter(i => i.estado === 'ABIERTA').map(i => `<button type="button" class="btn btn-outline btn-sm" data-resolver="${esc(i.id)}">Resolver: ${esc(i.producto.slice(0, 30))}</button>`).join(' ')}</div>
+            <details class="erp-card soc-det"><summary><h3>Datos de la orden, memos y distribución</h3></summary>
+            ${oc.datos ? `<div class="erp-card soc-datos"><h3>Datos de la orden</h3><div class="soc-datos__g">
+                ${[['Despacho', oc.datos.direccionDespacho], ['Contraparte técnica', oc.datos.contraparte], ['Contacto', oc.datos.contacto], ['Horario', oc.datos.horario], ['Forma de pago', oc.datos.formaPago], ['Factura a', oc.datos.emailFactura], ['Memo', oc.datos.memo ? 'N° ' + oc.datos.memo + (oc.descripcion ? ' · ' + oc.descripcion : '') : ''], ['Total (con IVA)', oc.datos.total ? peso(oc.datos.total) : '']].filter(x => x[1]).map(x => `<div><small>${x[0]}</small><span>${esc(x[1])}</span></div>`).join('')}</div></div>` : ''}
+            ${memosCDPHTML(oc)}${entregasHTML(oc)}
+            </details>
             <div class="erp-card"><h3>Destinatarios del correo</h3><div id="soc-dest"></div></div>
             <div class="erp-card"><h3>Notas y avisos</h3>
                 <textarea id="soc-texto" rows="3" maxlength="1500" placeholder="Escribe la nota o aviso (ej.: proveedor informa despacho por Pullman Cargo, OT …)"></textarea>
                 <div class="soc-componer"><label class="soc-toggle"><input type="checkbox" id="soc-correo" checked> Enviar correo a la lista</label>
-                    <button type="button" class="btn btn-primary" id="soc-guardar-nota">Registrar</button></div>
+                    <button type="button" class="btn btn-outline" id="soc-guardar-nota">Registrar nota</button></div>
                 <div id="soc-bitacora"></div></div>
             <div class="soc-pie">${esAdmin() ? '<button type="button" class="btn btn-outline btn-sm" id="soc-multa">Registrar decisión de multa</button> <button type="button" class="btn btn-outline btn-sm" id="soc-cerrar">' + (oc.cerrada ? 'Reabrir seguimiento' : 'Cerrar seguimiento') + '</button> <button type="button" class="btn btn-outline btn-sm" id="soc-config">Configurar correo</button>' : ''}</div>`;
         const q = (s) => root().querySelector(s);
         q('#soc-volver').addEventListener('click', () => { ocActual = null; pintarLista(); });
-        q('#soc-todos').addEventListener('change', (e) => { verTodos = e.target.checked; pintarDetalle(); });
+        const tdo = q('#soc-todos'); if (tdo) tdo.addEventListener('change', (e) => { verTodos = e.target.checked; pintarDetalle(); });
+        const bs = q('#soc-sig'); if (bs) bs.addEventListener('click', () => { const t = q(bs.dataset.go); if (t) t.click(); else if (bs.dataset.go.startsWith('#view')) window.location.hash = bs.dataset.go.slice(1); });
         q('#soc-recep').addEventListener('click', formRecepcion);
         q('#soc-pend').addEventListener('click', () => { if (!pendientesDe(ocActual).some(x => x.pendiente > 0)) { toast('Sin pendientes', 'Todo lo de SAR ya fue recibido.', 'success'); return; } descargarPendientes(ocActual); });
         q('#soc-conforme').addEventListener('click', () => { if (window.SAR_RecepcionConforme) window.SAR_RecepcionConforme.abrir({ oc: ocActual, modal, toast, enviarCorreo, config: configCorreo, usuario: usuario(), fmtFecha, peso, totalesPorCentro, centroPropio: CENTRO_PROPIO }); });
@@ -344,6 +354,18 @@
         pintarDestinatarios(); pintarBitacora();
     }
 
+    /** Banner con el siguiente paso según el estado de la orden. */
+    function bannerSiguiente(oc, pl) {
+        if (oc.cerrada) return '';
+        const pend = pendientesDe(oc).filter(x => x.pendiente > 0).length > 0, hayStock = (oc.lineas || []).some(l => Object.keys(l.ingresado || {}).some(k => num(l.ingresado[k]) > num(l.entregado && l.entregado[k])));
+        let txt, btn, go;
+        if (!oc.aceptada) { txt = 'Siguiente paso: registra cuándo aceptó la orden el proveedor.'; btn = 'Registrar aceptación'; go = '#soc-acepta'; }
+        else if (pend) { txt = 'Siguiente paso: cuando llegue la mercadería, regístrala (puedes hacerlo por partes).'; btn = 'Recibir mercadería'; go = '#soc-recep'; }
+        else if (!oc.recepcionConforme) { txt = 'Todo recibido. Siguiente paso: la recepción conforme con la guía o factura.'; btn = 'Recepción conforme'; go = '#soc-conforme'; }
+        else { txt = 'Recepción conforme lista. Ya puedes entregar a los centros desde las actas.'; btn = 'Ir a Actas de entrega'; go = '#view-actas-entrega'; }
+        const extra = hayStock && pend ? ' Lo ya recibido está en Bodega Central y se entrega desde Actas de entrega.' : '';
+        return `<div class="soc-siguiente"><span>${esc(txt)}${esc(extra)}</span><button type="button" class="btn btn-primary btn-sm" id="soc-sig" data-go="${go}">${esc(btn)}</button></div>`;
+    }
     function memosCDPHTML(oc) {
         const cols = oc.columnas || []; if (!cols.length) return '';
         const hayExtra = cols.some(c => c.financiamiento || c.cdp || c.total);
@@ -355,7 +377,7 @@
             ${oc.descripcion ? `<p class="soc-card__sub">${esc(oc.descripcion)}</p>` : ''}</div>`;
     }
     function entregasHTML(oc) {
-        const est = estadoEntregas(oc), cols = oc.columnas || []; if (!est.length) return '';
+        const est = estadoEntregas(oc), cols = oc.columnas || []; if (!est.length || est.every(e => e.centro === CENTRO_PROPIO)) return '';
         const globalPed = est.reduce((t, e) => t + e.pedido, 0), globalEnt = est.reduce((t, e) => t + e.entregado, 0), globalRec = est.reduce((t, e) => t + e.recibido, 0);
         return `<div class="erp-card"><h3>Distribución y entregas por centro <span class="soc-n">${globalEnt} de ${globalPed} entregadas · ${globalRec} recibidas</span></h3>
             ${est.map(e => {
@@ -363,11 +385,11 @@
                 return `<div class="soc-entrega"><div class="soc-sub"><strong>${esc(e.centro)}</strong> <small>memo ${esc(e.memo)}${e.cdp ? ' · CDP ' + esc(e.cdp) : ''}</small>
                     <span class="soc-chip soc-chip--${e.estado === 'ENTREGADO' ? 'completa' : e.estado === 'SIN_RECIBIR' ? 'en_plazo' : 'cerrada'}">${esc(ETIQ_ENTREGA[e.estado])}</span>
                     ${!propio && e.entregable > 0 ? `<button type="button" class="btn btn-primary btn-sm" data-acta="${esc(e.key)}"><i class="ph-bold ph-file-text"></i> Generar acta (${e.entregable} un.)</button>` : ''}</div>
-                    <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Llegó</th><th>En bodega</th><th>Entregado</th><th>Pendiente</th></tr></thead><tbody>${(oc.lineas || []).map(l => {
+                    <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Recibido</th><th>En bodega</th><th>Entregado</th><th>Pendiente</th></tr></thead><tbody>${(oc.lineas || []).map(l => {
                         const p = num(l.dist && l.dist[e.key]); if (!p) return '';
                         const r = num(l.recibido && l.recibido[e.key]), g = num(l.ingresado && l.ingresado[e.key]), en = num(l.entregado && l.entregado[e.key]);
                         return `<tr><td>${esc(l.descripcion)}</td><td>${p}</td><td>${r}</td><td>${Math.max(0, g - en)}</td><td>${en}</td><td class="${p - en > 0 ? 'soc-est--parcial' : 'soc-est--ok'}"><strong>${Math.max(0, p - en)}</strong></td></tr>`; }).join('')}</tbody></table></div></div>`; }).join('')}
-            <p class="bodega-estantes__hint">"Llegó" = lo registrado en Registrar recepción · "En bodega" = ingresado al stock y aún sin entregar · "Entregado" = en actas emitidas desde esta orden. Cada acta descuenta el stock y deja el saldo pendiente actualizado.</p></div>`;
+            <p class="bodega-estantes__hint">"Recibido" = lo registrado en Recibir mercadería · "En bodega" = ingresado al stock y aún sin entregar · "Entregado" = en actas emitidas desde esta orden. Cada acta descuenta el stock y deja el saldo pendiente actualizado.</p></div>`;
     }
     /** Acta de entrega a un centro con lo que ya llegó a bodega y aún no se entrega. */
     async function formActaCentro(key) {
@@ -467,9 +489,10 @@
     }
 
     // --- ventanas de formulario simples ---
-    function modal(titulo, html, onListo) {
+    function modal(titulo, html, onListo, opts) {
+        opts = opts || {};
         const ov = document.createElement('div'); ov.className = 'cierre-overlay';
-        ov.innerHTML = `<div class="cierre-box" role="dialog" aria-modal="true" aria-label="${esc(titulo)}"><h3>${esc(titulo)}</h3>${html}<div class="cierre-acciones"><button type="button" class="btn btn-outline" data-x>Cancelar</button><button type="button" class="btn btn-primary" data-ok>Guardar</button></div></div>`;
+        ov.innerHTML = `<div class="cierre-box${opts.ancho ? ' cierre-box--ancho' : ''}" role="dialog" aria-modal="true" aria-label="${esc(titulo)}"><h3>${esc(titulo)}</h3>${html}<div class="cierre-acciones"><button type="button" class="btn btn-outline" data-x>Cancelar</button><button type="button" class="btn btn-primary" data-ok>${esc(opts.ok || 'Guardar')}</button></div></div>`;
         document.body.appendChild(ov);
         const cerrar = () => ov.remove();
         ov.querySelector('[data-x]').addEventListener('click', cerrar);
@@ -479,7 +502,7 @@
 
     function formNueva() {
         let cuadro = null;
-        const ov = modal('Ingresar orden de compra', `
+        const ov = modal('Ingresar orden de compra (cuadro Excel)', `
             <label>N° de orden (Mercado Público)<input type="text" id="n-num" placeholder="1298355-840-AG26" autocomplete="off"></label>
             <label>Proveedor<input type="text" id="n-prov" placeholder="Nombre del proveedor"></label>
             <label>Descripción<input type="text" id="n-desc" placeholder="Ej.: productos para monitoreo de pacientes"></label>
@@ -540,7 +563,7 @@
             && lineas.every((l, i) => Object.values(cuadro0.dist[i] || {}).reduce((t, x) => t + num(x), 0) === num(l.cantidad))) ? cuadro0 : null;
         if (v.distrib && !cuadro) throw new Error('El cuadro de distribución no calza con los productos de la orden (revisa los avisos). Corrige las cantidades o quita el cuadro.');
         const propia = cuadro && cuadro.columnas ? cuadro.columnas.find(c => c.centro === CENTRO_PROPIO) : null;
-        // v20.64: del cuadro solo importa lo que dice SAR; lo de otros centros se omite (queda anotado cuáles).
+        // v20.65: del cuadro solo importa lo que dice SAR; lo de otros centros se omite (queda anotado cuáles).
         let cuadroF = cuadro; const otrosCentros = [];
         if (cuadro && propia && cuadro.columnas.length > 1) {
             cuadro.columnas.filter(c => c !== propia).forEach(c => otrosCentros.push({ centro: c.centro, memo: c.memo }));
@@ -590,8 +613,9 @@
                 tx.set(fs().doc(fs().collection(db(), 'Seguimiento_OC', id, 'Eventos')), { tipo: 'CREACION', texto: `Orden ingresada${oc.origen === 'OC_MP' ? ' desde el PDF' : ''}: ${oc.lineas.length} producto(s). El proveedor debe aceptarla hasta el ${fmtFecha(oc.aceptarLimite)}; entrega en ${oc.plazoDiasHabiles} días hábiles desde la aceptación.`, autor: usuario(), fecha: fs().serverTimestamp() });
             });
             if (usoCuadro) window.SAR_ComprasAgiles.vincularOC(usoCuadro.id, oc.numeroOC);
+            abrirCuando(id);
             toast('Orden ingresada', `Acepta hasta el ${fmtFecha(oc.aceptarLimite)}.${oc.distribucionPDF ? ' Distribución por centro leída del PDF.' : ''}${usoCuadro && !oc.distribucionPDF ? ' Cuadro por centro tomado de la compra ágil ' + usoCuadro.compra + '.' : ''}`, 'success');
-        });
+        }, { ok: 'Ingresar orden' });
         const q = (s) => ov.querySelector(s);
         function leerRev(o) {
             const g = (id) => { const e = o.querySelector('#' + id); return e ? e.value : ''; };
@@ -693,7 +717,6 @@
         const f = fs();
         const aplicadoLocal = aplicarRecepcion(oc, key, det, incidencias, null, ingresaStock);
         let correo = null;
-        if (notificar) correo = await enviarCorreo(oc.destinatarios || [], armarCorreo({ ...oc, ...aplicadoLocal }, titulo, texto, usuario()));
         const ocRef = f.doc(f.collection(db(), 'Seguimiento_OC'), oc.id);
         const evRef = f.doc(f.collection(db(), 'Seguimiento_OC', oc.id, 'Eventos'));
         // Productos del inventario (Bodega Central): se buscan por nombre antes de la transacción
@@ -711,19 +734,22 @@
         await f.runTransaction(db(), async (tx) => {
             const os = await tx.get(ocRef); if (!os.exists()) throw new Error('La orden ya no existe.');
             const lecturas = []; for (const g of grupos.values()) lecturas.push([g, await tx.get(g.ref)]);
-            tx.update(ocRef, { ...aplicarRecepcion(os.data(), key, det, incidencias, null, ingresaStock), actualizadoEn: f.serverTimestamp() });
+            const fresca = os.data();
+            det.forEach(d => { const l = (fresca.lineas || [])[d.i] || {}, pe = num(l.dist && l.dist[key]) - num(l.recibido && l.recibido[key]); if (d.cantidad > Math.max(0, pe)) throw new Error(`"${String(l.descripcion || '').slice(0, 40)}": solo quedan ${Math.max(0, pe)} por recibir (otra recepción se registró antes). Cierra y vuelve a abrir.`); });
+            tx.update(ocRef, { ...aplicarRecepcion(fresca, key, det, incidencias, null, ingresaStock), ...(guia ? { ultimaGuia: guia } : {}), ultimaRecepcion: fecha, actualizadoEn: f.serverTimestamp() });
             tx.set(evRef, { tipo: 'RECEPCION', texto, autor: usuario(), fecha: f.serverTimestamp(), ...(correo ? { correo } : {}), columna: key, guia, fechaRecepcion: fecha, ingresoAStock: !!ingresaStock, detalle: det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })), incidencias: incidencias.map(n => ({ producto: n.producto, tipo: n.tipo, detalle: n.detalle })) });
             lecturas.forEach(([g, snap]) => {
                 const actual = snap.exists() ? snap.data() : null, m = mezclarIngreso(actual, g.ingresos);
                 const limite = num(actual && (actual.criticalLimit || actual.stock_minimo)) || 50;
                 const prox = m.batches[0];
                 const base = { quantity: m.quantity, batches: m.batches, isCritical: m.quantity <= limite, batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', provider: oc.proveedor || (actual && actual.provider) || 'S/I', updatedAt: f.serverTimestamp() };
-                if (actual) tx.update(g.ref, base); else tx.set(g.ref, { name: g.nombre, location: central, criticalLimit: 50, ...base });
+                if (actual) tx.update(g.ref, base); else tx.set(g.ref, { name: g.nombre, name_lowercase: String(g.nombre).toLowerCase(), location: central, criticalLimit: 50, ...base });
                 g.ingresos.forEach(ing => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), {
                     insumoName: g.nombre, item: g.nombre, quantity: ing.cantidad, type: 'INGRESO_OC', batch: ing.lote, expirationDate: ing.vence, destination: central, dest: central, origin: oc.proveedor || 'Proveedor',
                     provider: oc.proveedor || 'S/I', user: usuario(), date: f.serverTimestamp(), document: `OC ${oc.numeroOC}${guia ? ' · guía ' + guia : ''}`, observacion: obs || '', ocId: oc.id, idInsumoDestino: g.ref.id }));
             });
         });
+        if (notificar) { try { correo = await enviarCorreo(oc.destinatarios || [], armarCorreo({ ...oc, ...aplicadoLocal }, titulo, texto, usuario())); } catch (e) { toast('Recepción guardada', 'No se pudo preparar el correo: ' + e.message, 'warning'); } }
         return correo;
     }
 
@@ -754,9 +780,9 @@
         } catch (e) { /* sin lista de inventario: se escribe a mano */ }
         const propia = (key) => { const c = cols.find(x => x.key === key); return !!c && c.centro === CENTRO_PROPIO; };
         const ov = modal('Recibir mercadería', `
-            <label>¿Qué memo/CDP se recibió?<select id="r-col">${cols.map(c => `<option value="${esc(c.key)}">${esc(c.centro)} · memo ${esc(c.memo)}${c.cdp ? ' · CDP ' + esc(c.cdp) : ''}</option>`).join('')}</select></label>
+            <label${cols.length === 1 ? ' hidden' : ''}>¿Qué memo/CDP se recibió?<select id="r-col">${cols.map(c => `<option value="${esc(c.key)}">${esc(c.centro)} · memo ${esc(c.memo)}${c.cdp ? ' · CDP ' + esc(c.cdp) : ''}</option>`).join('')}</select></label>
             <div class="soc-fila"><label>N° guía de despacho<input type="text" id="r-guia" autocomplete="off"></label><label>Fecha<input type="date" id="r-fecha" value="${hoyISO()}"></label></div>
-            <div class="soc-barra-rec"><button type="button" class="btn btn-primary btn-sm" id="r-total"><i class="ph-bold ph-checks"></i> Recepción total</button><button type="button" class="btn btn-outline btn-sm" id="r-nada">Limpiar</button><span id="r-resumen" class="soc-resumen-rec"></span></div>
+            <div class="soc-barra-rec"><button type="button" class="btn btn-outline btn-sm" id="r-total"><i class="ph-bold ph-checks"></i> Marcar todo recibido</button><button type="button" class="btn btn-outline btn-sm" id="r-nada">Limpiar</button><span id="r-resumen" class="soc-resumen-rec"></span></div>
             <div id="r-lineas"></div>
             <label class="soc-toggle" id="r-stock-w"><input type="checkbox" id="r-stock" checked> Ingresar lo recibido al stock de ${esc(central)} (así se descuenta al entregarlo por acta)</label>
             <label>Observación (opcional)<input type="text" id="r-obs" maxlength="300"></label>
@@ -771,24 +797,38 @@
                     if (tipo) incidencias.push({ producto: oc.lineas[i].descripcion, tipo, detalle: tr.querySelector('.r-td').value.trim() });
                 });
                 if (!det.length && !incidencias.length) { toast('Sin datos', 'Indica una cantidad recibida o una incidencia.', 'warning'); return false; }
+                const mal = det.find(d => !Number.isInteger(d.cantidad) || d.cantidad > Math.max(0, num(oc.lineas[d.i].dist && oc.lineas[d.i].dist[q('#r-col').value]) - num(oc.lineas[d.i].recibido && oc.lineas[d.i].recibido[q('#r-col').value])));
+                if (mal) { toast('Cantidad no válida', `"${String(oc.lineas[mal.i].descripcion).slice(0, 40)}": indica un número entero que no supere lo pendiente.`, 'warning'); return false; }
+                const vencida = det.find(d => d.vence && d.vence < hoyISO());
+                if (vencida) { toast('Vencimiento pasado', `"${String(oc.lineas[vencida.i].descripcion).slice(0, 40)}" tiene un vencimiento anterior a hoy. Revisa la fecha.`, 'warning'); return false; }
                 const col = cols.find(c => c.key === key), guia = q('#r-guia').value.trim(), fecha = q('#r-fecha').value || hoyISO(), obs = q('#r-obs').value.trim();
                 if (ingresaStock && det.some(d => !d.insumoName)) { toast('Falta el producto', 'Indica el producto del inventario de cada línea que recibes.', 'warning'); return false; }
+                const avisos = [], conoce = new Set(nombresInv.map(norm));
+                if (ingresaStock) {
+                    const nuevos = det.filter(d => !conoce.has(norm(d.insumoName))).map(d => d.insumoName);
+                    if (nuevos.length) avisos.push(`${nuevos.length} producto(s) no existen en el inventario y se crearían como nuevos: ${nuevos.slice(0, 3).join(', ')}${nuevos.length > 3 ? '…' : ''}`);
+                    const sinV = det.filter(d => !d.vence).length; if (sinV) avisos.push(`${sinV} línea(s) sin fecha de vencimiento (quedarán sin vencimiento)`);
+                }
+                const guiaN = q('#r-guia').value.trim();
+                if (guiaN && eventos.some(e => e.tipo === 'RECEPCION' && String(e.guia || '') === guiaN)) avisos.push(`la guía N° ${guiaN} ya se registró en esta orden`);
+                const firma = avisos.join('|');
+                if (avisos.length && o.dataset.aviso !== firma) { o.dataset.aviso = firma; toast('Revisa antes de guardar', avisos.join('. ') + '. Si es correcto, pulsa Guardar recepción otra vez.', 'warning'); return false; }
                 const texto = `Recepción en ${col.centro}${col.memo ? ' (memo ' + col.memo + (col.cdp ? ', CDP ' + col.cdp : '') + ')' : ''} el ${fmtFecha(fecha)}${guia ? ' · guía N° ' + guia : ''}:\n` +
                     (det.length ? det.map(d => `- ${oc.lineas[d.i].descripcion}: ${d.cantidad} un.${d.lote ? ' · lote ' + d.lote : ''}${d.vence ? ' · vence ' + fmtFecha(d.vence) : ''}`).join('\n') : '- (sin unidades recibidas)') +
                     (incidencias.length ? '\nINCIDENCIAS:\n' + incidencias.map(n => `- ${n.producto}: ${INCIDENCIAS[n.tipo]}${n.detalle ? ' — ' + n.detalle : ''}`).join('\n') : '') + (obs ? '\nObs.: ' + obs : '') + (ingresaStock ? `\nIngresado al stock de ${central}.` : '');
                 await recepcionConStock(oc, { key, det, incidencias, guia, fecha, obs, notificar: q('#r-correo').checked, ingresaStock, central, texto, titulo: incidencias.length ? `Recepción con incidencias en ${col.centro}` : `Recepción en ${col.centro}` });
-                toast('Recepción registrada', ingresaStock ? `Lo recibido quedó en el stock de ${central}.` : 'Se actualizó lo recibido.', 'success');
-            });
+                toast('Recepción registrada', ingresaStock ? `Lo recibido quedó en el stock de ${central}. Entrégalo a los centros desde Actas de entrega.` : 'Se actualizó lo recibido.', 'success');
+            }, { ancho: true, ok: 'Guardar recepción' });
         const pintar = () => {
             const key = ov.querySelector('#r-col').value, st = ov.querySelector('#r-stock').checked;
-            ov.querySelector('#r-lineas').innerHTML = '<div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Ya recibido</th><th>Pendiente</th><th>Llegó ahora</th>' + (st ? '<th>Producto en inventario</th><th>Lote</th><th>Vence</th>' : '') + '<th>Incidencia</th></tr></thead><tbody>' +
-                oc.lineas.map((l, i) => { const p = num(l.dist && l.dist[key]), ya = num(l.recibido && l.recibido[key]), pe = Math.max(0, p - ya); return p ? `<tr data-i="${i}" data-pe="${pe}"><td>${esc(l.descripcion)}</td><td>${p}</td><td>${ya}</td><td><strong>${pe}</strong></td><td class="r-celda"><input type="number" min="0" max="${pe}" class="r-c" value="" aria-label="Unidades que llegaron"><button type="button" class="btn btn-outline btn-sm r-ok" title="Llegó completo"${pe ? '' : ' disabled'}>✔ ${pe || 'listo'}</button></td>` +
-                    (st ? `<td><input class="r-n" list="r-inv" value="${esc(l.insumoName || l.descripcion)}"></td><td><input class="r-l" placeholder="S/L"></td><td><input type="date" class="r-v"></td>` : '') +
-                    `<td><select class="r-t"><option value="">Sin incidencia</option>${Object.entries(INCIDENCIAS).map(([k, t]) => `<option value="${k}">${esc(t)}</option>`).join('')}</select><input class="r-td" placeholder="Detalle"></td></tr>` : ''; }).join('') + '</tbody></table></div>';
+            ov.querySelector('#r-lineas').innerHTML = '<div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Recibido</th><th>Pendiente</th><th>Llega ahora</th>' + (st ? '<th>Producto en inventario</th><th>Lote</th><th>Vence</th>' : '') + '<th>Incidencia</th></tr></thead><tbody>' +
+                oc.lineas.map((l, i) => { const p = num(l.dist && l.dist[key]), ya = num(l.recibido && l.recibido[key]), pe = Math.max(0, p - ya); return p ? `<tr data-i="${i}" data-pe="${pe}"><td class="r-prod" data-l="Producto">${esc(l.descripcion)}</td><td data-l="Pedido">${p}</td><td data-l="Recibido">${ya}</td><td data-l="Pendiente"><strong>${pe}</strong></td><td class="r-celda" data-l="Llega ahora"><input type="number" min="0" max="${pe}" class="r-c" value="" aria-label="Unidades que llegaron"><button type="button" class="btn btn-outline btn-sm r-ok" title="Llegó completo"${pe ? '' : ' disabled'}>✔ ${pe || 'listo'}</button></td>` +
+                    (st ? `<td data-l="Producto en inventario"><input class="r-n" list="r-inv" aria-label="Producto en inventario" value="${esc(l.insumoName || l.descripcion)}"></td><td data-l="Lote"><input class="r-l" aria-label="Lote" placeholder="S/L"></td><td data-l="Vence"><input type="date" class="r-v" aria-label="Fecha de vencimiento"></td>` : '') +
+                    `<td data-l="Incidencia"><select class="r-t" aria-label="Incidencia"><option value="">Sin incidencia</option>${Object.entries(INCIDENCIAS).map(([k, t]) => `<option value="${k}">${esc(t)}</option>`).join('')}</select><input class="r-td" aria-label="Detalle de la incidencia" placeholder="Detalle"></td></tr>` : ''; }).join('') + '</tbody></table></div>';
         };
         const resumen = () => {
-            let pe = 0, lleg = 0; ov.querySelectorAll('tr[data-i]').forEach(tr => { pe += num(tr.dataset.pe); lleg += Math.min(num(tr.dataset.pe), num(tr.querySelector('.r-c').value)); });
-            const el = ov.querySelector('#r-resumen'); if (el) el.innerHTML = `Pendiente: <b>${pe}</b> un. · llegan ahora: <b>${lleg}</b> · quedarían pendientes: <b>${Math.max(0, pe - lleg)}</b>`;
+            let pe = 0, lleg = 0, sobra = 0; ov.querySelectorAll('tr[data-i]').forEach(tr => { const v = num(tr.querySelector('.r-c').value); pe += num(tr.dataset.pe); lleg += Math.min(num(tr.dataset.pe), v); sobra += Math.max(0, v - num(tr.dataset.pe)); tr.classList.toggle('r-sobra', v > num(tr.dataset.pe)); });
+            const el = ov.querySelector('#r-resumen'); if (el) el.innerHTML = `Pendiente: <b>${pe}</b> un. · llegan ahora: <b>${lleg}</b> · quedarían pendientes: <b>${Math.max(0, pe - lleg)}</b>${sobra ? ` · <span class="cierre-error">${sobra} de más</span>` : ''}`;
         };
         ov.addEventListener('input', (e) => { if (e.target.classList && e.target.classList.contains('r-c')) resumen(); });
         ov.addEventListener('click', (e) => {
@@ -819,8 +859,9 @@
 
     async function alternarCierre() {
         const nuevo = !ocActual.cerrada;
-        if (!window.confirm(nuevo ? 'Cerrar el seguimiento de esta orden?' : 'Reabrir el seguimiento de esta orden?')) return;
-        try { await registrarEvento(ocActual, { tipo: 'ESTADO', texto: nuevo ? 'Seguimiento cerrado.' : 'Seguimiento reabierto.', notificar: false, cambiosOC: { cerrada: nuevo } }); }
+        const pu = pendientesDe(ocActual).reduce((t, x) => t + x.pendiente, 0);
+        if (!window.confirm(nuevo ? (pu ? `¿Cerrar el seguimiento? Quedan ${pu} unidades sin recibir y dejarán de aparecer como pendientes.` : '¿Cerrar el seguimiento de esta orden?') : '¿Reabrir el seguimiento de esta orden?')) return;
+        try { await registrarEvento(ocActual, { tipo: 'ESTADO', texto: nuevo ? `Seguimiento cerrado${pu ? ` con ${pu} unidades sin recibir` : ''}.` : 'Seguimiento reabierto.', notificar: false, cambiosOC: { cerrada: nuevo } }); }
         catch (e) { toast('Error', e.message, 'error'); }
     }
 

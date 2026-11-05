@@ -66,7 +66,7 @@
         r.contacto = dato(/CONTACTO\s*:\s*([^\n]+)/);
         r.horario = dato(/HORARIO\s*:\s*([^\n]+)/);
         r.convenioMarco = /convenio marco/i.test(todo) || /-CM\d{2}$/.test(r.numeroOC);
-        // Totales (líneas "Neto $ 620.640", "Total $ 738.562")
+        // Totales (líneas "Neto $ 620.650", "Total $ 738.562")
         const tot = (palabra) => {
             const re = new RegExp('^' + palabra + '$', 'i');
             for (const l of L) { const k = l.items.findIndex(i => i.x > 380 && re.test(limpiar(i.str))); if (k >= 0) { const resto = l.items.slice(k + 1).map(i => limpiar(i.str)).filter(t => /^[\d.,]+$/.test(t)); if (resto.length) return monto(resto[resto.length - 1]); } }
@@ -199,7 +199,7 @@
     }
 
     // ------------------------------------------------------------------
-    // Cuadro de distribución, variante B (v20.64): memo y CDP en el encabezado de la columna
+    // Cuadro de distribución, variante B (v20.65): memo y CDP en el encabezado de la columna
     // ("MEMO N°54 SAR CDP N°4387"), código MP entre paréntesis al inicio de cada producto y pie con
     // NETO / IVA / TOTAL / PRESUPUESTO / SALDO. Mismo resultado que la variante A (+ presupuesto y saldo).
     // ------------------------------------------------------------------

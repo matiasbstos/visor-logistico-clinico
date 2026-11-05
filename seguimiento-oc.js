@@ -1248,17 +1248,37 @@ function doPost(e) {
     return salida({ ok: true, enviados: to.length + cc.length, adjuntos: adj.length });
   } catch (err) { return salida({ ok: false, error: String(err) }); }
 }
-const TIENDAS = ['aseo3'];   // agrega aquí otras tiendas de Convenio Marco si las usas (ej.: la de útiles de oficina)
-function imagenDe(c) {
+const BASE = 'https://conveniomarco.mercadopublico.cl/';
+const TIENDAS_FIJAS = ['aseo3'];   // respaldo si no se pueden descubrir las tiendas
+function tiendas() {   // descubre las tiendas de Convenio Marco desde la portada (se recuerda 6 horas)
+  const cache = CacheService.getScriptCache(), g = cache.get('tiendas');
+  if (g) return JSON.parse(g);
+  let lista = TIENDAS_FIJAS.slice();
+  try {
+    const h = UrlFetchApp.fetch(BASE, { muteHttpExceptions: true, followRedirects: true }).getContentText();
+    const sin = ['media', 'static', 'skin', 'customer', 'checkout', 'catalogsearch', 'catalog', 'js', 'css', 'pub', 'cms', 'contact', 'sales'];
+    const set = {}; TIENDAS_FIJAS.forEach(t => { set[t] = 1; });
+    const re = /conveniomarco\\.mercadopublico\\.cl\\/([a-z0-9_-]{3,40})\\//gi; let m;
+    while ((m = re.exec(h)) !== null) { const t = m[1].toLowerCase(); if (sin.indexOf(t) < 0) set[t] = 1; }
+    lista = Object.keys(set).slice(0, 25);
+  } catch (e) { /* usa el respaldo */ }
+  cache.put('tiendas', JSON.stringify(lista), 21600);
+  return lista;
+}
+function imagenDe(c) {   // busca el código en todas las tiendas y devuelve la ruta de la foto (o vacío)
   if (!c) return '';
-  for (const t of TIENDAS) {
-    try {
-      const h = UrlFetchApp.fetch('https://conveniomarco.mercadopublico.cl/' + t + '/catalogsearch/result/?q=' + c, { muteHttpExceptions: true, followRedirects: true }).getContentText();
-      const m = h.match(/property="og:image"\\s+content="[^"]*media\\/catalog\\/product\\/(\\d\\/\\d\\/[^"?]+)/);
-      if (m) return m[1];
-    } catch (e) { /* sigue con la siguiente tienda */ }
-  }
-  return '';
+  const cache = CacheService.getScriptCache(), k = 'img' + c, g = cache.get(k);
+  if (g !== null) return g;
+  const reqs = tiendas().map(t => ({ url: BASE + t + '/catalogsearch/result/?q=' + c, muteHttpExceptions: true, followRedirects: true }));
+  let r = '';
+  try {
+    const res = UrlFetchApp.fetchAll(reqs);
+    for (let i = 0; i < res.length && !r; i++) {
+      try { const m = res[i].getContentText().match(/property="og:image"\\s+content="[^"]*media\\/catalog\\/product\\/(\\d\\/\\d\\/[^"?]+)/); if (m) r = m[1]; } catch (e) { /* sigue */ }
+    }
+  } catch (e) { /* sin red */ }
+  cache.put(k, r, 21600);
+  return r;
 }
 function salida(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }`;
 

@@ -260,3 +260,8 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - Recibir mercadería: lote y vencimiento son opcionales (casilla "Anotar lote y vencimiento ahora"); la hora de llegada la pone el sistema; cada recepción tiene ID propio `REC-<orden>-NN` (evento, historial y texto).
 - Recepción conforme: archivo `RC_<orden>.pdf`; Total/Parcial viene preseleccionado según lo pendiente.
 - Pendiente: editar lote/vencimiento después del ingreso, reportar REC-ID en Auditoría, destinatarios fijos (compras, M. Quintanilla, M. Bustos) cargados en la lista de la orden.
+
+### 4.26 v20.67 — Correos de recepción, lotes posteriores y ID en Auditoría
+- Correo de cada recepción: siempre a mariel.quintanilla@, compras.sar@ y matias.bustos@ (cormumel.cl). Recepción conforme: Para paulina.carrasco@; Cc daniela.medina@, carolina.ortiz@, nadia.sanchez@, sar.melipilla@, matias.bustos@.
+- Botón "Lotes y vencimientos" en la ficha: completa lote/vencimiento de lo ingresado sin ellos (parcial o total); mueve unidades del lote "S/L" al nuevo en el stock y deja un evento LOTE en la bitácora.
+- Cada recepción guarda `recepciones[{recId, fecha, hora, guia, unidades, usuario, detalle}]` en la orden; Auditoría muestra "Recepciones de mercadería" con buscador por REC-ID, orden o guía.

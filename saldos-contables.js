@@ -122,6 +122,25 @@
         a.download = `Seguimiento_${seg.acta.numero}.csv`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
     }
 
+    // Recepciones de mercadería (ID REC-<orden>-NN) para seguimiento en Auditoría
+    let recs = null, recQ = '', recCargando = false;
+    async function cargarRec() {
+        const f = fs(); if (!f || recCargando) return; recCargando = true; pintarRec();
+        try { const sn = await f.getDocs(f.collection(db(), 'Seguimiento_OC')); recs = []; sn.forEach(d => { const o = d.data(); (o.recepciones || []).forEach(x => recs.push({ ...x, numeroOC: o.numeroOC, proveedor: o.proveedor })); }); recs.sort((a, b) => String(b.fecha + (b.hora || '')).localeCompare(String(a.fecha + (a.hora || '')))); }
+        catch (e) { recs = []; toast('Recepciones', 'No se pudieron leer: ' + e.message, 'error'); }
+        recCargando = false; pintarRec();
+    }
+    function pintarRec() {
+        const h = document.getElementById('rec-aud'); if (!h) return;
+        if (recs == null && !recCargando) { cargarRec(); return; }
+        const t = recQ.trim().toLowerCase(), vis = (recs || []).filter(x => !t || [x.recId, x.numeroOC, x.guia, x.proveedor].join(' ').toLowerCase().includes(t));
+        h.innerHTML = `<h3 class="act-h">Recepciones de mercadería</h3>
+        <p class="act-hint">Cada recepción de una orden de compra tiene un ID propio (<b>REC-orden-NN</b>) para seguirla.</p>
+        <div class="sal-barra"><input id="rec-q" type="search" placeholder="REC-…, orden o guía" value="${esc(recQ)}" autocomplete="off" style="max-width:260px"></div>
+        ${recCargando ? '<p class="act-hint">Cargando…</p>' : !vis.length ? '<p class="act-hint">Sin recepciones registradas.</p>' : `<div class="sal-tabla"><div class="sal-fila sal-cab"><span>ID</span><span>Orden</span><span>Fecha</span><span>Guía</span><span>Unidades</span><span>Registró</span></div>${vis.slice(0, 200).map(x => `<div class="sal-fila"><span class="sal-n">${esc(x.recId)}<small>${esc((x.detalle || []).map(d => d.descripcion + ' (' + d.cantidad + ')').join(' · ').slice(0, 160))}</small></span><span>${esc(x.numeroOC)}</span><span>${esc(x.fecha)} ${esc(x.hora || '')}</span><span>${esc(x.guia || '—')}</span><span>${num(x.unidades)}</span><span>${esc(x.usuario || '')}</span></div>`).join('')}</div>`}`;
+        const q = h.querySelector('#rec-q'); if (q) q.addEventListener('input', () => { recQ = q.value; const pos = q.selectionStart; pintarRec(); const n = document.getElementById('rec-q'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } });
+    }
+
     const root = () => document.getElementById('sal-root');
     function pintarSeg() {
         const h = document.getElementById('seg-root'); if (!h) return;
@@ -157,6 +176,7 @@
         ${cargando ? '<p class="act-hint">Cargando…</p>' : !vis.length ? '<p class="act-hint">Sin insumos en sobregiro. Todo cuadrado.</p>' : `
         <div class="sal-tabla"><div class="sal-fila sal-cab"><span>Insumo</span><span>En sistema</span><span>Sobregiro</span><span>Contable</span><span>Disponible</span><span>Estado</span><span></span></div>
         ${vis.slice(0, 300).map(x => `<div class="sal-fila"><span class="sal-n">${esc(x.nombre)}<small>${esc(x.bodega)}${x.actas.length ? ' · ' + esc(actasTxt(x)) : ''}</small></span><span>${x.q}</span><span class="${x.sg > 0 ? 'act-sin' : ''}">${x.sg}</span><span class="${x.contable < 0 ? 'act-sin' : ''}">${x.contable}</span><span>${x.disp}</span><span><i class="sal-e sal-e--${x.estado}">${ETIQ[x.estado]}</i></span><span>${x.estado === 'LISTO' ? `<button type="button" class="btn btn-outline sal-q" data-id="${esc(x.id)}">Cuadrar</button>` : ''}</span></div>`).join('')}</div>${vis.length > 300 ? '<p class="act-hint">Se muestran 300; el informe Excel incluye todos.</p>' : ''}`}`;
+        r.insertAdjacentHTML('beforeend', '<div id="rec-aud"></div>'); pintarRec();
         r.querySelector('#sal-b').addEventListener('change', (e) => { bodega = e.target.value; pintar(); });
         r.querySelector('#sal-sp').addEventListener('change', (e) => { soloPend = e.target.checked; cargar(); });
         r.querySelector('#sal-act').addEventListener('click', cargar);

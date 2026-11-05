@@ -340,3 +340,9 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - `assets/imagenes-mp.json` trae las 23 fotos del cuadro 1298355-911-CM26 ya resueltas. Para códigos nuevos el Apps Script (acción `imagenes`, hay que volver a pegarlo) consulta la tienda; sin eso, la foto se puede subir a mano en el catálogo.
 - La foto aparece en Catálogo de productos, Recibir mercadería, Actas de entrega (stock) y Existencias, asociada por código o por nombre. Una foto subida a mano tiene prioridad sobre la de la tienda.
 - Limitación: la búsqueda automática solo usa la tienda "aseo3"; para otras (p. ej. útiles de oficina) hay que agregarlas en `TIENDAS` del script.
+
+### 4.43 Fotos ampliables, más pantallas con foto y Catálogo de Insumos real (v20.86)
+- Clic en cualquier foto de producto la abre ampliada (Esc o clic fuera cierra). Aplica a Existencias, catálogo, recepción, actas y bodegas.
+- Fotos también en "Pedido y recibido", "Entregar" (OC) y Stock Local por Bodega.
+- Códigos nuevos sin Apps Script: se prueban los nombres de archivo habituales (código−7, con o sin `_1`) cargando la imagen; si ninguno existe queda sin foto. Los 23 códigos conocidos siguen este patrón.
+- "Catálogo de Insumos" (menú Compras) deja de mostrar datos de ejemplo: lista Catalogo_Productos con foto, código MP, proveedor y stock por bodega (`catalogo-vista.js`). Los KPI cuentan productos, con stock y sin stock.

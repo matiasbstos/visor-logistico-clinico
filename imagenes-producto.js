@@ -68,9 +68,32 @@
                 const j = await r.json(); const f = j && j.ok && j.imagenes && j.imagenes[c]; if (f) { semilla[c] = f; return f; }
             } catch (e) { /* sin acceso a la tienda */ }
         }
+        const g = await adivinar(c); if (g) { semilla[c] = g; return g; }
         return '';
     }
+    /** Sin Apps Script: prueba los nombres de archivo habituales (código−7, con o sin _1) cargando la imagen. */
+    function probar(url) { return new Promise(ok => { const im = new Image(); im.onload = () => ok(im.naturalWidth > 20); im.onerror = () => ok(false); im.src = url; }); }
+    async function adivinar(c) {
+        const n = Number(c); if (!n) return '';
+        for (const f of [n - 7, n - 7 + '_1']) {
+            const nom = String(f), arch = `${nom[0]}/${nom[1]}/${nom}.jpg`;
+            if (await probar(urlMP(arch, 60))) return arch;
+        }
+        return '';
+    }
+    /** Ampliación al hacer clic en cualquier foto de producto. */
+    function ampliar(img) {
+        const sp = img.closest('.prod-img'), nombre = (sp && sp.dataset.imgName) || img.alt || '';
+        const s = img.src.replace(/width=\d+&height=\d+&canvas=\d+,\d+/, 'width=900&height=900&canvas=900,900');
+        const ov = document.createElement('div'); ov.className = 'prod-zoom'; ov.setAttribute('role', 'dialog');
+        ov.innerHTML = `<div class="prod-zoom-box"><button type="button" class="prod-zoom-x" aria-label="Cerrar">×</button><img src="${esc(s)}" alt="${esc(nombre)}" referrerpolicy="no-referrer"><p>${esc(nombre)}</p></div>`;
+        const cerrar = () => { ov.remove(); document.removeEventListener('keydown', tecla); };
+        const tecla = (e) => { if (e.key === 'Escape') cerrar(); };
+        ov.addEventListener('click', (e) => { if (e.target === ov || e.target.classList.contains('prod-zoom-x')) cerrar(); });
+        document.addEventListener('keydown', tecla); document.body.appendChild(ov);
+    }
+    document.addEventListener('click', (e) => { const im = e.target && e.target.closest && e.target.closest('.prod-img img'); if (im) { e.preventDefault(); e.stopPropagation(); ampliar(im); } }, true);
     let t = null;
     if (typeof MutationObserver !== 'undefined') new MutationObserver(() => { if (!listo) return; clearTimeout(t); t = setTimeout(() => rellenar(), 250); }).observe(document.documentElement, { childList: true, subtree: true });
-    window.SAR_Imagenes = { cargar, thumb, buscar, src, imgHTML, rellenar, archivoPara, urlMP, recargar: () => cargar(true) };
+    window.SAR_Imagenes = { ampliar, cargar, thumb, buscar, src, imgHTML, rellenar, archivoPara, urlMP, recargar: () => cargar(true) };
 })(window, document);

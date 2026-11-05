@@ -5106,7 +5106,7 @@ document.addEventListener('DOMContentLoaded', () => {
             tbody.innerHTML = '';
             Object.keys(pivot).sort().forEach(itemName => {
                 const row = document.createElement('tr');
-                let cols = `<td><div class="item-name">${window.escapeHTML(itemName)}</div></td>`;
+                let cols = `<td><div class="item-name">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(itemName) : ''}${window.escapeHTML(itemName)}</div></td>`;
 
                 bodegas.forEach(b => {
                     const stock = pivot[itemName][b.name] || 0;

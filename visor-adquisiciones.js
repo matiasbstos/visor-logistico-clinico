@@ -2590,6 +2590,7 @@
         try {
             const grid = document.getElementById('erp-catalog-grid');
             if (!grid) return;
+            if (window.SAR_CatalogoVista) { window.SAR_CatalogoVista.render(grid); return; }
 
             // Obtener desde caché en memoria / sessionStorage sin re-consultar Firebase
             const cachedCatalog = ERPCacheManager.get('ERP_CATALOGO_MAESTRO');

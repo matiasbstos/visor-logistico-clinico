@@ -616,10 +616,10 @@
         const r = root(); if (!r) return;
         const f = leerFirma(); if (f) firma = f;
         borrador = cargarBorrador();
-        r.innerHTML = '<p class="act-hint" style="padding:24px;">Cargando…</p>';
+        r.innerHTML = (window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando las actas y el stock…') : 'Cargando las actas y el stock…');
         try {
             if (window.SAR_Imagenes) window.SAR_Imagenes.cargar().catch(() => {});
-            await Promise.all([cargarBodegas(), cargarCentros(), cargarHistorial().catch(() => { historial = []; })]);
+            await Promise.all([cargarCatalogo(), cargarBodegas(), cargarCentros(), cargarHistorial().catch(() => { historial = []; })]);
             if (!borrador.origen) { const c = bodegas.find(b => /central/i.test(b.name)); if (c) borrador.origen = c.name; }
             else if (!bodegas.some(b => b.name === borrador.origen)) { borrador.origen = null; borrador.items = []; }
             await cargarStock();

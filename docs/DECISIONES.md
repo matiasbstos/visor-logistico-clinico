@@ -417,3 +417,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.56 Animación en bodegas y "Asignar ID" en informes (v21.01)
 - Guardar nombre y configuración de bodegas, y cuadrar un insumo, usan la animación única de avance.
 - En el informe contable/disponible, los insumos provisionales sin ID tienen "Asignar ID": guarda el ID en el insumo y en el catálogo; al recibir la orden con ese ID se suman al mismo insumo.
+
+### 4.57 Toda pantalla que carga muestra la animación de la marca (v21.02)
+- `SAR_Progreso.cargando(texto)` pinta el logo SAR con anillo girando dentro de la pantalla mientras carga. Reemplaza los textos "Cargando…" sueltos (actas, oxígeno, informes, órdenes, compras ágiles, bodegas, catálogo). Toda pantalla nueva que cargue datos debe usarlo.
+- Actas de entrega carga catálogo, bodegas, centros e historial en paralelo para abrir más rápido.

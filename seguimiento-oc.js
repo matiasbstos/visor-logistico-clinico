@@ -224,7 +224,7 @@
         await cargarConfig();
         if (window.SAR_CDP) await window.SAR_CDP.cargar();
         if (unsubLista) { try { unsubLista(); } catch (e) { /* noop */ } }
-        root().innerHTML = '<div class="home-empty">Cargando órdenes…</div>';
+        root().innerHTML = (window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando las órdenes…') : 'Cargando las órdenes…');
         unsubLista = fs().onSnapshot(fs().collection(db(), 'Seguimiento_OC'), (snap) => {
             lista = []; snap.forEach(d => lista.push({ id: d.id, ...d.data() }));
             lista.sort((a, b) => String(b.aceptada || '').localeCompare(String(a.aceptada || '')));

@@ -215,7 +215,7 @@
         if (!usa) { cont.innerHTML = `<button type="button" class="btn btn-outline" id="be-etq-bodega"><i class="ph-bold ph-qr-code"></i> Etiqueta general de la bodega</button>`;
             const b = cont.querySelector('#be-etq-bodega'); if (b) b.addEventListener('click', () => imprimirEtiquetas(bodega, [], true)); return; }
 
-        cont.innerHTML = '<p class="bodega-estantes__hint">Cargando ubicaciones…</p>';
+        cont.innerHTML = (window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando ubicaciones…') : 'Cargando ubicaciones…');
         let ubic = [];
         try { ubic = await cargarUbicaciones(bodega.id); } catch (e) { cont.innerHTML = '<p class="bodega-estantes__hint">No se pudieron cargar las ubicaciones.</p>'; return; }
         const activas = ubic.filter(u => u.activo !== false);
@@ -462,7 +462,7 @@
         async function abrir(ctx) {
             const cont = document.getElementById('acceso-bodega-contenido');
             if (!cont || !ctx) return;
-            cont.innerHTML = '<div class="home-empty">Cargando bodega…</div>';
+            cont.innerHTML = (window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando la bodega…') : 'Cargando la bodega…');
             const f = fs();
             try {
                 const bSnap = await f.getDoc(f.doc(f.collection(db(), 'Bodegas'), ctx.bodegaId));

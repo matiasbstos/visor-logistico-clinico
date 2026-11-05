@@ -165,6 +165,7 @@
             if (!nuevo) { toast('Falta el nombre', 'Escribe el nombre de la bodega.', 'warning'); return; }
             const antes = String(bodega.name || '').trim() || 'Bodega Central';
             gn.disabled = true; gn.textContent = 'Guardando…';
+            const prog = window.SAR_Progreso.iniciar('Guardando el nombre de la bodega…', ['Comprobando que el nombre no esté repetido…']);
             try {
                 const todas = await fs().getDocs(fs().collection(db(), 'Bodegas'));
                 let repetido = false; todas.forEach(d => { if (d.id !== bodega.id && String(d.data().name || '').trim().toLowerCase() === nuevo.toLowerCase()) repetido = true; });
@@ -181,9 +182,9 @@
                 bodega.name = nuevo; if (!bodega.type) bodega.type = 'principal';
                 const t = document.getElementById('modal-bodega-name'); if (t) t.innerText = nuevo;
                 const m = document.getElementById('bodega-modal'); if (m) m.dataset.currentBodegaName = nuevo;
-                toast('Nombre guardado', movidos ? `${nuevo}. ${movidos} producto(s) pasaron a esta bodega con su nuevo nombre.` : nuevo, 'success');
+                prog.listo(movidos ? `${nuevo}: ${movidos} producto(s) pasaron a esta bodega con su nuevo nombre` : `Nombre guardado: ${nuevo}`);
                 renderSeccion(bodega);
-            } catch (e) { toast('No se guardó el nombre', e.message || String(e), 'error'); gn.disabled = false; gn.textContent = 'Guardar nombre'; }
+            } catch (e) { prog.error(); toast('No se guardó el nombre', e.message || String(e), 'error'); gn.disabled = false; gn.textContent = 'Guardar nombre'; }
         });
 
         const guardar = sec.querySelector('#be-guardar');
@@ -193,6 +194,7 @@
             if (prefijo && !prefijoValido(prefijo)) { toast('Prefijo no válido', 'Usa de 1 a 4 letras o números, sin guiones (ej. BS).', 'warning'); return; }
             if (usaNuevo && !prefijo) { toast('Falta el prefijo', 'Para usar estantes la bodega necesita un prefijo (ej. BS).', 'warning'); return; }
             guardar.disabled = true; guardar.textContent = 'Guardando…';
+            const prog = window.SAR_Progreso.iniciar('Guardando la configuración de la bodega…', ['Guardando prefijo y estantes…']);
             try {
                 const ref = fs().doc(fs().collection(db(), 'Bodegas'), bodega.id);
                 await fs().setDoc(ref, { usaEstantes: usaNuevo, prefijo }, { merge: true });
@@ -200,9 +202,10 @@
                 const leido = (await fs().getDoc(ref)).data() || {};
                 if ((leido.prefijo || '') !== prefijo || (leido.usaEstantes === true) !== usaNuevo) throw new Error('el dato no quedó guardado');
                 bodega.usaEstantes = usaNuevo; bodega.prefijo = prefijo;
-                toast('Guardado y verificado', `Prefijo ${prefijo || '(ninguno)'} • ${usaNuevo ? 'usa estantes' : 'sin estantes'}.`, 'success');
+                prog.listo(`Guardado y verificado: prefijo ${prefijo || '(ninguno)'} • ${usaNuevo ? 'usa estantes' : 'sin estantes'}`);
                 renderSeccion(bodega);
             } catch (e) {
+                prog.error();
                 toast('No se guardó', `${e.code || 'error'}: ${e.message}`, 'error');
                 guardar.disabled = false; guardar.textContent = 'Guardar';
             }

@@ -296,3 +296,7 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - Interruptor `FASE_SOLO_OC` (script.js, true): las lecturas de Firestore filtran los Insumos sin `origenOC:true` y todas las Bandejas_Turno. No se borra nada.
 - Cada recepción de OC marca el insumo con `origenOC:true`; desde ahí aparece en Existencias, Inicio y demás. Para ver todo otra vez: `FASE_SOLO_OC = false`.
 - Los movimientos del Historial no se filtran.
+
+### 4.33 v20.74 — Avance de la recepción e informes
+- Al guardar una recepción se muestra un panel de avance (validando → buscando productos → guardando y subiendo unidades al stock → correo) y al final un aviso "Recepción cargada" con el ID, las unidades y la bodega.
+- La recepción queda registrada en la orden (`recepciones[]` con bodega, productos, lote y vencimiento), en Auditoría y en los informes contable y disponible: ahora incluyen todo el stock (no solo lo con sobregiro) y una sección "Recepciones de orden de compra".

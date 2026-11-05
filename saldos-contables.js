@@ -53,22 +53,33 @@
         });
     }
 
-    function csv(tipo) {
+    function csv(tipo, extra) {
+        const filasX = (extra && extra.filas) || filas, recepciones = (extra && extra.recs) || [];
         const cab = tipo === 'contable'
             ? ['Insumo', 'Bodega', 'En sistema', 'Sobregiro', 'Saldo contable', 'Precio unitario', 'Valor contable', 'Estado', 'Actas con sobregiro (unidades)']
             : ['Insumo', 'Bodega', 'En sistema', 'Sobregiro', 'Disponible', 'Precio unitario', 'Valor disponible', 'Estado', 'Actas con sobregiro (unidades)'];
         const celda = (v) => { const t = String(v == null ? '' : v); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
-        const l = filas.map(r => tipo === 'contable'
+        const l = filasX.map(r => tipo === 'contable'
             ? [r.nombre, r.bodega, r.q, r.sg, r.contable, r.pu, r.valContable, ETIQ[r.estado], actasTxt(r)]
             : [r.nombre, r.bodega, r.q, r.sg, r.disp, r.pu, r.valDisp, ETIQ[r.estado], actasTxt(r)]);
-        const tot = tipo === 'contable' ? ['TOTAL', '', '', filas.reduce((s, r) => s + r.sg, 0), filas.reduce((s, r) => s + r.contable, 0), '', filas.reduce((s, r) => s + r.valContable, 0), '', ''] : ['TOTAL', '', '', filas.reduce((s, r) => s + r.sg, 0), filas.reduce((s, r) => s + r.disp, 0), '', filas.reduce((s, r) => s + r.valDisp, 0), '', ''];
-        return '﻿' + [cab, ...l, tot].map(x => x.map(celda).join(';')).join('\r\n');
+        const tot = tipo === 'contable' ? ['TOTAL', '', '', filasX.reduce((s, r) => s + r.sg, 0), filasX.reduce((s, r) => s + r.contable, 0), '', filasX.reduce((s, r) => s + r.valContable, 0), '', ''] : ['TOTAL', '', '', filasX.reduce((s, r) => s + r.sg, 0), filasX.reduce((s, r) => s + r.disp, 0), '', filasX.reduce((s, r) => s + r.valDisp, 0), '', ''];
+        const rec = recepciones.length ? [[], ['RECEPCIONES DE ORDEN DE COMPRA'], ['ID recepción', 'Orden', 'Fecha', 'Hora', 'Guía', 'Bodega', 'Producto', 'Unidades', 'Lote', 'Vence', 'Registró'],
+            ...recepciones.flatMap(x => (x.detalle || []).map(d => [x.recId, x.numeroOC, x.fecha, x.hora || '', x.guia || '', x.bodega || '', d.insumoName || d.descripcion, d.cantidad, d.lote || 'S/L', d.vence || 'N/A', x.usuario || '']))] : [];
+        return '﻿' + [cab, ...l, tot, ...rec].map(x => x.map(celda).join(';')).join('\r\n');
     }
-    function descargar(tipo) {
-        if (!filas.length) { toast('Informe', 'No hay datos para exportar.', 'warning'); return; }
-        const hoy = new Date().toISOString().slice(0, 10);
-        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv(tipo)], { type: 'text/csv;charset=utf-8' }));
-        a.download = `Informe_${tipo}_${hoy}.csv`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    async function descargar(tipo) {
+        const f = fs();
+        try {
+            // El informe lleva TODO el stock (no solo lo con sobregiro) y las recepciones de OC.
+            const sn = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(3000)));
+            const todas = []; sn.forEach(d => todas.push(fila(d.id, d.data())));
+            todas.sort((a, b) => a.bodega.localeCompare(b.bodega, 'es') || a.nombre.localeCompare(b.nombre, 'es'));
+            if (recs == null) await cargarRec();
+            if (!todas.length && !(recs || []).length) { toast('Informe', 'No hay datos para exportar.', 'warning'); return; }
+            const hoy = new Date().toISOString().slice(0, 10);
+            const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv(tipo, { filas: todas, recs: recs || [] })], { type: 'text/csv;charset=utf-8' }));
+            a.download = `Informe_${tipo}_${hoy}.csv`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+        } catch (e) { toast('Informe', 'No se pudo generar: ' + e.message, 'error'); }
     }
 
     // ---- seguimiento por ID de acta ----

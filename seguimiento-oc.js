@@ -802,8 +802,8 @@
         det.forEach(d => { const l = lineas[d.i]; l.recibido[key] = num(l.recibido[key]) + d.cantidad; if (ingresaStock) l.ingresado[key] = num(l.ingresado[key]) + d.cantidad; if (d.insumoName) l.insumoName = d.insumoName; });
         return { lineas, incidencias: [...(data.incidencias || []), ...incidencias.map((n, k) => ({ id: `inc-${Date.now()}-${k}`, ...n, estado: 'ABIERTA', fecha: hoyISO(), ...(extra || {}) }))] };
     }
-    async function recepcionConStock(oc, { recId, hora, key, det, incidencias, guia, fecha, obs, notificar, ingresaStock, central, texto, titulo }) {
-        const f = fs();
+    async function recepcionConStock(oc, { onPaso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar, ingresaStock, central, texto, titulo }) {
+        const f = fs(); const paso = (t) => { if (onPaso) onPaso(t); };
         const aplicadoLocal = aplicarRecepcion(oc, key, det, incidencias, null, ingresaStock);
         let correo = null;
         const ocRef = f.doc(f.collection(db(), 'Seguimiento_OC'), oc.id);
@@ -811,6 +811,7 @@
         // Productos del inventario (Bodega Central): se buscan por nombre antes de la transacción
         const grupos = new Map();
         if (ingresaStock) {
+            paso(`Buscando los productos en ${central}…`);
             for (const d of det) {
                 const nombre = String(d.insumoName || '').trim(); if (!nombre) throw new Error('Indica el producto del inventario de cada línea recibida.');
                 const snap = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('name', '==', nombre), f.limit(10)));
@@ -820,12 +821,13 @@
                 g.ingresos.push({ cantidad: d.cantidad, lote: (d.lote || '').trim().toUpperCase() || 'S/L', vence: d.vence || 'N/A' }); g.lineas.push(d); grupos.set(ref.path, g);
             }
         }
+        paso(`Guardando la recepción ${recId} y subiendo ${det.reduce((t, d) => t + d.cantidad, 0)} unidades al stock…`);
         await f.runTransaction(db(), async (tx) => {
             const os = await tx.get(ocRef); if (!os.exists()) throw new Error('La orden ya no existe.');
             const lecturas = []; for (const g of grupos.values()) lecturas.push([g, await tx.get(g.ref)]);
             const fresca = os.data();
             det.forEach(d => { const l = (fresca.lineas || [])[d.i] || {}, pe = num(l.dist && l.dist[key]) - num(l.recibido && l.recibido[key]); if (d.cantidad > Math.max(0, pe)) throw new Error(`"${String(l.descripcion || '').slice(0, 40)}": solo quedan ${Math.max(0, pe)} por recibir (otra recepción se registró antes). Cierra y vuelve a abrir.`); });
-            tx.update(ocRef, { ...aplicarRecepcion(fresca, key, det, incidencias, null, ingresaStock), ...(guia ? { ultimaGuia: guia } : {}), ultimaRecepcion: fecha, recepciones: [...(fresca.recepciones || []), { recId, fecha, hora, guia: guia || '', columna: key, usuario: usuario(), unidades: det.reduce((t, d) => t + d.cantidad, 0), detalle: det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad })) }], actualizadoEn: f.serverTimestamp() });
+            tx.update(ocRef, { ...aplicarRecepcion(fresca, key, det, incidencias, null, ingresaStock), ...(guia ? { ultimaGuia: guia } : {}), ultimaRecepcion: fecha, recepciones: [...(fresca.recepciones || []), { recId, fecha, hora, guia: guia || '', columna: key, bodega: ingresaStock ? central : '', ingresoAStock: !!ingresaStock, usuario: usuario(), unidades: det.reduce((t, d) => t + d.cantidad, 0), detalle: det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, insumoName: d.insumoName || '', cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })) }], actualizadoEn: f.serverTimestamp() });
             tx.set(evRef, { tipo: 'RECEPCION', texto, autor: usuario(), fecha: f.serverTimestamp(), ...(correo ? { correo } : {}), columna: key, guia, recId, horaLlegada: hora, bodegaDestino: central, fechaRecepcion: fecha, ingresoAStock: !!ingresaStock, detalle: det.map(d => ({ i: d.i, bodega: central, insumoName: d.insumoName || '', descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })), incidencias: incidencias.map(n => ({ producto: n.producto, tipo: n.tipo, detalle: n.detalle })) });
             lecturas.forEach(([g, snap]) => {
                 const actual = snap.exists() ? snap.data() : null, m = mezclarIngreso(actual, g.ingresos);
@@ -838,7 +840,7 @@
                     provider: oc.proveedor || 'S/I', user: usuario(), date: f.serverTimestamp(), document: `${recId} · OC ${oc.numeroOC}${guia ? ' · guía ' + guia : ''}`, observacion: obs || '', ocId: oc.id, idInsumoDestino: g.ref.id }));
             });
         });
-        if (notificar) { try { correo = await enviarCorreo(DESTINO_RECEPCION, armarCorreo({ ...oc, ...aplicadoLocal }, titulo, texto, usuario())); } catch (e) { toast('Recepción guardada', 'No se pudo preparar el correo: ' + e.message, 'warning'); } }
+        if (notificar) { paso('Enviando el aviso por correo…'); try { correo = await enviarCorreo(DESTINO_RECEPCION, armarCorreo({ ...oc, ...aplicadoLocal }, titulo, texto, usuario())); } catch (e) { toast('Recepción guardada', 'No se pudo preparar el correo: ' + e.message, 'warning'); } }
         return correo;
     }
 
@@ -882,6 +884,20 @@
             toast('Bodega creada', `${nombre} ya aparece en Bodegas.`, 'success');
             alCrear(nombre);
         }, { ok: 'Crear bodega' });
+    }
+    /** Panel de avance dentro de la ventana de recepción: qué se está haciendo y cuándo terminó. */
+    function progresoRecepcion(ov, inicial) {
+        const p = document.createElement('div'); p.className = 'r-prog'; p.setAttribute('role', 'status'); p.setAttribute('aria-live', 'polite');
+        p.innerHTML = '<div class="r-prog__c"><span class="r-prog__spin" aria-hidden="true"></span><strong class="r-prog__t"></strong><ul class="r-prog__l"></ul></div>';
+        ov.appendChild(p);
+        const t = p.querySelector('.r-prog__t'), l = p.querySelector('.r-prog__l');
+        const paso = (txt) => { const ult = l.lastElementChild; if (ult) ult.classList.add('ok'); const li = document.createElement('li'); li.textContent = txt; l.appendChild(li); t.textContent = txt; };
+        (inicial || []).forEach(paso);
+        return {
+            paso,
+            listo: (txt) => { [...l.children].forEach(x => x.classList.add('ok')); p.classList.add('r-prog--ok'); t.textContent = txt; const li = document.createElement('li'); li.className = 'ok'; li.textContent = 'Informes contable y disponible actualizados'; l.appendChild(li); },
+            error: (e) => { p.remove(); }
+        };
     }
     async function formRecepcion() {
         const oc = ocActual; const cols = oc.columnas || [];
@@ -934,8 +950,14 @@
                 const texto = `${recId} · Recepción en ${col.centro}${col.memo ? ' (memo ' + col.memo + (col.cdp ? ', CDP ' + col.cdp : '') + ')' : ''} el ${fmtFecha(fecha)} a las ${hora}${guia ? ' · guía N° ' + guia : ''}:\n` +
                     (det.length ? det.map(d => `- ${oc.lineas[d.i].descripcion}: ${d.cantidad} un.${d.lote ? ' · lote ' + d.lote : ''}${d.vence ? ' · vence ' + fmtFecha(d.vence) : ''}`).join('\n') : '- (sin unidades recibidas)') +
                     (incidencias.length ? '\nINCIDENCIAS:\n' + incidencias.map(n => `- ${n.producto}: ${INCIDENCIAS[n.tipo]}${n.detalle ? ' — ' + n.detalle : ''}`).join('\n') : '') + (obs ? '\nObs.: ' + obs : '') + (ingresaStock ? `\nIngresado al stock de ${central}.` : '');
-                await recepcionConStock(oc, { recId, hora, key, det, incidencias, guia, fecha, obs, notificar: q('#r-correo').checked, ingresaStock, central, texto, titulo: incidencias.length ? `Recepción con incidencias en ${col.centro}` : `Recepción en ${col.centro}` });
-                toast('Recepción registrada', ingresaStock ? `Lo recibido quedó en el stock de ${central}. Entrégalo a los centros desde Actas de entrega.` : 'Se actualizó lo recibido.', 'success');
+                const unidades = det.reduce((t, d) => t + d.cantidad, 0);
+                const prog = progresoRecepcion(o, ['Validando la recepción…']);
+                try {
+                await recepcionConStock(oc, { onPaso: prog.paso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar: q('#r-correo').checked, ingresaStock, central, texto, titulo: incidencias.length ? `Recepción con incidencias en ${col.centro}` : `Recepción en ${col.centro}` });
+                } catch (err) { prog.error(err); throw err; }
+                prog.listo(`Listo: ${recId} · ${unidades} unidades${ingresaStock ? ` en ${central}` : ''}. Quedó registrada en Auditoría y en los informes contable y disponible.`);
+                await new Promise(r => setTimeout(r, 1400));
+                toast('Recepción cargada', ingresaStock ? `${recId}: ${unidades} unidades ingresadas a ${central}. Registrada en los informes contable y disponible (Auditoría). Entrégalas a los centros desde Actas de entrega.` : `${recId}: se actualizó lo recibido.`, 'success');
             }, { ancho: true, ok: 'Guardar recepción' });
         const pintar = () => {
             const key = ov.querySelector('#r-col').value, st = ov.querySelector('#r-stock').checked, lv = ov.querySelector('#r-lv').checked;

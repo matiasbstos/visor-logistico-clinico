@@ -389,3 +389,8 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - v20.96: el script de Apps Script descubre solo las tiendas de Convenio Marco y busca el código en todas (antes solo aseo3); recuerda resultados 6 h.
 
 - v20.97: botón "Buscar fotos de esta orden" en Pedido y recibido.
+
+### 4.52 Correo de recepción conforme según el modelo real y diagnóstico de fotos (v20.98)
+- Correo tipo (copiado del enviado por Compras SAR): asunto `RC<N° de orden>`; cuerpo "Estimada: / Espero se encuentre bien. Adjunto RC<N° de orden> de <PROVEEDOR> / Saludos Cordiales. / <nombre>."; firma HTML con logo SAR, "Compras SAR · Analista de compras y adquisiciones · Real audiencia #980, Melipilla · 2 2568 8652 · www.corpomelipilla.cl". Adjuntos: acta `RC<N° de orden>.pdf` y la guía/factura. Para: Paulina Carrasco; Cc: lista base (configurable).
+- Apps Script: remitente visible "Compras SAR" y Responder-a compras.sar@cormumel.cl. El envío sale de la cuenta donde corre el script (hoy datosgestionsaraera@gmail.com); para que salga desde compras.sar@cormumel.cl el script debe correr en esa cuenta (requiere que TI de la Corporación permita scripts propios) o configurarse como alias "Enviar como".
+- "Buscar fotos de esta orden" explica el resultado: productos sin código, ya con foto, encontrados, y por qué no se encontró (tienda, clave o conexión).

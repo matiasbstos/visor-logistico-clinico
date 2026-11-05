@@ -66,19 +66,20 @@
         if (pend > 0 && !d.parcial) err.push(`Faltan ${pend} unidad(es) por recibir. Si igualmente das conforme lo recibido, marca "Recepción parcial".`);
         return err;
     }
+    /** Correo tipo (modelo real enviado por Compras SAR): asunto = RC + N° de orden; cuerpo corto; firma con logo SAR. */
+    const FIRMA_CORREO = { unidad: 'Compras SAR', cargo: 'Analista de compras y adquisiciones', direccion: 'Real audiencia #980, Melipilla', telefono: '2 2568 8652', web: 'www.corpomelipilla.cl', logo: 'https://sarinventario.web.app/assets/logo-sar.png' };
     function armarCorreo(oc, d, centro) {
-        const doc = d.tipoDoc === 'FACTURA' ? 'factura' : 'guía de despacho';
-        const texto = `Estimada Paulina:
-
-Junto con saludar, informo la recepción conforme de la orden de compra N° ${oc.numeroOC}${oc.proveedor ? ' del proveedor ' + oc.proveedor : ''} en ${centro === 'SAR' ? 'el SAR Arpillerista Elsa Romo Aravena' : centro}, con fecha ${fmtLarga(d.fecha)}${d.parcial ? ' (recepción parcial; el detalle está en el acta)' : ''}.
-
-Se adjuntan el acta de recepción conforme y la ${doc} N° ${d.numeroDoc} para continuar con el proceso.${d.observaciones ? '\n\nObservaciones: ' + d.observaciones : ''}
-
-Saludos cordiales,
-${d.firmaNombre}
-${d.firmaCargo}
-SAR Arpillerista Elsa Romo Aravena`;
-        return { subject: `Recepción conforme OC ${oc.numeroOC}${oc.proveedor ? ' · ' + oc.proveedor : ''}`, text: texto, html: '<div style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap">' + esc(texto) + '</div>' };
+        const rc = 'RC' + String(oc.numeroOC || '').replace(/[^A-Za-z0-9-]+/g, '');
+        const prov = String(oc.proveedor || '').trim();
+        const extra = (d.parcial ? '\n\nRecepción parcial: quedan unidades pendientes de entrega por el proveedor.' : '') + (d.observaciones ? '\n\nObservaciones: ' + d.observaciones : '');
+        const cuerpo = `Estimada:\n\nEspero se encuentre bien. Adjunto ${rc}${prov ? ' de ' + prov : ''}${extra}\n\nSaludos Cordiales.\n\n${d.firmaNombre || FIRMA_BASE.nombre}.`;
+        const F = FIRMA_CORREO;
+        const texto = `${cuerpo}\n\n${F.unidad}\n${F.cargo}\n${F.direccion}\n${F.telefono}\n${F.web}`;
+        const html = `<div style="font-family:Arial,sans-serif;font-size:14px;color:#222;white-space:pre-wrap">${esc(cuerpo)}</div>
+<table style="margin-top:14px;font-family:Arial,sans-serif;border-collapse:collapse"><tr>
+<td style="padding-right:14px;vertical-align:middle"><img src="${F.logo}" alt="SAR" width="150" style="display:block;border:0"></td>
+<td style="vertical-align:middle;font-size:12px;color:#555;line-height:1.4"><b style="color:#1A3668;font-size:14px">${esc(F.unidad)}</b><br><b>${esc(F.cargo)}</b><br>${esc(F.direccion)}<br>${esc(F.telefono)}<br>${esc(F.web)}</td></tr></table>`;
+        return { subject: rc, text: texto, html };
     }
 
     // ---------------------------------------------------------------

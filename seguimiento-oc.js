@@ -308,8 +308,9 @@
     // nombre del inventario que se usó al recibir. Clave: código de Mercado Público (o la descripción).
     // ---------------------------------------------------------------
     const catId = (l) => slug(String(l.codigoMP || l.descripcion || '').trim()).slice(0, 120);
+    let diagFotos = { sinCodigo: 0, yaTenian: 0, encontradas: 0, noEncontradas: 0, motivos: {} };
     async function registrarCatalogo(oc) {
-        const f = fs(); let n = 0;
+        const f = fs(); let n = 0; diagFotos = { sinCodigo: 0, yaTenian: 0, encontradas: 0, noEncontradas: 0, motivos: {} };
         const previos = await cargarCatalogo().catch(() => new Map());
         const nd = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
         for (const l of (oc.lineas || [])) {
@@ -319,8 +320,10 @@
                 // ¿la misma descripción ya existe con otro código? Se avisa y la foto no se da por buena sin mirarla en la tienda.
                 const parecido = [...previos.values()].find(x => x.id !== id && nd(x.descripcion) === nd(l.descripcion) && String(x.codigoMP || '') !== String(l.codigoMP || ''));
                 let foto = {};
+                if (!l.codigoMP) diagFotos.sinCodigo++;
+                else if (prev && (prev.imagenMP || prev.fotoEstado)) diagFotos.yaTenian++;
                 if (l.codigoMP && window.SAR_Imagenes && !(prev && (prev.imagenMP || prev.fotoEstado))) {
-                    try { const r = await window.SAR_Imagenes.buscarFoto(l.codigoMP, configCorreo); if (r.archivo) foto = { imagenMP: r.archivo, fotoEstado: (r.origen === 'semilla' && !parecido) ? 'confirmada' : 'por_confirmar' }; } catch (e) { foto = {}; }
+                    try { const r = await window.SAR_Imagenes.buscarFoto(l.codigoMP, configCorreo); if (r.archivo) diagFotos.encontradas++; else { diagFotos.noEncontradas++; const m = String(r.motivo || 'no_en_tiendas').split(':')[0]; diagFotos.motivos[m] = (diagFotos.motivos[m] || 0) + 1; if (r.motivo && r.motivo.includes(':')) diagFotos.detalle = r.motivo; } if (r.archivo) foto = { imagenMP: r.archivo, fotoEstado: (r.origen === 'semilla' && !parecido) ? 'confirmada' : 'por_confirmar' }; } catch (e) { foto = {}; }
                 }
                 await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: l.descripcion, descripcion_lower: String(l.descripcion).toLowerCase(), codigoMP: l.codigoMP || '', proveedor: oc.proveedor || '', ultimaOC: oc.numeroOC || '', valorNeto: num(l.valorNeto), ...foto, ...(parecido && !prev ? { avisoCodigo: `Misma descripción que el producto con código ${parecido.codigoMP || '(sin código)'}: confirma que es el mismo antes de usar su foto.` } : {}), actualizado: f.serverTimestamp() }, { merge: true }); n++;
             } catch (e) { /* el catálogo nunca debe frenar el ingreso de la orden */ }
@@ -517,7 +520,15 @@
             bft.disabled = true;
             try {
                 await window.SAR_Progreso.correr('Buscando las fotos de esta orden…', async () => { await registrarCatalogo({ ...ocActual, id: ocActual.id }); if (window.SAR_Imagenes) await window.SAR_Imagenes.recargar(); }, 'Fotos buscadas');
-                toast('Fotos buscadas', 'Las que se encontraron quedan "por confirmar" en el Catálogo de productos; confírmalas ahí. Las que no, se pueden pegar o subir a mano.', 'success');
+                const dg = diagFotos, partes = [];
+                if (dg.sinCodigo) partes.push(`${dg.sinCodigo} producto(s) SIN código en la orden (no se pueden buscar: pega o sube la foto a mano)`);
+                if (dg.yaTenian) partes.push(`${dg.yaTenian} ya tenían foto o estaban por confirmar`);
+                if (dg.encontradas) partes.push(`${dg.encontradas} foto(s) encontrada(s): confírmalas en Catálogo de productos`);
+                if (dg.noEncontradas) {
+                    const mt = dg.motivos || {};
+                    partes.push(`${dg.noEncontradas} sin foto: ` + [mt.no_en_tiendas ? 'el script no la encontró en ninguna tienda de Convenio Marco' : '', mt.sin_script ? 'falta configurar el script (Configurar correo)' : '', mt.script_rechazo ? 'el script rechazó la consulta (revisa la clave)' : '', mt.script_inaccesible ? 'no se pudo conectar con el script' : ''].filter(Boolean).join('; ') + (dg.detalle ? ` [${dg.detalle}]` : ''));
+                }
+                toast(dg.encontradas ? 'Fotos buscadas' : 'No se encontraron fotos nuevas', partes.join(' · ') || 'Sin cambios.', dg.encontradas ? 'success' : 'warning');
                 pintarDetalle();
             } catch (e) { toast('No se pudo buscar', e.message || String(e), 'error'); } finally { bft.disabled = false; }
         });
@@ -1250,7 +1261,7 @@ function doPost(e) {
     const to = ok(d.to), cc = ok(d.cc);
     if (!to.length) return salida({ ok: false, error: 'sin destinatarios permitidos' });
     const adj = (d.attachments || []).slice(0, 5).map(a => Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'application/pdf', String(a.name).slice(0, 120)));
-    const op = { to: to.join(','), subject: String(d.subject).slice(0, 200), body: String(d.text), htmlBody: String(d.html), name: 'Sistema SAR Melipilla' };
+    const op = { to: to.join(','), subject: String(d.subject).slice(0, 200), body: String(d.text), htmlBody: String(d.html), name: 'Compras SAR', replyTo: 'compras.sar@cormumel.cl' };
     if (cc.length) op.cc = cc.join(',');
     if (adj.length) op.attachments = adj;
     MailApp.sendEmail(op);

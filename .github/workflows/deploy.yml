@@ -1,0 +1,28 @@
+# Despliega a Firebase Hosting cada vez que se fusiona un cambio en main.
+# Requiere el secreto FIREBASE_SERVICE_ACCOUNT (JSON de una cuenta de servicio de Firebase). Sin él, se omite sin fallar.
+name: Deploy a Firebase Hosting
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+    steps:
+      - name: Revisar secreto
+        id: sec
+        run: |
+          if [ -z "$SA" ]; then echo "listo=no" >> "$GITHUB_OUTPUT"; echo "Sin FIREBASE_SERVICE_ACCOUNT: se omite el despliegue."; else echo "listo=si" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/checkout@v4
+        if: steps.sec.outputs.listo == 'si'
+      - uses: actions/setup-node@v4
+        if: steps.sec.outputs.listo == 'si'
+        with:
+          node-version: 20
+      - name: Desplegar hosting
+        if: steps.sec.outputs.listo == 'si'
+        run: |
+          printf '%s' "$SA" > "$RUNNER_TEMP/sa.json"
+          GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/sa.json" npx -y firebase-tools deploy --only hosting --project sarinventario

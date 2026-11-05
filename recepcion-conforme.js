@@ -222,5 +222,42 @@ SAR Arpillerista Elsa Romo Aravena`;
         } catch (e) { prog.error(); throw e; }
     }
 
-    window.SAR_RecepcionConforme = { regenerar, abrir, nombreAdjunto, nombreActa, lineasActa, validar, armarCorreo, generarActaPDF, DESTINATARIOS_BASE };
+    /** Edita los datos de una recepción conforme ya registrada (fecha, guía/factura, contraparte, parcial, observaciones, quien recibe),
+     *  rehace el acta y reemplaza el archivo guardado en la orden. Los productos y cantidades siguen lo recibido en la orden. */
+    async function editar(ctx) {
+        const { oc, toast } = ctx, centro = ctx.centroPropio || 'SAR', rc = oc.recepcionConforme;
+        if (!rc) { toast('Sin recepción conforme', 'Esta orden aún no tiene recepción conforme registrada.', 'warning'); return; }
+        const e = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        const ov = document.createElement('div'); ov.className = 'cierre-overlay';
+        ov.innerHTML = `<div class="cierre-box" role="dialog" aria-modal="true"><h3>Editar recepción conforme</h3>
+            <p class="cierre-hint">Al guardar se rehace el acta con estos datos y reemplaza el archivo de la orden. Los productos y cantidades salen de lo recibido en la orden.</p>
+            <div class="soc-fila"><label>Fecha<input type="date" id="rce-fecha" value="${e(rc.fecha || hoyISO())}"></label><label>Documento<select id="rce-tipo"><option value="GUIA"${rc.tipoDoc !== 'FACTURA' ? ' selected' : ''}>Guía de despacho</option><option value="FACTURA"${rc.tipoDoc === 'FACTURA' ? ' selected' : ''}>Factura</option></select></label><label>N° del documento<input id="rce-num" value="${e(rc.numeroDoc || '')}"></label></div>
+            <div class="soc-fila"><label>Contraparte técnica<input id="rce-ct" value="${e(rc.contraparte || CONTRAPARTE_BASE)}"></label><label>Quien recibe (firma del correo)<input id="rce-rec" value="${e(rc.recibe || '')}"></label></div>
+            <label class="soc-toggle"><input type="checkbox" id="rce-par"${rc.parcial ? ' checked' : ''}> Recepción parcial</label>
+            <label>Observaciones<textarea id="rce-obs" rows="3">${e(rc.observaciones || '')}</textarea></label>
+            <div class="cierre-acciones"><button type="button" class="btn btn-outline" id="rce-x">Cancelar</button><button type="button" class="btn btn-primary" id="rce-ok">Guardar y rehacer el acta</button></div></div>`;
+        document.body.appendChild(ov);
+        const q = (s) => ov.querySelector(s); q('#rce-x').addEventListener('click', () => ov.remove());
+        q('#rce-ok').addEventListener('click', async () => {
+            const nuevo = { ...rc, fecha: q('#rce-fecha').value || rc.fecha, tipoDoc: q('#rce-tipo').value, numeroDoc: q('#rce-num').value.trim(), contraparte: q('#rce-ct').value.trim() || CONTRAPARTE_BASE, recibe: q('#rce-rec').value.trim(), parcial: q('#rce-par').checked, observaciones: q('#rce-obs').value.trim(), editadaPor: ctx.usuario, editadaEn: hoyISO() };
+            if (!nuevo.numeroDoc) { toast('Falta el número', 'Indica el N° de la guía o factura.', 'warning'); return; }
+            ov.remove();
+            const prog = window.SAR_Progreso.iniciar('Guardando los cambios de la recepción conforme…', ['Actualizando los datos de la orden…']);
+            try {
+                await fs().updateDoc(fs().doc(fs().collection(db(), 'Seguimiento_OC'), oc.id), { recepcionConforme: nuevo, actualizadoEn: fs().serverTimestamp() });
+                prog.paso('Rehaciendo el acta de recepción conforme…');
+                const d = { fecha: nuevo.fecha, parcial: nuevo.parcial, observaciones: nuevo.observaciones, contraparte: nuevo.contraparte, conFirma: true, tipoDoc: nuevo.tipoDoc, numeroDoc: nuevo.numeroDoc, firmaNombre: nuevo.recibe };
+                const PDFLib = await cargarPDFLib(); const logoBytes = await cargarLogo(); const firmaBytes = await cargarFirma();
+                const acta = await generarActaPDF({ ...oc, recepcionConforme: nuevo }, d, centro, { PDFLib, logoBytes, firmaBytes });
+                bajar(acta, nombreActa(oc));
+                prog.paso('Reemplazando el archivo guardado en la orden…');
+                if (ctx.eliminarCategoria) { await ctx.eliminarCategoria(oc.id, 'Recepción conforme'); await ctx.eliminarCategoria(oc.id, 'Recepción conforme (modelo vigente)'); }
+                if (ctx.guardarArchivo) await ctx.guardarArchivo(oc.id, { nombre: nombreActa(oc), categoria: 'Recepción conforme', bytes: acta });
+                await fs().setDoc(fs().doc(fs().collection(db(), 'Seguimiento_OC', oc.id, 'Eventos')), { tipo: 'CONFORME', texto: `Recepción conforme editada (${nuevo.tipoDoc === 'FACTURA' ? 'factura' : 'guía'} N° ${nuevo.numeroDoc}${nuevo.parcial ? ', parcial' : ''}). Se rehizo el acta y reemplazó el archivo anterior.`, autor: ctx.usuario, fecha: fs().serverTimestamp() });
+                prog.listo('Recepción conforme actualizada y archivo reemplazado', { informe: true });
+            } catch (err) { prog.error(); toast('No se guardó', err.message || String(err), 'error'); }
+        });
+    }
+
+    window.SAR_RecepcionConforme = { editar, regenerar, abrir, nombreAdjunto, nombreActa, lineasActa, validar, armarCorreo, generarActaPDF, DESTINATARIOS_BASE };
 })(window, document);

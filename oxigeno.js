@@ -157,6 +157,38 @@
         });
     }
 
+    /** Balones llenos disponibles (para agregar o cambiar la serie en un acta). */
+    async function listarLlenos() {
+        const f = fs(), out = [];
+        const sn = await f.getDocs(f.query(f.collection(db(), 'Equipos_Oxigeno'), f.where('estado', '==', 'LLENO'), f.limit(500)));
+        sn.forEach(d => out.push({ id: d.id, ...d.data() }));
+        return out.sort((a, b) => String(a.serie).localeCompare(String(b.serie), 'es', { numeric: true }));
+    }
+    /** Edita un acta de oxígeno ya emitida: centro, fecha, balones (quitar / agregar / cambiar serie), documentos y firmas. Reajusta el estado de cada balón. */
+    async function editarActa(numero, N) {
+        const f = fs(), actaRef = f.doc(f.collection(db(), 'Actas_Entrega'), numero);
+        return f.runTransaction(db(), async (tx) => {
+            const as = await tx.get(actaRef); if (!as.exists()) throw new Error('El acta no existe.');
+            const a = as.data(); if (a.estado !== 'EMITIDA' || a.tipo !== 'OXIGENO') throw new Error('Solo se pueden editar actas de oxígeno emitidas.');
+            const viejos = (a.items || []).map(i => i.id), nuevos = [...new Set(N.ids)];
+            if (!nuevos.length) throw new Error('El acta debe tener al menos un balón (si no corresponde, elimínala).');
+            const centro = String(N.centro || '').trim(); if (!centro) throw new Error('Indica el centro.');
+            const todos = [...new Set([...viejos, ...nuevos])], refs = {}, S = {};
+            for (const id of todos) { refs[id] = f.doc(f.collection(db(), 'Equipos_Oxigeno'), id); S[id] = await tx.get(refs[id]); if (!S[id].exists()) throw new Error('Un balón del acta ya no existe.'); }
+            const quitados = viejos.filter(id => !nuevos.includes(id)), agregados = nuevos.filter(id => !viejos.includes(id)), quedan = nuevos.filter(id => viejos.includes(id));
+            agregados.forEach(id => { if (S[id].data().estado !== 'LLENO') throw new Error(`El balón ${S[id].data().serie} ya no está lleno.`); });
+            const ev = (id, o) => tx.set(f.doc(f.collection(db(), 'Equipos_Oxigeno', id, 'Eventos')), { fecha: hoy(), documento: numero, usuario: usuario(), creadoEn: f.serverTimestamp(), ...o });
+            quitados.forEach(id => { const e = S[id].data(); tx.update(refs[id], { estado: 'LLENO', ubicacion: SEDE, prestadoA: '', ultimaEntregaActa: '', updatedAt: f.serverTimestamp() }); ev(id, { tipo: 'EDICION_ACTA', detalle: `Quitado del acta ${numero}: vuelve a ${SEDE}`, estadoAnterior: e.estado, estadoNuevo: 'LLENO', ubicacion: SEDE }); });
+            agregados.forEach(id => { tx.update(refs[id], { estado: 'PRESTADO', ubicacion: centro, prestadoA: centro, ultimaEntregaActa: numero, updatedAt: f.serverTimestamp() }); ev(id, { tipo: 'ENTREGA_ACTA', detalle: `Entregado a ${centro} (acta ${numero}, editada)`, estadoAnterior: 'LLENO', estadoNuevo: 'PRESTADO', ubicacion: centro }); });
+            if (centro !== a.centro) quedan.forEach(id => { tx.update(refs[id], { ubicacion: centro, prestadoA: centro, updatedAt: f.serverTimestamp() }); ev(id, { tipo: 'EDICION_ACTA', detalle: `Acta ${numero}: el centro cambió de ${a.centro} a ${centro}`, estadoAnterior: 'PRESTADO', estadoNuevo: 'PRESTADO', ubicacion: centro }); });
+            const items = nuevos.map(id => { const e = S[id].data(); return { id, nombre: nombreEnActa({ ...e, serie: e.serie }), cantidad: 1, serie: e.serie }; });
+            const cambios = { centro, fecha: N.fecha || a.fecha, items, documentos: N.documentos || [], entrega: N.entrega || a.entrega, recibe: N.recibe || a.recibe, editadaEn: f.serverTimestamp(), editadaPor: usuario(), ediciones: num(a.ediciones) + 1 };
+            tx.update(actaRef, cambios);
+            tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: `ACTA DE OXÍGENO ${numero} (editada)`, quantity: items.length, type: 'EDICION_ACTA', user: usuario(), date: f.serverTimestamp(), document: numero, batch: 'N/A', origin: SEDE, dest: centro, actaId: numero, observacion: `Edición del acta de oxígeno ${numero}: quitados ${quitados.length}, agregados ${agregados.length}.` });
+            return { ...a, ...cambios, editadaEn: new Date().toISOString() };
+        });
+    }
+
     // ---------------------------------------------------------------
     // Interfaz
     // ---------------------------------------------------------------
@@ -277,6 +309,6 @@
         pintar();
     }
 
-    window.SAR_Oxigeno = { abrir, resumen, accionesPara, aplicarAccion, parsearSeries, validarEntrega, nombreEnActa, registrarAccion, crearEquipos, entregar, ESTADOS, ACCIONES };
+    window.SAR_Oxigeno = { editarActa, listarLlenos, abrir, resumen, accionesPara, aplicarAccion, parsearSeries, validarEntrega, nombreEnActa, registrarAccion, crearEquipos, entregar, ESTADOS, ACCIONES };
     if (typeof module !== 'undefined') module.exports = window.SAR_Oxigeno;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: { dataset: {} } });

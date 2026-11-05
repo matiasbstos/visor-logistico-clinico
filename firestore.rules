@@ -218,11 +218,12 @@ service cloud.firestore {
     }
     match /Actas_Entrega/{numero} {
       allow read, create: if isStaff();
-      // solo se puede pasar de EMITIDA a ANULADA (administrador); el resto del acta no cambia
+      // administrador: EMITIDA → ANULADA (sin tocar los productos) o editar un acta EMITIDA (v20.93; cada edición deja su movimiento EDICION_ACTA)
       allow update: if isAdmin()
-        && resource.data.estado == 'EMITIDA' && request.resource.data.estado == 'ANULADA'
+        && resource.data.estado == 'EMITIDA'
         && request.resource.data.numero == resource.data.numero
-        && request.resource.data.items == resource.data.items;
+        && ((request.resource.data.estado == 'ANULADA' && request.resource.data.items == resource.data.items)
+            || request.resource.data.estado == 'EMITIDA');
       allow delete: if false;
     }
     match /Equipos_Oxigeno/{equipoId} {

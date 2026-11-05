@@ -430,7 +430,7 @@
         <h3 class="act-h">Actas emitidas</h3>
         <div class="act-hist">${historial.length ? historial.map(a => `<div class="act-fila${a.estado === 'ANULADA' ? ' act-anulada' : ''}"><div class="act-fn"><strong>${esc(a.numero)}</strong> · ${esc(a.centro)}<small>${esc(a.fecha)} · ${a.tipo === 'OXIGENO' ? 'oxígeno · ' : ''}${(a.items || []).length} ${a.tipo === 'OXIGENO' ? 'balones' : 'productos'} · ${esc(a.bodegaOrigen)} · ${esc(a.creadoPor || '')}${a.estado === 'ANULADA' ? ' · <b>ANULADA</b>' : ''}${a.conSobregiro ? ' · <b class="act-sin">con sobregiro</b>' : ''}</small></div>
             <button type="button" class="btn btn-outline act-dl" data-n="${esc(a.numero)}" data-f="pdf">PDF</button><button type="button" class="btn btn-outline act-dl" data-n="${esc(a.numero)}" data-f="docx">Word</button>
-            ${esAdmin() && a.estado !== 'ANULADA' && a.tipo !== 'OXIGENO' ? `<button type="button" class="btn btn-outline act-an" data-n="${esc(a.numero)}">Eliminar acta</button>` : ''}</div>`).join('') : '<p class="act-hint">Todavía no hay actas emitidas.</p>'}</div></div>
+            ${esAdmin() && a.estado === 'EMITIDA' ? `<button type="button" class="btn btn-outline act-ed" data-n="${esc(a.numero)}">Editar</button>` : ''}${esAdmin() && a.estado !== 'ANULADA' && a.tipo !== 'OXIGENO' ? `<button type="button" class="btn btn-outline act-an" data-n="${esc(a.numero)}">Eliminar acta</button>` : ''}</div>`).join('') : '<p class="act-hint">Todavía no hay actas emitidas.</p>'}</div></div>
         <div data-act-tab="seguimiento" id="seg-root"${tab === 'seguimiento' ? '' : ' hidden'}></div>`;
         r.querySelectorAll('.act-tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; pintar(); }));
         if (window.SAR_Saldos && window.SAR_Saldos.pintarSeg) window.SAR_Saldos.pintarSeg();
@@ -497,6 +497,10 @@
         $$('.act-dl').forEach(b => b.addEventListener('click', async () => {
             const a = historial.find(x => x.numero === b.dataset.n); if (!a) return;
             b.disabled = true; try { await descargar(actaParaDoc(a), b.dataset.f); } catch (e) { toast('Descarga', e.message, 'error'); } finally { b.disabled = false; }
+        }));
+        $$('.act-ed').forEach(b => b.addEventListener('click', () => {
+            const a = historial.find(x => x.numero === b.dataset.n); if (!a || !window.SAR_ActaEdicion) return;
+            window.SAR_ActaEdicion.abrir(a, { centros: listaCentros(), refrescar: async () => { await Promise.all([cargarHistorial(), cargarStock()]); pintar(); } });
         }));
         $$('.act-an').forEach(b => b.addEventListener('click', async () => {
             const motivo = (prompt(`Eliminar el acta ${b.dataset.n}: se borra su archivo, el stock vuelve a la bodega de origen y lo entregado vuelve a quedar pendiente en la orden. Queda el registro en el historial.\n\nMotivo:`, 'Acta mal generada') || '').trim();
@@ -592,6 +596,6 @@
         pintar();
     }
 
-    window.SAR_ActasEntrega = { abrir, planificar, cuadrar, restaurarConSobregiro, detalleDe, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, lotesDeDoc };
+    window.SAR_ActasEntrega = { listaCentros, abrir, planificar, cuadrar, restaurarConSobregiro, detalleDe, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, lotesDeDoc };
     if (typeof module !== 'undefined') module.exports = window.SAR_ActasEntrega;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: { dataset: {} } });

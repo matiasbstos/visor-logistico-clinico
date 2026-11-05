@@ -311,7 +311,8 @@
                 ${(oc.incidencias || []).filter(i => i.estado === 'ABIERTA').map(i => `<button type="button" class="btn btn-outline btn-sm" data-resolver="${esc(i.id)}">Resolver: ${esc(i.producto.slice(0, 30))}</button>`).join(' ')}</div>
             <div class="erp-card"><div class="soc-sub"><h3>Pedido y recibido</h3>
                 <label class="soc-toggle"><input type="checkbox" id="soc-todos" ${verTodos ? 'checked' : ''}> Ver todos los centros</label>
-                <button type="button" class="btn btn-primary btn-sm" id="soc-recep"><i class="ph-bold ph-package"></i> Registrar recepción</button>
+                <button type="button" class="btn btn-primary btn-sm" id="soc-recep"><i class="ph-bold ph-package"></i> Recibir mercadería</button>
+                <button type="button" class="btn btn-outline btn-sm" id="soc-pend"><i class="ph-bold ph-file-csv"></i> Pendientes (CSV)</button>
                 <button type="button" class="btn btn-outline btn-sm" id="soc-conforme"><i class="ph-bold ph-seal-check"></i> Recepción conforme</button></div>
                 ${oc.recepcionConforme ? `<p class="soc-card__sub">Recepción conforme registrada el ${fmtFecha(oc.recepcionConforme.fecha)} (${esc(oc.recepcionConforme.tipoDoc === 'FACTURA' ? 'factura' : 'guía')} ${esc(oc.recepcionConforme.numeroDoc)}). Correo: ${({ enviado: 'enviado', borrador: 'borrador abierto', error: 'NO se envió', sin_adjuntos: 'enviado SIN adjuntos', sin_destinatarios: 'sin destinatarios' })[(oc.recepcionConforme.correo || {}).estado] || '—'}.</p>` : ''}
                 <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Neto</th>${colsVis.map(c => `<th>${esc(c.centro)}<br><small>memo ${esc(c.memo)} · CDP ${esc(c.cdp)}</small></th>`).join('')}</tr></thead><tbody>
@@ -331,6 +332,7 @@
         q('#soc-volver').addEventListener('click', () => { ocActual = null; pintarLista(); });
         q('#soc-todos').addEventListener('change', (e) => { verTodos = e.target.checked; pintarDetalle(); });
         q('#soc-recep').addEventListener('click', formRecepcion);
+        q('#soc-pend').addEventListener('click', () => { if (!pendientesDe(ocActual).some(x => x.pendiente > 0)) { toast('Sin pendientes', 'Todo lo de SAR ya fue recibido.', 'success'); return; } descargarPendientes(ocActual); });
         q('#soc-conforme').addEventListener('click', () => { if (window.SAR_RecepcionConforme) window.SAR_RecepcionConforme.abrir({ oc: ocActual, modal, toast, enviarCorreo, config: configCorreo, usuario: usuario(), fmtFecha, peso, totalesPorCentro, centroPropio: CENTRO_PROPIO }); });
         root().querySelectorAll('[data-acta]').forEach(b => b.addEventListener('click', () => formActaCentro(b.dataset.acta)));
         const ac = q('#soc-acepta'); if (ac) ac.addEventListener('click', formAceptacion);
@@ -538,14 +540,21 @@
             && lineas.every((l, i) => Object.values(cuadro0.dist[i] || {}).reduce((t, x) => t + num(x), 0) === num(l.cantidad))) ? cuadro0 : null;
         if (v.distrib && !cuadro) throw new Error('El cuadro de distribución no calza con los productos de la orden (revisa los avisos). Corrige las cantidades o quita el cuadro.');
         const propia = cuadro && cuadro.columnas ? cuadro.columnas.find(c => c.centro === CENTRO_PROPIO) : null;
+        // v20.64: del cuadro solo importa lo que dice SAR; lo de otros centros se omite (queda anotado cuáles).
+        let cuadroF = cuadro; const otrosCentros = [];
+        if (cuadro && propia && cuadro.columnas.length > 1) {
+            cuadro.columnas.filter(c => c !== propia).forEach(c => otrosCentros.push({ centro: c.centro, memo: c.memo }));
+            cuadroF = { ...cuadro, columnas: [propia], dist: cuadro.dist.map(d => (propia.key in d ? { [propia.key]: d[propia.key] } : {})) };
+        }
         return {
             numeroOC: numero, proveedor: String(v.proveedor || '').trim(), rutProveedor: String(v.rutProveedor || '').trim(), descripcion: String(v.descripcion || '').trim(),
             emitida: v.emitida, emitidaHora: v.emitidaHora || '', aceptarHoras: horas, aceptarLimite: sumarDias(v.emitida, Math.ceil(horas / 24)), aceptada: '',
             plazoDiasHabiles: dias, fechaLimite: '', origen: v.origen || 'MANUAL',
-            columnas: cuadro ? cuadro.columnas : [{ memo: String(v.memo || '').trim() || 's/n', centro: CENTRO_PROPIO, cdp: '', key: 'sar' }],
-            lineas: lineas.map((l, i) => ({ descripcion: String(l.descripcion).trim(), codigoMP: l.codigoMP || '', licitacion: l.licitacion || '', valorNeto: num(l.valorNeto), dist: cuadro ? { ...cuadro.dist[i] } : { sar: num(l.cantidad) }, recibido: {}, entregado: {}, ingresado: {} })),
-            ...(cuadro && cuadro.compra ? { compraAgil: cuadro.compra } : {}),
-            ...(cuadro && cuadro.desdePDF ? { distribucionPDF: true } : {}),
+            columnas: cuadroF ? cuadroF.columnas : [{ memo: String(v.memo || '').trim() || 's/n', centro: CENTRO_PROPIO, cdp: '', key: 'sar' }],
+            lineas: lineas.map((l, i) => ({ descripcion: String(l.descripcion).trim(), codigoMP: l.codigoMP || '', licitacion: l.licitacion || '', valorNeto: num(l.valorNeto), dist: cuadroF ? { ...cuadroF.dist[i] } : { sar: num(l.cantidad) }, recibido: {}, entregado: {}, ingresado: {} })),
+            ...(cuadroF && cuadroF.compra ? { compraAgil: cuadroF.compra } : {}),
+            ...(cuadroF && cuadroF.desdePDF ? { distribucionPDF: true } : {}),
+            ...(otrosCentros.length ? { otrosCentros } : {}),
             memos: memosDe(v),
             datos: { direccionDespacho: v.direccionDespacho || (propia && propia.direccion) || '', contraparte: v.contraparte || (propia && propia.contraparte) || '', contacto: v.contacto || (propia && propia.contacto) || '', horario: v.horario || (propia && propia.horario) || '', formaPago: v.formaPago || '', emailFactura: v.emailFactura || '', memo: v.memo || '', total: num(v.total), totalNeto: num(v.totalNeto) },
             incidencias: [], multa: { estado: 'por_evaluar' }, cerrada: false
@@ -718,6 +727,23 @@
         return correo;
     }
 
+    /** Unidades pendientes de recibir por producto (solo columnas de SAR). Puro. */
+    function pendientesDe(oc) {
+        const out = [];
+        (oc.columnas || []).filter(c => c.centro === CENTRO_PROPIO).forEach(c => (oc.lineas || []).forEach(l => {
+            const p = num(l.dist && l.dist[c.key]), r = num(l.recibido && l.recibido[c.key]);
+            if (p) out.push({ producto: l.descripcion, codigoMP: l.codigoMP || '', memo: c.memo, pedido: p, recibido: r, pendiente: Math.max(0, p - r), valorNeto: num(l.valorNeto) });
+        }));
+        return out;
+    }
+    function descargarPendientes(oc) {
+        const filas = pendientesDe(oc).filter(x => x.pendiente > 0), celda = (v) => { const t = String(v == null ? '' : v); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+        const csv = [[`Pendientes de recibir · OC ${oc.numeroOC} · ${oc.proveedor || ''}`], [], ['Producto', 'Código MP', 'Memo', 'Pedido', 'Recibido', 'Pendiente', 'Neto pendiente']]
+            .concat(filas.map(x => [x.producto, x.codigoMP, x.memo, x.pedido, x.recibido, x.pendiente, x.pendiente * x.valorNeto])).concat([[], ['Total unidades pendientes', '', '', '', '', filas.reduce((t, x) => t + x.pendiente, 0)]]);
+        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + csv.map(r => r.map(celda).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
+        a.download = `Pendientes_${oc.numeroOC}.csv`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    }
+
     async function formRecepcion() {
         const oc = ocActual; const cols = oc.columnas || [];
         let central = 'Bodega Central', nombresInv = [];
@@ -727,9 +753,10 @@
             const set = new Set(); ins.forEach(d => { if (d.data().name) set.add(d.data().name); }); nombresInv = [...set].sort((a, b) => a.localeCompare(b, 'es'));
         } catch (e) { /* sin lista de inventario: se escribe a mano */ }
         const propia = (key) => { const c = cols.find(x => x.key === key); return !!c && c.centro === CENTRO_PROPIO; };
-        const ov = modal('Registrar recepción', `
+        const ov = modal('Recibir mercadería', `
             <label>¿Qué memo/CDP se recibió?<select id="r-col">${cols.map(c => `<option value="${esc(c.key)}">${esc(c.centro)} · memo ${esc(c.memo)}${c.cdp ? ' · CDP ' + esc(c.cdp) : ''}</option>`).join('')}</select></label>
             <div class="soc-fila"><label>N° guía de despacho<input type="text" id="r-guia" autocomplete="off"></label><label>Fecha<input type="date" id="r-fecha" value="${hoyISO()}"></label></div>
+            <div class="soc-barra-rec"><button type="button" class="btn btn-primary btn-sm" id="r-total"><i class="ph-bold ph-checks"></i> Recepción total</button><button type="button" class="btn btn-outline btn-sm" id="r-nada">Limpiar</button><span id="r-resumen" class="soc-resumen-rec"></span></div>
             <div id="r-lineas"></div>
             <label class="soc-toggle" id="r-stock-w"><input type="checkbox" id="r-stock" checked> Ingresar lo recibido al stock de ${esc(central)} (así se descuenta al entregarlo por acta)</label>
             <label>Observación (opcional)<input type="text" id="r-obs" maxlength="300"></label>
@@ -754,14 +781,24 @@
             });
         const pintar = () => {
             const key = ov.querySelector('#r-col').value, st = ov.querySelector('#r-stock').checked;
-            ov.querySelector('#r-lineas').innerHTML = '<div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Ya recibido</th><th>Recibido ahora</th>' + (st ? '<th>Producto en inventario</th><th>Lote</th><th>Vence</th>' : '') + '<th>Incidencia</th></tr></thead><tbody>' +
-                oc.lineas.map((l, i) => { const p = num(l.dist && l.dist[key]); return p ? `<tr data-i="${i}"><td>${esc(l.descripcion)}</td><td>${p}</td><td>${num(l.recibido && l.recibido[key])}</td><td><input type="number" min="0" class="r-c" value=""></td>` +
+            ov.querySelector('#r-lineas').innerHTML = '<div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Ya recibido</th><th>Pendiente</th><th>Llegó ahora</th>' + (st ? '<th>Producto en inventario</th><th>Lote</th><th>Vence</th>' : '') + '<th>Incidencia</th></tr></thead><tbody>' +
+                oc.lineas.map((l, i) => { const p = num(l.dist && l.dist[key]), ya = num(l.recibido && l.recibido[key]), pe = Math.max(0, p - ya); return p ? `<tr data-i="${i}" data-pe="${pe}"><td>${esc(l.descripcion)}</td><td>${p}</td><td>${ya}</td><td><strong>${pe}</strong></td><td class="r-celda"><input type="number" min="0" max="${pe}" class="r-c" value="" aria-label="Unidades que llegaron"><button type="button" class="btn btn-outline btn-sm r-ok" title="Llegó completo"${pe ? '' : ' disabled'}>✔ ${pe || 'listo'}</button></td>` +
                     (st ? `<td><input class="r-n" list="r-inv" value="${esc(l.insumoName || l.descripcion)}"></td><td><input class="r-l" placeholder="S/L"></td><td><input type="date" class="r-v"></td>` : '') +
                     `<td><select class="r-t"><option value="">Sin incidencia</option>${Object.entries(INCIDENCIAS).map(([k, t]) => `<option value="${k}">${esc(t)}</option>`).join('')}</select><input class="r-td" placeholder="Detalle"></td></tr>` : ''; }).join('') + '</tbody></table></div>';
         };
-        ov.querySelector('#r-col').addEventListener('change', pintar); ov.querySelector('#r-stock').addEventListener('change', pintar);
+        const resumen = () => {
+            let pe = 0, lleg = 0; ov.querySelectorAll('tr[data-i]').forEach(tr => { pe += num(tr.dataset.pe); lleg += Math.min(num(tr.dataset.pe), num(tr.querySelector('.r-c').value)); });
+            const el = ov.querySelector('#r-resumen'); if (el) el.innerHTML = `Pendiente: <b>${pe}</b> un. · llegan ahora: <b>${lleg}</b> · quedarían pendientes: <b>${Math.max(0, pe - lleg)}</b>`;
+        };
+        ov.addEventListener('input', (e) => { if (e.target.classList && e.target.classList.contains('r-c')) resumen(); });
+        ov.addEventListener('click', (e) => {
+            const ok = e.target.closest('.r-ok'); if (ok) { const tr = ok.closest('tr'); const c = tr.querySelector('.r-c'); c.value = c.value && num(c.value) === num(tr.dataset.pe) ? '' : tr.dataset.pe; resumen(); }
+            if (e.target.closest('#r-total')) { ov.querySelectorAll('tr[data-i]').forEach(tr => { if (num(tr.dataset.pe)) tr.querySelector('.r-c').value = tr.dataset.pe; }); resumen(); }
+            if (e.target.closest('#r-nada')) { ov.querySelectorAll('.r-c').forEach(i => { i.value = ''; }); resumen(); }
+        });
+        ov.querySelector('#r-col').addEventListener('change', () => { pintar(); resumen(); }); ov.querySelector('#r-stock').addEventListener('change', () => { pintar(); resumen(); });
         const sel = ov.querySelector('#r-col'); const iPropia = cols.findIndex(c => c.centro === CENTRO_PROPIO); if (iPropia > 0) sel.selectedIndex = iPropia;
-        pintar();
+        pintar(); resumen();
     }
 
     function formMulta() {
@@ -832,5 +869,5 @@ function salida(o) { return ContentService.createTextOutput(JSON.stringify(o)).s
         ov.querySelector('#c-copiar').addEventListener('click', async () => { try { await navigator.clipboard.writeText(SCRIPT_GAS); toast('Copiado', 'Código copiado.', 'success'); } catch (e) { ov.querySelector('#c-script').select(); } });
     }
 
-    window.SAR_SeguimientoOC = { abrir, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
+    window.SAR_SeguimientoOC = { abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
 })(window, document);

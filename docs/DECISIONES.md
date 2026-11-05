@@ -236,3 +236,9 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - **Toma de inventario**: la cabecera deja visibles solo Exportar + dos menús (*Google Sheets ▾* y *Más ▾*, con Limpiar sesión al final y en rojo); los IDs de los botones no cambian. El panel del formulario deja de quedar cortado en pantallas bajas (sticky solo si caben 800 px de alto). Menú y título se llaman igual: *Toma de Inventario*.
 - Objetivos táctiles ≥ 40 px en enlaces de pie del Panel, "+ Nueva categoría", búsqueda y selectores; el recuadro del escáner enfoca el campo al hacer clic.
 - Pendiente (auditoría): reordenar el formulario de toma, ubicaciones desde `Bodegas`, unificar pestañas del Inventario semanal, mover "Cerrar inventario", una sola primaria en Ingresos, modal de cuadre en Auditoría.
+
+### 4.23 Recepción de mercadería solo SAR (v20.64)
+- **Alcance**: del cuadro de distribución solo importa la columna **SAR**; las demás (p. ej. Nehuén) se omiten y la OC guarda solo la lista `otrosCentros` (centro y memo) como referencia. Las líneas de otros centros quedan en la OC sin cantidad para SAR.
+- **Lector**: nueva variante B del cuadro (memo y CDP en el encabezado de la columna, código MP entre paréntesis, pie con NETO/IVA/TOTAL/PRESUPUESTO/SALDO). Presupuesto y saldo se leen y guardan en la columna, **sin descontar** todavía (el CDP se trabaja más adelante). Probado con la OC 1298355-911-CM26: 22 líneas SAR, sin avisos.
+- **Flujo**: llega la OC → se ingresa con su cuadro → al llegar el camión, **Recibir mercadería** (lista de pendientes con ✔ por línea, *Recepción total*, cantidades parciales, guía, lote y vencimiento, incidencias) → lo recibido entra al stock de Bodega Central → las actas de entrega descuentan desde ahí. Lo no recibido queda pendiente y se baja con **Pendientes (CSV)**.
+- Pendiente: vista "por recibir" en Existencias, adjuntar el archivo de la guía/factura.

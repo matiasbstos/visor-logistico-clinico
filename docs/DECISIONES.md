@@ -325,3 +325,8 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 
 ### 4.39 Pendientes en el acta de entrega desde una orden (v20.80)
 - Modelo ANIDES (16-10-2026): si una línea se entrega solo en parte, el acta dice "— Solicitado: S | Entregado: E | Pendiente: P" (E acumulado de la orden para ese centro). Lo solicitado que no entra en el acta (no llegó o no se entrega ahora) se agrega solo a "PRODUCTOS SOLICITADOS QUE AÚN NO LLEGAN (pendientes de entrega)" con su cantidad pendiente.
+
+### 4.40 Recepción conforme con firma y timbre, modal de bodega y centros guardados (v20.82)
+- El acta de recepción conforme lleva la firma y timbre de la contraparte técnica (Mariel Quintanilla L.) tomados del modelo vigente (`assets/firma-contraparte-mariel.png`); solo se incluye si la contraparte es ella y la casilla está marcada. Texto "Que se recibió conforme en forma Parcial/Total de los productos…" y "(CANTIDAD:n)" como en el modelo RC128355-684-AG26.
+- Ficha de bodega: modal ancho en dos columnas (datos a la izquierda, estantes a la derecha) con scroll.
+- Actas de entrega: lista de centros = base + centros guardados (`Centros_Entrega`) + centros de actas anteriores; botón "+ Guardar este centro" y guardado automático al emitir. Requiere desplegar `firestore.rules`.

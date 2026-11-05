@@ -94,6 +94,8 @@ SAR Arpillerista Elsa Romo Aravena`;
         });
         return pdfLibPromesa;
     }
+    /** Firma y timbre de la contraparte técnica (imagen del modelo vigente de la Corporación). */
+    async function cargarFirma() { try { const r = await fetch('assets/firma-contraparte-mariel.png'); if (!r.ok) return null; return new Uint8Array(await r.arrayBuffer()); } catch (e) { return null; } }
     async function cargarLogo() { try { const r = await fetch('assets/logo-corpo-melipilla.jpg'); if (!r.ok) return null; return new Uint8Array(await r.arrayBuffer()); } catch (e) { return null; } }
 
     /** Productos recibidos (acumulado del SAR) para el acta: descripción + cantidad. */
@@ -102,11 +104,12 @@ SAR Arpillerista Elsa Romo Aravena`;
     const fechaCorta = (iso) => { const [y, m, d] = String(iso).slice(0, 10).split('-'); return `${d}/${m}/${y}`; };
 
     /** Reproduce "RECEPCIÓN CONFORME PRODUCTO O SERVICIO (PARCIAL)" del modelo de la Corporación. */
-    async function generarActaPDF(oc, d, centro, { PDFLib, logoBytes }) {
+    async function generarActaPDF(oc, d, centro, { PDFLib, logoBytes, firmaBytes }) {
         const { PDFDocument, StandardFonts, rgb } = PDFLib;
         const doc = await PDFDocument.create();
         doc.setTitle(`Recepción conforme OC ${oc.numeroOC}`); doc.setAuthor('Corporación Municipal de Melipilla'); doc.setCreator('Sistema de inventario SAR');
         const F = await doc.embedFont(StandardFonts.Helvetica), FB = await doc.embedFont(StandardFonts.HelveticaBold);
+        let firmaImg = null; if (firmaBytes && d.conFirma !== false && /quintanilla/i.test(d.contraparte || CONTRAPARTE_BASE)) { try { firmaImg = await doc.embedPng(firmaBytes); } catch (e) { firmaImg = null; } }
         let logo = null; if (logoBytes) { try { logo = await doc.embedJpg(logoBytes); } catch (e) { try { logo = await doc.embedPng(logoBytes); } catch (e2) { logo = null; } } }
         const W = 612, H = 792, ML = 84, MR = 552, negro = rgb(0, 0, 0);
         const seguro = (font, s) => { const set = font.getCharacterSet(); return Array.from(String(s == null ? '' : s).replace(/³/g, '3').replace(/²/g, '2').replace(/\s+/g, ' ')).map(c => set.includes(c.codePointAt(0)) ? c : '?').join(''); };
@@ -125,20 +128,21 @@ SAR Arpillerista Elsa Romo Aravena`;
         T('Orden de Compra: ' + (oc.numeroOC || ''), ML, y, 10.5, true); y += 22;
         T(`Con fecha ${fechaCorta(d.fecha)}, en calidad de contraparte técnica, certifico lo siguiente:`, ML, y, 10.5, false); y += 22;
         // Caja con lo recibido (se parte en otra página si es muy larga)
-        const items = lineasRecibidas(oc, centro).map(l => envolver(`${String(l.producto).toUpperCase()} (CANTIDAD: ${miles(l.recibido)})`, 9.5, false, MR - ML - 44));
-        const encab = `Que se recibió conforme en forma ${d.parcial ? 'PARCIAL' : 'TOTAL'} el producto, donde se recibió lo siguiente:`;
+        const items = lineasRecibidas(oc, centro).map(l => envolver(`${String(l.producto).toUpperCase()} (CANTIDAD:${miles(l.recibido)})`, 10.5, false, MR - ML - 44));
+        const encab = `Que se recibió conforme en forma ${d.parcial ? 'Parcial' : 'Total'} de los productos, donde se recibió lo siguiente:`;
         const caja = (x0, x1, yTop, yBot) => { const t = 0.8; [[x0, yTop, x1, yTop], [x0, yBot, x1, yBot], [x0, yTop, x0, yBot], [x1, yTop, x1, yBot]].forEach(([a, b, c, e]) => page.drawLine({ start: { x: a, y: H - b }, end: { x: c, y: H - e }, thickness: t, color: negro })); };
         let top = y, cy = y + 16; T(encab, ML + 6, cy, 8.5, false); cy += 16;
         items.forEach(ls => {
-            const alto = ls.length * 12.5 + 6;
+            const alto = ls.length * 13.5 + 8;
             if (cy + alto > H - 120) { caja(ML, MR, top, cy + 2); page = doc.addPage([W, H]); top = 60; cy = 76; T(`Recepción conforme OC ${oc.numeroOC} (continuación)`, ML + 6, cy, 8.5, true); cy += 16; }
             page.drawCircle({ x: ML + 26, y: H - cy + 3, size: 2.2, color: negro });
-            ls.forEach((t, i) => T(t, ML + 40, cy + i * 12.5, 9.5, false)); cy += alto;
+            ls.forEach((t, i) => T(t, ML + 40, cy + i * 13.5, 10.5, false)); cy += alto;
         });
         if (d.observaciones) { envolver('Observaciones: ' + d.observaciones, 8.5, false, MR - ML - 12).forEach(t => { T(t, ML + 6, cy, 8.5, false); cy += 11; }); cy += 4; }
         caja(ML, MR, top, cy + 2);
         let yf = cy + 80; if (yf > H - 90) { page = doc.addPage([W, H]); yf = 160; }
-        page.drawLine({ start: { x: 190, y: H - yf }, end: { x: 420, y: H - yf }, thickness: 0.8, color: negro });
+        if (firmaImg) { const w = 196, h = w * firmaImg.height / firmaImg.width; page.drawImage(firmaImg, { x: (W - w) / 2, y: H - yf - 4, width: w, height: h }); }
+        else page.drawLine({ start: { x: 190, y: H - yf }, end: { x: 420, y: H - yf }, thickness: 0.8, color: negro });
         centrar('Firma contraparte técnica', 10.5, false, yf + 24, 0, W);
         centrar('Nombre Contraparte Técnica: ' + (d.contraparte || CONTRAPARTE_BASE), 10.5, false, yf + 46, 0, W);
         return await doc.save();
@@ -165,6 +169,7 @@ SAR Arpillerista Elsa Romo Aravena`;
             <label>PDF de la guía o factura<input type="file" id="rc-file" accept="application/pdf"></label>
             <label>Tipo de recepción<select id="rc-parcial"><option value="0"${pend > 0 ? '' : ' selected'}>Total</option><option value="1"${pend > 0 ? ' selected' : ''}>Parcial${pend > 0 ? ` (faltan ${pend} unidades)` : ''}</option></select></label>
             ${f('rc-ct', 'Contraparte técnica (firma del acta)', CONTRAPARTE_BASE)}
+            <label class="soc-toggle"><input type="checkbox" id="rc-firma" checked> Incluir firma y timbre de la contraparte en el acta</label>
             <div class="soc-fila">${f('rc-fn', 'Correo firmado por', FIRMA_BASE.nombre)}${f('rc-fc', 'Cargo', FIRMA_BASE.cargo)}</div>
             <label>Observaciones (opcional)<textarea id="rc-obs" rows="2"></textarea></label>
             <label class="soc-toggle"><input type="checkbox" id="rc-enviar" checked> Enviar correo con el acta y la guía/factura a la lista</label>
@@ -173,12 +178,12 @@ SAR Arpillerista Elsa Romo Aravena`;
             <div id="rc-error" class="cierre-error"></div>`, async (o) => {
             const g = (id) => (o.querySelector('#' + id) || {}).value || '';
             const d = { tipoDoc: g('rc-tipo'), numeroDoc: g('rc-num').trim(), fecha: g('rc-fec') || hoyISO(), archivo: (o.querySelector('#rc-file').files || [])[0] || null, parcial: (o.querySelector('#rc-parcial') || {}).value === '1',
-                contraparte: g('rc-ct').trim() || CONTRAPARTE_BASE, firmaNombre: g('rc-fn').trim() || FIRMA_BASE.nombre, firmaCargo: g('rc-fc').trim() || FIRMA_BASE.cargo, observaciones: g('rc-obs').trim(), to: lista(g('rc-to')), cc: lista(g('rc-cc')) };
+                contraparte: g('rc-ct').trim() || CONTRAPARTE_BASE, conFirma: (o.querySelector('#rc-firma') || {}).checked !== false, firmaNombre: g('rc-fn').trim() || FIRMA_BASE.nombre, firmaCargo: g('rc-fc').trim() || FIRMA_BASE.cargo, observaciones: g('rc-obs').trim(), to: lista(g('rc-to')), cc: lista(g('rc-cc')) };
             const err = validar(oc, d, centro);
             o.querySelector('#rc-error').innerHTML = err.map(e => `<div>${esc(e)}</div>`).join('');
             if (err.length) return false;
-            const PDFLib = await cargarPDFLib(); const logoBytes = await cargarLogo();
-            const acta = await generarActaPDF(oc, d, centro, { PDFLib, logoBytes });
+            const PDFLib = await cargarPDFLib(); const logoBytes = await cargarLogo(); const firmaBytes = await cargarFirma();
+            const acta = await generarActaPDF(oc, d, centro, { PDFLib, logoBytes, firmaBytes });
             const guia = new Uint8Array(await d.archivo.arrayBuffer());
             const adj = [{ name: nombreActa(oc), mime: 'application/pdf', base64: aBase64(acta) }, { name: nombreAdjunto(d.tipoDoc, d.numeroDoc), mime: 'application/pdf', base64: aBase64(guia) }];
             const enviar = (o.querySelector('#rc-enviar') || {}).checked !== false;

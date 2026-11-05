@@ -496,6 +496,8 @@
                     return `<td class="soc-est--${estadoLinea(p, r)}"><strong>${r}</strong> / ${p}</td>`; }).join('')}</tr>`).join('')}
                 </tbody></table></div>
                 <div class="soc-resumen">${tot.filter(t => verTodos || t.centro === CENTRO_PROPIO).map(t => `<span><strong>${esc(t.centro)}</strong>: pendiente ${t.pendiente} un. · ${peso(t.netoPend)} neto de ${peso(t.netoTotal)}</span>`).join('')}</div></details>
+            ${(oc.recepciones || []).length ? `<details class="erp-card soc-det" id="soc-recs"><summary><h3>Recepciones registradas</h3><span class="soc-n">${oc.recepciones.length}</span></summary>
+                <ul class="soc-arch">${oc.recepciones.map(r => `<li class="${r.anulada ? 'soc-rec-anul' : ''}"><i class="ph-bold ph-truck"></i><div><strong>${esc(r.recId)}</strong>${r.anulada ? ' · <b>ANULADA</b>' : ''}<small>${esc(fmtFecha(r.fecha))} ${esc(r.hora || '')} · ${num(r.unidades)} u.${r.guia ? ' · guía ' + esc(r.guia) : ''}${r.ingresoAStock ? ' · ingresó a ' + esc(r.bodega || 'bodega') : ' · sin ingreso a stock'} · ${esc(r.usuario || '')}${r.anulada ? ' · motivo: ' + esc(r.anuladaMotivo || '') : ''}</small></div>${esAdmin() && !r.anulada ? `<button type="button" class="btn btn-outline btn-sm" data-anular-rec="${esc(r.recId)}">Anular</button>` : ''}</li>`).join('')}</ul></details>` : ''}
             <div class="erp-card"><h3>Discrepancias <span class="soc-n">${disc.length}</span></h3>
                 ${disc.length ? '<ul class="soc-disc">' + disc.map(d => `<li class="soc-disc--${d.nivel}">${esc(d.texto)}</li>`).join('') + '</ul>' : '<p class="bodega-estantes__hint">Sin discrepancias.</p>'}
                 ${(oc.incidencias || []).filter(i => i.estado === 'ABIERTA').map(i => `<button type="button" class="btn btn-outline btn-sm" data-resolver="${esc(i.id)}">Resolver: ${esc(i.producto.slice(0, 30))}</button>`).join(' ')}</div>
@@ -543,6 +545,14 @@
         const bre = q('#soc-recep'); if (bre) bre.addEventListener('click', () => { formRecepcion().catch(e => toast('No se pudo abrir la recepción', e.message || String(e), 'error')); });
         const bpe = q('#soc-pend'); if (bpe) bpe.addEventListener('click', () => { if (!pendientesDe(ocActual).some(x => x.pendiente > 0)) { toast('Sin pendientes', 'Todo lo de SAR ya fue recibido.', 'success'); return; } descargarPendientes(ocActual); });
         const blo = q('#soc-lotes'); if (blo) blo.addEventListener('click', formLotes);
+        root().querySelectorAll('[data-anular-rec]').forEach(b => b.addEventListener('click', async () => {
+            const recId = b.dataset.anularRec;
+            const motivo = (prompt(`Anular la recepción ${recId}: lo recibido vuelve a quedar "por recibir" y, si ingresó a stock, se retira de la bodega. Queda el registro en la bitácora y en el historial.${ocActual.recepcionConforme ? '\n\nOJO: la recepción conforme ya emitida no cambia sola; edítala o regenérala después.' : ''}\n\nMotivo:`, 'Recepción mal registrada') || '').trim();
+            if (!motivo) return;
+            const prog = window.SAR_Progreso.iniciar('Anulando la recepción…', ['Preparando la anulación…']);
+            try { await anularRecepcion(ocActual, recId, motivo, (t) => prog.paso(t)); prog.listo(`Recepción ${recId} anulada: stock y cantidades revertidos`, { informe: true }); }
+            catch (e) { prog.error(); toast('No se anuló la recepción', e.message || String(e), 'error'); }
+        }));
         const baa = q('#soc-arch-add'); if (baa) baa.addEventListener('click', formAgregarArchivo);
         const brEd = q('#soc-rc-edit'); if (brEd) brEd.addEventListener('click', () => {
             if (!window.SAR_RecepcionConforme || !window.SAR_RecepcionConforme.editar) { toast('No disponible', 'El módulo de recepción conforme no está cargado.', 'warning'); return; }
@@ -664,7 +674,7 @@
     }
 
     const DESTINO_RECEPCION = ['mariel.quintanilla@cormumel.cl', 'compras.sar@cormumel.cl', 'matias.bustos@cormumel.cl'];   // correo de cada recepción: siempre estos tres
-    const ICONOS = { LOTE: 'Lote y vencimiento', CONFORME: 'Recepción conforme', INCIDENCIA: 'Incidencia', ACEPTACION: 'Aceptación', NOTA: 'Comentario', ARCHIVO: 'Archivo', RECEPCION: 'Recepción', MULTA: 'Multa', ESTADO: 'Estado', CREACION: 'Ingreso' };
+    const ICONOS = { LOTE: 'Lote y vencimiento', CONFORME: 'Recepción conforme', INCIDENCIA: 'Incidencia', ACEPTACION: 'Aceptación', NOTA: 'Comentario', ARCHIVO: 'Archivo', RECEPCION: 'Recepción', RECEPCION_ANULADA: 'Recepción anulada', MULTA: 'Multa', ESTADO: 'Estado', CREACION: 'Ingreso' };
     function pintarBitacora() {
         const host = root() && root().querySelector('#soc-bitacora'); if (!host) return;
         const evs = soloNotas ? eventos.filter(e => e.tipo === 'NOTA' || e.tipo === 'ARCHIVO') : eventos;
@@ -1091,6 +1101,73 @@
         return correo;
     }
 
+    /** Anula una recepción de mercadería (solo administradores): devuelve lo recibido a "por recibir" y retira del stock lo que ingresó.
+     *  Se bloquea si ese stock ya se usó (acta de entrega u otro movimiento): primero hay que eliminar esas actas. */
+    async function anularRecepcion(oc, recId, motivo, onPaso) {
+        const f = fs(), paso = (t) => { if (onPaso) onPaso(t); };
+        const rec = (oc.recepciones || []).find(r => r.recId === recId);
+        if (!rec) throw new Error('No se encontró la recepción.');
+        if (rec.anulada) throw new Error('Esa recepción ya estaba anulada.');
+        paso('Leyendo el detalle de la recepción…');
+        const evs = await f.getDocs(f.query(f.collection(db(), 'Seguimiento_OC', oc.id, 'Eventos'), f.where('recId', '==', recId)));
+        let ev = null; evs.forEach(d => { if (!ev && d.data().tipo === 'RECEPCION') ev = d.data(); });
+        if (!ev || !Array.isArray(ev.detalle) || !ev.detalle.length) throw new Error('Esta recepción es anterior al registro detallado: no se puede anular automáticamente.');
+        const key = rec.columna, central = rec.bodega || ev.bodegaDestino || '', conStock = !!rec.ingresoAStock;
+        const ocRef = f.doc(f.collection(db(), 'Seguimiento_OC'), oc.id);
+        const grupos = new Map();
+        if (conStock) {
+            paso(`Buscando los productos en ${central}…`);
+            for (const d of ev.detalle) {
+                const nombre = String(d.insumoName || '').trim();
+                const cod = String(((oc.lineas || [])[d.i] || {}).codigoMP || '').trim();
+                let ref = null;
+                const s1 = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('name', '==', nombre), f.limit(10)));
+                s1.forEach(x => { const l = x.data().location; if (!ref && (l === central || !l)) ref = f.doc(f.collection(db(), 'Insumos'), x.id); });
+                if (!ref && cod) { const s2 = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('codigoMP', '==', cod), f.limit(10))); s2.forEach(x => { const l = x.data().location; if (!ref && (l === central || !l)) ref = f.doc(f.collection(db(), 'Insumos'), x.id); }); }
+                if (!ref) throw new Error(`No se encontró "${nombre}" en ${central}.`);
+                const g = grupos.get(ref.path) || { ref, nombre, quitar: [] };
+                g.quitar.push(d); grupos.set(ref.path, g);
+            }
+        }
+        paso('Revirtiendo el stock y las cantidades de la orden…');
+        await f.runTransaction(db(), async (tx) => {
+            const os = await tx.get(ocRef); if (!os.exists()) throw new Error('La orden ya no existe.');
+            const fresca = os.data();
+            const r0 = (fresca.recepciones || []).find(r => r.recId === recId); if (!r0 || r0.anulada) throw new Error('Esa recepción ya estaba anulada.');
+            const lecturas = []; for (const g of grupos.values()) lecturas.push([g, await tx.get(g.ref)]);
+            const lineas = (fresca.lineas || []).map(l => ({ ...l, recibido: { ...(l.recibido || {}) }, ingresado: { ...(l.ingresado || {}) }, entregado: { ...(l.entregado || {}) } }));
+            ev.detalle.forEach(d => {
+                const l = lineas[d.i]; if (!l) throw new Error('Una línea de la recepción ya no existe en la orden.');
+                if (num(l.recibido[key]) < d.cantidad) throw new Error(`"${String(l.descripcion || '').slice(0, 40)}": lo recibido ya es menor a lo que se quiere anular.`);
+                if (conStock && num(l.ingresado[key]) - d.cantidad < num(l.entregado[key])) throw new Error(`"${String(l.descripcion || '').slice(0, 40)}": ya se entregaron ${num(l.entregado[key])} u. con actas. Elimina esas actas antes de anular la recepción.`);
+                l.recibido[key] = num(l.recibido[key]) - d.cantidad; if (conStock) l.ingresado[key] = Math.max(0, num(l.ingresado[key]) - d.cantidad);
+            });
+            const nuevas = [];
+            lecturas.forEach(([g, snap]) => {
+                if (!snap.exists()) throw new Error(`"${g.nombre}" ya no existe en el stock.`);
+                const d = snap.data(); let lotes = (Array.isArray(d.batches) ? d.batches : []).map(b => ({ ...b }));
+                if (!lotes.length && num(d.quantity) > 0) lotes = [{ batch: d.batch || 'S/L', quantity: num(d.quantity), expirationDate: d.expirationDate || 'N/A' }];
+                g.quitar.forEach(q => {
+                    let falta = q.cantidad;
+                    const sacar = (b) => { const t = Math.min(falta, num(b.quantity)); b.quantity = num(b.quantity) - t; falta -= t; };
+                    lotes.filter(b => b.batch === ((q.lote || '').trim().toUpperCase() || 'S/L') && (b.expirationDate || 'N/A') === (q.vence || 'N/A')).forEach(b => { if (falta > 0) sacar(b); });
+                    if (falta > 0) lotes.filter(b => b.batch === 'S/L').forEach(b => { if (falta > 0) sacar(b); });
+                    if (falta > 0) [...lotes].sort(typeof window.fefoCompare === 'function' ? window.fefoCompare : () => 0).reverse().forEach(b => { if (falta > 0) sacar(b); });
+                    if (falta > 0) throw new Error(`"${g.nombre}": en la bodega ya no quedan ${q.cantidad} u. de esta recepción (se usaron en otros movimientos). Revisa o corrige esos movimientos primero.`);
+                });
+                lotes = lotes.filter(b => num(b.quantity) > 0);
+                const total = lotes.reduce((t, b) => t + num(b.quantity), 0), prox = lotes[0];
+                nuevas.push([g, { quantity: total, batches: lotes, isCritical: total <= (num(d.criticalLimit || d.stock_minimo) || 50), batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', updatedAt: f.serverTimestamp() }]);
+            });
+            tx.update(ocRef, { lineas, recepciones: (fresca.recepciones || []).map(r => r.recId === recId ? { ...r, anulada: true, anuladaPor: usuario(), anuladaMotivo: motivo, anuladaFecha: hoyISO() } : r), actualizadoEn: f.serverTimestamp() });
+            tx.set(f.doc(f.collection(db(), 'Seguimiento_OC', oc.id, 'Eventos')), { tipo: 'RECEPCION_ANULADA', texto: `Recepción ${recId} ANULADA (${r0.unidades} u.). Motivo: ${motivo}`, autor: usuario(), fecha: f.serverTimestamp(), recId, columna: key });
+            nuevas.forEach(([g, cambios]) => {
+                tx.update(g.ref, cambios);
+                g.quitar.forEach(q => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: g.nombre, item: g.nombre, quantity: q.cantidad, type: 'ANULACION_RECEPCION', batch: (q.lote || '').trim().toUpperCase() || 'S/L', expirationDate: q.vence || 'N/A', origin: central, user: usuario(), date: f.serverTimestamp(), document: `${recId} · OC ${oc.numeroOC}`, observacion: `Recepción ${recId} anulada: ${motivo}`, ocId: oc.id, idInsumoOrigen: g.ref.id }));
+            });
+        });
+    }
+
     /** Unidades pendientes de recibir por producto (solo columnas de SAR). Puro. */
     function pendientesDe(oc) {
         const out = [];
@@ -1346,5 +1423,5 @@ function salida(o) { return ContentService.createTextOutput(JSON.stringify(o)).s
         ov.querySelector('#c-copiar').addEventListener('click', async () => { try { await navigator.clipboard.writeText(SCRIPT_GAS); toast('Copiado', 'Código copiado.', 'success'); } catch (e) { ov.querySelector('#c-script').select(); } });
     }
 
-    window.SAR_SeguimientoOC = { eliminarArchivosCategoria, eliminarArchivosActa, formCatalogo, registrarCatalogo, guardarArchivo, abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
+    window.SAR_SeguimientoOC = { anularRecepcion, eliminarArchivosCategoria, eliminarArchivosActa, formCatalogo, registrarCatalogo, guardarArchivo, abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
 })(window, document);

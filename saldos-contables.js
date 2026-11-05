@@ -63,8 +63,8 @@
             ? [r.nombre, r.codigo, r.bodega, r.q, r.sg, r.contable, r.pu, r.valContable, ETIQ[r.estado], actasTxt(r)]
             : [r.nombre, r.codigo, r.bodega, r.q, r.sg, r.disp, r.pu, r.valDisp, ETIQ[r.estado], actasTxt(r)]);
         const tot = tipo === 'contable' ? ['TOTAL', '', '', '', filasX.reduce((s, r) => s + r.sg, 0), filasX.reduce((s, r) => s + r.contable, 0), '', filasX.reduce((s, r) => s + r.valContable, 0), '', ''] : ['TOTAL', '', '', '', filasX.reduce((s, r) => s + r.sg, 0), filasX.reduce((s, r) => s + r.disp, 0), '', filasX.reduce((s, r) => s + r.valDisp, 0), '', ''];
-        const rec = recepciones.length ? [[], ['RECEPCIONES DE ORDEN DE COMPRA'], ['ID recepción', 'Orden', 'Fecha', 'Hora', 'Guía', 'Bodega', 'Producto', 'Unidades', 'Lote', 'Vence', 'Registró'],
-            ...recepciones.flatMap(x => (x.detalle || []).map(d => [x.recId, x.numeroOC, x.fecha, x.hora || '', x.guia || '', x.bodega || '', d.insumoName || d.descripcion, d.cantidad, d.lote || 'S/L', d.vence || 'N/A', x.usuario || '']))] : [];
+        const rec = recepciones.length ? [[], ['RECEPCIONES DE ORDEN DE COMPRA'], ['ID recepción', 'Orden', 'Fecha', 'Hora', 'Guía', 'Bodega', 'Producto', 'Unidades', 'Lote', 'Vence', 'Registró', 'Estado'],
+            ...recepciones.flatMap(x => (x.detalle || []).map(d => [x.recId, x.numeroOC, x.fecha, x.hora || '', x.guia || '', x.bodega || '', d.insumoName || d.descripcion, d.cantidad, d.lote || 'S/L', d.vence || 'N/A', x.usuario || '', x.anulada ? 'ANULADA' : '']))] : [];
         return '﻿' + [cab, ...l, tot, ...rec].map(x => x.map(celda).join(';')).join('\r\n');
     }
     async function descargar(tipo) {
@@ -102,7 +102,7 @@
         } catch (e) { toast('Seguimiento', 'No se pudo buscar: ' + e.message, 'error'); seg = null; }
         segCargando = false; pintar();
     }
-    const TIPOS = { ENTREGA_ACTA: 'Entrega', CUADRE_SOBREGIRO: 'Cuadre de sobregiro', ANULACION_ACTA: 'Anulación', EDICION_ACTA: 'Edición del acta', ACTA_PRUEBA: 'Acta de prueba' };
+    const TIPOS = { ENTREGA_ACTA: 'Entrega', CUADRE_SOBREGIRO: 'Cuadre de sobregiro', ANULACION_ACTA: 'Anulación', EDICION_ACTA: 'Edición del acta', ACTA_PRUEBA: 'Acta de prueba', ANULACION_RECEPCION: 'Anulación de recepción' };
     const fh = (m) => m._t ? new Date(m._t).toLocaleString('es-CL') : '';
     function itemsSeg() {
         return (seg.acta.items || []).map(it => {

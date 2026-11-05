@@ -356,3 +356,6 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - El cuadro de distribución puede venir en Excel (`extraerDistribucionExcel`): memos/CDP en el encabezado; si un centro trae varias columnas con el mismo memo (SAR 3565 y 3568) se juntan en una sola (clave `centro-memo`, CDP "3565-3568", montos sumados). Lee NETO/IVA/TOTAL/PRESUPUESTO/SALDO del pie.
 - La orden también puede subirse en Excel (lectura genérica, con aviso de revisar). Los dos recuadros aceptan PDF o Excel y se acomodan solos si el archivo está en el recuadro equivocado. Si el archivo es una recepción conforme, guía o factura, el mensaje lo dice.
 - Para que el lector aprenda otras variaciones: enviar el archivo y se agrega como caso al lector (no hay aprendizaje automático).
+
+### 4.46 Foto de productos sin ID de Mercado Público (v20.89)
+- Compras ágiles y otros productos sin ID: en el Catálogo de productos cada fila tiene "Buscar foto" (abre Google Imágenes con el nombre), "Pegar" (imagen copiada con clic derecho → Copiar imagen; se reduce y se guarda en el producto) y "Subir". No hay búsqueda automática por nombre: requeriría un servicio de búsqueda con clave.

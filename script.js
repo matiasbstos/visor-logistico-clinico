@@ -16076,3 +16076,11 @@ function doGet(e) {
 })();
 
 
+
+
+// v20.63 · menús desplegables (details.menu-acc): se cierran al hacer clic fuera, al elegir una acción o con Escape
+document.addEventListener('click', (e) => {
+    document.querySelectorAll('details.menu-acc[open]').forEach(d => { if (!d.contains(e.target) || e.target.closest('.menu-acc__item')) d.removeAttribute('open'); });
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') document.querySelectorAll('details.menu-acc[open]').forEach(d => d.removeAttribute('open')); });
+document.addEventListener('click', (e) => { const g = e.target.closest('.scan-input-group'); if (g && e.target === g) { const i = g.querySelector('input'); if (i) i.focus(); } });

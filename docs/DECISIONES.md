@@ -230,3 +230,9 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - **Actas de entrega** se divide en tres pestañas, con el mismo estilo de la barra superior: *Emitir acta* (el formulario de siempre), *Actas emitidas* (historial con PDF/Word/Anular) y *Seguimiento de acta* (búsqueda por ID).
 - **Saldos contables y disponibles** salen de Actas y pasan a una sección propia de la barra lateral, **Auditoría** (grupo Movimientos), con el mismo bloqueo por rol que Actas (el enfermero no la ve). Datos y cuadre de sobregiro no cambian.
 - Los documentos (actas, informes) no se tocan.
+
+### 4.22 Auditoría UX y primeros arreglos (v20.63)
+- Agente `ux-ui-flujo` (`.claude/agents/`) y `tools/auditoria-ux.js` (solapes, recortes, objetivos < 28 px; ignora campos dentro de `<details>` cerrados).
+- **Toma de inventario**: la cabecera deja visibles solo Exportar + dos menús (*Google Sheets ▾* y *Más ▾*, con Limpiar sesión al final y en rojo); los IDs de los botones no cambian. El panel del formulario deja de quedar cortado en pantallas bajas (sticky solo si caben 800 px de alto). Menú y título se llaman igual: *Toma de Inventario*.
+- Objetivos táctiles ≥ 40 px en enlaces de pie del Panel, "+ Nueva categoría", búsqueda y selectores; el recuadro del escáner enfoca el campo al hacer clic.
+- Pendiente (auditoría): reordenar el formulario de toma, ubicaciones desde `Bodegas`, unificar pestañas del Inventario semanal, mover "Cerrar inventario", una sola primaria en Ingresos, modal de cuadre en Auditoría.

@@ -313,7 +313,8 @@
         for (const l of (oc.lineas || [])) {
             const id = catId(l); if (!id || !String(l.descripcion || '').trim()) continue;
             try {
-                await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: l.descripcion, descripcion_lower: String(l.descripcion).toLowerCase(), codigoMP: l.codigoMP || '', proveedor: oc.proveedor || '', ultimaOC: oc.numeroOC || '', valorNeto: num(l.valorNeto), actualizado: f.serverTimestamp() }, { merge: true }); n++;
+                let archivo = ''; if (l.codigoMP && window.SAR_Imagenes) { try { archivo = await window.SAR_Imagenes.archivoPara(l.codigoMP, configCorreo); } catch (e) { archivo = ''; } }
+                await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: l.descripcion, descripcion_lower: String(l.descripcion).toLowerCase(), codigoMP: l.codigoMP || '', proveedor: oc.proveedor || '', ultimaOC: oc.numeroOC || '', valorNeto: num(l.valorNeto), ...(archivo ? { imagenMP: archivo } : {}), actualizado: f.serverTimestamp() }, { merge: true }); n++;
             } catch (e) { /* el catálogo nunca debe frenar el ingreso de la orden */ }
         }
         return n;
@@ -339,14 +340,21 @@
         });
     }
     async function formCatalogo() {
+        if (window.SAR_Imagenes) await window.SAR_Imagenes.cargar(true).catch(() => {});
         const items = [...(await cargarCatalogo()).values()].sort((a, b) => String(a.descripcion || '').localeCompare(String(b.descripcion || '')));
         const fila = (c) => `<li data-id="${esc(c.id)}" data-t="${esc((c.descripcion || '') + ' ' + (c.insumoName || '') + ' ' + (c.codigoMP || '') + ' ' + (c.proveedor || '')).toLowerCase()}">
-            <span class="cat-img">${c.imagen ? `<img src="${esc(c.imagen)}" alt="">` : '<i class="ph-bold ph-image"></i>'}</span>
+            <span class="cat-img">${(() => { const e = window.SAR_Imagenes && window.SAR_Imagenes.buscar(c.descripcion, c.codigoMP); const h = e ? window.SAR_Imagenes.imgHTML(e, 120, c.descripcion) : ''; return h || '<i class="ph-bold ph-image"></i>'; })()}</span>
             <div><strong>${esc(c.descripcion || '')}</strong><small>${c.codigoMP ? 'Cód. MP ' + esc(c.codigoMP) + ' · ' : ''}${esc(c.proveedor || 's/proveedor')}${c.insumoName ? ' · Inventario: ' + esc(c.insumoName) : ''}${num(c.valorNeto) ? ' · ' + peso(c.valorNeto) + ' neto' : ''}</small></div>
             <label class="btn btn-outline btn-sm cat-foto">Foto<input type="file" accept="image/*" hidden></label></li>`;
         const ov = modal('Catálogo de productos', `<p class="cierre-hint">Se completa solo con cada orden que ingresas. Agrega una foto para reconocer cada producto.</p>
-            <input type="search" id="cat-q" placeholder="Buscar por nombre, código o proveedor…" autocomplete="off">
+            <div class="soc-arch-acc"><button type="button" class="btn btn-outline btn-sm" id="cat-sync"><i class="ph-bold ph-arrows-clockwise"></i> Cargar productos y fotos de las órdenes ya ingresadas</button></div>
+                        <input type="search" id="cat-q" placeholder="Buscar por nombre, código o proveedor…" autocomplete="off">
             <ul class="soc-arch cat-lista" id="cat-l">${items.length ? items.map(fila).join('') : '<li>Aún no hay productos. Aparecerán al ingresar la próxima orden.</li>'}</ul>`, async () => true, { ancho: true, ok: 'Cerrar' });
+        ov.querySelector('#cat-sync').addEventListener('click', async (e) => {
+            const btn = e.currentTarget; btn.disabled = true; btn.textContent = 'Cargando…';
+            try { let n = 0; for (const oc of lista) n += await registrarCatalogo(oc); toast('Catálogo actualizado', `${n} producto(s) de ${lista.length} orden(es), con su foto cuando existe en la tienda.`, 'success'); ov.remove(); formCatalogo(); }
+            catch (err) { toast('No se pudo actualizar', err.message || String(err), 'error'); btn.disabled = false; }
+        });
         ov.querySelector('#cat-q').addEventListener('input', (e) => { const t = e.target.value.trim().toLowerCase(); ov.querySelectorAll('#cat-l li[data-id]').forEach(li => { li.hidden = !!t && !li.dataset.t.includes(t); }); });
         ov.querySelectorAll('.cat-foto input').forEach(inp => inp.addEventListener('change', async () => {
             const li = inp.closest('li'), file = inp.files[0]; if (!file) return;
@@ -1094,7 +1102,7 @@
         const pintar = () => {
             const key = ov.querySelector('#r-col').value, st = ov.querySelector('#r-stock').checked, lv = ov.querySelector('#r-lv').checked;
             ov.querySelector('#r-lineas').innerHTML = '<div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Recibido</th><th>Pendiente</th><th>Llega ahora</th>' + (st ? '<th>Producto en inventario</th>' + (lv ? '<th>Lote</th><th>Vence</th>' : '') : '') + '<th>Incidencia</th></tr></thead><tbody>' +
-                oc.lineas.map((l, i) => { const p = num(l.dist && l.dist[key]), ya = num(l.recibido && l.recibido[key]), pe = Math.max(0, p - ya); return p ? `<tr data-i="${i}" data-pe="${pe}"><td class="r-prod" data-l="Producto">${esc(l.descripcion)}</td><td data-l="Pedido">${p}</td><td data-l="Recibido">${ya}</td><td data-l="Pendiente"><strong>${pe}</strong></td><td class="r-celda" data-l="Llega ahora"><input type="number" min="0" max="${pe}" class="r-c" value="" aria-label="Unidades que llegaron"><button type="button" class="btn btn-outline btn-sm r-ok" title="Llegó completo"${pe ? '' : ' disabled'}>✔ ${pe || 'listo'}</button></td>` +
+                oc.lineas.map((l, i) => { const p = num(l.dist && l.dist[key]), ya = num(l.recibido && l.recibido[key]), pe = Math.max(0, p - ya); return p ? `<tr data-i="${i}" data-pe="${pe}"><td class="r-prod" data-l="Producto">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(l.descripcion, { codigo: l.codigoMP }) : ''}${esc(l.descripcion)}</td><td data-l="Pedido">${p}</td><td data-l="Recibido">${ya}</td><td data-l="Pendiente"><strong>${pe}</strong></td><td class="r-celda" data-l="Llega ahora"><input type="number" min="0" max="${pe}" class="r-c" value="" aria-label="Unidades que llegaron"><button type="button" class="btn btn-outline btn-sm r-ok" title="Llegó completo"${pe ? '' : ' disabled'}>✔ ${pe || 'listo'}</button></td>` +
                     (st ? `<td data-l="Producto en inventario"><input class="r-n" list="r-inv" aria-label="Producto en inventario" value="${esc(l.insumoName || ((catalogo.get(catId(l)) || {}).insumoName) || l.descripcion)}"></td>` + (lv ? `<td data-l="Lote"><input class="r-l" aria-label="Lote" placeholder="S/L"></td><td data-l="Vence"><input type="date" class="r-v" aria-label="Fecha de vencimiento"></td>` : '') : '') +
                     `<td data-l="Incidencia"><select class="r-t" aria-label="Incidencia"><option value="">Sin incidencia</option>${Object.entries(INCIDENCIAS).map(([k, t]) => `<option value="${k}">${esc(t)}</option>`).join('')}</select><input class="r-td" aria-label="Detalle de la incidencia" placeholder="Detalle"></td></tr>` : ''; }).join('') + '</tbody></table></div>';
         };
@@ -1158,6 +1166,10 @@ function doPost(e) {
   try {
     const d = JSON.parse(e.postData.contents);
     if (d.token !== TOKEN) return salida({ ok: false, error: 'token' });
+    if (d.accion === 'imagenes') {   // foto de producto en la tienda de Convenio Marco (por el código entre paréntesis)
+      const out = {}; (d.codigos || []).slice(0, 60).forEach(c => { out[c] = imagenDe(String(c).replace(/\\D/g, '')); });
+      return salida({ ok: true, imagenes: out });
+    }
     const ok = (l) => (l || []).filter(m => DOMINIOS.some(x => String(m).toLowerCase().endsWith('@' + x)));
     const to = ok(d.to), cc = ok(d.cc);
     if (!to.length) return salida({ ok: false, error: 'sin destinatarios permitidos' });
@@ -1168,6 +1180,18 @@ function doPost(e) {
     MailApp.sendEmail(op);
     return salida({ ok: true, enviados: to.length + cc.length, adjuntos: adj.length });
   } catch (err) { return salida({ ok: false, error: String(err) }); }
+}
+const TIENDAS = ['aseo3'];   // agrega aquí otras tiendas de Convenio Marco si las usas (ej.: la de útiles de oficina)
+function imagenDe(c) {
+  if (!c) return '';
+  for (const t of TIENDAS) {
+    try {
+      const h = UrlFetchApp.fetch('https://conveniomarco.mercadopublico.cl/' + t + '/catalogsearch/result/?q=' + c, { muteHttpExceptions: true, followRedirects: true }).getContentText();
+      const m = h.match(/property="og:image"\\s+content="[^"]*media\\/catalog\\/product\\/(\\d\\/\\d\\/[^"?]+)/);
+      if (m) return m[1];
+    } catch (e) { /* sigue con la siguiente tienda */ }
+  }
+  return '';
 }
 function salida(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }`;
 

@@ -334,3 +334,9 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 ### 4.41 Agregar archivos a una orden y regenerar la recepción conforme (v20.84)
 - "Archivos de la orden" tiene "Agregar archivo" (orden de compra, cuadro, guía, factura, etc.) para documentos cargados antes de existir esta función.
 - "Regenerar recepción conforme (modelo vigente)" rehace el acta de una recepción ya registrada con el modelo actual (firma y timbre incluidos), la descarga y la guarda como `RC<orden>.pdf`; la versión anterior queda en los archivos y el evento queda en la bitácora.
+
+### 4.42 Fotos de productos desde Mercado Público (v20.85)
+- El código entre paréntesis de cada producto del cuadro de distribución (p. ej. "(4540135)") se busca en la tienda de Convenio Marco (`/aseo3/catalogsearch/result/?q=<código>`): la página del producto trae la foto (og:image). El archivo de la foto NO es el código (4540135 → 4/5/4540128.jpg), por eso se guarda el archivo en `Catalogo_Productos.imagenMP`; la imagen se muestra directo desde la tienda.
+- `assets/imagenes-mp.json` trae las 23 fotos del cuadro 1298355-911-CM26 ya resueltas. Para códigos nuevos el Apps Script (acción `imagenes`, hay que volver a pegarlo) consulta la tienda; sin eso, la foto se puede subir a mano en el catálogo.
+- La foto aparece en Catálogo de productos, Recibir mercadería, Actas de entrega (stock) y Existencias, asociada por código o por nombre. Una foto subida a mano tiene prioridad sobre la de la tienda.
+- Limitación: la búsqueda automática solo usa la tienda "aseo3"; para otras (p. ej. útiles de oficina) hay que agregarlas en `TIENDAS` del script.

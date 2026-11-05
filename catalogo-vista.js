@@ -12,7 +12,15 @@
             const prods = [], stock = new Map();
             try { const sn = await fs().getDocs(fs().query(fs().collection(db(), 'Catalogo_Productos'), fs().limit(3000))); sn.forEach(d => prods.push({ id: d.id, ...d.data() })); } catch (e) { /* sin catálogo */ }
             try { const sn = await fs().getDocs(fs().query(fs().collection(db(), 'Insumos'), fs().limit(5000))); sn.forEach(d => { const x = d.data(); if (!x.origenOC) return; const k = norm(x.name), b = x.location || 'Sin asignar'; const e = stock.get(k) || { total: 0, b: {} }; e.total += Number(x.quantity) || 0; e.b[b] = (e.b[b] || 0) + (Number(x.quantity) || 0); stock.set(k, e); }); } catch (e) { /* sin stock */ }
-            datos = prods.map(p => ({ ...p, st: stock.get(norm(p.insumoName || p.descripcion)) || { total: 0, b: {} } })).sort((a, b) => String(a.descripcion).localeCompare(String(b.descripcion)));
+            // por recibir: lo pedido y aún no recibido en órdenes abiertas (columna SAR)
+            const porRecibir = new Map();
+            try {
+                const sn = await fs().getDocs(fs().query(fs().collection(db(), 'Seguimiento_OC'), fs().limit(300)));
+                sn.forEach(d => { const o = d.data(); if (o.cerrada) return; const col = (o.columnas || []).find(c => c.centro === 'SAR') || (o.columnas || [])[0]; if (!col) return;
+                    (o.lineas || []).forEach(l => { const p = (Number(l.dist && l.dist[col.key]) || 0) - (Number(l.recibido && l.recibido[col.key]) || 0); if (p <= 0) return;
+                        const k = l.codigoMP ? 'c' + l.codigoMP : 'd' + norm(l.descripcion); const e = porRecibir.get(k) || { n: 0, ocs: [] }; e.n += p; if (!e.ocs.includes(o.numeroOC)) e.ocs.push(o.numeroOC); porRecibir.set(k, e); }); });
+            } catch (e) { /* sin permiso */ }
+            datos = prods.map(p => ({ ...p, st: stock.get(norm(p.insumoName || p.descripcion)) || { total: 0, b: {} }, rec: porRecibir.get(p.codigoMP ? 'c' + p.codigoMP : 'd' + norm(p.descripcion)) || null })).sort((a, b) => String(a.descripcion).localeCompare(String(b.descripcion)));
             if (window.SAR_Imagenes) await window.SAR_Imagenes.cargar(true).catch(() => {});
         })().finally(() => { cargando = null; });
         return cargando;
@@ -27,7 +35,7 @@
         const st = (document.getElementById('erp-catalog-status-filter') || {}).value || 'ALL';
         const lista = datos.filter(p => (!q || norm(p.descripcion + ' ' + p.codigoMP + ' ' + (p.insumoName || '') + ' ' + (p.proveedor || '')).includes(q)) && (st === 'ALL' || (st === 'OPTIMO' ? p.st.total > 0 : st === 'CRITICO' ? p.st.total === 0 : false)));
         if (!lista.length) { grid.innerHTML = `<div class="erp-card" style="grid-column:1/-1;text-align:center;padding:32px;color:#64748B">${datos.length ? 'Ningún producto coincide con el filtro.' : 'Aún no hay productos. Ingresa una orden de compra o usa "Cargar productos y fotos" en Seguimiento de OC → Catálogo de productos.'}</div>`; return; }
-        grid.innerHTML = lista.map(p => `<article class="erp-catalog-card cv-card"><div class="cv-foto">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(p.descripcion, { codigo: p.codigoMP, grande: true }) : ''}</div><div class="erp-catalog-card__body"><h4 class="cv-n">${esc(p.descripcion)}</h4><p class="cv-m">${p.codigoMP ? 'Cód. MP ' + esc(p.codigoMP) + ' · ' : ''}${esc(p.proveedor || '')}</p><div class="erp-catalog-card__stock-box"><strong>${p.st.total.toLocaleString('es-CL')}</strong> un. en stock<small>${Object.keys(p.st.b).map(b => esc(b) + ': ' + p.st.b[b]).join(' · ')}</small></div></div></article>`).join('');
+        grid.innerHTML = lista.map(p => `<article class="erp-catalog-card cv-card"><div class="cv-foto">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(p.descripcion, { codigo: p.codigoMP, grande: true, candidata: !!p.rec }) : ''}</div><div class="erp-catalog-card__body"><h4 class="cv-n">${esc(p.descripcion)}</h4><p class="cv-m">${p.codigoMP ? 'Cód. MP ' + esc(p.codigoMP) + ' · ' : ''}${esc(p.proveedor || '')}</p>${p.rec ? `<div class="cv-pend">Pendiente de recepción: ${p.rec.n} un. (OC ${esc(p.rec.ocs.join(', '))})${p.st.total === 0 ? ' · aún no está en stock' : ''}</div>` : ''}<div class="erp-catalog-card__stock-box"><strong>${p.st.total.toLocaleString('es-CL')}</strong> un. en stock<small>${Object.keys(p.st.b).map(b => esc(b) + ': ' + p.st.b[b]).join(' · ')}</small></div></div></article>`).join('');
         if (window.SAR_Imagenes) window.SAR_Imagenes.rellenar(grid);
     }
     async function render(grid) {

@@ -408,9 +408,10 @@
         return ref.id;
     }
     /** Borra de la orden los archivos de un acta de entrega (al eliminar el acta). Devuelve cuántos quitó. */
-    async function eliminarArchivosActa(ocId, numero) {
+    const eliminarArchivosActa = (ocId, numero) => eliminarArchivosCategoria(ocId, 'Acta de entrega ' + numero);
+    async function eliminarArchivosCategoria(ocId, categoria) {
         const f = fs(); let n = 0;
-        const sn = await f.getDocs(f.query(f.collection(db(), 'Seguimiento_OC', ocId, 'Archivos'), f.where('categoria', '==', 'Acta de entrega ' + numero)));
+        const sn = await f.getDocs(f.query(f.collection(db(), 'Seguimiento_OC', ocId, 'Archivos'), f.where('categoria', '==', categoria)));
         for (const d of sn.docs) {
             const ps = await f.getDocs(f.collection(db(), 'Seguimiento_OC', ocId, 'Archivos', d.id, 'Partes'));
             for (const p of ps.docs) await f.deleteDoc(p.ref);
@@ -497,7 +498,7 @@
             </details>
             <details class="erp-card soc-det" open><summary><h3>Archivos de la orden</h3></summary>
                 <div class="soc-arch-acc"><button type="button" class="btn btn-outline btn-sm" id="soc-arch-add"><i class="ph-bold ph-paperclip"></i> Agregar archivo</button>
-                ${oc.recepcionConforme ? '<button type="button" class="btn btn-outline btn-sm" id="soc-rc-regen"><i class="ph-bold ph-arrows-clockwise"></i> Regenerar recepción conforme (modelo vigente)</button>' : ''}</div>
+                ${oc.recepcionConforme ? '<button type="button" class="btn btn-outline btn-sm" id="soc-rc-edit"><i class="ph-bold ph-pencil-simple"></i> Editar recepción conforme</button> <button type="button" class="btn btn-outline btn-sm" id="soc-rc-regen"><i class="ph-bold ph-arrows-clockwise"></i> Regenerar recepción conforme (modelo vigente)</button>' : ''}</div>
                 <div id="soc-archivos"></div></details>
             <div class="erp-card"><h3>Notas y avisos</h3>
                 <textarea id="soc-texto" rows="3" maxlength="1500" placeholder="Escribe la nota o aviso (ej.: proveedor informa despacho por Pullman Cargo, OT …)"></textarea>
@@ -515,6 +516,10 @@
         const bpe = q('#soc-pend'); if (bpe) bpe.addEventListener('click', () => { if (!pendientesDe(ocActual).some(x => x.pendiente > 0)) { toast('Sin pendientes', 'Todo lo de SAR ya fue recibido.', 'success'); return; } descargarPendientes(ocActual); });
         const blo = q('#soc-lotes'); if (blo) blo.addEventListener('click', formLotes);
         const baa = q('#soc-arch-add'); if (baa) baa.addEventListener('click', formAgregarArchivo);
+        const brEd = q('#soc-rc-edit'); if (brEd) brEd.addEventListener('click', () => {
+            if (!window.SAR_RecepcionConforme || !window.SAR_RecepcionConforme.editar) { toast('No disponible', 'El módulo de recepción conforme no está cargado.', 'warning'); return; }
+            window.SAR_RecepcionConforme.editar({ oc: ocActual, toast, guardarArchivo, eliminarCategoria: eliminarArchivosCategoria, centroPropio: CENTRO_PROPIO, usuario: usuario() });
+        });
         const brg = q('#soc-rc-regen'); if (brg) brg.addEventListener('click', () => {
             if (!window.SAR_RecepcionConforme || !window.SAR_RecepcionConforme.regenerar) { toast('No disponible', 'El módulo de recepción conforme no está cargado.', 'warning'); return; }
             brg.disabled = true;
@@ -1269,5 +1274,5 @@ function salida(o) { return ContentService.createTextOutput(JSON.stringify(o)).s
         ov.querySelector('#c-copiar').addEventListener('click', async () => { try { await navigator.clipboard.writeText(SCRIPT_GAS); toast('Copiado', 'Código copiado.', 'success'); } catch (e) { ov.querySelector('#c-script').select(); } });
     }
 
-    window.SAR_SeguimientoOC = { eliminarArchivosActa, formCatalogo, registrarCatalogo, guardarArchivo, abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
+    window.SAR_SeguimientoOC = { eliminarArchivosCategoria, eliminarArchivosActa, formCatalogo, registrarCatalogo, guardarArchivo, abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
 })(window, document);

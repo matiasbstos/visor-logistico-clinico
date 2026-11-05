@@ -372,3 +372,9 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - `progreso.js` (`SAR_Progreso`): una sola animación con el logo SAR (anillo que gira, pasos, ✔ final y aviso al costado) para ingresar orden, recepción, emitir/eliminar acta, acta de prueba, regenerar recepción conforme y actualizar catálogo. Toda carga, guardado o modificación nueva debe usarla.
 - En "Pedido y recibido" (y en las tablas de la orden) la foto aparece aunque esté por confirmar: con borde punteado y "?" (título "Foto por confirmar"); al ampliarla avisa que falta confirmar. En el resto del sistema solo se ven las confirmadas.
 - Cuadro de distribución: IVA y total de cada columna se verifican (IVA = 19 % del neto, total = neto + IVA); si lo leído no cuadra (celdas pegadas, p. ej. $138.623.686.281) se corrige y se avisa.
+
+### 4.50 Editar actas ya emitidas y recepción conforme (v20.93)
+- Actas de entrega → Actas emitidas → **Editar** (administrador): cambia centro, fecha, productos y cantidades (quitar/agregar de la bodega de origen), pendientes, documentos y firmas. En una transacción deshace lo entregado antes (lotes, sobregiro, lo entregado de la OC) y aplica lo nuevo; deja `EDICION_ACTA` en el historial (informes contable/disponible), rehace el PDF y reemplaza el archivo de la orden. `firestore.rules` permite al administrador actualizar actas EMITIDA→EMITIDA.
+- Actas de oxígeno: Editar permite quitar balones (vuelven a SAR como llenos), agregar balones llenos o cambiar la serie, y cambiar centro/documentos/firmas; cada balón deja su evento.
+- Recepción conforme: botón **Editar recepción conforme** (fecha, guía/factura y N°, contraparte, quien recibe, parcial, observaciones); rehace el acta y reemplaza el archivo. Productos y cantidades siguen lo recibido en la orden.
+- Catálogo de Insumos: los productos con recepción pendiente llevan "Pendiente de recepción: N un. (OC …) · aún no está en stock".

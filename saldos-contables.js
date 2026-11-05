@@ -123,18 +123,27 @@
     }
 
     const root = () => document.getElementById('sal-root');
+    function pintarSeg() {
+        const h = document.getElementById('seg-root'); if (!h) return;
+        h.innerHTML = `
+        <h3 class="act-h">Seguimiento de un acta</h3>
+        <p class="act-hint">Escribe el ID del acta (ej. <b>AE-2026-0001</b>) para ver todo su movimiento: entrega, sobregiro, cuadres y anulación.</p>
+        <div class="sal-barra"><input id="seg-q" type="search" placeholder="AE-2026-0001" value="${esc(segId)}" autocomplete="off" style="max-width:220px"><button type="button" class="btn btn-primary" id="seg-b">Buscar</button>${seg && seg.acta ? '<button type="button" class="btn btn-outline" id="seg-csv">Descargar seguimiento (Excel)</button>' : ''}</div>
+`;
+        const sq = h.querySelector('#seg-q'); const go = () => { segId = sq.value.trim().toUpperCase(); seguir(); };
+        h.querySelector('#seg-b').addEventListener('click', go); sq.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+        const sc = h.querySelector('#seg-csv'); if (sc) sc.addEventListener('click', descargarSeg);
+    }
     function pintar() {
+        pintarSeg();
         const r = root(); if (!r) return;
         const vis = filas.filter(x => !bodega || x.bodega === bodega);
         const bodegas = [...new Set(filas.map(x => x.bodega).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'es'));
         const sum = (k) => vis.reduce((s, x) => s + x[k], 0);
         const listos = vis.filter(x => x.estado === 'LISTO');
         r.innerHTML = `
-        <h3 class="act-h" style="margin-top:34px;">Seguimiento de un acta</h3>
-        <p class="act-hint">Escribe el ID del acta (ej. <b>AE-2026-0001</b>) para ver todo su movimiento: entrega, sobregiro, cuadres y anulación.</p>
-        <div class="sal-barra"><input id="seg-q" type="search" placeholder="AE-2026-0001" value="${esc(segId)}" autocomplete="off" style="max-width:220px"><button type="button" class="btn btn-primary" id="seg-b">Buscar</button>${seg && seg.acta ? '<button type="button" class="btn btn-outline" id="seg-csv">Descargar seguimiento (Excel)</button>' : ''}</div>
-        <div id="seg-res">${segHtml()}</div>
-        <h3 class="act-h" style="margin-top:34px;">Saldos contables y disponibles</h3>
+        <div class="page-header mb-24"><div class="page-title"><h2>Auditoría</h2><p>Saldos contables y disponibles de los insumos entregados con sobregiro.</p></div></div>
+        <h3 class="act-h">Saldos contables y disponibles</h3>
         <p class="act-hint">Lo entregado sin stock en sistema queda como <b>sobregiro</b>. <b>Saldo contable</b> = en sistema − sobregiro (puede ser negativo). Al ingresar la OC/SDC se <b>cuadra</b>: se descuenta lo ya entregado y queda lo disponible.</p>
         <div class="sal-barra">
           <select id="sal-b" aria-label="Bodega"><option value="">Todas las bodegas</option>${bodegas.map(b => `<option${b === bodega ? ' selected' : ''}>${esc(b)}</option>`).join('')}</select>
@@ -148,9 +157,6 @@
         ${cargando ? '<p class="act-hint">Cargando…</p>' : !vis.length ? '<p class="act-hint">Sin insumos en sobregiro. Todo cuadrado.</p>' : `
         <div class="sal-tabla"><div class="sal-fila sal-cab"><span>Insumo</span><span>En sistema</span><span>Sobregiro</span><span>Contable</span><span>Disponible</span><span>Estado</span><span></span></div>
         ${vis.slice(0, 300).map(x => `<div class="sal-fila"><span class="sal-n">${esc(x.nombre)}<small>${esc(x.bodega)}${x.actas.length ? ' · ' + esc(actasTxt(x)) : ''}</small></span><span>${x.q}</span><span class="${x.sg > 0 ? 'act-sin' : ''}">${x.sg}</span><span class="${x.contable < 0 ? 'act-sin' : ''}">${x.contable}</span><span>${x.disp}</span><span><i class="sal-e sal-e--${x.estado}">${ETIQ[x.estado]}</i></span><span>${x.estado === 'LISTO' ? `<button type="button" class="btn btn-outline sal-q" data-id="${esc(x.id)}">Cuadrar</button>` : ''}</span></div>`).join('')}</div>${vis.length > 300 ? '<p class="act-hint">Se muestran 300; el informe Excel incluye todos.</p>' : ''}`}`;
-        const sq = r.querySelector('#seg-q'); const go = () => { segId = sq.value.trim().toUpperCase(); seguir(); };
-        r.querySelector('#seg-b').addEventListener('click', go); sq.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
-        const sc = r.querySelector('#seg-csv'); if (sc) sc.addEventListener('click', descargarSeg);
         r.querySelector('#sal-b').addEventListener('change', (e) => { bodega = e.target.value; pintar(); });
         r.querySelector('#sal-sp').addEventListener('change', (e) => { soloPend = e.target.checked; cargar(); });
         r.querySelector('#sal-act').addEventListener('click', cargar);
@@ -171,5 +177,5 @@
         });
     }
     function abrir() { cargar(); }
-    window.SAR_Saldos = { abrir, seguir, _id: (v) => { segId = v; }, fila, csv: (t) => csv(t), _set: (f) => { filas = f; } };
+    window.SAR_Saldos = { abrir, seguir, pintarSeg, _id: (v) => { segId = v; }, fila, csv: (t) => csv(t), _set: (f) => { filas = f; } };
 })(window, document);

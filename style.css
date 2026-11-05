@@ -5298,3 +5298,13 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .desktop-toggle-btn, .mobile-menu-btn { appearance: none; -webkit-appearance: none; width: 40px; height: 40px; padding: 0; align-items: center; justify-content: center; background: #fff; border: 1px solid #E2E8F0; box-shadow: var(--sh-1); cursor: pointer; transition: background .2s, border-color .2s, box-shadow .2s; }
 .desktop-toggle-btn:hover, .mobile-menu-btn:hover { background: var(--sar-blue-light, #EEF2F9); border-color: var(--brand-blue); }
 .desktop-toggle-btn:active, .mobile-menu-btn:active { transform: scale(.96); }
+
+/* v20.62 · pestañas de Actas de entrega (misma voz que la barra superior) */
+.act-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid #E2E8F0; margin: 0 0 20px; }
+.act-tab { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; background: none; border: 0; border-bottom: 3px solid transparent; margin-bottom: -1px; font: inherit; font-weight: 600; font-size: 14px; color: #64748B; cursor: pointer; transition: color .15s, border-color .15s, background .15s; border-radius: 8px 8px 0 0; }
+.act-tab:hover { color: var(--brand-blue); background: #F8FAFC; }
+.act-tab.active { color: var(--brand-blue); border-bottom-color: var(--brand-green); }
+.act-tab:focus-visible { outline: 3px solid var(--brand-green); outline-offset: -2px; }
+.act-tab em { font-style: normal; font-size: 11px; font-weight: 700; background: #EEF2F7; color: var(--brand-blue); border-radius: 999px; padding: 1px 8px; }
+[data-act-tab][hidden] { display: none !important; }
+@media (max-width: 600px) { .act-tab { padding: 9px 10px; font-size: 13px; } .act-tab span { white-space: nowrap; } }

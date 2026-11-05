@@ -5325,3 +5325,11 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .scan-input-group input { align-self: stretch; min-height: 32px; }
 #view-toma-inventario select.form-control, #view-inventario-semanal select.form-control, [id^="semanal-select-"] { min-height: 40px; }
 #toma-table-search { min-height: 40px; }
+
+/* v20.64 · recepción de mercadería: lista con ✔ por línea y recepción total */
+.soc-barra-rec { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 10px; }
+.soc-resumen-rec { margin-left: auto; font-size: 13px; color: #64748B; }
+.soc-resumen-rec b { color: var(--brand-blue); }
+.r-celda { white-space: nowrap; }
+.r-celda .r-c { width: 72px; }
+.r-celda .r-ok { margin-left: 6px; min-height: 36px; color: var(--brand-green-ink); border-color: var(--brand-green); }

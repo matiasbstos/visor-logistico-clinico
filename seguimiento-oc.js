@@ -293,7 +293,52 @@
         unsubEventos = fs().onSnapshot(fs().query(fs().collection(db(), 'Seguimiento_OC', id, 'Eventos'), fs().orderBy('fecha', 'desc'), fs().limit(100)), (snap) => {
             eventos = []; snap.forEach(d => eventos.push({ id: d.id, ...d.data() })); if (ocActual) pintarBitacora();
         }, () => { /* sin permiso: no se muestra bitácora */ });
+        if (unsubArchivos) { try { unsubArchivos(); } catch (e) { /* noop */ } }
+        archivos = [];
+        unsubArchivos = fs().onSnapshot(fs().query(fs().collection(db(), 'Seguimiento_OC', id, 'Archivos'), fs().orderBy('fecha', 'desc'), fs().limit(100)), (snap) => {
+            archivos = []; snap.forEach(d => archivos.push({ id: d.id, ...d.data() })); if (ocActual) pintarArchivos();
+        }, () => { /* sin permiso */ });
         pintarDetalle();
+    }
+
+    // ---------------------------------------------------------------
+    // Archivos de la orden (v20.75): quedan guardados en la propia orden (Firestore, en partes
+    // de ~700 KB) y se pueden volver a abrir desde la ficha. No se modifican ni se borran.
+    // ---------------------------------------------------------------
+    const TROZO = 700000, MAX_ARCHIVO = 8 * 1024 * 1024;
+    const b64De = (bytes) => { let s = ''; const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes); for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
+    async function guardarArchivo(ocId, { nombre, categoria, bytes, mime, nota }) {
+        const f = fs(); const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+        if (u.length > MAX_ARCHIVO) throw new Error(`"${nombre}" pesa más de 8 MB.`);
+        const b64 = b64De(u), partes = []; for (let i = 0; i < b64.length; i += TROZO) partes.push(b64.slice(i, i + TROZO));
+        const ref = f.doc(f.collection(db(), 'Seguimiento_OC', ocId, 'Archivos'));
+        await f.setDoc(ref, { nombre, categoria: categoria || 'Documento', mime: mime || 'application/pdf', tamano: u.length, partes: partes.length, nota: nota || '', subidoPor: usuario(), fecha: f.serverTimestamp() });
+        for (let i = 0; i < partes.length; i++) await f.setDoc(f.doc(f.collection(db(), 'Seguimiento_OC', ocId, 'Archivos', ref.id, 'Partes'), String(i).padStart(3, '0')), { n: i, b64: partes[i] });
+        return ref.id;
+    }
+    /** Guarda un File del navegador sin interrumpir el flujo si falla. */
+    async function guardarFile(ocId, file, categoria) {
+        if (!file) return false;
+        try { await guardarArchivo(ocId, { nombre: file.name, categoria, bytes: new Uint8Array(await file.arrayBuffer()), mime: file.type || 'application/octet-stream' }); return true; }
+        catch (e) { toast('Archivo no guardado', `${file.name}: ${e.message || e}`, 'warning'); return false; }
+    }
+    async function verArchivo(a) {
+        const f = fs(); const snap = await f.getDocs(f.query(f.collection(db(), 'Seguimiento_OC', ocActual.id, 'Archivos', a.id, 'Partes'), f.orderBy('n')));
+        let b64 = ''; snap.forEach(d => { b64 += d.data().b64; });
+        if (!b64) throw new Error('El archivo no tiene contenido.');
+        const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+        const url = URL.createObjectURL(new Blob([u], { type: a.mime || 'application/pdf' }));
+        const w = window.open(url, '_blank');
+        if (!w) { const l = document.createElement('a'); l.href = url; l.download = a.nombre; document.body.appendChild(l); l.click(); l.remove(); }
+        setTimeout(() => URL.revokeObjectURL(url), 60000);
+    }
+    let archivos = [], unsubArchivos = null;
+    function pintarArchivos() {
+        const host = root() && root().querySelector('#soc-archivos'); if (!host) return;
+        const kb = (n) => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+        host.innerHTML = archivos.length ? '<ul class="soc-arch">' + archivos.map(a => `<li><i class="ph-bold ph-file-pdf"></i><div><strong>${esc(a.nombre)}</strong><small>${esc(a.categoria)} · ${kb(a.tamano || 0)} · ${a.fecha && a.fecha.toDate ? fmtFecha(a.fecha.toDate().toISOString().slice(0, 10)) : ''} · ${esc(a.subidoPor || '')}</small></div><button type="button" class="btn btn-outline btn-sm" data-arch="${esc(a.id)}">Ver</button></li>`).join('') + '</ul>'
+            : '<p class="bodega-estantes__hint">Aún no hay archivos. Los PDF que cargues en esta orden (orden, distribución, guía, acta) quedarán aquí.</p>';
+        host.querySelectorAll('[data-arch]').forEach(b => b.addEventListener('click', () => { const a = archivos.find(x => x.id === b.dataset.arch); if (a) verArchivo(a).catch(e => toast('No se pudo abrir', e.message || String(e), 'error')); }));
     }
 
     let verTodos = false, verPedido = false;
@@ -336,6 +381,7 @@
                 ${[['Despacho', oc.datos.direccionDespacho], ['Contraparte técnica', oc.datos.contraparte], ['Contacto', oc.datos.contacto], ['Horario', oc.datos.horario], ['Forma de pago', oc.datos.formaPago], ['Factura a', oc.datos.emailFactura], ['Memo', oc.datos.memo ? 'N° ' + oc.datos.memo + (oc.descripcion ? ' · ' + oc.descripcion : '') : ''], ['Total (con IVA)', oc.datos.total ? peso(oc.datos.total) : '']].filter(x => x[1]).map(x => `<div><small>${x[0]}</small><span>${esc(x[1])}</span></div>`).join('')}</div></div>` : ''}
             ${memosCDPHTML(oc)}${entregasHTML(oc)}
             </details>
+            <details class="erp-card soc-det" open><summary><h3>Archivos de la orden</h3></summary><div id="soc-archivos"></div></details>
             <div class="erp-card"><h3>Notas y avisos</h3>
                 <textarea id="soc-texto" rows="3" maxlength="1500" placeholder="Escribe la nota o aviso (ej.: proveedor informa despacho por Pullman Cargo, OT …)"></textarea>
                 <div class="soc-componer"><label class="soc-toggle"><input type="checkbox" id="soc-correo" checked> Enviar correo a la lista</label>
@@ -351,7 +397,7 @@
         const bre = q('#soc-recep'); if (bre) bre.addEventListener('click', () => { formRecepcion().catch(e => toast('No se pudo abrir la recepción', e.message || String(e), 'error')); });
         const bpe = q('#soc-pend'); if (bpe) bpe.addEventListener('click', () => { if (!pendientesDe(ocActual).some(x => x.pendiente > 0)) { toast('Sin pendientes', 'Todo lo de SAR ya fue recibido.', 'success'); return; } descargarPendientes(ocActual); });
         const blo = q('#soc-lotes'); if (blo) blo.addEventListener('click', formLotes);
-        const bco = q('#soc-conforme'); if (bco) bco.addEventListener('click', () => { if (window.SAR_RecepcionConforme) window.SAR_RecepcionConforme.abrir({ oc: ocActual, modal, toast, enviarCorreo, config: configCorreo, usuario: usuario(), fmtFecha, peso, totalesPorCentro, centroPropio: CENTRO_PROPIO }); });
+        const bco = q('#soc-conforme'); if (bco) bco.addEventListener('click', () => { if (window.SAR_RecepcionConforme) window.SAR_RecepcionConforme.abrir({ oc: ocActual, modal, toast, enviarCorreo, guardarArchivo, config: configCorreo, usuario: usuario(), fmtFecha, peso, totalesPorCentro, centroPropio: CENTRO_PROPIO }); });
         root().querySelectorAll('[data-acta]').forEach(b => b.addEventListener('click', () => formActaCentro(b.dataset.acta)));
         const ac = q('#soc-acepta'); if (ac) ac.addEventListener('click', formAceptacion);
         root().querySelectorAll('[data-resolver]').forEach(b => b.addEventListener('click', () => formResolver(b.dataset.resolver)));
@@ -359,7 +405,7 @@
         const m = q('#soc-multa'); if (m) m.addEventListener('click', formMulta);
         const c = q('#soc-cerrar'); if (c) c.addEventListener('click', alternarCierre);
         const cf = q('#soc-config'); if (cf) cf.addEventListener('click', formConfig);
-        pintarDestinatarios(); pintarBitacora();
+        pintarDestinatarios(); pintarBitacora(); pintarArchivos();
     }
 
     /** Banner con el siguiente paso según el estado de la orden. */
@@ -615,6 +661,7 @@
                     tx.set(ref, oc);
                     tx.set(fs().doc(fs().collection(db(), 'Seguimiento_OC', id, 'Eventos')), { tipo: 'CREACION', texto: `Orden ingresada: ${cuadro.lineas.length} productos, ${cuadro.columnas.length} memos/CDP. Vence el ${fmtFecha(oc.fechaLimite)}.`, autor: usuario(), fecha: fs().serverTimestamp() });
                 });
+                await guardarFile(id, q('#n-file').files[0], 'Cuadro de distribución');
                 toast('Orden ingresada', `Vence el ${fmtFecha(oc.fechaLimite)}.`, 'success');
             });
         ov.querySelector('#n-file').addEventListener('change', async (e) => {
@@ -702,6 +749,8 @@
                 tx.set(fs().doc(fs().collection(db(), 'Seguimiento_OC', id, 'Eventos')), { tipo: 'CREACION', texto: `Orden ingresada${oc.origen === 'OC_MP' ? ' desde el PDF' : ''}: ${oc.lineas.length} producto(s). El proveedor debe aceptarla hasta el ${fmtFecha(oc.aceptarLimite)}; entrega en ${oc.plazoDiasHabiles} días hábiles desde la aceptación.`, autor: usuario(), fecha: fs().serverTimestamp() });
             });
             if (usoCuadro) window.SAR_ComprasAgiles.vincularOC(usoCuadro.id, oc.numeroOC);
+            const fOC = (o.querySelector('#p-file') || {}).files, fDist = (o.querySelector('#p-dist') || {}).files;
+            await guardarFile(id, fOC && fOC[0], 'Orden de compra'); await guardarFile(id, fDist && fDist[0], 'Cuadro de distribución');
             abrirCuando(id);
             toast('Orden ingresada', `Acepta hasta el ${fmtFecha(oc.aceptarLimite)}.${oc.distribucionPDF ? ' Distribución por centro leída del PDF.' : ''}${usoCuadro && !oc.distribucionPDF ? ' Cuadro por centro tomado de la compra ágil ' + usoCuadro.compra + '.' : ''}`, 'success');
         }, { ok: 'Ingresar orden' });
@@ -913,6 +962,7 @@
         const ov = modal('Recibir mercadería', `
             <label${cols.length === 1 ? ' hidden' : ''}>¿Qué memo/CDP se recibió?<select id="r-col">${cols.map(c => `<option value="${esc(c.key)}">${esc(c.centro)} · memo ${esc(c.memo)}${c.cdp ? ' · CDP ' + esc(c.cdp) : ''}</option>`).join('')}</select></label>
             <div class="soc-fila"><label>N° guía de despacho<input type="text" id="r-guia" autocomplete="off"></label><label>Fecha<input type="date" id="r-fecha" value="${hoyISO()}"></label></div>
+            <label>Guía de despacho (PDF, opcional: queda guardada en la orden)<input type="file" id="r-file" accept="application/pdf,image/*"></label>
             <div class="soc-barra-rec"><button type="button" class="btn btn-outline btn-sm" id="r-total"><i class="ph-bold ph-checks"></i> Marcar todo recibido</button><button type="button" class="btn btn-outline btn-sm" id="r-nada">Limpiar</button><span id="r-resumen" class="soc-resumen-rec"></span></div>
             <div id="r-lineas"></div>
             <label class="soc-toggle"><input type="checkbox" id="r-lv"> Anotar lote y vencimiento ahora (también se puede hacer después)</label>
@@ -953,7 +1003,9 @@
                 const unidades = det.reduce((t, d) => t + d.cantidad, 0);
                 const prog = progresoRecepcion(o, ['Validando la recepción…']);
                 try {
+                const fGuia = (q('#r-file').files || [])[0];
                 await recepcionConStock(oc, { onPaso: prog.paso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar: q('#r-correo').checked, ingresaStock, central, texto, titulo: incidencias.length ? `Recepción con incidencias en ${col.centro}` : `Recepción en ${col.centro}` });
+                if (fGuia) { prog.paso('Guardando la guía en la orden…'); await guardarFile(oc.id, fGuia, 'Guía de despacho ' + recId); }
                 } catch (err) { prog.error(err); throw err; }
                 prog.listo(`Listo: ${recId} · ${unidades} unidades${ingresaStock ? ` en ${central}` : ''}. Quedó registrada en Auditoría y en los informes contable y disponible.`);
                 await new Promise(r => setTimeout(r, 1400));
@@ -1066,5 +1118,5 @@ function salida(o) { return ContentService.createTextOutput(JSON.stringify(o)).s
         ov.querySelector('#c-copiar').addEventListener('click', async () => { try { await navigator.clipboard.writeText(SCRIPT_GAS); toast('Copiado', 'Código copiado.', 'success'); } catch (e) { ov.querySelector('#c-script').select(); } });
     }
 
-    window.SAR_SeguimientoOC = { abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
+    window.SAR_SeguimientoOC = { guardarArchivo, abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
 })(window, document);

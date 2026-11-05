@@ -378,6 +378,17 @@
         for (let i = 0; i < partes.length; i++) await f.setDoc(f.doc(f.collection(db(), 'Seguimiento_OC', ocId, 'Archivos', ref.id, 'Partes'), String(i).padStart(3, '0')), { n: i, b64: partes[i] });
         return ref.id;
     }
+    /** Borra de la orden los archivos de un acta de entrega (al eliminar el acta). Devuelve cuántos quitó. */
+    async function eliminarArchivosActa(ocId, numero) {
+        const f = fs(); let n = 0;
+        const sn = await f.getDocs(f.query(f.collection(db(), 'Seguimiento_OC', ocId, 'Archivos'), f.where('categoria', '==', 'Acta de entrega ' + numero)));
+        for (const d of sn.docs) {
+            const ps = await f.getDocs(f.collection(db(), 'Seguimiento_OC', ocId, 'Archivos', d.id, 'Partes'));
+            for (const p of ps.docs) await f.deleteDoc(p.ref);
+            await f.deleteDoc(d.ref); n++;
+        }
+        return n;
+    }
     /** Guarda un File del navegador sin interrumpir el flujo si falla. */
     async function guardarFile(ocId, file, categoria) {
         if (!file) return false;
@@ -1222,5 +1233,5 @@ function salida(o) { return ContentService.createTextOutput(JSON.stringify(o)).s
         ov.querySelector('#c-copiar').addEventListener('click', async () => { try { await navigator.clipboard.writeText(SCRIPT_GAS); toast('Copiado', 'Código copiado.', 'success'); } catch (e) { ov.querySelector('#c-script').select(); } });
     }
 
-    window.SAR_SeguimientoOC = { formCatalogo, registrarCatalogo, guardarArchivo, abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
+    window.SAR_SeguimientoOC = { eliminarArchivosActa, formCatalogo, registrarCatalogo, guardarArchivo, abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
 })(window, document);

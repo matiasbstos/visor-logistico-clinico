@@ -422,13 +422,15 @@
             ${errores.length && (borrador.items.length || borrador.centro) ? `<ul class="act-err">${errores.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
             <div class="act-acc"><button type="button" class="btn btn-outline" id="act-limpiar">Vaciar borrador</button>
               <button type="button" class="btn btn-primary" id="act-emitir"${errores.length ? ' disabled' : ''}>Emitir acta y descontar stock</button></div>
+            <div class="act-prueba"><b>Probar el formato</b><span>Genera el acta con los productos elegidos para comparar con el modelo. <u>No descuenta stock</u> ni se numera; queda registrada como "ACTA_PRUEBA" en el historial (informes contable y disponible).</span>
+              <div class="act-acc"><button type="button" class="btn btn-outline" id="act-prueba-pdf"${borrador.items.length ? '' : ' disabled'}>Acta de prueba · PDF</button><button type="button" class="btn btn-outline" id="act-prueba-docx"${borrador.items.length ? '' : ' disabled'}>Acta de prueba · Word</button></div></div>
           </div>
         </div></div>
         <div data-act-tab="emitidas"${tab === 'emitidas' ? '' : ' hidden'}>
         <h3 class="act-h">Actas emitidas</h3>
         <div class="act-hist">${historial.length ? historial.map(a => `<div class="act-fila${a.estado === 'ANULADA' ? ' act-anulada' : ''}"><div class="act-fn"><strong>${esc(a.numero)}</strong> · ${esc(a.centro)}<small>${esc(a.fecha)} · ${a.tipo === 'OXIGENO' ? 'oxígeno · ' : ''}${(a.items || []).length} ${a.tipo === 'OXIGENO' ? 'balones' : 'productos'} · ${esc(a.bodegaOrigen)} · ${esc(a.creadoPor || '')}${a.estado === 'ANULADA' ? ' · <b>ANULADA</b>' : ''}${a.conSobregiro ? ' · <b class="act-sin">con sobregiro</b>' : ''}</small></div>
             <button type="button" class="btn btn-outline act-dl" data-n="${esc(a.numero)}" data-f="pdf">PDF</button><button type="button" class="btn btn-outline act-dl" data-n="${esc(a.numero)}" data-f="docx">Word</button>
-            ${esAdmin() && a.estado !== 'ANULADA' && a.tipo !== 'OXIGENO' ? `<button type="button" class="btn btn-outline act-an" data-n="${esc(a.numero)}">Anular</button>` : ''}</div>`).join('') : '<p class="act-hint">Todavía no hay actas emitidas.</p>'}</div></div>
+            ${esAdmin() && a.estado !== 'ANULADA' && a.tipo !== 'OXIGENO' ? `<button type="button" class="btn btn-outline act-an" data-n="${esc(a.numero)}">Eliminar acta</button>` : ''}</div>`).join('') : '<p class="act-hint">Todavía no hay actas emitidas.</p>'}</div></div>
         <div data-act-tab="seguimiento" id="seg-root"${tab === 'seguimiento' ? '' : ' hidden'}></div>`;
         r.querySelectorAll('.act-tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; pintar(); }));
         if (window.SAR_Saldos && window.SAR_Saldos.pintarSeg) window.SAR_Saldos.pintarSeg();
@@ -491,16 +493,51 @@
         });
         $('#act-limpiar').addEventListener('click', () => { if (!confirm('¿Vaciar el borrador?')) return; borrador = { ...vacio(), origen: borrador.origen }; guardarBorrador(); pintar(); });
         $('#act-emitir').addEventListener('click', onEmitir);
+        ['pdf', 'docx'].forEach(fm => { const bt = document.getElementById('act-prueba-' + fm); if (bt) bt.addEventListener('click', async () => { bt.disabled = true; try { await probarActa(fm); } finally { bt.disabled = false; } }); });
         $$('.act-dl').forEach(b => b.addEventListener('click', async () => {
             const a = historial.find(x => x.numero === b.dataset.n); if (!a) return;
             b.disabled = true; try { await descargar(actaParaDoc(a), b.dataset.f); } catch (e) { toast('Descarga', e.message, 'error'); } finally { b.disabled = false; }
         }));
         $$('.act-an').forEach(b => b.addEventListener('click', async () => {
-            const motivo = (prompt(`Motivo de la anulación del acta ${b.dataset.n} (el stock vuelve a la bodega de origen):`) || '').trim();
+            const motivo = (prompt(`Eliminar el acta ${b.dataset.n}: se borra su archivo, el stock vuelve a la bodega de origen y lo entregado vuelve a quedar pendiente en la orden. Queda el registro en el historial.\n\nMotivo:`, 'Acta mal generada') || '').trim();
             if (!motivo) return;
-            try { await anular(b.dataset.n, motivo, usuarioEmail()); toast('Acta anulada', `${b.dataset.n}: stock devuelto.`, 'success'); await Promise.all([cargarHistorial(), cargarStock()]); borrador.items = []; guardarBorrador(); pintar(); }
+            try {
+                const a = historial.find(x => x.numero === b.dataset.n);
+                await anular(b.dataset.n, motivo, usuarioEmail());
+                let arch = 0; if (a && a.oc && a.oc.id && window.SAR_SeguimientoOC && window.SAR_SeguimientoOC.eliminarArchivosActa) { try { arch = await window.SAR_SeguimientoOC.eliminarArchivosActa(a.oc.id, a.numero); } catch (e2) { toast('Archivo no eliminado', 'El stock se devolvió, pero el archivo de la orden no se pudo borrar: ' + (e2.message || e2), 'warning'); } }
+                toast('Acta eliminada', `${b.dataset.n}: stock devuelto${arch ? ' y archivo borrado de la orden' : ''}.`, 'success'); await Promise.all([cargarHistorial(), cargarStock()]); borrador.items = []; guardarBorrador(); pintar(); }
             catch (e) { toast('No se anuló', e.message, 'error'); }
         }));
+    }
+
+    /** Acta de prueba: arma el documento como si se emitiera, sin tocar stock ni órdenes. */
+    async function probarActa(formato) {
+        leerCampos();
+        const b = borrador; if (!b.items.length) { toast('Acta de prueba', 'Agrega al menos un producto.', 'warning'); return; }
+        const f = fs(), usuario = usuarioEmail(), hoy = new Date();
+        const numero = 'PRUEBA-' + hoy.toISOString().slice(0, 19).replace(/\D/g, '').slice(2);
+        let items = b.items.map(i => ({ id: i.id || '', nombre: i.nombre, cantidad: num(i.cantidad), ...(b.oc ? { ocI: i.ocI } : {}) }));
+        let pendientes = b.pendientes.map(p => ({ nombre: p.nombre, cantidad: num(p.cantidad) }));
+        if (b.oc) {
+            try {
+                const os = await f.getDoc(f.doc(f.collection(db(), 'Seguimiento_OC'), b.oc.id));
+                if (os.exists()) {
+                    const ls = os.data().lineas || [];
+                    items = items.map(i => { const l = ls[i.ocI]; if (!l) return i; const ent = num(l.entregado && l.entregado[b.oc.key]); return { ...i, solicitado: num(l.dist && l.dist[b.oc.key]), entregadoTotal: ent + i.cantidad }; });
+                    const yaEn = new Set(items.map(i => i.ocI));
+                    ls.forEach((l, idx) => { const p = num(l.dist && l.dist[b.oc.key]) - num(l.entregado && l.entregado[b.oc.key]); if (!yaEn.has(idx) && p > 0) pendientes.push({ nombre: String(l.descripcion || '').toUpperCase(), cantidad: p }); });
+                }
+            } catch (e) { /* sin la orden: se arma con lo elegido */ }
+        }
+        const acta = { numero, fecha: hoy.toISOString().slice(0, 10), centro: (b.centro || '').trim() || 'CENTRO (prueba)', bodegaOrigen: b.origen || '', estado: 'PRUEBA', items, pendientes,
+            documentos: b.documentos.map(d => ({ tipo: d.tipo, numero: d.numero, detalle: d.detalle || '' })), entrega: { nombre: firma.nombre, cargo: firma.cargo }, recibe: { nombre: (b.recibe && b.recibe.nombre) || '', cargo: (b.recibe && b.recibe.cargo) || '' } };
+        try { await descargar(actaParaDoc(acta), formato); }
+        catch (e) { toast('Acta de prueba', 'No se pudo generar: ' + (e.message || e), 'error'); return; }
+        try {
+            await f.setDoc(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: 'ACTA DE PRUEBA (sin efecto en stock)', quantity: items.reduce((s, i) => s + i.cantidad, 0), type: 'ACTA_PRUEBA', user: usuario, date: f.serverTimestamp(), document: numero, batch: 'N/A', origin: b.origen || '', dest: acta.centro, actaId: numero, sinEfectoStock: true,
+                observacion: `Acta de prueba ${numero} (${formato.toUpperCase()}): ${items.map(i => i.nombre + ' x' + i.cantidad).join('; ')}`.slice(0, 900) });
+            toast('Acta de prueba generada', `${numero}: no se descontó stock. Quedó registrada en el historial.`, 'success');
+        } catch (e) { toast('Acta de prueba', 'Se generó el documento, pero no se pudo registrar en el historial: ' + (e.message || e), 'warning'); }
     }
 
     let emitiendo = false;

@@ -346,3 +346,7 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - Fotos también en "Pedido y recibido", "Entregar" (OC) y Stock Local por Bodega.
 - Códigos nuevos sin Apps Script: se prueban los nombres de archivo habituales (código−7, con o sin `_1`) cargando la imagen; si ninguno existe queda sin foto. Los 23 códigos conocidos siguen este patrón.
 - "Catálogo de Insumos" (menú Compras) deja de mostrar datos de ejemplo: lista Catalogo_Productos con foto, código MP, proveedor y stock por bodega (`catalogo-vista.js`). Los KPI cuentan productos, con stock y sin stock.
+
+### 4.44 Acta de prueba y eliminar acta (v20.87)
+- Actas de entrega → "Probar el formato": genera PDF o Word con los productos elegidos (y los pendientes/solicitado de la OC si corresponde) para compararlo con el modelo. N° `PRUEBA-…`; NO descuenta stock, no toca la orden ni el correlativo. Queda en Historial_Movimientos como `ACTA_PRUEBA` (sin efecto en stock) para los informes contable y disponible.
+- "Eliminar acta" (antes "Anular", solo administrador): devuelve el stock a la bodega de origen, vuelve lo entregado a pendiente en la OC, borra el archivo del acta en los archivos de la orden y deja el registro `ANULACION_ACTA` en el historial. El acta queda marcada ANULADA (no se borra el registro, por trazabilidad).

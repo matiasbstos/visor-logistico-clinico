@@ -211,12 +211,15 @@ SAR Arpillerista Elsa Romo Aravena`;
         if (!rc) throw new Error('Esta orden aún no tiene recepción conforme registrada.');
         const lin = lineasActa(oc, centro), pend = lin.reduce((t, l) => t + Math.max(0, l.pedido - l.recibido), 0);
         const d = { fecha: rc.fecha || hoyISO(), parcial: typeof rc.parcial === 'boolean' ? rc.parcial : pend > 0, observaciones: rc.observaciones || '', contraparte: rc.contraparte || CONTRAPARTE_BASE, conFirma: true };
+        const prog = window.SAR_Progreso.iniciar('Regenerando la recepción conforme…', ['Armando el documento con el modelo vigente…']);
+        try {
         const PDFLib = await cargarPDFLib(); const logoBytes = await cargarLogo(); const firmaBytes = await cargarFirma();
         const acta = await generarActaPDF(oc, d, centro, { PDFLib, logoBytes, firmaBytes });
         bajar(acta, nombreActa(oc));
         if (ctx.guardarArchivo) await ctx.guardarArchivo(oc.id, { nombre: nombreActa(oc), categoria: 'Recepción conforme (modelo vigente)', bytes: acta });
         await fs().setDoc(fs().doc(fs().collection(db(), 'Seguimiento_OC', oc.id, 'Eventos')), { tipo: 'CONFORME', texto: 'Acta de recepción conforme regenerada con el modelo vigente (la versión anterior se conserva en los archivos).', autor: ctx.usuario || 'Usuario', fecha: fs().serverTimestamp() });
-        toast('Recepción conforme regenerada', `${nombreActa(oc)} quedó guardada en la orden.`, 'success');
+        prog.listo(`${nombreActa(oc)} regenerada y guardada en la orden`, { informe: true });
+        } catch (e) { prog.error(); throw e; }
     }
 
     window.SAR_RecepcionConforme = { regenerar, abrir, nombreAdjunto, nombreActa, lineasActa, validar, armarCorreo, generarActaPDF, DESTINATARIOS_BASE };

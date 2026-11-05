@@ -365,8 +365,9 @@
             <ul class="soc-arch cat-lista" id="cat-l">${items.length ? items.map(fila).join('') : '<li>Aún no hay productos. Aparecerán al ingresar la próxima orden.</li>'}</ul>`, async () => true, { ancho: true, ok: 'Cerrar' });
         ov.querySelector('#cat-sync').addEventListener('click', async (e) => {
             const btn = e.currentTarget; btn.disabled = true; btn.textContent = 'Cargando…';
-            try { let n = 0; for (const oc of lista) n += await registrarCatalogo(oc); toast('Catálogo actualizado', `${n} producto(s) de ${lista.length} orden(es), con su foto cuando existe en la tienda.`, 'success'); ov.remove(); formCatalogo(); }
-            catch (err) { toast('No se pudo actualizar', err.message || String(err), 'error'); btn.disabled = false; }
+            const prog = window.SAR_Progreso.iniciar('Actualizando el catálogo…', ['Leyendo los productos de las órdenes y buscando sus fotos…']);
+            try { let n = 0; for (const oc of lista) n += await registrarCatalogo(oc); prog.listo(`Catálogo actualizado: ${n} producto(s) de ${lista.length} orden(es)`); ov.remove(); formCatalogo(); }
+            catch (err) { prog.error(); toast('No se pudo actualizar', err.message || String(err), 'error'); btn.disabled = false; }
         });
         ov.querySelectorAll('.cat-conf li[data-cid]').forEach(li => {
             const marcar = async (estado, extra, msg) => { try { await fs().setDoc(fs().doc(fs().collection(db(), 'Catalogo_Productos'), li.dataset.cid), { fotoEstado: estado, ...extra, confirmadaPor: usuario(), actualizado: fs().serverTimestamp() }, { merge: true }); toast('Foto ' + msg, 'Quedó registrado en el catálogo.', 'success'); ov.remove(); formCatalogo(); } catch (e) { toast('No se pudo guardar', e.message || String(e), 'error'); } };
@@ -481,7 +482,7 @@
                 <button type="button" class="btn btn-outline btn-sm" id="soc-pend"><i class="ph-bold ph-file-csv"></i> Descargar pendientes</button>` : ''}</div>
                 ${oc.recepcionConforme ? `<p class="soc-card__sub">Recepción conforme registrada el ${fmtFecha(oc.recepcionConforme.fecha)} (${esc(oc.recepcionConforme.tipoDoc === 'FACTURA' ? 'factura' : 'guía')} ${esc(oc.recepcionConforme.numeroDoc)}). Correo: ${({ enviado: 'enviado', borrador: 'borrador abierto', error: 'NO se envió', sin_adjuntos: 'enviado SIN adjuntos', sin_destinatarios: 'sin destinatarios' })[(oc.recepcionConforme.correo || {}).estado] || '—'}.</p>` : ''}
                 <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Neto</th>${colsVis.map(c => `<th>${esc(c.centro)}<br><small>memo ${esc(c.memo)} · CDP ${esc(c.cdp)}</small></th>`).join('')}</tr></thead><tbody>
-                ${(oc.lineas || []).filter(l => colsVis.some(c => num(l.dist && l.dist[c.key]) || num(l.recibido && l.recibido[c.key]))).map(l => `<tr><td>${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(l.descripcion, { codigo: l.codigoMP }) : ''}${esc(l.descripcion)}</td><td>${peso(l.valorNeto)}</td>${colsVis.map(c => {
+                ${(oc.lineas || []).filter(l => colsVis.some(c => num(l.dist && l.dist[c.key]) || num(l.recibido && l.recibido[c.key]))).map(l => `<tr><td>${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(l.descripcion, { codigo: l.codigoMP, candidata: true }) : ''}${esc(l.descripcion)}</td><td>${peso(l.valorNeto)}</td>${colsVis.map(c => {
                     const p = num(l.dist && l.dist[c.key]), r = num(l.recibido && l.recibido[c.key]); if (!p && !r) return '<td class="soc-vacio">—</td>';
                     return `<td class="soc-est--${estadoLinea(p, r)}"><strong>${r}</strong> / ${p}</td>`; }).join('')}</tr>`).join('')}
                 </tbody></table></div>
@@ -571,7 +572,7 @@
                     <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Recibido</th><th>En bodega</th><th>Entregado</th><th>Pendiente</th></tr></thead><tbody>${(oc.lineas || []).map(l => {
                         const p = num(l.dist && l.dist[e.key]); if (!p) return '';
                         const r = num(l.recibido && l.recibido[e.key]), g = num(l.ingresado && l.ingresado[e.key]), en = num(l.entregado && l.entregado[e.key]);
-                        return `<tr><td>${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(l.descripcion, { codigo: l.codigoMP }) : ''}${esc(l.descripcion)}</td><td>${p}</td><td>${r}</td><td>${Math.max(0, g - en)}</td><td>${en}</td><td class="${p - en > 0 ? 'soc-est--parcial' : 'soc-est--ok'}"><strong>${Math.max(0, p - en)}</strong></td></tr>`; }).join('')}</tbody></table></div></div>`; }).join('')}
+                        return `<tr><td>${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(l.descripcion, { codigo: l.codigoMP, candidata: true }) : ''}${esc(l.descripcion)}</td><td>${p}</td><td>${r}</td><td>${Math.max(0, g - en)}</td><td>${en}</td><td class="${p - en > 0 ? 'soc-est--parcial' : 'soc-est--ok'}"><strong>${Math.max(0, p - en)}</strong></td></tr>`; }).join('')}</tbody></table></div></div>`; }).join('')}
             <p class="bodega-estantes__hint">"Recibido" = lo registrado en Recibir mercadería · "En bodega" = ingresado al stock y aún sin entregar · "Entregado" = en actas emitidas desde esta orden. Cada acta descuenta el stock y deja el saldo pendiente actualizado.</p></div>`;
     }
     /** Acta de entrega a un centro con lo que ya llegó a bodega y aún no se entrega. */
@@ -867,14 +868,20 @@
                 if (al.length && !(await confirmar('Atención con el presupuesto', al.join('\n') + '\n\n¿Ingresar la orden de todos modos?', 'Ingresar igual'))) return false;
             }
             oc.destinatarios = [...(configCorreo.destinatariosBase || [])]; oc.creadoPor = usuario(); oc.creadoEn = fs().serverTimestamp();
+            const prog = progresoRecepcion(o, ['Guardando la orden de compra…']);
+            try {
             await fs().runTransaction(db(), async (tx) => {
                 tx.set(ref, oc);
                 tx.set(fs().doc(fs().collection(db(), 'Seguimiento_OC', id, 'Eventos')), { tipo: 'CREACION', texto: `Orden ingresada${oc.origen === 'OC_MP' ? ' desde el PDF' : ''}: ${oc.lineas.length} producto(s). El proveedor debe aceptarla hasta el ${fmtFecha(oc.aceptarLimite)}; entrega en ${oc.plazoDiasHabiles} días hábiles desde la aceptación.`, autor: usuario(), fecha: fs().serverTimestamp() });
             });
             if (usoCuadro) window.SAR_ComprasAgiles.vincularOC(usoCuadro.id, oc.numeroOC);
+            prog.paso('Registrando los productos en el catálogo y buscando sus fotos…');
             await registrarCatalogo({ ...oc, id });
+            prog.paso('Guardando los archivos de la orden…');
             const fOC = (o.querySelector('#p-file') || {}).files, fDist = (o.querySelector('#p-dist') || {}).files;
             await guardarFile(id, fOC && fOC[0], 'Orden de compra'); await guardarFile(id, fDist && fDist[0], 'Cuadro de distribución');
+            prog.listo(`Orden ${oc.numeroOC} ingresada`, true); await new Promise(r => setTimeout(r, 1300)); prog.error();
+            } catch (e) { prog.error(); throw e; }
             abrirCuando(id);
             toast('Orden ingresada', `Acepta hasta el ${fmtFecha(oc.aceptarLimite)}.${oc.distribucionPDF ? ' Distribución por centro leída del PDF.' : ''}${usoCuadro && !oc.distribucionPDF ? ' Cuadro por centro tomado de la compra ágil ' + usoCuadro.compra + '.' : ''}`, 'success');
         }, { ok: 'Ingresar orden' });
@@ -900,7 +907,7 @@
         pintarRev([]);
         q('#p-file').addEventListener('change', async (e) => {
             const f = e.target.files[0]; if (!f) return;
-            const est = q('#p-estado'); est.textContent = 'Leyendo el PDF…';
+            const est = q('#p-estado'); est.innerHTML = '<span class="r-prog__spin r-prog__spin--s"></span> Leyendo el archivo…';
             try {
                 if (!window.SAR_Lector) throw new Error('El lector de documentos no está cargado.');
                 const r = await window.SAR_Lector.leerArchivo(f);
@@ -917,7 +924,7 @@
         });
         q('#p-dist').addEventListener('change', async (e) => {
             const f = e.target.files[0], est = q('#p-dist-est'); rev.distrib = null; if (!f) { est.textContent = ''; return; }
-            est.textContent = 'Leyendo el cuadro…';
+            est.innerHTML = '<span class="r-prog__spin r-prog__spin--s"></span> Leyendo el cuadro…';
             try {
                 if (!window.SAR_Lector) throw new Error('El lector de documentos no está cargado.');
                 leerRev(ov);
@@ -1070,17 +1077,8 @@
     }
     /** Panel de avance dentro de la ventana de recepción: qué se está haciendo y cuándo terminó. */
     function progresoRecepcion(ov, inicial) {
-        const p = document.createElement('div'); p.className = 'r-prog'; p.setAttribute('role', 'status'); p.setAttribute('aria-live', 'polite');
-        p.innerHTML = '<div class="r-prog__c"><span class="r-prog__spin" aria-hidden="true"></span><strong class="r-prog__t"></strong><ul class="r-prog__l"></ul></div>';
-        ov.appendChild(p);
-        const t = p.querySelector('.r-prog__t'), l = p.querySelector('.r-prog__l');
-        const paso = (txt) => { const ult = l.lastElementChild; if (ult) ult.classList.add('ok'); const li = document.createElement('li'); li.textContent = txt; l.appendChild(li); t.textContent = txt; };
-        (inicial || []).forEach(paso);
-        return {
-            paso,
-            listo: (txt) => { [...l.children].forEach(x => x.classList.add('ok')); p.classList.add('r-prog--ok'); t.textContent = txt; const li = document.createElement('li'); li.className = 'ok'; li.textContent = 'Informes contable y disponible actualizados'; l.appendChild(li); },
-            error: (e) => { p.remove(); }
-        };
+        const P = window.SAR_Progreso.iniciar('Procesando…', inicial, ov);
+        return { paso: P.paso, listo: (txt, sinInforme) => P.listo(txt, { informe: !sinInforme, ms: 60000, aviso: false }), error: () => P.error() };
     }
     async function formRecepcion() {
         const oc = ocActual; const cols = oc.columnas || [];
@@ -1151,7 +1149,7 @@
         const pintar = () => {
             const key = ov.querySelector('#r-col').value, st = ov.querySelector('#r-stock').checked, lv = ov.querySelector('#r-lv').checked;
             ov.querySelector('#r-lineas').innerHTML = '<div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Recibido</th><th>Pendiente</th><th>Llega ahora</th>' + (st ? '<th>Producto en inventario</th>' + (lv ? '<th>Lote</th><th>Vence</th>' : '') : '') + '<th>Incidencia</th></tr></thead><tbody>' +
-                oc.lineas.map((l, i) => { const p = num(l.dist && l.dist[key]), ya = num(l.recibido && l.recibido[key]), pe = Math.max(0, p - ya); return p ? `<tr data-i="${i}" data-pe="${pe}"><td class="r-prod" data-l="Producto">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(l.descripcion, { codigo: l.codigoMP }) : ''}${esc(l.descripcion)}</td><td data-l="Pedido">${p}</td><td data-l="Recibido">${ya}</td><td data-l="Pendiente"><strong>${pe}</strong></td><td class="r-celda" data-l="Llega ahora"><input type="number" min="0" max="${pe}" class="r-c" value="" aria-label="Unidades que llegaron"><button type="button" class="btn btn-outline btn-sm r-ok" title="Llegó completo"${pe ? '' : ' disabled'}>✔ ${pe || 'listo'}</button></td>` +
+                oc.lineas.map((l, i) => { const p = num(l.dist && l.dist[key]), ya = num(l.recibido && l.recibido[key]), pe = Math.max(0, p - ya); return p ? `<tr data-i="${i}" data-pe="${pe}"><td class="r-prod" data-l="Producto">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(l.descripcion, { codigo: l.codigoMP, candidata: true }) : ''}${esc(l.descripcion)}</td><td data-l="Pedido">${p}</td><td data-l="Recibido">${ya}</td><td data-l="Pendiente"><strong>${pe}</strong></td><td class="r-celda" data-l="Llega ahora"><input type="number" min="0" max="${pe}" class="r-c" value="" aria-label="Unidades que llegaron"><button type="button" class="btn btn-outline btn-sm r-ok" title="Llegó completo"${pe ? '' : ' disabled'}>✔ ${pe || 'listo'}</button></td>` +
                     (st ? `<td data-l="Producto en inventario"><input class="r-n" list="r-inv" aria-label="Producto en inventario" value="${esc(l.insumoName || ((catalogo.get(catId(l)) || {}).insumoName) || l.descripcion)}"></td>` + (lv ? `<td data-l="Lote"><input class="r-l" aria-label="Lote" placeholder="S/L"></td><td data-l="Vence"><input type="date" class="r-v" aria-label="Fecha de vencimiento"></td>` : '') : '') +
                     `<td data-l="Incidencia"><select class="r-t" aria-label="Incidencia"><option value="">Sin incidencia</option>${Object.entries(INCIDENCIAS).map(([k, t]) => `<option value="${k}">${esc(t)}</option>`).join('')}</select><input class="r-td" aria-label="Detalle de la incidencia" placeholder="Detalle"></td></tr>` : ''; }).join('') + '</tbody></table></div>';
         };

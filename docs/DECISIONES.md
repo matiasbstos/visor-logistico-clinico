@@ -289,4 +289,10 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 - Recibir mercadería: botón "+ Nueva bodega" (solo admin) crea la bodega en la misma colección que la sección Bodegas; los estantes/ubicaciones se asignan después desde Bodegas (por ahora solo la bodega transitoria los usa).
 - Flujo acordado: crear/elegir bodega → recibir mercadería → recepción conforme → en Existencias ubicar los productos en la bodega asignada.
 - Accesos rápidos con nombre explícito (menú "Accesos" y bloque en Inicio): Ingresar orden de compra (PDF), Seguimiento de órdenes, Bodegas, Actas de entrega.
-- Mientras se carga solo lo de compras se oculta (sin borrar datos) lo de medicamentos y turno clínico en Inicio (indicadores, urgencias, precaución, flujo semanal) y las Bandejas de Turno (menú lateral y Accesos). Para volver a mostrarlo: quitar la clase `oculto-fase` del grupo "Turno clínico" y las reglas "v20.72" de style.css.
+- (Corregido en 4.32: lo clínico no se oculta como sección; queda sin datos.)
+
+### 4.32 v20.73 — Fase "órdenes de compra": secciones visibles pero sin datos de prueba
+- Las secciones (indicadores, urgencias, precaución, flujo semanal, Bandejas de Turno) y el menú vuelven a estar; lo que no aparece es la información de prueba.
+- Interruptor `FASE_SOLO_OC` (script.js, true): las lecturas de Firestore filtran los Insumos sin `origenOC:true` y todas las Bandejas_Turno. No se borra nada.
+- Cada recepción de OC marca el insumo con `origenOC:true`; desde ahí aparece en Existencias, Inicio y demás. Para ver todo otra vez: `FASE_SOLO_OC = false`.
+- Los movimientos del Historial no se filtran.

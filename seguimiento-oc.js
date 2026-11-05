@@ -746,7 +746,7 @@
             <label>Proveedor<input type="text" id="n-prov" placeholder="Nombre del proveedor"></label>
             <label>Descripción<input type="text" id="n-desc" placeholder="Ej.: productos para monitoreo de pacientes"></label>
             <div class="soc-fila"><label>Emitida<input type="date" id="n-emi"></label><label>Aceptada por el proveedor<input type="date" id="n-ace"></label><label>Plazo (días hábiles)<input type="number" id="n-plazo" min="1" max="60" value="5"></label></div>
-            <label>Cuadro de distribución (Excel)<input type="file" id="n-file" accept=".xlsx,.xls"></label>
+            <label>Cuadro de distribución (Excel)<input type="file" id="n-file" accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></label>
             <div id="n-prev" class="cierre-hint">Sube el Excel con las columnas "MEMO N° … CDP N° …" para cargar los productos y la distribución por centro.</div>`,
             async (o) => {
                 const q = (s) => o.querySelector(s);
@@ -828,8 +828,8 @@
         let rev = { lineas: [], aceptarHoras: 48, entregaDias: 2, origen: 'MANUAL' };
         const campo = (id, et, v, tipo) => `<label>${et}<input type="${tipo || 'text'}" id="${id}" value="${esc(v == null ? '' : v)}"></label>`;
         const ov = modal('Ingresar orden de compra', `
-            <label>Orden de compra (Mercado Público): PDF o Excel<input type="file" id="p-file" accept="application/pdf,.xlsx,.xls"></label>
-            <label>Cuadro de distribución (PDF o Excel, opcional): lee memos, CDP, cantidades por centro y montos<input type="file" id="p-dist" accept="application/pdf,.xlsx,.xls"></label>
+            <label>Orden de compra (Mercado Público): PDF o Excel<input type="file" id="p-file" accept="application/pdf,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></label>
+            <label>Cuadro de distribución (PDF o Excel, opcional): lee memos, CDP, cantidades por centro y montos<input type="file" id="p-dist" accept="application/pdf,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></label>
             <div id="p-dist-est" class="cierre-hint"></div>
             <label>Correo del despacho (opcional: pega el texto para leer los plazos)<textarea id="p-correo" rows="3" placeholder="Pega aquí el correo con el plazo de aceptación y los días de entrega"></textarea></label>
             <div id="p-estado" class="cierre-hint">Sube el PDF y revisa lo que se leyó. También puedes completar todo a mano.</div>
@@ -874,7 +874,7 @@
                 <div class="soc-fila">${campo('v-direccionDespacho', 'Dirección de despacho', rev.direccionDespacho)}${campo('v-contraparte', 'Contraparte técnica', rev.contraparte)}</div>
                 <div class="soc-fila">${campo('v-contacto', 'Contacto', rev.contacto)}${campo('v-horario', 'Horario de recepción', rev.horario)}</div>
                 <div class="soc-fila">${campo('v-formaPago', 'Forma de pago', rev.formaPago)}${campo('v-emailFactura', 'Email envío factura', rev.emailFactura)}</div>
-                <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Cant.</th><th>Neto unit.</th><th></th></tr></thead><tbody>${rev.lineas.map((l, i) => `<tr data-fila="${i}"><td><input class="v-d" value="${esc(l.descripcion || '')}"></td><td><input class="v-c" type="number" min="0" value="${esc(l.cantidad || '')}"></td><td><input class="v-v" type="number" min="0" value="${esc(l.valorNeto || '')}"></td><td><button type="button" class="btn btn-outline btn-sm" data-del="${i}">✕</button></td></tr>`).join('')}</tbody></table></div>
+                <div class="soc-tabla soc-apilar"><table><thead><tr><th>Producto</th><th>Cant.</th><th>Neto unit.</th><th></th></tr></thead><tbody>${rev.lineas.map((l, i) => `<tr data-fila="${i}"><td data-l="Producto"><input class="v-d" value="${esc(l.descripcion || '')}"></td><td data-l="Cantidad"><input class="v-c" type="number" min="0" value="${esc(l.cantidad || '')}"></td><td data-l="Neto unitario"><input class="v-v" type="number" min="0" value="${esc(l.valorNeto || '')}"></td><td><button type="button" class="btn btn-outline btn-sm" data-del="${i}">✕</button></td></tr>`).join('')}</tbody></table></div>
                 <button type="button" class="btn btn-outline btn-sm" id="v-add">+ Producto</button>${rev.totalNeto ? ` <small>Neto de la orden: ${peso(rev.totalNeto)} · Total con IVA: ${peso(rev.total)}</small>` : ''}`;
             q('#v-add').addEventListener('click', () => { leerRev(ov); rev.lineas.push({ descripcion: '', cantidad: 0, valorNeto: 0 }); pintarRev(avisos); });
             ov.querySelectorAll('[data-del]').forEach(b => b.addEventListener('click', () => { leerRev(ov); rev.lineas.splice(Number(b.dataset.del), 1); pintarRev(avisos); }));
@@ -1080,7 +1080,7 @@
         const ov = modal('Recibir mercadería', `
             <label${cols.length === 1 ? ' hidden' : ''}>¿Qué memo/CDP se recibió?<select id="r-col">${cols.map(c => `<option value="${esc(c.key)}">${esc(c.centro)} · memo ${esc(c.memo)}${c.cdp ? ' · CDP ' + esc(c.cdp) : ''}</option>`).join('')}</select></label>
             <div class="soc-fila"><label>N° guía de despacho<input type="text" id="r-guia" autocomplete="off"></label><label>Fecha<input type="date" id="r-fecha" value="${hoyISO()}"></label></div>
-            <label>Guía de despacho (PDF, opcional: queda guardada en la orden)<input type="file" id="r-file" accept="application/pdf,image/*"></label>
+            <label>Guía de despacho (foto o PDF, opcional: queda guardada en la orden)<input type="file" id="r-file" accept="application/pdf,image/*"></label>
             <div class="soc-barra-rec"><button type="button" class="btn btn-outline btn-sm" id="r-total"><i class="ph-bold ph-checks"></i> Marcar todo recibido</button><button type="button" class="btn btn-outline btn-sm" id="r-nada">Limpiar</button><span id="r-resumen" class="soc-resumen-rec"></span></div>
             <div id="r-lineas"></div>
             <label class="soc-toggle"><input type="checkbox" id="r-lv"> Anotar lote y vencimiento ahora (también se puede hacer después)</label>

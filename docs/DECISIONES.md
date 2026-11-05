@@ -359,3 +359,6 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 
 ### 4.46 Foto de productos sin ID de Mercado Público (v20.89)
 - Compras ágiles y otros productos sin ID: en el Catálogo de productos cada fila tiene "Buscar foto" (abre Google Imágenes con el nombre), "Pegar" (imagen copiada con clic derecho → Copiar imagen; se reduce y se guarda en el producto) y "Subir". No hay búsqueda automática por nombre: requeriría un servicio de búsqueda con clave.
+
+### 4.47 Ajustes móviles tras revisión UX/UI (v20.90)
+- Tabla de revisión de "Ingresar orden" apilada en teléfono; catálogo de productos con botones a todo el ancho (y sin "Pegar" en pantallas táctiles); recepción con Pedido/Recibido/Pendiente en una fila; pestañas de actas con scroll horizontal; botones táctiles ≥44 px; Eliminar acta separado en rojo; `accept` de Excel con tipos MIME para el selector del teléfono; modal con `90dvh`.

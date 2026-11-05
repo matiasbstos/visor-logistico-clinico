@@ -153,6 +153,7 @@ SAR Arpillerista Elsa Romo Aravena`;
             <label>Tipo de recepción<select id="rc-parcial"><option value="0"${pend > 0 ? '' : ' selected'}>Total</option><option value="1"${pend > 0 ? ' selected' : ''}>Parcial${pend > 0 ? ` (faltan ${pend} unidades)` : ''}</option></select></label>
             <div class="soc-fila">${f('rc-fn', 'Firma: nombre', FIRMA_BASE.nombre)}${f('rc-fc', 'Cargo', FIRMA_BASE.cargo)}</div>
             <label>Observaciones (opcional)<textarea id="rc-obs" rows="2"></textarea></label>
+            <label class="soc-toggle"><input type="checkbox" id="rc-enviar" checked> Enviar correo con el acta y la guía/factura a la lista</label>
             <label>Para<input type="text" id="rc-to" value="${esc(to.join(', '))}"></label>
             <label>Cc<input type="text" id="rc-cc" value="${esc(cc.join(', '))}"></label>
             <div id="rc-error" class="cierre-error"></div>`, async (o) => {
@@ -166,7 +167,13 @@ SAR Arpillerista Elsa Romo Aravena`;
             const acta = await generarActaPDF(oc, d, centro, { PDFLib, logoBytes });
             const guia = new Uint8Array(await d.archivo.arrayBuffer());
             const adj = [{ name: nombreActa(oc), mime: 'application/pdf', base64: aBase64(acta) }, { name: nombreAdjunto(d.tipoDoc, d.numeroDoc), mime: 'application/pdf', base64: aBase64(guia) }];
-            const correo = await ctx.enviarCorreo(d.to, armarCorreo(oc, d, centro), { cc: d.cc, attachments: adj });
+            const enviar = (o.querySelector('#rc-enviar') || {}).checked !== false;
+            const correo = enviar ? await ctx.enviarCorreo(d.to, armarCorreo(oc, d, centro), { cc: d.cc, attachments: adj }) : { estado: 'no_enviado', detalle: 'Se emitió sin enviar el correo.', destinatarios: [], cc: [] };
+            if (ctx.guardarArchivo) {
+                try { await ctx.guardarArchivo(oc.id, { nombre: adj[0].name, categoria: 'Recepción conforme', bytes: acta }); await ctx.guardarArchivo(oc.id, { nombre: adj[1].name, categoria: d.tipoDoc === 'FACTURA' ? 'Factura' : 'Guía de despacho', bytes: guia }); }
+                catch (e) { toast('Archivos no guardados', e.message || String(e), 'warning'); }
+            }
+            if (!enviar) { bajar(acta, adj[0].name); toast('Acta emitida', 'Quedó guardada en la orden. No se envió correo.', 'success'); }
             if (correo.estado === 'borrador') { bajar(acta, adj[0].name); bajar(guia, adj[1].name); toast('Adjunta los archivos', 'El envío automático no está configurado: se descargaron el acta y la guía/factura; adjúntalos al borrador.', 'warning'); }
             const resumen = { estado: correo.estado, to: correo.destinatarios || d.to, cc: correo.cc || d.cc, detalle: correo.detalle || '', fecha: hoyISO() };
             const textoEv = `Recepción conforme registrada (${d.tipoDoc === 'FACTURA' ? 'factura' : 'guía'} N° ${d.numeroDoc})${d.parcial ? ', parcial' : ''}. Correo: ${correo.estado}${correo.detalle ? ' — ' + correo.detalle : ''}.`;
@@ -174,7 +181,7 @@ SAR Arpillerista Elsa Romo Aravena`;
             await fs().updateDoc(ocRef, { recepcionConforme: { fecha: d.fecha, por: ctx.usuario, recibe: d.firmaNombre, tipoDoc: d.tipoDoc, numeroDoc: d.numeroDoc, parcial: d.parcial, observaciones: d.observaciones, correo: resumen } });
             await fs().setDoc(fs().doc(fs().collection(db(), 'Seguimiento_OC', oc.id, 'Eventos')), { tipo: 'CONFORME', texto: textoEv, autor: ctx.usuario, fecha: fs().serverTimestamp(), correo: { estado: correo.estado, destinatarios: [...(correo.destinatarios || []), ...(correo.cc || [])], detalle: correo.detalle || '' } });
             if (correo.estado === 'enviado') toast('Correo enviado', `Acta y ${d.tipoDoc === 'FACTURA' ? 'factura' : 'guía'} enviadas a ${(correo.destinatarios || []).length + (correo.cc || []).length} destinatario(s).`, 'success');
-            else if (correo.estado !== 'borrador') toast('Revisa el correo', correo.detalle || 'El correo no se pudo enviar.', 'error');
+            else if (correo.estado !== 'borrador' && enviar) toast('Revisa el correo', correo.detalle || 'El correo no se pudo enviar.', 'error');
         });
         return ov;
     }

@@ -5439,3 +5439,11 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .r-prog__l { list-style: none; margin: 4px 0 0; padding: 0; font-size: 13px; color: #64748B; display: flex; flex-direction: column; gap: 4px; }
 .r-prog__l li.ok::before { content: '✔ '; color: var(--brand-green-ink, #4C7A0F); }
 @keyframes rprog { to { transform: rotate(360deg); } }
+
+/* v20.75 archivos de la orden */
+.soc-arch{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.soc-arch li{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--border-color,#e5e7eb);border-radius:10px}
+.soc-arch li>i{font-size:22px;color:var(--accent-red,#c0392b)}
+.soc-arch li>div{flex:1;min-width:0;display:flex;flex-direction:column}
+.soc-arch strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.soc-arch small{color:#6b7280}

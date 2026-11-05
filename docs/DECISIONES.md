@@ -300,3 +300,8 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 ### 4.33 v20.74 — Avance de la recepción e informes
 - Al guardar una recepción se muestra un panel de avance (validando → buscando productos → guardando y subiendo unidades al stock → correo) y al final un aviso "Recepción cargada" con el ID, las unidades y la bodega.
 - La recepción queda registrada en la orden (`recepciones[]` con bodega, productos, lote y vencimiento), en Auditoría y en los informes contable y disponible: ahora incluyen todo el stock (no solo lo con sobregiro) y una sección "Recepciones de orden de compra".
+
+### 4.34 Archivos de la orden y envío opcional de la recepción conforme (v20.75)
+- Cada archivo cargado en una orden (PDF de la OC, cuadro de distribución, guía de despacho, acta y guía/factura de la recepción conforme) se guarda en `Seguimiento_OC/{id}/Archivos` (contenido en `Partes`, trozos de ~700 KB; máx. 8 MB). Se listan en la ficha ("Archivos de la orden") y se pueden abrir cuando se necesite. No se modifican; solo un administrador puede borrar. Requiere desplegar `firestore.rules`.
+- Recepción conforme: casilla "Enviar correo a la lista" siempre marcada por defecto; si se desmarca, el acta se emite y se guarda sin enviar correo.
+- Los datos viven en Firestore: los despliegues del sitio (hosting) no los tocan. BigQuery no es necesario por ahora; una copia periódica de Firestore queda como opción.

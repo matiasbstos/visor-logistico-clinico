@@ -180,6 +180,17 @@ service cloud.firestore {
         allow read, create: if isStaff();
         allow update, delete: if false;
       }
+      // Archivos de la orden (v20.75): PDF guardados en partes; no se modifican
+      match /Archivos/{archId} {
+        allow read, create: if isStaff();
+        allow update: if false;
+        allow delete: if isAdmin();
+        match /Partes/{parteId} {
+          allow read, create: if isStaff();
+          allow update: if false;
+          allow delete: if isAdmin();
+        }
+      }
     }
     // PRESUPUESTO POR CDP (v20.55): opcional; lo comprometido se calcula desde las órdenes
     match /CDP_Presupuesto/{id} {

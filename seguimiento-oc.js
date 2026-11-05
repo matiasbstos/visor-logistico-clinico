@@ -310,11 +310,19 @@
     const catId = (l) => slug(String(l.codigoMP || l.descripcion || '').trim()).slice(0, 120);
     async function registrarCatalogo(oc) {
         const f = fs(); let n = 0;
+        const previos = await cargarCatalogo().catch(() => new Map());
+        const nd = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
         for (const l of (oc.lineas || [])) {
             const id = catId(l); if (!id || !String(l.descripcion || '').trim()) continue;
             try {
-                let archivo = ''; if (l.codigoMP && window.SAR_Imagenes) { try { archivo = await window.SAR_Imagenes.archivoPara(l.codigoMP, configCorreo); } catch (e) { archivo = ''; } }
-                await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: l.descripcion, descripcion_lower: String(l.descripcion).toLowerCase(), codigoMP: l.codigoMP || '', proveedor: oc.proveedor || '', ultimaOC: oc.numeroOC || '', valorNeto: num(l.valorNeto), ...(archivo ? { imagenMP: archivo } : {}), actualizado: f.serverTimestamp() }, { merge: true }); n++;
+                const prev = previos.get(id);
+                // ¿la misma descripción ya existe con otro código? Se avisa y la foto no se da por buena sin mirarla en la tienda.
+                const parecido = [...previos.values()].find(x => x.id !== id && nd(x.descripcion) === nd(l.descripcion) && String(x.codigoMP || '') !== String(l.codigoMP || ''));
+                let foto = {};
+                if (l.codigoMP && window.SAR_Imagenes && !(prev && (prev.imagenMP || prev.fotoEstado))) {
+                    try { const r = await window.SAR_Imagenes.buscarFoto(l.codigoMP, configCorreo); if (r.archivo) foto = { imagenMP: r.archivo, fotoEstado: (r.origen === 'semilla' && !parecido) ? 'confirmada' : 'por_confirmar' }; } catch (e) { foto = {}; }
+                }
+                await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: l.descripcion, descripcion_lower: String(l.descripcion).toLowerCase(), codigoMP: l.codigoMP || '', proveedor: oc.proveedor || '', ultimaOC: oc.numeroOC || '', valorNeto: num(l.valorNeto), ...foto, ...(parecido && !prev ? { avisoCodigo: `Misma descripción que el producto con código ${parecido.codigoMP || '(sin código)'}: confirma que es el mismo antes de usar su foto.` } : {}), actualizado: f.serverTimestamp() }, { merge: true }); n++;
             } catch (e) { /* el catálogo nunca debe frenar el ingreso de la orden */ }
         }
         return n;
@@ -346,7 +354,12 @@
             <span class="cat-img">${(() => { const e = window.SAR_Imagenes && window.SAR_Imagenes.buscar(c.descripcion, c.codigoMP); const h = e ? window.SAR_Imagenes.imgHTML(e, 120, c.descripcion) : ''; return h || '<i class="ph-bold ph-image"></i>'; })()}</span>
             <div><strong>${esc(c.descripcion || '')}</strong><small>${c.codigoMP ? 'Cód. MP ' + esc(c.codigoMP) + ' · ' : ''}${esc(c.proveedor || 's/proveedor')}${c.insumoName ? ' · Inventario: ' + esc(c.insumoName) : ''}${num(c.valorNeto) ? ' · ' + peso(c.valorNeto) + ' neto' : ''}</small></div>
             <span class="cat-acc"><a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="https://www.google.com/search?tbm=isch&q=${encodeURIComponent(String(c.descripcion || '').replace(/\b(IGUAL O SUPERIOR A|RM)\b/gi, '').replace(/[,]/g, ' '))}">Buscar foto</a><button type="button" class="btn btn-outline btn-sm cat-pegar" title="Copia una imagen (clic derecho → Copiar imagen) y pégala aquí">Pegar</button><label class="btn btn-outline btn-sm cat-foto">Subir<input type="file" accept="image/*" hidden></label></span></li>`;
-        const ov = modal('Catálogo de productos', `<p class="cierre-hint">Se completa solo con cada orden que ingresas. Agrega una foto para reconocer cada producto.</p>
+        const porConf = items.filter(c => c.fotoEstado === 'por_confirmar' && c.imagenMP && window.SAR_Imagenes);
+        const confirmar = porConf.length ? `<div class="cat-conf"><strong>Fotos por confirmar (${porConf.length})</strong><small>Abre la tienda, compara con la descripción y confirma. Hasta entonces la foto no se muestra en el sistema.</small>
+            <ul class="soc-arch">${porConf.map(c => `<li data-cid="${esc(c.id)}"><span class="cat-img"><img src="${esc(window.SAR_Imagenes.urlMP(c.imagenMP, 120))}" alt="" referrerpolicy="no-referrer"></span>
+              <div><strong>${esc(c.descripcion || '')}</strong><small>Cód. MP ${esc(c.codigoMP || '')}${c.avisoCodigo ? ' · <b>' + esc(c.avisoCodigo) + '</b>' : ''}</small></div>
+              <span class="cat-acc"><a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="https://conveniomarco.mercadopublico.cl/aseo3/catalogsearch/result/?q=${encodeURIComponent(c.codigoMP || '')}">Ver en la tienda</a><button type="button" class="btn btn-primary btn-sm cat-ok">Es este producto</button><button type="button" class="btn btn-outline btn-sm cat-no">No es</button></span></li>`).join('')}</ul></div>` : '';
+        const ov = modal('Catálogo de productos', `${confirmar}<p class="cierre-hint">Se completa solo con cada orden que ingresas. Agrega una foto para reconocer cada producto.</p>
             <div class="soc-arch-acc"><button type="button" class="btn btn-outline btn-sm" id="cat-sync"><i class="ph-bold ph-arrows-clockwise"></i> Cargar productos y fotos de las órdenes ya ingresadas</button></div>
                         <input type="search" id="cat-q" placeholder="Buscar por nombre, código o proveedor…" autocomplete="off">
             <ul class="soc-arch cat-lista" id="cat-l">${items.length ? items.map(fila).join('') : '<li>Aún no hay productos. Aparecerán al ingresar la próxima orden.</li>'}</ul>`, async () => true, { ancho: true, ok: 'Cerrar' });
@@ -354,6 +367,11 @@
             const btn = e.currentTarget; btn.disabled = true; btn.textContent = 'Cargando…';
             try { let n = 0; for (const oc of lista) n += await registrarCatalogo(oc); toast('Catálogo actualizado', `${n} producto(s) de ${lista.length} orden(es), con su foto cuando existe en la tienda.`, 'success'); ov.remove(); formCatalogo(); }
             catch (err) { toast('No se pudo actualizar', err.message || String(err), 'error'); btn.disabled = false; }
+        });
+        ov.querySelectorAll('.cat-conf li[data-cid]').forEach(li => {
+            const marcar = async (estado, extra, msg) => { try { await fs().setDoc(fs().doc(fs().collection(db(), 'Catalogo_Productos'), li.dataset.cid), { fotoEstado: estado, ...extra, confirmadaPor: usuario(), actualizado: fs().serverTimestamp() }, { merge: true }); toast('Foto ' + msg, 'Quedó registrado en el catálogo.', 'success'); ov.remove(); formCatalogo(); } catch (e) { toast('No se pudo guardar', e.message || String(e), 'error'); } };
+            li.querySelector('.cat-ok').addEventListener('click', () => marcar('confirmada', { avisoCodigo: '' }, 'confirmada'));
+            li.querySelector('.cat-no').addEventListener('click', () => marcar('descartada', { imagenMP: '' }, 'descartada'));
         });
         ov.querySelector('#cat-q').addEventListener('input', (e) => { const t = e.target.value.trim().toLowerCase(); ov.querySelectorAll('#cat-l li[data-id]').forEach(li => { li.hidden = !!t && !li.dataset.t.includes(t); }); });
         const guardarFoto = async (li, blob) => { const img = await reducirImagen(blob); await fs().setDoc(fs().doc(fs().collection(db(), 'Catalogo_Productos'), li.dataset.id), { imagen: img, actualizado: fs().serverTimestamp() }, { merge: true }); li.querySelector('.cat-img').innerHTML = `<img src="${img}" alt="">`; toast('Foto guardada', 'La imagen quedó en el producto.', 'success'); };

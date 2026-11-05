@@ -18,18 +18,23 @@
     const fs = () => window.firebaseFirestore, db = () => window.firebaseDb;
     const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    let descartados = new Set();
     let semilla = {}, porCodigo = new Map(), porNombre = new Map(), cargando = null, listo = false;
 
     function urlMP(archivo, tam) { const t = tam || 120; return `${BASE}${archivo}?width=${t}&height=${t}&canvas=${t},${t}&quality=80&fit=bounds`; }
-    function entrada(c) { return { imagen: c.imagen || '', archivo: c.imagenMP || (c.codigoMP && semilla[String(c.codigoMP)]) || '' }; }
+    // Una foto de la tienda solo se muestra si está CONFIRMADA: la que quedó "por_confirmar" (código nuevo o con descripción
+    // parecida a otro producto) o "descartada" no se usa en ninguna pantalla hasta que la persona la mire en la tienda y la confirme.
+    const sinConfirmar = (c) => c.fotoEstado === 'por_confirmar' || c.fotoEstado === 'descartada';
+    function entrada(c) { return { codigo: c.codigoMP ? String(c.codigoMP) : '', imagen: c.imagen || '', archivo: sinConfirmar(c) ? '' : (c.imagenMP || (c.codigoMP && semilla[String(c.codigoMP)]) || '') }; }
     function indexar(lista) {
-        porCodigo = new Map(); porNombre = new Map();
+        porCodigo = new Map(); porNombre = new Map(); descartados = new Set();
         lista.forEach(c => {
+            if (c.codigoMP && sinConfirmar(c)) descartados.add(String(c.codigoMP));
             const e = entrada(c); if (!e.imagen && !e.archivo) return;
             if (c.codigoMP) porCodigo.set(String(c.codigoMP), e);
             [c.descripcion, c.insumoName].forEach(n => { if (n) porNombre.set(norm(n), e); });
         });
-        Object.keys(semilla).forEach(cod => { if (!porCodigo.has(cod)) porCodigo.set(cod, { imagen: '', archivo: semilla[cod] }); });
+        Object.keys(semilla).forEach(cod => { if (!porCodigo.has(cod) && !descartados.has(cod)) porCodigo.set(cod, { codigo: cod, imagen: '', archivo: semilla[cod] }); });
     }
     async function cargar(forzar) {
         if (listo && !forzar) return true;
@@ -42,7 +47,13 @@
         })().finally(() => { cargando = null; });
         return cargando;
     }
-    function buscar(nombre, codigo) { return (codigo && porCodigo.get(String(codigo))) || porNombre.get(norm(nombre)) || null; }
+    /** Por código si lo hay; por nombre solo si el producto no tiene código o es el mismo código (nunca la foto de otro código). */
+    function buscar(nombre, codigo) {
+        const c = codigo ? String(codigo) : '';
+        if (c && porCodigo.get(c)) return porCodigo.get(c);
+        const e = porNombre.get(norm(nombre)) || null;
+        return e && (!c || !e.codigo || e.codigo === c) ? e : null;
+    }
     function src(e, tam) { return e ? (e.imagen || (e.archivo ? urlMP(e.archivo, tam) : '')) : ''; }
     function imgHTML(e, tam, alt) { const s = src(e, tam); return s ? `<img src="${esc(s)}" alt="${esc(alt || '')}" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode&&this.parentNode.classList.add('prod-img--sin');this.remove()">` : ''; }
     /** Marcador con la foto del producto (se completa solo cuando el catálogo termina de cargar). */
@@ -58,19 +69,21 @@
         });
     }
     /** Archivo de la tienda para un código: tabla incluida o Apps Script (códigos nuevos). */
-    async function archivoPara(codigo, cfg) {
-        const c = String(codigo || '').replace(/\D/g, ''); if (!c) return '';
+    /** Devuelve {archivo, origen}: 'semilla' (tabla ya verificada contra la tienda), 'tienda' (Apps Script) o 'supuesto' (se probó el nombre habitual). */
+    async function buscarFoto(codigo, cfg) {
+        const c = String(codigo || '').replace(/\D/g, ''); if (!c) return { archivo: '', origen: '' };
         if (!listo) await cargar();
-        if (semilla[c]) return semilla[c];
+        if (semilla[c]) return { archivo: semilla[c], origen: 'semilla' };
         if (cfg && cfg.webhookUrl && cfg.token) {
             try {
                 const r = await fetch(cfg.webhookUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ token: cfg.token, accion: 'imagenes', codigos: [c] }) });
-                const j = await r.json(); const f = j && j.ok && j.imagenes && j.imagenes[c]; if (f) { semilla[c] = f; return f; }
+                const j = await r.json(); const f = j && j.ok && j.imagenes && j.imagenes[c]; if (f) return { archivo: f, origen: 'tienda' };
             } catch (e) { /* sin acceso a la tienda */ }
         }
-        const g = await adivinar(c); if (g) { semilla[c] = g; return g; }
-        return '';
+        const g = await adivinar(c); if (g) return { archivo: g, origen: 'supuesto' };
+        return { archivo: '', origen: '' };
     }
+    const archivoPara = async (codigo, cfg) => (await buscarFoto(codigo, cfg)).archivo;
     /** Sin Apps Script: prueba los nombres de archivo habituales (código−7, con o sin _1) cargando la imagen. */
     function probar(url) { return new Promise(ok => { const im = new Image(); im.onload = () => ok(im.naturalWidth > 20); im.onerror = () => ok(false); im.src = url; }); }
     async function adivinar(c) {
@@ -95,5 +108,5 @@
     document.addEventListener('click', (e) => { const im = e.target && e.target.closest && e.target.closest('.prod-img img'); if (im) { e.preventDefault(); e.stopPropagation(); ampliar(im); } }, true);
     let t = null;
     if (typeof MutationObserver !== 'undefined') new MutationObserver(() => { if (!listo) return; clearTimeout(t); t = setTimeout(() => rellenar(), 250); }).observe(document.documentElement, { childList: true, subtree: true });
-    window.SAR_Imagenes = { ampliar, cargar, thumb, buscar, src, imgHTML, rellenar, archivoPara, urlMP, recargar: () => cargar(true) };
+    window.SAR_Imagenes = { buscarFoto, ampliar, cargar, thumb, buscar, src, imgHTML, rellenar, archivoPara, urlMP, recargar: () => cargar(true) };
 })(window, document);

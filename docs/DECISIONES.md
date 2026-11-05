@@ -362,3 +362,8 @@ Según el cuaderno del encargado: CDP (lo genera Presupuesto, por centro) · SDC
 
 ### 4.47 Ajustes móviles tras revisión UX/UI (v20.90)
 - Tabla de revisión de "Ingresar orden" apilada en teléfono; catálogo de productos con botones a todo el ancho (y sin "Pegar" en pantallas táctiles); recepción con Pedido/Recibido/Pendiente en una fila; pestañas de actas con scroll horizontal; botones táctiles ≥44 px; Eliminar acta separado en rojo; `accept` de Excel con tipos MIME para el selector del teléfono; modal con `90dvh`.
+
+### 4.48 Fotos de la tienda: se confirman antes de usarse (v20.91)
+- Una foto de Mercado Público solo se muestra si está **confirmada**. Las de la tabla `assets/imagenes-mp.json` (verificadas contra la tienda) entran confirmadas; las que obtiene el Apps Script o las que se "suponen" por el nombre de archivo quedan `por_confirmar` y NO se ven en ninguna pantalla.
+- Si la descripción ya existe en el catálogo con otro código, el producto nuevo queda con `avisoCodigo` y su foto `por_confirmar`; además la búsqueda por nombre nunca devuelve la foto de un producto con otro código.
+- Catálogo de productos → "Fotos por confirmar": muestra el candidato, enlace a la tienda ("Ver en la tienda") y los botones "Es este producto" / "No es" (descartada). Queda quién confirmó (`confirmadaPor`).

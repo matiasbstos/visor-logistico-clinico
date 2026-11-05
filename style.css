@@ -5528,3 +5528,5 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
     .act-an { margin-top: 12px; border-color: #dc2626; color: #dc2626; }
 }
 @media (pointer: coarse) { .cat-pegar { display: none; } }
+.cat-conf{margin-bottom:14px;padding:10px;border:1px solid #f59e0b;border-radius:10px;background:#fffbeb;display:flex;flex-direction:column;gap:6px}
+.cat-conf small{color:#78350f}

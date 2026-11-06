@@ -10,7 +10,7 @@
         (padre || document.body).appendChild(p);
         const t = p.querySelector('.r-prog__t'), l = p.querySelector('.r-prog__l');
         t.textContent = titulo || 'Procesando…';
-        const paso = (txt) => { const ult = l.lastElementChild; if (ult) ult.classList.add('ok'); const li = document.createElement('li'); li.textContent = txt; l.appendChild(li); t.textContent = txt; };
+        const paso = (txt) => { const ult = l.lastElementChild; if (ult) ult.classList.add('ok'); const li = document.createElement('li'); li.textContent = txt; l.appendChild(li); l.scrollTop = l.scrollHeight; t.textContent = txt; };
         (pasos || []).forEach(paso);
         return {
             paso,

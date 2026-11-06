@@ -442,3 +442,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.62 Foto por descripción cuando el producto no tiene ID (v21.07)
 - Si una línea de la orden no trae código, "Buscar fotos de esta orden" pide al Apps Script (acción `porDescripcion`) buscar la descripción en todas las tiendas de Convenio Marco y elegir el resultado más parecido (mínimo 60 % de las palabras clave). La foto queda SIEMPRE "por confirmar" y se guarda el título hallado (`fotoTitulo`) para compararlo.
+
+### 4.63 Avance por producto al buscar fotos (v21.08)
+- "Buscar fotos de esta orden" muestra una línea por producto (N de M, descripción y resultado: encontrada / por descripción / ya tenía / sin foto).

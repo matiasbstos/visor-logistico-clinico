@@ -423,6 +423,11 @@
         const q = busqueda.trim().toLowerCase();
         const lista = stock.filter(s => !q || s.name.toLowerCase().includes(q) || String(s.codigo || '').includes(q)).slice(0, 80);
         const yaEsta = (id) => borrador.items.some(i => i.id === id);
+        const esCero = (i) => num(i.cantidad) === 0 && num(i.solicitado) > 0;   // no se entrega nada: queda pendiente del centro
+        const pares = borrador.items.map((i, k) => [i, k]);
+        const entregan = pares.filter(([i]) => !esCero(i)), enCero = pares.filter(([i]) => esCero(i));
+        const filaItem = (i, k) => `<div class="act-fila"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(i.nombre, { codigo: i.codigo }) : ''}${esc(i.nombre)}${i.manual ? ' <small>(manual · provisional)</small>' : ''}<small>${i.codigo ? '<b>ID ' + esc(i.codigo) + '</b> · ' : (i.manual ? '' : `<input class="act-cod" data-k="${k}" inputmode="numeric" placeholder="Sin ID: escríbelo aquí (opcional)" aria-label="ID de Mercado Público"> `)}Disponible: ${num(i.stock)}${num(i.solicitado) > num(i.cantidad) ? ` · pedido ${num(i.solicitado)} · <b>pendiente ${num(i.solicitado) - num(i.cantidad)}</b>` : ''}${num(i.cantidad) > num(i.stock) ? ` · <span class="act-sin">sin respaldo: ${num(i.cantidad) - num(i.stock)}</span>` : ''}</small>${fotoDe(i, k)}</div>
+                <input type="number" min="0" value="${num(i.solicitado) > num(i.cantidad) ? num(i.solicitado) : ''}" class="act-qty act-sedit" data-k="${k}" placeholder="Pedido" aria-label="Cantidad pedida"><input type="number" min="0" value="${i.cantidad}" class="act-qty act-edit" data-k="${k}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-del" data-k="${k}" aria-label="Quitar">✕</button></div>`;
         const errores = validarBorrador(borrador);
         r.innerHTML = `
         <div class="page-header mb-24"><div class="page-title"><h2>Actas de entrega</h2>
@@ -452,10 +457,10 @@
             <label class="act-l">Centro al que se entrega
               <input id="act-centro" list="act-centros" value="${esc(borrador.centro)}" placeholder="Ej: Pomaire"><datalist id="act-centros">${listaCentros().map(c => `<option value="${esc(c)}">`).join('')}</datalist></label>
               <div class="act-centro-acc"><button type="button" class="btn btn-outline btn-sm" id="act-centro-add">+ Guardar este centro en la lista</button></div>
-            <h4 class="act-h4">Productos entregados (${borrador.items.length})</h4>
-            ${borrador.items.length ? borrador.items.map((i, k) => `<div class="act-fila"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(i.nombre, { codigo: i.codigo }) : ''}${esc(i.nombre)}${i.manual ? ' <small>(manual · provisional)</small>' : ''}<small>${i.codigo ? '<b>ID ' + esc(i.codigo) + '</b> · ' : (i.manual ? '' : `<input class="act-cod" data-k="${k}" inputmode="numeric" placeholder="Sin ID: escríbelo aquí (opcional)" aria-label="ID de Mercado Público"> `)}Disponible: ${num(i.stock)}${num(i.solicitado) > num(i.cantidad) ? ` · pedido ${num(i.solicitado)} · <b>pendiente ${num(i.solicitado) - num(i.cantidad)}</b>` : ''}${num(i.cantidad) > num(i.stock) ? ` · <span class="act-sin">sin respaldo: ${num(i.cantidad) - num(i.stock)}</span>` : ''}</small>${fotoDe(i, k)}</div>
-                <input type="number" min="0" value="${num(i.solicitado) > num(i.cantidad) ? num(i.solicitado) : ''}" class="act-qty act-sedit" data-k="${k}" placeholder="Pedido" aria-label="Cantidad pedida"><input type="number" min="0" value="${i.cantidad}" class="act-qty act-edit" data-k="${k}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-del" data-k="${k}" aria-label="Quitar">✕</button></div>`).join('') : '<p class="act-hint">Aún no agregas productos.</p>'}
-            <details class="act-det"${borrador.pendientes.length ? ' open' : ''}><summary>Productos pendientes de entrega (opcional)</summary>
+            <h4 class="act-h4">Productos entregados (${entregan.length})</h4>
+            ${entregan.length ? entregan.map(([i, k]) => filaItem(i, k)).join('') : '<p class="act-hint">Aún no agregas productos que se entreguen.</p>'}
+            <details class="act-det"${(borrador.pendientes.length || enCero.length) ? ' open' : ''}><summary>Productos pendientes de entrega${enCero.length ? ` (${enCero.length} sin stock, entrega 0)` : ' (opcional)'}</summary>
+              ${enCero.map(([i, k]) => filaItem(i, k)).join('')}
               ${borrador.pendientes.map((p, k) => `<div class="act-fila"><div class="act-fn">${esc(p.nombre)}</div><input type="number" min="1" value="${p.cantidad}" class="act-qty act-pedit" data-k="${k}"><button type="button" class="btn btn-outline act-pdel" data-k="${k}">✕</button></div>`).join('')}
               <div class="act-fila"><input id="act-pn" placeholder="Nombre del producto pendiente"><input id="act-pq" type="number" min="1" value="1" class="act-qty"><button type="button" class="btn btn-outline" id="act-padd">Añadir</button></div></details>
             <details class="act-det"${borrador.documentos.length ? ' open' : ''}><summary>Documentos asociados: SDC, OC, factura… (opcional)</summary>

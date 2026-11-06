@@ -659,7 +659,8 @@
             const porProducto = new Map(); // nombre -> Map(bodegaNombre -> cantidad)
             insumos.forEach(i => {
                 const n = String(i.name || ''); if (!n) return;
-                if (!slug(n).replace(/_/g, ' ').includes(t)) return;
+                const dq = String(q).replace(/\D/g, ''), esId = dq.length >= 3 && !/[a-z]/i.test(String(q).replace(/[\s-]/g, ''));
+                if (!slug(n).replace(/_/g, ' ').includes(t) && !(esId && (String(i.codigoMP || '').replace(/\D/g, '').includes(dq) || (window.SAR_IdProducto && window.SAR_IdProducto.coincide(n, q))))) return;
                 const loc = String(i.location || 'Sin bodega');
                 const m = porProducto.get(n) || new Map();
                 m.set(loc, (m.get(loc) || 0) + (Number(i.quantity) || 0));

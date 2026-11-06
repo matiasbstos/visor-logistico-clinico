@@ -307,10 +307,10 @@
             return { ...acta, creadoEn: new Date().toISOString() };
         });
         // Productos que no venían de ninguna orden: quedan en el catálogo (nombre + ID) para reconocerlos la próxima vez y asociarlos a una orden
-        for (const i of items.filter(x => x.nuevo || x.manual || x.codigoNuevo)) {
+        for (const i of items.filter(x => x.nuevo || x.manual || x.codigoNuevo || x.imagen)) {
             try {
                 const cod = String(i.codigo || '').trim(), id = slugC(cod || i.nombre) || 'manual';
-                await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: i.nombre, descripcion_lower: String(i.nombre).toLowerCase(), codigoMP: cod, insumoName: i.nombre, ...((i.nuevo || i.manual) ? { sinOrden: true, origen: 'MANUAL', creadoEn: f.serverTimestamp(), creadoPor: usuario } : {}), actualizado: f.serverTimestamp() }, { merge: true });
+                await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: i.nombre, descripcion_lower: String(i.nombre).toLowerCase(), codigoMP: cod, insumoName: i.nombre, ...(i.imagen ? { imagen: i.imagen } : {}), ...((i.nuevo || i.manual) ? { sinOrden: true, origen: 'MANUAL', creadoEn: f.serverTimestamp(), creadoPor: usuario } : {}), actualizado: f.serverTimestamp() }, { merge: true });
                 catCargado = false;
             } catch (e) { /* el acta ya se emitió */ }
         }
@@ -448,7 +448,7 @@
               <input id="act-centro" list="act-centros" value="${esc(borrador.centro)}" placeholder="Ej: Pomaire"><datalist id="act-centros">${listaCentros().map(c => `<option value="${esc(c)}">`).join('')}</datalist></label>
               <div class="act-centro-acc"><button type="button" class="btn btn-outline btn-sm" id="act-centro-add">+ Guardar este centro en la lista</button></div>
             <h4 class="act-h4">Productos entregados (${borrador.items.length})</h4>
-            ${borrador.items.length ? borrador.items.map((i, k) => `<div class="act-fila"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(i.nombre, { codigo: i.codigo }) : ''}${esc(i.nombre)}${i.manual ? ' <small>(manual · provisional)</small>' : ''}<small>${i.codigo ? '<b>ID ' + esc(i.codigo) + '</b> · ' : (i.manual ? '' : `<input class="act-cod" data-k="${k}" inputmode="numeric" placeholder="Sin ID: escríbelo aquí (opcional)" aria-label="ID de Mercado Público"> `)}Disponible: ${num(i.stock)}${num(i.solicitado) > num(i.cantidad) ? ` · pedido ${num(i.solicitado)} · <b>pendiente ${num(i.solicitado) - num(i.cantidad)}</b>` : ''}${num(i.cantidad) > num(i.stock) ? ` · <span class="act-sin">sin respaldo: ${num(i.cantidad) - num(i.stock)}</span>` : ''}</small></div>
+            ${borrador.items.length ? borrador.items.map((i, k) => `<div class="act-fila"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(i.nombre, { codigo: i.codigo }) : ''}${esc(i.nombre)}${i.manual ? ' <small>(manual · provisional)</small>' : ''}<small>${i.codigo ? '<b>ID ' + esc(i.codigo) + '</b> · ' : (i.manual ? '' : `<input class="act-cod" data-k="${k}" inputmode="numeric" placeholder="Sin ID: escríbelo aquí (opcional)" aria-label="ID de Mercado Público"> `)}Disponible: ${num(i.stock)}${num(i.solicitado) > num(i.cantidad) ? ` · pedido ${num(i.solicitado)} · <b>pendiente ${num(i.solicitado) - num(i.cantidad)}</b>` : ''}${num(i.cantidad) > num(i.stock) ? ` · <span class="act-sin">sin respaldo: ${num(i.cantidad) - num(i.stock)}</span>` : ''}</small>${fotoDe(i, k)}</div>
                 <input type="number" min="0" value="${num(i.solicitado) > num(i.cantidad) ? num(i.solicitado) : ''}" class="act-qty act-sedit" data-k="${k}" placeholder="Pedido" aria-label="Cantidad pedida"><input type="number" min="1" value="${i.cantidad}" class="act-qty act-edit" data-k="${k}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-del" data-k="${k}" aria-label="Quitar">✕</button></div>`).join('') : '<p class="act-hint">Aún no agregas productos.</p>'}
             <details class="act-det"${borrador.pendientes.length ? ' open' : ''}><summary>Productos pendientes de entrega (opcional)</summary>
               ${borrador.pendientes.map((p, k) => `<div class="act-fila"><div class="act-fn">${esc(p.nombre)}</div><input type="number" min="1" value="${p.cantidad}" class="act-qty act-pedit" data-k="${k}"><button type="button" class="btn btn-outline act-pdel" data-k="${k}">✕</button></div>`).join('')}
@@ -477,6 +477,21 @@
         enlazar();
     }
 
+    /** Foto del producto: desplegable en cada fila del acta (si aún no tiene foto en el sistema). */
+    function fotoDe(i, k) {
+        if (i.imagen) return `<div class="act-foto-ok"><img src="${esc(i.imagen)}" alt=""><small>Foto cargada (se guarda en el catálogo)</small><button type="button" class="btn btn-outline btn-sm act-img-quitar" data-k="${k}">Quitar</button></div>`;
+        const IM = window.SAR_Imagenes; let tiene = false;
+        try { tiene = !!(IM && (IM.buscar(i.nombre, i.codigo) || (IM.buscarConCandidata && IM.buscarConCandidata(i.nombre, i.codigo)))); } catch (e) { tiene = false; }
+        if (tiene) return '';
+        return `<details class="act-foto"><summary>Agregar foto del producto</summary><input type="file" accept="image/*" class="act-img" data-k="${k}" aria-label="Foto del producto"></details>`;
+    }
+    function reducirFoto(file) {
+        return new Promise((ok, mal) => {
+            const img = new Image(), url = URL.createObjectURL(file);
+            img.onload = () => { const k = Math.min(1, 220 / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url); ok(c.toDataURL('image/jpeg', 0.8)); };
+            img.onerror = () => { URL.revokeObjectURL(url); mal(new Error('No se pudo leer la imagen.')); }; img.src = url;
+        });
+    }
     function leerCampos() {
         const g = (id) => { const e = document.getElementById(id); return e ? e.value : null; };
         const c = g('act-centro'); if (c !== null) borrador.centro = c;
@@ -510,6 +525,8 @@
             borrador.items.push({ id: s.id, nombre: s.name, codigo: s.codigo || '', cantidad: c, solicitado: sol > c ? sol : 0, stock: s.disp, controlado: s.controlado }); refrescar();
         }));
         $$('.act-edit').forEach(i => i.addEventListener('change', () => { borrador.items[+i.dataset.k].cantidad = Math.floor(num(i.value)); refrescar(); }));
+        $$('.act-img').forEach(i => i.addEventListener('change', async () => { const it = borrador.items[+i.dataset.k], file = i.files && i.files[0]; if (!it || !file) return; try { it.imagen = await reducirFoto(file); refrescar(); } catch (e) { toast('Foto', e.message || 'No se pudo leer la foto.', 'error'); } }));
+        $$('.act-img-quitar').forEach(b => b.addEventListener('click', () => { const it = borrador.items[+b.dataset.k]; if (it) { delete it.imagen; refrescar(); } }));
         $$('.act-cod').forEach(i => i.addEventListener('change', () => { const it = borrador.items[+i.dataset.k]; const v = String(i.value || '').replace(/\D/g, ''); if (!it || !v) return; it.codigo = v; it.codigoNuevo = true; refrescar(); }));
         $$('.act-sedit').forEach(i => i.addEventListener('change', () => { const it = borrador.items[+i.dataset.k]; const v = Math.floor(num(i.value)); it.solicitado = v > num(it.cantidad) ? v : 0; refrescar(); }));
         // Manual: al elegir un nombre del catálogo se completa el ID, y al escribir un ID conocido se completa el nombre

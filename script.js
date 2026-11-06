@@ -3,6 +3,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebas
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, runTransaction, writeBatch, serverTimestamp, getDoc, setDoc, query, where, orderBy, limit, limitToLast, startAfter, endBefore, startAt, endAt, getDocs as _getDocs, deleteDoc, addDoc, updateDoc, increment, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 import { generarPlantillaExcel, procesarExcelCargaMasiva, excelSerialDateToJS, exportarInventarioResguardo } from './excelUtils.js';
+const SAR_IdMatch = (n, t) => !!(window.SAR_IdProducto && window.SAR_IdProducto.coincide(n, t));   // búsqueda por ID (id-producto.js)
 
 // ---------------------------------------------------------------------------
 // Fase "órdenes de compra" (v20.73): mientras solo se carga lo que llega por OC, los medicamentos de
@@ -766,7 +767,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     const batches = data.batches || [];
                                     const matchesBatch = rootBatch.includes(term) || batches.some(b => (b.batch || "").toLowerCase().includes(term));
 
-                                    return name.includes(term) || code.includes(term) || provider.includes(term) || matchesBatch;
+                                    return name.includes(term) || code.includes(term) || provider.includes(term) || matchesBatch || String(data.codigoMP || '').includes(term);
                                 }).slice(0, 20);
 
                                 if (matches.length === 0) {
@@ -3158,7 +3159,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (searchText.length >= 2) {
                     const name = (data.name || data.nombre || data.descripcion || '').toLowerCase();
                     const code = (data.code || data.codigo || '').toLowerCase();
-                    if (!name.includes(searchText) && !code.includes(searchText)) return false;
+                    if (!name.includes(searchText) && !code.includes(searchText) && !String(data.codigoMP || '').includes(searchText) && !(window.SAR_IdProducto && window.SAR_IdProducto.coincide(name, searchText))) return false;
                 }
                 return true;
             });
@@ -4766,7 +4767,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         SAR_Utils.matches(m.user, term) ||
                         SAR_Utils.matches(m.batch, term) ||
                         SAR_Utils.matches(m.type || m.tipo, term) ||
-                        SAR_Utils.matches(m.document || m.supportDocument, term)
+                        SAR_Utils.matches(m.document || m.supportDocument, term) ||
+ SAR_IdMatch(m.insumoName, term)
                     );
                     renderHistorial(filtered);
                     if (statusLabel) statusLabel.textContent = `Mostrando ${filtered.length} coincidencias (de ${globalHistoryData.length} cargados)`;
@@ -4857,7 +4859,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 SAR_Utils.matches(m.user, term) ||
                                 SAR_Utils.matches(m.batch, term) ||
                                 SAR_Utils.matches(m.type || m.tipo, term) ||
-                                SAR_Utils.matches(m.document || m.supportDocument, term)
+                                SAR_Utils.matches(m.document || m.supportDocument, term) ||
+ SAR_IdMatch(m.insumoName, term)
                             );
                             renderHistorial(filtered);
                             if (statusLabel) statusLabel.textContent = `Mostrando ${filtered.length} coincidencias (de ${globalHistoryData.length} cargados)`;
@@ -4888,7 +4891,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             SAR_Utils.matches(m.user, term) ||
                             SAR_Utils.matches(m.batch, term) ||
                             SAR_Utils.matches(m.type || m.tipo, term) ||
-                            SAR_Utils.matches(m.document || m.supportDocument, term)
+                            SAR_Utils.matches(m.document || m.supportDocument, term) ||
+ SAR_IdMatch(m.insumoName, term)
                         );
                         renderHistorial(filtered);
                         if (statusLabel) statusLabel.textContent = `Mostrando ${filtered.length} coincidencias (de ${globalHistoryData.length} cargados)`;
@@ -12517,6 +12521,7 @@ function doGet(e) {
                 (item.name && item.name.toLowerCase().includes(searchTerm)) ||
                 (item.batch && item.batch.toLowerCase().includes(searchTerm)) ||
                 (item.code && item.code.toLowerCase().includes(searchTerm)) ||
+                (window.SAR_IdProducto && window.SAR_IdProducto.coincide(item.name, searchTerm)) ||
                 (item.fase && item.fase.toLowerCase().includes(searchTerm)) ||
                 (item.category && item.category.toLowerCase().includes(searchTerm));
             return matchCat && matchSearch;

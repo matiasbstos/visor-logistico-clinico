@@ -50,6 +50,19 @@
         return [...porCentro.entries()].map(([centro, items]) => ({ centro, items })).sort((a, b) => a.centro.localeCompare(b.centro, 'es'));
     }
 
+    /** Órdenes abiertas con mercadería por recibir de SAR (parcial = ya llegó algo y falta el resto). */
+    function calcularPorRecibir(ocs, centro) {
+        centro = centro || 'SAR';
+        return (ocs || []).filter(o => o && !o.cerrada).map(oc => {
+            const lineas = []; let recibido = 0, pendiente = 0;
+            (oc.columnas || []).filter(c => c.centro === centro).forEach(c => (oc.lineas || []).forEach(l => {
+                const p = num(l.dist && l.dist[c.key]), r = num(l.recibido && l.recibido[c.key]); if (!p) return;
+                recibido += r; if (p > r) { pendiente += p - r; lineas.push({ producto: l.descripcion, codigoMP: l.codigoMP || '', pedido: p, recibido: r, pendiente: p - r }); }
+            }));
+            return { ocId: oc.id, numeroOC: oc.numeroOC, proveedor: oc.proveedor || '', recibido, pendiente, parcial: recibido > 0, lineas };
+        }).filter(o => o.pendiente > 0).sort((a, b) => String(a.numeroOC).localeCompare(String(b.numeroOC)));
+    }
+
     /** Cruza cada pendiente con el stock (por ID o por nombre, usando el catálogo para traducir descripciones)
      *  y anota dónde está (bodega y estante) y el lote que vence primero. */
     function cruzarStock(grupos, insumos, catalogo, asign, bodegas) {
@@ -80,16 +93,18 @@
         return grupos;
     }
 
-    let grupos = [], cargado = false, catalogoDocs = [];
+    let grupos = [], cargado = false, catalogoDocs = [], porRecibir = [];
     async function traer() {
         const f = fs();
-        const [sa, si, sc, sb, sg] = await Promise.all([
+        const [sa, si, sc, sb, sg, so] = await Promise.all([
             f.getDocs(f.query(f.collection(db(), 'Actas_Entrega'), f.orderBy('creadoEn', 'desc'), f.limit(600))),
             f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(3000))),
             f.getDocs(f.query(f.collection(db(), 'Catalogo_Productos'), f.limit(3000))).catch(() => null),
             f.getDocs(f.query(f.collection(db(), 'Bodegas'), f.limit(100))).catch(() => null),
-            f.getDocs(f.query(f.collection(db(), 'Asignaciones_Ubicacion'), f.limit(3000))).catch(() => null)
+            f.getDocs(f.query(f.collection(db(), 'Asignaciones_Ubicacion'), f.limit(3000))).catch(() => null),
+            f.getDocs(f.query(f.collection(db(), 'Seguimiento_OC'), f.limit(400))).catch(() => null)
         ]);
+        { const ocs = []; if (so) so.forEach(d => ocs.push({ id: d.id, ...d.data() })); porRecibir = calcularPorRecibir(ocs); }
         const actas = [], ins = [], cat = [], bod = [], asg = [];
         sa.forEach(d => actas.push({ id: d.id, ...d.data() })); si.forEach(d => ins.push(d.data())); if (sc) sc.forEach(d => cat.push({ id: d.id, ...d.data() }));
         if (sb) sb.forEach(d => bod.push({ id: d.id, ...d.data() })); if (sg) sg.forEach(d => asg.push(d.data()));
@@ -208,17 +223,19 @@
     // ---------------- Campana de notificaciones ----------------
     function pintarCampana() {
         const b = document.getElementById('btn-notificaciones'); if (!b) return;
-        const n = grupos.reduce((s, g) => s + g.listos, 0);
+        const n = grupos.reduce((s, g) => s + g.listos, 0) + porRecibir.filter(o => o.parcial).length;
         let ins = b.querySelector('.noti-n'); if (!ins) { ins = document.createElement('span'); ins.className = 'noti-n'; b.appendChild(ins); }
         ins.textContent = n > 9 ? '9+' : String(n); ins.style.display = n ? '' : 'none';
-        b.title = n ? `${n} producto(s) pendientes ya tienen stock para entregar` : 'Notificaciones';
+        b.title = n ? `${n} aviso(s): entregas con stock disponible y/o órdenes con recepción parcial` : 'Notificaciones';
     }
     function abrirPanel() {
         let p = document.getElementById('noti-panel'); if (p) { p.remove(); return; }
         p = document.createElement('div'); p.id = 'noti-panel'; p.className = 'noti-panel';
         const con = grupos.filter(g => g.listos);
-        p.innerHTML = `<strong>Notificaciones</strong>${con.length ? con.map(g => `<div class="noti-it"><b>${esc(g.centro)}</b>: hay stock para entregar ${g.listos} de ${g.items.length} producto(s) pendiente(s)
-            <small>${g.items.filter(x => x.entregable > 0).slice(0, 3).map(x => esc(x.nombre.slice(0, 40)) + ' (' + x.entregable + ')').join(' · ')}</small></div>`).join('') : '<p class="act-hint">Sin avisos por ahora.</p>'}
+        const parc = porRecibir.filter(o => o.parcial);
+        const bloqueRec = parc.length ? `<div class="noti-sec"><b>Por recibir (recepción parcial)</b>${parc.map(o => `<div class="noti-it"><b>OC ${esc(o.numeroOC)}</b> · ${esc(o.proveedor)}: faltan ${o.pendiente} un. (${o.lineas.length} producto(s))<small>${o.lineas.slice(0, 3).map(x => esc(String(x.producto).slice(0, 40)) + ' (' + x.pendiente + ')').join(' · ')}</small></div>`).join('')}</div>` : '';
+        p.innerHTML = `<strong>Notificaciones</strong>${bloqueRec}${con.length ? con.map(g => `<div class="noti-it"><b>${esc(g.centro)}</b>: hay stock para entregar ${g.listos} de ${g.items.length} producto(s) pendiente(s)
+            <small>${g.items.filter(x => x.entregable > 0).slice(0, 3).map(x => esc(x.nombre.slice(0, 40)) + ' (' + x.entregable + ')').join(' · ')}</small></div>`).join('') : (parc.length ? '' : '<p class="act-hint">Sin avisos por ahora.</p>')}
             <button type="button" class="btn btn-outline btn-sm" id="noti-ir">Ver pendientes por entregar</button>`;
         document.body.appendChild(p);
         p.querySelector('#noti-ir').addEventListener('click', () => { p.remove(); window.location.hash = 'view-pendientes-entrega'; });
@@ -232,6 +249,6 @@
     }
     if (typeof document !== 'undefined' && document.addEventListener) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar(); }
 
-    window.SAR_Pendientes = { abrir, calcularPendientes, cruzarStock, refrescar: () => traer().catch(() => {}) };
+    window.SAR_Pendientes = { abrir, calcularPendientes, calcularPorRecibir, cruzarStock, datos: async () => { await traer(); return { grupos, porRecibir }; }, refrescar: () => traer().catch(() => {}) };
     if (typeof module !== 'undefined') module.exports = window.SAR_Pendientes;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: { dataset: {} } });

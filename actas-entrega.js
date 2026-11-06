@@ -535,6 +535,17 @@
             const sp = r.querySelector(`.act-qty[data-sid="${CSS.escape(b.dataset.id)}"]`), sol = Math.floor(num(sp && sp.value));
             borrador.items.push({ id: s.id, nombre: s.name, codigo: s.codigo || '', cantidad: c, solicitado: sol > c ? sol : 0, stock: s.disp, controlado: s.controlado }); refrescar();
         }));
+        // Sugerencias con foto: al escribir una letra aparece el nombre sugerido, su ID y su fotografía (stock de la bodega + catálogo, incluidos los ingresados manualmente)
+        const fuenteSug = () => {
+            const a = stock.map(x => ({ nombre: x.name, codigo: x.codigo, nota: x.provisional ? 'manual · provisional' : `disp. ${x.disp}` }));
+            const b = catalogo.map(c => ({ nombre: String(c.descripcion || c.insumoName || '').toUpperCase(), codigo: c.codigoMP ? String(c.codigoMP) : '', nota: 'catálogo' })).filter(x => x.nombre);
+            return a.concat(b);
+        };
+        if (window.SAR_Sugerir) {
+            window.SAR_Sugerir.enlazar($('#act-mn'), fuenteSug, (x) => { const m = $('#act-mid'); if (m && x.codigo && !m.value) m.value = x.codigo; });
+            window.SAR_Sugerir.enlazar($('#act-pn'), fuenteSug, null);
+            $$('.act-fis').forEach(i => window.SAR_Sugerir.enlazar(i, fuenteSug, null));
+        }
         $$('.act-fis').forEach(i => i.addEventListener('change', () => { const it = borrador.items[+i.dataset.k]; if (it) { it.fisico = i.value.trim(); guardarBorrador(); } }));
         $$('.act-edit').forEach(i => i.addEventListener('change', () => { borrador.items[+i.dataset.k].cantidad = Math.floor(num(i.value)); refrescar(); }));
         $$('.act-img').forEach(i => i.addEventListener('change', async () => { const it = borrador.items[+i.dataset.k], file = i.files && i.files[0]; if (!it || !file) return; try { it.imagen = await reducirFoto(file); refrescar(); } catch (e) { toast('Foto', e.message || 'No se pudo leer la foto.', 'error'); } }));

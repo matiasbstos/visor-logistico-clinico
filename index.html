@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=21.09",
+                "./script.js": "./script.js?v=21.10",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -65,7 +65,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
     <meta name="theme-color" content="#1A3668">
-    <link rel="stylesheet" href="style.css?v=21.09">
+    <link rel="stylesheet" href="style.css?v=21.10">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -244,6 +244,9 @@
                     <a href="#" class="menu-item normal" data-target="view-actas-entrega" data-title="Actas de entrega">
                         <i class="ph-bold ph-file-text"></i><span class="menu-label">Actas de entrega</span>
                     </a>
+                    <a href="#" class="menu-item normal" data-target="view-pendientes-entrega" data-title="Pendientes por entregar">
+                        <i class="ph-bold ph-hourglass-medium"></i><span class="menu-label">Pendientes por entregar</span>
+                    </a>
                     <a href="#" class="menu-item normal" data-target="view-oxigeno" data-title="Oxígeno portátil">
                         <i class="ph-bold ph-wind"></i><span class="menu-label">Oxígeno portátil</span>
                     </a>
@@ -402,7 +405,7 @@
                     <div class="status-badge">
                         <i class="ph-fill ph-cloud-check"></i><span>Nube actualizada</span>
                     </div>
-                    <button type="button" class="btn btn-icon" title="Notificaciones"><i class="ph-bold ph-bell"></i></button>
+                    <button type="button" class="btn btn-icon" id="btn-notificaciones" title="Notificaciones" style="position:relative"><i class="ph-bold ph-bell"></i></button>
                     <button type="button" class="btn btn-icon" title="Ayuda"><i class="ph-bold ph-question"></i></button>
 
                     <div class="user-profile" id="btn-user-profile" style="cursor: pointer;" title="Mi Perfil">
@@ -2630,6 +2633,10 @@
 
             <section id="view-errores" class="view-section" style="display:none;">
                 <div class="dashboard-container" id="err-root"></div>
+            </section>
+
+            <section id="view-pendientes-entrega" class="view-section" style="display:none;">
+                <div class="dashboard-container" id="pen-root"></div>
             </section>
 
             <section id="view-ingreso-rapido" class="view-section" style="display:none;">
@@ -5862,29 +5869,30 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=21.09"></script>
-    <script type="module" src="patch-plantillas.js?v=21.09"></script>
+    <script type="module" src="script.js?v=21.10"></script>
+    <script type="module" src="patch-plantillas.js?v=21.10"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="bodegas-estantes.js?v=21.09"></script>
-    <script src="bodegas-cierre.js?v=21.09"></script>
-    <script src="progreso.js?v=21.09"></script>
-    <script src="oc-lector.js?v=21.09"></script>
-    <script src="acta-edicion.js?v=21.09"></script>
-    <script src="anonimizar-pacientes.js?v=21.09"></script>
-    <script src="cdp-presupuesto.js?v=21.09"></script>
-    <script src="imagenes-producto.js?v=21.09"></script>
-    <script src="catalogo-vista.js?v=21.09"></script>
-    <script src="seguimiento-oc.js?v=21.09"></script>
-    <script src="compras-agiles.js?v=21.09"></script>
-    <script src="ingreso-rapido.js?v=21.09"></script>
-    <script src="home-compras.js?v=21.09"></script>
-    <script src="login-animado.js?v=21.09"></script>
-    <script src="errores.js?v=21.09"></script>
-    <script src="saldos-contables.js?v=21.09"></script>
-    <script src="recepcion-conforme.js?v=21.09"></script>
-    <script src="acta-documentos.js?v=21.09"></script>
-    <script src="actas-entrega.js?v=21.09"></script>
-    <script src="oxigeno.js?v=21.09"></script>
-    <script src="visor-adquisiciones.js?v=21.09"></script>
+    <script src="bodegas-estantes.js?v=21.10"></script>
+    <script src="bodegas-cierre.js?v=21.10"></script>
+    <script src="progreso.js?v=21.10"></script>
+    <script src="oc-lector.js?v=21.10"></script>
+    <script src="acta-edicion.js?v=21.10"></script>
+    <script src="anonimizar-pacientes.js?v=21.10"></script>
+    <script src="cdp-presupuesto.js?v=21.10"></script>
+    <script src="imagenes-producto.js?v=21.10"></script>
+    <script src="catalogo-vista.js?v=21.10"></script>
+    <script src="seguimiento-oc.js?v=21.10"></script>
+    <script src="compras-agiles.js?v=21.10"></script>
+    <script src="ingreso-rapido.js?v=21.10"></script>
+    <script src="pendientes-entrega.js?v=21.10"></script>
+    <script src="home-compras.js?v=21.10"></script>
+    <script src="login-animado.js?v=21.10"></script>
+    <script src="errores.js?v=21.10"></script>
+    <script src="saldos-contables.js?v=21.10"></script>
+    <script src="recepcion-conforme.js?v=21.10"></script>
+    <script src="acta-documentos.js?v=21.10"></script>
+    <script src="actas-entrega.js?v=21.10"></script>
+    <script src="oxigeno.js?v=21.10"></script>
+    <script src="visor-adquisiciones.js?v=21.10"></script>
 </body>
 </html>

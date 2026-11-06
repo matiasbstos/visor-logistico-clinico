@@ -448,3 +448,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.64 Tiendas de Convenio Marco en el script (v21.09)
 - El script solo buscaba en `aseo3` (la portada no publica las tiendas), por eso las fotos de insumos médicos no aparecían. Ahora usa lista fija: `insumos2` (Insumos y Dispositivos Médicos), `aseo3` y `escritorio3`. Los glucómetros/tiras Accu-Chek no están en esas tiendas: su foto va a mano.
+
+### 4.65 Pendientes por entregar y aviso en la campana (v21.10)
+- Pantalla "Pendientes por entregar" (menú, junto a Actas): por centro, lo pedido y aún no entregado según las actas (pedido − entregado; las actas anuladas no cuentan; entregas posteriores lo descuentan), con el stock disponible y estado (completo / parcial / sin stock).
+- Botón "Preparar acta con lo disponible": abre Actas de entrega con el centro y los productos ya cargados (cantidad = lo que hay en stock, pedido = lo pendiente).
+- La campana muestra un número cuando hay stock para entregar algo pendiente (se revisa al abrir la app y cada 10 min); al pulsarla lista los centros.
+- Todo producto ingresado a mano en un acta queda en el Catálogo de productos (antes solo si era nuevo en la bodega).

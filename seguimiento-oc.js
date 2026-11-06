@@ -509,7 +509,7 @@
                     return `<td class="soc-est--${estadoLinea(p, r)}"><strong>${r}</strong> / ${p}</td>`; }).join('')}</tr>`).join('')}
                 </tbody></table></div>
                 <div class="soc-resumen">${tot.filter(t => verTodos || t.centro === CENTRO_PROPIO).map(t => `<span><strong>${esc(t.centro)}</strong>: pendiente ${t.pendiente} un. · ${peso(t.netoPend)} neto de ${peso(t.netoTotal)}</span>`).join('')}</div></details>
-            ${(oc.recepciones || []).length ? `<details class="erp-card soc-det" id="soc-recs"><summary><h3>Recepciones y recepción conforme</h3><span class="soc-n">${oc.recepciones.length}</span></summary>
+            ${(oc.recepciones || []).length ? `<details class="erp-card soc-det" id="soc-recs" open><summary><h3>Recepciones y recepción conforme</h3><span class="soc-n">${oc.recepciones.length}</span></summary>
                 <ul class="soc-arch">${oc.recepciones.map(r => `<li class="${r.anulada ? 'soc-rec-anul' : ''}"><i class="ph-bold ph-truck"></i><div><strong>${esc(r.recId)}</strong>${r.anulada ? ' · <b>ANULADA</b>' : ''}<small>${esc(fmtFecha(r.fecha))} ${esc(r.hora || '')} · ${num(r.unidades)} u.${r.guia ? ' · guía ' + esc(r.guia) : ''}${r.ingresoAStock ? ' · ingresó a ' + esc(r.bodega || 'bodega') : ' · sin ingreso a stock'} · ${esc(r.usuario || '')}${r.anulada ? ' · motivo: ' + esc(r.anuladaMotivo || '') : ''}</small></div>${!r.anulada ? `<span class="soc-rc-bts"><button type="button" class="btn btn-outline btn-sm" data-rc-pdf="${esc(r.recId)}">PDF</button><button type="button" class="btn btn-outline btn-sm" data-rc-docx="${esc(r.recId)}">Word</button><button type="button" class="btn btn-outline btn-sm" data-rc-ed="${esc(r.recId)}">Editar</button></span>` : ''}${esAdmin() && !r.anulada ? `<button type="button" class="btn btn-outline btn-sm" data-anular-rec="${esc(r.recId)}">Anular</button>` : ''}</li>`).join('')}</ul></details>` : ''}
             ${(() => { const pe = pendientesDe(oc).filter(x => x.pendiente > 0), rc = pendientesDe(oc).reduce((t, x) => t + x.recibido, 0); if (!pe.length || !rc) return ''; const un = pe.reduce((t, x) => t + x.pendiente, 0);
                 return `<details class="erp-card soc-det soc-porrec" id="soc-porrec" open><summary><h3>Pendiente de recibir (recepción parcial) <span class="soc-n">${un} un.</span></h3></summary>
@@ -578,6 +578,10 @@
             if (b.dataset.rcEd) window.SAR_RecepConf.editar({ oc: ocActual, rec, toast, usuario: usuario(), guardarArchivo, eliminarCategoria: eliminarArchivosCategoria });
             else window.SAR_RecepConf.descargar(ocActual, rec, b.dataset.rcDocx ? 'docx' : 'pdf', toast);
         }));
+        const bdesc = q('#soc-rc-desc'); if (bdesc) bdesc.addEventListener('click', () => {
+            const rs = (ocActual.recepciones || []).filter(r => !r.anulada), rec = rs[rs.length - 1]; if (!rec || !window.SAR_RecepConf) return;
+            window.SAR_RecepConf.ofrecer({ oc: ocActual, rec, toast, usuario: usuario(), guardarArchivo, eliminarCategoria: eliminarArchivosCategoria, desdeOrden: true });
+        });
         const baa = q('#soc-arch-add'); if (baa) baa.addEventListener('click', formAgregarArchivo);
         const brEd = q('#soc-rc-edit'); if (brEd) brEd.addEventListener('click', () => {
             if (!window.SAR_RecepcionConforme || !window.SAR_RecepcionConforme.editar) { toast('No disponible', 'El módulo de recepción conforme no está cargado.', 'warning'); return; }
@@ -612,10 +616,11 @@
         let txt, btns;
         if (pend) {
             txt = hayRecibido(oc) ? 'Falta mercadería por recibir. Regístrala cuando llegue, o envía la recepción conforme parcial.' : 'Siguiente paso: cuando llegue la mercadería, regístrala (puedes hacerlo por partes). La aceptación del proveedor es opcional.';
-            btns = B('soc-recep', hayRecibido(oc) ? 'Recibir lo que falta' : 'Recibir mercadería', true) + (hayRecibido(oc) && !oc.recepcionConforme ? B('soc-conforme', 'Recepción conforme (parcial)', false) : '');
+            btns = B('soc-recep', hayRecibido(oc) ? 'Recibir lo que falta' : 'Recibir mercadería', true) + (hayRecibido(oc) && !oc.recepcionConforme ? B('soc-conforme', 'Recepción conforme con correo (parcial)', false) : '');
         } else if (!oc.recepcionConforme) { txt = 'Todo recibido. Siguiente paso: la recepción conforme con la guía o factura.'; btns = B('soc-conforme', 'Recepción conforme', true); }
         else { txt = 'Recepción conforme lista. Ya puedes entregar a los centros desde las actas.'; btns = B('soc-sig', 'Ir a Actas de entrega', true, '#view-actas-entrega'); }
         const extra = hayStock && pend ? ' Lo ya recibido está en Bodega Central y se entrega desde Actas de entrega.' : '';
+        if ((oc.recepciones || []).some(r => !r.anulada)) btns = B('soc-rc-desc', 'Descargar recepción conforme (PDF / Word)', false) + btns;
         if (!oc.aceptada) btns += B('soc-acepta', 'Registrar aceptación', false);
         return `<div class="soc-siguiente"><span>${esc(txt)}${esc(extra)}</span><span class="soc-siguiente__btns">${btns}</span></div>`;
     }

@@ -439,3 +439,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.61 Productos que ya están en bodega pero llegaron con una orden (v21.06)
 - El Ingreso rápido es donde esos productos entran al stock del centro. Tiene un campo opcional "N° de orden de compra de origen" que queda en el historial y en el insumo (`ultimaOC`).
 - Para no contar el stock dos veces, en esa orden la recepción se registra SIN marcar "Ingresar al stock" (queda como "Recibido, sin ingresar a stock").
+
+### 4.62 Foto por descripción cuando el producto no tiene ID (v21.07)
+- Si una línea de la orden no trae código, "Buscar fotos de esta orden" pide al Apps Script (acción `porDescripcion`) buscar la descripción en todas las tiendas de Convenio Marco y elegir el resultado más parecido (mínimo 60 % de las palabras clave). La foto queda SIEMPRE "por confirmar" y se guarda el título hallado (`fotoTitulo`) para compararlo.

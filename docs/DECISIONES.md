@@ -540,3 +540,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.86 Descarga de la recepción conforme siempre visible, con el nombre del modelo (v21.32)
 - Sea parcial o total, el documento de recepción conforme (PDF con el modelo de la Corporación y Word) se puede descargar siempre: botón "Descargar recepción conforme (PDF / Word)" en la barra de la orden (última recepción registrada) y botones PDF/Word/Editar en cada recepción de la lista, que ahora aparece abierta. Las recepciones registradas antes de existir esta función también sirven (se arman desde lo recibido en cada una).
 - Nombre de archivo igual al modelo: `RC<N° de orden>.pdf` / `.docx` (la 2.ª recepción de la orden en adelante lleva `_02`, `_03`…). El botón antiguo de la orden se renombra "Recepción conforme con correo" para distinguirlo.
+
+### 4.87 Editar recepción conforme: incluir los productos de la orden (v21.33)
+- El documento de una recepción lista solo lo que se registró como recibido en esa recepción (lo no recibido queda en "Pendiente de recibir"). En "Editar" hay un botón para incluir todos los productos de la orden con su cantidad pedida (ajustable), para cuando la conformidad abarca más de lo digitado en "Llega ahora".

@@ -129,13 +129,18 @@
             <label class="soc-toggle"><input type="checkbox" id="rcx-par"${d.parcial ? ' checked' : ''}> Recepción parcial</label>
             <label class="soc-toggle"><input type="checkbox" id="rcx-firma"${d.conFirma ? ' checked' : ''}> Incluir firma de la contraparte en el PDF</label>
             <h4>Productos del documento</h4><div id="rcx-ls">${d.lineas.map(filaL).join('')}</div>
-            <button type="button" class="btn btn-outline btn-sm" id="rcx-add">+ Agregar línea</button>
+            <button type="button" class="btn btn-outline btn-sm" id="rcx-add">+ Agregar línea</button> <button type="button" class="btn btn-outline btn-sm" id="rcx-orden">Incluir los productos de la orden (cantidad pedida)</button>
             <label>Observaciones<textarea id="rcx-obs" rows="2">${esc(d.observaciones)}</textarea></label>
             <div class="cierre-acciones"><button type="button" class="btn btn-outline" id="rcx-x">Cancelar</button><button type="button" class="btn btn-primary" id="rcx-ok">Guardar cambios</button></div></div>`;
         document.body.appendChild(ov);
         const q = (s) => ov.querySelector(s);
         q('#rcx-x').addEventListener('click', () => ov.remove());
         q('#rcx-add').addEventListener('click', () => q('#rcx-ls').insertAdjacentHTML('beforeend', filaL({ producto: '', recibido: 1 })));
+        q('#rcx-orden').addEventListener('click', () => {
+            const ya = new Set([...ov.querySelectorAll('.rce-p')].map(i => i.value.trim().toUpperCase()));
+            RC().lineasActa(oc, 'SAR').filter(l => num(l.pedido) > 0 && !ya.has(String(l.producto).trim().toUpperCase())).forEach(l => q('#rcx-ls').insertAdjacentHTML('beforeend', filaL({ producto: l.producto, recibido: num(l.pedido) })));
+            toast('Productos incluidos', 'Se agregaron los productos de la orden con la cantidad pedida. Ajusta las cantidades si llegó menos.', 'info');
+        });
         ov.addEventListener('click', (e) => { const b = e.target.closest('.rce-q'); if (b) b.closest('.rce-l').remove(); });
         q('#rcx-ok').addEventListener('click', async () => {
             const lineas = [...ov.querySelectorAll('.rce-l')].map(r => ({ producto: r.querySelector('.rce-p').value.trim(), cantidad: Math.floor(num(r.querySelector('.rce-c').value)) })).filter(l => l.producto && l.cantidad > 0);

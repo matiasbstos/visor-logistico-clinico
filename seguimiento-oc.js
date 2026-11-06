@@ -1252,8 +1252,8 @@
             <label>Guía de despacho (foto o PDF, opcional: queda guardada en la orden)<input type="file" id="r-file" accept="application/pdf,image/*"></label>
             <div class="soc-barra-rec"><button type="button" class="btn btn-outline btn-sm" id="r-total"><i class="ph-bold ph-checks"></i> Marcar todo recibido</button><button type="button" class="btn btn-outline btn-sm" id="r-nada">Limpiar</button><span id="r-resumen" class="soc-resumen-rec"></span></div>
             <div id="r-lineas"></div>
-            <div class="r-extra"><button type="button" class="btn btn-outline btn-sm" id="r-add"><i class="ph-bold ph-plus"></i> Agregar un producto que no vino en la orden</button>
-              <div id="r-add-f" class="r-add-f" hidden><small>Si el lector no alcanzó a leer algún producto del documento, agrégalo aquí: queda en la orden como producto agregado y se recibe como cualquier otro (lote y vencimiento los puedes completar ahora o después).</small>
+            <div class="r-extra"><button type="button" class="btn btn-outline btn-sm" id="r-add"><i class="ph-bold ph-plus"></i> Agregar producto</button>
+              <div id="r-add-f" class="r-add-f" hidden><small>Agrega el producto y recíbelo como cualquier otro (lote y vencimiento los puedes completar ahora o después).</small>
                 <div class="soc-fila"><label>Producto (descripción)<input type="text" id="ra-n" autocomplete="off" placeholder="Escribe una o más letras para ver sugerencias"></label><label>ID Mercado Público (opcional)<input type="text" id="ra-c" inputmode="numeric" autocomplete="off"></label></div>
                 <div class="soc-fila"><label>Pedido según el documento<input type="number" id="ra-p" min="1" placeholder="Si no lo sabes, igual a lo que llega"></label><label>Llega ahora<input type="number" id="ra-q" min="0" value="0"></label></div>
                 <button type="button" class="btn btn-sm" id="ra-ok">Agregar a la recepción</button></div></div>

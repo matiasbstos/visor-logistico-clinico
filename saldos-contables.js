@@ -63,9 +63,12 @@
             ? [r.nombre, r.codigo, r.bodega, r.q, r.sg, r.contable, r.pu, r.valContable, ETIQ[r.estado], actasTxt(r)]
             : [r.nombre, r.codigo, r.bodega, r.q, r.sg, r.disp, r.pu, r.valDisp, ETIQ[r.estado], actasTxt(r)]);
         const tot = tipo === 'contable' ? ['TOTAL', '', '', '', filasX.reduce((s, r) => s + r.sg, 0), filasX.reduce((s, r) => s + r.contable, 0), '', filasX.reduce((s, r) => s + r.valContable, 0), '', ''] : ['TOTAL', '', '', '', filasX.reduce((s, r) => s + r.sg, 0), filasX.reduce((s, r) => s + r.disp, 0), '', filasX.reduce((s, r) => s + r.valDisp, 0), '', ''];
-        const rec = recepciones.length ? [[], ['RECEPCIONES DE ORDEN DE COMPRA'], ['ID recepción', 'Orden', 'Fecha', 'Hora', 'Guía', 'Bodega', 'Producto', 'Unidades', 'Lote', 'Vence', 'Registró', 'Estado'],
-            ...recepciones.flatMap(x => (x.detalle || []).map(d => [x.recId, x.numeroOC, x.fecha, x.hora || '', x.guia || '', x.bodega || '', d.insumoName || d.descripcion, d.cantidad, d.lote || 'S/L', d.vence || 'N/A', x.usuario || '', x.anulada ? 'ANULADA' : '']))] : [];
-        return '﻿' + [cab, ...l, tot, ...rec].map(x => x.map(celda).join(';')).join('\r\n');
+        const rec = recepciones.length ? [[], ['RECEPCIONES DE ORDEN DE COMPRA'], ['ID recepción', 'Orden', 'Fecha', 'Hora', 'Guía', 'Bodega', 'Producto', 'Unidades', 'Lote', 'Vence', 'Registró', 'Estado', 'Recepción conforme'],
+            ...recepciones.flatMap(x => (x.detalle || []).map(d => [x.recId, x.numeroOC, x.fecha, x.hora || '', x.guia || '', x.bodega || '', d.insumoName || d.descripcion, d.cantidad, d.lote || 'S/L', d.vence || 'N/A', x.usuario || '', x.anulada ? 'ANULADA' : '', x.tipoConforme || '']))] : [];
+        const porRec = (extra && extra.porRecibir) || [], grp = (extra && extra.grupos) || [];
+        const secRec = porRec.length ? [[], ['PENDIENTE DE RECIBIR (órdenes abiertas con mercadería por llegar)'], ['Orden', 'Proveedor', 'Producto', 'ID producto', 'Pedido', 'Recibido', 'Falta recibir', 'Tipo'], ...porRec.flatMap(o => o.lineas.map(l => [o.numeroOC, o.proveedor, l.producto, l.codigoMP, l.pedido, l.recibido, l.pendiente, o.parcial ? 'Recepción parcial' : 'Sin recibir']))] : [];
+        const secEnt = grp.length ? [[], ['PENDIENTE DE ENTREGA A CENTROS (según actas de entrega)'], ['Centro', 'Producto', 'ID producto', 'Pendiente', 'Disponible en stock', 'Se puede entregar'], ...grp.flatMap(g => g.items.map(p => [g.centro, p.nombre, p.codigo || '', p.pendiente, p.disponible, p.entregable]))] : [];
+        return '﻿' + [cab, ...l, tot, ...rec, ...secRec, ...secEnt].map(x => x.map(celda).join(';')).join('\r\n');
     }
     async function descargar(tipo) {
         const f = fs();
@@ -75,9 +78,10 @@
             const todas = []; sn.forEach(d => todas.push(fila(d.id, d.data())));
             todas.sort((a, b) => a.bodega.localeCompare(b.bodega, 'es') || a.nombre.localeCompare(b.nombre, 'es'));
             if (recs == null) await cargarRec();
+            let porRecibir = [], grupos = []; try { if (window.SAR_Pendientes) { const dd = await window.SAR_Pendientes.datos(); porRecibir = dd.porRecibir; grupos = dd.grupos; } } catch (e) { /* el informe sale sin estas secciones */ }
             if (!todas.length && !(recs || []).length) { toast('Informe', 'No hay datos para exportar.', 'warning'); return; }
             const hoy = new Date().toISOString().slice(0, 10);
-            const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv(tipo, { filas: todas, recs: recs || [] })], { type: 'text/csv;charset=utf-8' }));
+            const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv(tipo, { filas: todas, recs: recs || [], porRecibir, grupos })], { type: 'text/csv;charset=utf-8' }));
             a.download = `Informe_${tipo}_${hoy}.csv`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
         } catch (e) { toast('Informe', 'No se pudo generar: ' + e.message, 'error'); }
     }
@@ -134,10 +138,10 @@
     }
 
     // Recepciones de mercadería (ID REC-<orden>-NN) para seguimiento en Auditoría
-    let recs = null, recQ = '', recCargando = false;
+    let recs = null, ocsRaw = [], recQ = '', recCargando = false;
     async function cargarRec() {
         const f = fs(); if (!f || recCargando) return; recCargando = true; pintarRec();
-        try { const sn = await f.getDocs(f.collection(db(), 'Seguimiento_OC')); recs = []; sn.forEach(d => { const o = d.data(); (o.recepciones || []).forEach(x => recs.push({ ...x, numeroOC: o.numeroOC, proveedor: o.proveedor })); }); recs.sort((a, b) => String(b.fecha + (b.hora || '')).localeCompare(String(a.fecha + (a.hora || '')))); }
+        try { const sn = await f.getDocs(f.collection(db(), 'Seguimiento_OC')); recs = []; ocsRaw = []; sn.forEach(d => { const o = d.data(); ocsRaw.push({ id: d.id, ...o }); (o.recepciones || []).forEach(x => recs.push({ ...x, numeroOC: o.numeroOC, proveedor: o.proveedor, tipoConforme: x.conforme && typeof x.conforme.parcial === 'boolean' ? (x.conforme.parcial ? 'Parcial' : 'Total') : '' })); }); recs.sort((a, b) => String(b.fecha + (b.hora || '')).localeCompare(String(a.fecha + (a.hora || '')))); }
         catch (e) { recs = []; toast('Recepciones', 'No se pudieron leer: ' + e.message, 'error'); }
         recCargando = false; pintarRec();
     }

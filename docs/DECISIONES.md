@@ -547,3 +547,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.88 Alerta de stock agregado en Inicio y mover de bodega desde el stock (v21.34)
 - Inicio muestra la tarjeta "Stock agregado últimamente": últimos ingresos al stock (recepción de órdenes, ingreso de inventario/rápido y de proveedor) con unidades, producto, bodega de destino, documento y hace cuánto; solo personal; se refresca cada 5 minutos. Lee Historial_Movimientos (no escribe).
 - En la tabla de Existencias cada producto tiene el botón "Mover a otra bodega" (flechas): abre la transferencia entre bodegas con el producto y su bodega de origen ya elegidos; se elige destino y cantidad. Usa el mismo traspaso de siempre (deja historial y conserva lote y vencimiento).
+
+### 4.89 Existencias: lo último que ingresó va primero (v21.35)
+- La tabla de Existencias se leía en orden de ID de documento y en páginas de 20: los productos creados o ingresados después (IDs "tras_…") quedaban en una página lejana y parecía que no estaban. Ahora se ordena por última modificación (lo recién ingresado, movido o entregado arriba) y, al guardar una recepción que ingresa al stock, la tabla se vuelve a leer sola.

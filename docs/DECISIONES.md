@@ -454,3 +454,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Botón "Preparar acta con lo disponible": abre Actas de entrega con el centro y los productos ya cargados (cantidad = lo que hay en stock, pedido = lo pendiente).
 - La campana muestra un número cuando hay stock para entregar algo pendiente (se revisa al abrir la app y cada 10 min); al pulsarla lista los centros.
 - Todo producto ingresado a mano en un acta queda en el Catálogo de productos (antes solo si era nuevo en la bodega).
+
+### 4.66 Pendientes por entregar: vista condensada e impresión (v21.11)
+- Una fila por centro (pendientes y si hay stock para entregar); al pulsar se abre el listado de ese centro. Botón "Imprimir listado con fotos" (todos los centros, una hoja por centro) o "Imprimir este centro". El encabezado del documento lleva el logo de la Corporación.
+- Se quitó de esta pantalla el botón "Preparar acta"; generar el acta desde aquí queda pendiente (la función `precargar` sigue en actas-entrega.js).

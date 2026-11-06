@@ -494,3 +494,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.76 Acta solo de pendientes (v21.21)
 - Si el centro pidió un producto que aún no se recibe, se deja cantidad a entregar 0 con el pedido: el acta se puede emitir aunque TODOS los productos vayan en 0; no mueve stock y todo queda en "Pendientes por entregar" del centro (con nombre, ID y foto al catálogo).
 - Sigue siendo obligatorio que cada línea tenga entrega mayor que 0, o 0 con pedido mayor que 0.
+
+### 4.77 Pendientes coherentes con el stock (v21.22)
+- Una línea con entrega 0 y pedido N no toca el stock ni crea el insumo: solo registra N como pendiente del centro. Cuando llega el producto y se ingresa, el stock sube normal y el pendiente sigue ahí hasta que una acta lo entregue.
+- El pendiente se calcula solo a partir de las actas (pedido − entregado), nunca del stock, y el estado "Sin stock / Se pueden X / Completo" se obtiene cruzando con el stock actual: no hay doble descuento.
+- Un producto se reconoce por ID o por nombre indistintamente: si el pendiente se dejó solo con nombre y la entrega posterior trae el ID (o al revés), se descuenta del mismo pendiente y no queda uno "fantasma".

@@ -20,7 +20,7 @@
     const rol = () => String(document.body.dataset.userRole || '').toLowerCase();
     const puede = () => ['admin', 'administrador', 'global', 'superadmin', 'bodega', 'administrador_bodega', 'bodeguero'].includes(rol()) || rol() === '';
 
-    let bodegas = [], catalogo = [], filas = [], bodegaSel = '', cfg = null;
+    let bodegas = [], catalogo = [], filas = [], bodegaSel = '', cfg = null, ocRef = '';
     const filaVacia = () => ({ nombre: '', codigo: '', cantidad: '', lote: '', vence: '', dudas: '' });
 
     /** Fecha flexible -> AAAA-MM-DD ('' si no se entiende). Mes/año => último día del mes. */
@@ -110,7 +110,9 @@
         <div class="erp-card"><h2>Ingreso rápido de inventario</h2>
             <p class="act-hint">Para inventariar una bodega de una sola vez (por ejemplo el camión). Elige la bodega, pega la lista o escríbela, revisa y confirma. Cada producto queda con ID, lote y vencimiento, y se ve en todo el sistema.</p>
             <div class="act-fila"><select id="irp-b" aria-label="Bodega de destino"><option value="">— Elige la bodega de destino —</option>${bodegas.map(b => `<option value="${esc(b.name)}" ${b.name === bodegaSel ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select>
-                <button type="button" class="btn btn-outline" id="irp-nb">+ Nueva bodega</button></div></div>
+                <button type="button" class="btn btn-outline" id="irp-nb">+ Nueva bodega</button></div>
+            <div class="act-fila"><input id="irp-oc" value="${esc(ocRef)}" placeholder="N° de orden de compra de origen (opcional, p. ej. 1298355-641-AG26)" autocomplete="off"></div>
+            <p class="act-hint">Si estos productos ya llegaron con una orden, anota aquí su número: queda en el historial. Ojo: en esa orden registra la recepción <b>sin marcar "Ingresar al stock"</b>, para que el stock no se cuente dos veces (aquí es donde entra al stock del centro).</p></div>
         <div class="erp-card"><h3>Lista de productos <span class="soc-n">${filas.length}</span></h3>
             <div class="irp-foto"><label class="btn btn-primary irp-foto__b"><i class="ph-bold ph-camera"></i> Leer desde fotos<input type="file" id="irp-fotos" accept="image/*" multiple capture="environment" hidden></label>
                 <small>Saca o elige fotos de las cajas (la cara con nombre, lote y vencimiento). Se leen solas y quedan en la tabla para que las revises. Hasta ~20 fotos por vez.</small></div>
@@ -135,6 +137,7 @@
         const r = root();
         r.querySelector('#irp-b').addEventListener('change', (e) => { bodegaSel = e.target.value; pintar(); });
         r.querySelector('#irp-nb').addEventListener('click', nuevaBodega);
+        r.querySelector('#irp-oc').addEventListener('change', (e) => { ocRef = e.target.value.trim(); });
         r.querySelector('#irp-pegar').addEventListener('click', () => { const n = parsear(r.querySelector('#irp-txt').value); if (!n.length) { toast('Nada que agregar', 'Pega al menos una línea.', 'warning'); return; } n.forEach(x => { if (!x.codigo) x.codigo = codDe(x.nombre); else if (!x.nombre) x.nombre = nomDe(x.codigo); }); filas = filas.concat(n); pintar(); });
         r.querySelector('#irp-add').addEventListener('click', () => { filas.push(filaVacia()); pintar(); });
         r.querySelector('#irp-clr').addEventListener('click', () => { if (!filas.length || confirm('¿Vaciar toda la tabla?')) { filas = []; pintar(); } });
@@ -191,9 +194,9 @@
                 if (!ref) ref = f.doc(f.collection(db(), 'Insumos'), `inv_${slug(g.codigo || g.nombre)}__${slug(bodegaSel)}`);
                 await f.runTransaction(db(), async (tx) => {
                     const sn = await tx.get(ref), actual = sn.exists() ? sn.data() : null, m = mezclar(actual, g.ingresos), limite = num(actual && (actual.criticalLimit || actual.stock_minimo)) || 50, prox = m.batches[0];
-                    const base = { origenOC: true, origenIngreso: (actual && actual.origenIngreso) || 'INVENTARIO_RAPIDO', ...(g.codigo ? { codigoMP: g.codigo } : {}), quantity: m.quantity, batches: m.batches, isCritical: m.quantity <= limite, batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', updatedAt: f.serverTimestamp() };
+                    const base = { origenOC: true, origenIngreso: (actual && actual.origenIngreso) || 'INVENTARIO_RAPIDO', ...(ocRef ? { ultimaOC: ocRef } : {}), ...(g.codigo ? { codigoMP: g.codigo } : {}), quantity: m.quantity, batches: m.batches, isCritical: m.quantity <= limite, batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', updatedAt: f.serverTimestamp() };
                     if (actual) tx.update(ref, base); else tx.set(ref, { name: g.nombre, name_lowercase: g.nombre.toLowerCase(), location: bodegaSel, criticalLimit: 50, category: 'General', ...base });
-                    g.ingresos.forEach(ing => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: g.nombre, item: g.nombre, quantity: ing.cantidad, type: 'INGRESO_INVENTARIO', batch: ing.lote, expirationDate: ing.vence, destination: bodegaSel, dest: bodegaSel, origin: 'Inventario inicial', user: usuario(), date: f.serverTimestamp(), document: `${recId} · Ingreso rápido`, observacion: 'Ingreso rápido de inventario', idInsumoDestino: ref.id }));
+                    g.ingresos.forEach(ing => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: g.nombre, item: g.nombre, quantity: ing.cantidad, type: 'INGRESO_INVENTARIO', batch: ing.lote, expirationDate: ing.vence, destination: bodegaSel, dest: bodegaSel, origin: 'Inventario inicial', user: usuario(), date: f.serverTimestamp(), document: `${recId} · Ingreso rápido${ocRef ? ' · OC ' + ocRef : ''}`, observacion: 'Ingreso rápido de inventario' + (ocRef ? ' (llegó con la OC ' + ocRef + ')' : ''), idInsumoDestino: ref.id }));
                 });
                 try {
                     const id = slug(g.codigo || g.nombre) || 'manual';

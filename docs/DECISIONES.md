@@ -490,3 +490,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.75 Ingreso manual no se cierra al cargar foto (v21.20)
 - Al elegir o quitar la foto del producto manual en el acta, solo se actualiza la vista previa en el sitio; ya no se redibuja el acta, así que el apartado "Ingreso manual" queda abierto y con lo escrito.
 - El estado abierto/cerrado del apartado se recuerda durante la edición del borrador.
+
+### 4.76 Acta solo de pendientes (v21.21)
+- Si el centro pidió un producto que aún no se recibe, se deja cantidad a entregar 0 con el pedido: el acta se puede emitir aunque TODOS los productos vayan en 0; no mueve stock y todo queda en "Pendientes por entregar" del centro (con nombre, ID y foto al catálogo).
+- Sigue siendo obligatorio que cada línea tenga entrega mayor que 0, o 0 con pedido mayor que 0.

@@ -307,7 +307,7 @@
             return { ...acta, creadoEn: new Date().toISOString() };
         });
         // Productos que no venían de ninguna orden: quedan en el catálogo (nombre + ID) para reconocerlos la próxima vez y asociarlos a una orden
-        for (const i of items.filter(x => x.nuevo)) {
+        for (const i of items.filter(x => x.nuevo || x.manual)) {
             try {
                 const cod = String(i.codigo || '').trim(), id = slugC(cod || i.nombre) || 'manual';
                 await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: i.nombre, descripcion_lower: String(i.nombre).toLowerCase(), codigoMP: cod, insumoName: i.nombre, sinOrden: true, origen: 'MANUAL', creadoEn: f.serverTimestamp(), creadoPor: usuario, actualizado: f.serverTimestamp() }, { merge: true });
@@ -623,10 +623,20 @@
             if (!borrador.origen) { const c = bodegas.find(b => /central/i.test(b.name)); if (c) borrador.origen = c.name; }
             else if (!bodegas.some(b => b.name === borrador.origen)) { borrador.origen = null; borrador.items = []; }
             await cargarStock();
+            if (precarga) {   // viene de "Pendientes por entregar": el acta queda lista con lo que hay en stock
+                const pc = precarga; precarga = null; borrador.centro = pc.centro; borrador.items = [];
+                pc.lista.forEach(p => {
+                    const s = stock.find(x => (p.codigo && String(x.codigo).replace(/\D/g, '') === String(p.codigo).replace(/\D/g, '')) || normN(x.name) === normN(p.nombre)); if (!s || !(s.disp > 0)) return;
+                    const c = Math.min(num(p.entregable), s.disp); borrador.items.push({ id: s.id, nombre: s.name, codigo: s.codigo || p.codigo || '', cantidad: c, solicitado: num(p.pendiente) > c ? num(p.pendiente) : 0, stock: s.disp, controlado: s.controlado });
+                });
+                guardarBorrador(); if (!borrador.items.length) toast('Pendientes', 'No encontré esos productos en la bodega de origen elegida.', 'warning');
+            }
         } catch (e) { r.innerHTML = `<p class="act-err" style="padding:24px;">No se pudo cargar: ${esc(e.message)}</p>`; return; }
         pintar();
     }
 
-    window.SAR_ActasEntrega = { listaCentros, abrir, planificar, cuadrar, restaurarConSobregiro, detalleDe, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, lotesDeDoc };
+    let precarga = null;
+    function precargar(centro, lista) { precarga = { centro, lista: lista || [] }; if (window.location.hash === '#view-actas-entrega') abrir(); else window.location.hash = 'view-actas-entrega'; }
+    window.SAR_ActasEntrega = { precargar, listaCentros, abrir, planificar, cuadrar, restaurarConSobregiro, detalleDe, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, lotesDeDoc };
     if (typeof module !== 'undefined') module.exports = window.SAR_ActasEntrega;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: { dataset: {} } });

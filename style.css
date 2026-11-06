@@ -5569,3 +5569,10 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .irp-dudas { font-size: 12px; color: #92400E; background: #FEF3C7; border-radius: 6px; padding: 4px 8px; margin-top: 6px; }
 
 .sar-prog .r-prog__l{max-height:40vh;overflow:auto}
+
+/* Pendientes por entregar (v21.10) */
+.pen-grupo__cab{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.pen-ok{color:#2e7d32;font-weight:600}.pen-parcial{color:#b26a00;font-weight:600}.pen-sin{color:#8a8f98}
+.noti-n{position:absolute;top:-4px;right:-4px;min-width:18px;height:18px;padding:0 4px;border-radius:9px;background:#d32f2f;color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center}
+.noti-panel{position:fixed;top:64px;right:16px;width:min(360px,calc(100vw - 32px));max-height:70vh;overflow:auto;background:#fff;border:1px solid #dfe3ea;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:14px;z-index:9999;display:grid;gap:10px}
+.noti-it{padding:8px 0;border-top:1px solid #eef0f4}.noti-it small{display:block;color:#5b6472;margin-top:2px}

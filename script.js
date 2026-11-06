@@ -3170,6 +3170,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 return true;
             });
 
+            // Lo último que ingresó o se movió va primero (antes quedaba al final, en una página que no se veía)
+            const tsMod = (d) => { const u = d && d.updatedAt; return u && typeof u.toMillis === 'function' ? u.toMillis() : (u && u.seconds ? u.seconds * 1000 : 0); };
+            filteredInventorySnapshots.sort((a, b) => tsMod(b.data()) - tsMod(a.data()));
+
             currentPageIndex = 0;
             renderCurrentPage();
         }

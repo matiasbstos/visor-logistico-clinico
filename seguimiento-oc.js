@@ -1335,6 +1335,7 @@
                 if (quedan > 0) toast('Recepción parcial', `Quedan ${quedan} unidades por recibir de esta orden. Las verás en "Pendiente de recibir" de la orden y en la campana.`, 'info');
                 else toast('Orden completa', 'Ya se recibió todo lo pedido para SAR en esta orden.', 'success');
                 if (window.SAR_Pendientes && window.SAR_Pendientes.refrescar) window.SAR_Pendientes.refrescar();
+                if (ingresaStock && typeof window.loadFirstPage === 'function') window.loadFirstPage();   // Existencias al día
                 toast('Recepción cargada', ingresaStock ? `${recId}: ${unidades} unidades ingresadas a ${central}. Registrada en los informes contable y disponible (Auditoría). Entrégalas a los centros desde Actas de entrega.` : `${recId}: se actualizó lo recibido.`, 'success');
             }, { ancho: true, ok: 'Guardar recepción' });
         const pintar = () => {

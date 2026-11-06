@@ -503,3 +503,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.78 Entrega 0 se muestra en "Productos pendientes de entrega" (v21.23)
 - En el acta en preparación, un producto con entrega 0 y pedido mayor ya no figura en "Productos entregados": pasa a la sección "Productos pendientes de entrega" (que se abre sola y indica cuántos van sin stock), con los mismos campos editables (pedido, entrega, quitar). Si luego se pone una entrega mayor que 0, vuelve a "Productos entregados".
 - El contador "Productos entregados (n)" cuenta solo los que realmente se entregan.
+
+### 4.79 Entrega de un producto similar + Cuadre de sustituciones (v21.24)
+- En cada producto del acta hay un campo interno "¿Entregas físicamente otro similar?". Si se completa, el acta, el PDF y el descuento del sistema siguen con el producto PEDIDO (el centro no ve el cambio); el producto realmente entregado queda guardado en el ítem como `entregaFisica {nombre, codigoMP}`.
+- Nueva pantalla "Cuadre de sustituciones" (solo para quienes ven Actas): por producto muestra el ajuste físico vs sistema (+ el sistema ya descontó pero sigue físicamente; − salió físicamente pero el sistema lo sigue mostrando), y el detalle por acta, con "Marcar cuadrada / Deshacer". No modifica stock: el ajuste lo hace el usuario con las herramientas de ajuste y luego marca la sustitución.
+- Las marcas de cuadre se guardan en Contadores/cuadre-sustituciones (colección ya permitida a staff; no hace falta desplegar reglas nuevas). Actas anuladas no cuentan.

@@ -5589,3 +5589,8 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .act-foto{margin-top:4px}.act-foto summary{cursor:pointer;font-size:12px;color:#1a3668}
 .act-foto-ok{display:flex;align-items:center;gap:8px;margin-top:4px}.act-foto-ok img{width:44px;height:44px;object-fit:contain;border:1px solid #dfe3ea;border-radius:6px}
 .act-mfoto{align-items:center;gap:10px;flex-wrap:wrap}.act-mimg-v{width:44px;height:44px;object-fit:contain;border:1px solid #dfe3ea;border-radius:6px}
+
+.act-fis-w{display:block;margin-top:4px}.act-fis{width:100%;font-size:.8rem;padding:4px 8px;border:1px dashed #c9a227;border-radius:6px;background:#fffdf3}
+.sus-w{padding:8px 4px}.sus-acc{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:10px 0}.sus-chk{font-size:.9rem}
+.sus-t{width:100%;border-collapse:collapse;margin:8px 0 18px;font-size:.9rem}.sus-t th,.sus-t td{border-bottom:1px solid #e3e7ee;padding:6px 8px;text-align:left;vertical-align:top}.sus-t .n{text-align:center}
+.sus-mas{color:#0a7d3c}.sus-menos{color:#b42318}.sus-ok{opacity:.55}

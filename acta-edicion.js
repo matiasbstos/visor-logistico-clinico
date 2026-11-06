@@ -39,7 +39,7 @@
                 const p = A.planificar({ ...d }, it.cantidad, numero);
                 if (d.controlado && p.faltante > 0) throw new Error(`${d.name} es medicamento controlado: no puede entregarse sin stock en sistema.`);
                 Object.assign(d, { quantity: p.quantity, batches: p.batches, sobregiro: p.sobregiro, sobregiroDetalle: p.sobregiroDetalle });
-                const row = { id: it.id, nombre: d.name, cantidad: num(it.cantidad), lotes: p.usados, sinRespaldo: p.faltante, ...(d.codigoMP ? { codigoMP: String(d.codigoMP) } : {}), ...(it.ocI == null && num(it.solicitado) > num(it.cantidad) ? { solicitado: num(it.solicitado), entregadoTotal: num(it.cantidad) } : {}) };
+                const row = { id: it.id, nombre: d.name, cantidad: num(it.cantidad), lotes: p.usados, sinRespaldo: p.faltante, ...(d.codigoMP ? { codigoMP: String(d.codigoMP) } : {}), ...(it.entregaFisica ? { entregaFisica: it.entregaFisica } : {}), ...(it.ocI == null && num(it.solicitado) > num(it.cantidad) ? { solicitado: num(it.solicitado), entregadoTotal: num(it.cantidad) } : {}) };
                 const l = it.ocI != null && ocLineas ? ocLineas[it.ocI] : null;
                 if (l) {
                     const disp = num(l.ingresado && l.ingresado[a.oc.columna]) - num(l.entregado[a.oc.columna]);

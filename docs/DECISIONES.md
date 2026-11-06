@@ -517,3 +517,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - En "Recibir mercadería" hay un botón "Agregar producto": se escribe el producto (con sugerencias y foto), ID opcional, pedido según el documento (si se deja vacío, igual a lo que llega) y lo que llega ahora. La línea entra a la tabla de recepción y se completa como cualquier otra (producto en inventario, lote, vencimiento, incidencia).
 - La línea se guarda en la orden solo al confirmar la recepción, marcada como `agregada` (con quién y cuándo), y el registro de la recepción indica "(agregado en la recepción)". Si el pedido es mayor que lo recibido, el resto queda pendiente de recibir. Si la orden fue modificada por otra persona mientras tanto, se pide reabrir la recepción para no desalinear las líneas.
 - Mientras la orden no se recibe completa sigue en su estado de pendiente de recepción.
+
+### 4.82 Agregar producto en la recepción: solo con el nombre (v21.28)
+- "Agregar producto" exige únicamente el nombre. El producto entra a la tabla aunque no tenga pedido ni unidades; las unidades se digitan después en "Llega ahora" y, si no había pedido, esa cantidad pasa a ser su pedido (queda en la orden como producto agregado). Si se agrega y no se digitan unidades, al guardar se pide indicarlas o quitarlo.
+- El producto agregado también se guarda en el catálogo (nombre/ID) aunque la recepción no ingrese al stock. Al agregar, el formulario se cierra y el cursor queda en "Llega ahora" del producto nuevo.

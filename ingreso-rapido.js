@@ -114,7 +114,7 @@
             <div class="act-fila"><input id="irp-oc" value="${esc(ocRef)}" placeholder="N° de orden de compra de origen (opcional, p. ej. 1298355-641-AG26)" autocomplete="off"></div>
             <p class="act-hint">Si estos productos ya llegaron con una orden, anota aquí su número: queda en el historial. Ojo: en esa orden registra la recepción <b>sin marcar "Ingresar al stock"</b>, para que el stock no se cuente dos veces (aquí es donde entra al stock del centro).</p></div>
         <div class="erp-card"><h3>Lista de productos <span class="soc-n">${filas.length}</span></h3>
-            <div class="irp-foto"><label class="btn btn-primary irp-foto__b"><i class="ph-bold ph-camera"></i> Leer desde fotos<input type="file" id="irp-fotos" accept="image/*" multiple capture="environment" hidden></label>
+            <div class="irp-foto"><label class="btn btn-primary irp-foto__b"><i class="ph-bold ph-camera"></i> Leer desde fotos<input type="file" id="irp-fotos" accept="image/*,.webp,.jpg,.jpeg,.png,.gif,.bmp,.avif" multiple capture="environment" hidden></label>
                 <small>Saca o elige fotos de las cajas (la cara con nombre, lote y vencimiento). Se leen solas y quedan en la tabla para que las revises. Hasta ~20 fotos por vez.</small></div>
             <details class="soc-det"><summary><strong>Pegar una lista</strong> (desde Excel, o lo que leí de una foto)</summary>
                 <p class="act-hint">Una línea por producto: <b>producto ; ID ; cantidad ; lote ; vencimiento</b> (el ID, el lote y el vencimiento son opcionales; separa con tabulador, punto y coma o coma).</p>

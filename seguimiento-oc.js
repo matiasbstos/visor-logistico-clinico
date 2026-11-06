@@ -1255,8 +1255,8 @@
             <div class="r-extra"><button type="button" class="btn btn-outline btn-sm" id="r-add"><i class="ph-bold ph-plus"></i> Agregar producto</button>
               <div id="r-add-f" class="r-add-f" hidden><small>Agrega el producto y recíbelo como cualquier otro (lote y vencimiento los puedes completar ahora o después).</small>
                 <div class="soc-fila"><label>Producto (descripción)<input type="text" id="ra-n" autocomplete="off" placeholder="Escribe una o más letras para ver sugerencias"></label><label>ID Mercado Público (opcional)<input type="text" id="ra-c" inputmode="numeric" autocomplete="off"></label></div>
-                <div class="soc-fila"><label>Pedido según el documento<input type="number" id="ra-p" min="1" placeholder="Si no lo sabes, igual a lo que llega"></label><label>Llega ahora<input type="number" id="ra-q" min="0" value="0"></label></div>
-                <button type="button" class="btn btn-sm" id="ra-ok">Agregar a la recepción</button></div></div>
+                <div class="soc-fila"><label>Pedido según el documento<input type="number" id="ra-p" min="1" placeholder="Opcional: si no lo sabes, igual a lo que llega"></label><label>Llega ahora<input type="number" id="ra-q" min="0" value="0"></label></div>
+                <button type="button" class="btn btn-primary btn-sm" id="ra-ok">Agregar a la lista</button></div></div>
             <label class="soc-toggle"><input type="checkbox" id="r-lv"> Anotar lote y vencimiento ahora (también se puede hacer después)</label>
             <label>Bodega de destino<span class="r-dest-fila"><select id="r-dest"><option>${esc(central)}</option></select><button type="button" class="btn btn-outline btn-sm" id="r-nueva-b">+ Nueva bodega</button></span></label>
             <label class="soc-toggle" id="r-stock-w"><input type="checkbox" id="r-stock" checked> Ingresar lo recibido al stock de ${esc(central)} (así se descuenta al entregarlo por acta)</label>
@@ -1272,6 +1272,10 @@
                     if (tipo) incidencias.push({ producto: oc.lineas[i].descripcion, tipo, detalle: tr.querySelector('.r-td').value.trim() });
                 });
                 if (!det.length && !incidencias.length) { toast('Sin datos', 'Indica una cantidad recibida o una incidencia.', 'warning'); return false; }
+                // Producto agregado sin pedido: lo que se digita en "Llega ahora" pasa a ser su pedido; si no se digita nada, hay que quitarlo o indicar las unidades
+                const sinU = extras.find(l => !num(l.dist && l.dist[key]) && !det.some(d => oc.lineas[d.i] === l));
+                if (sinU) { toast('Falta la cantidad', `Indica en "Llega ahora" cuántas unidades llegan de "${String(sinU.descripcion).slice(0, 40)}".`, 'warning'); return false; }
+                det.forEach(d => { const l = oc.lineas[d.i]; if (l && l.agregada && !num(l.dist && l.dist[key])) l.dist = { ...(l.dist || {}), [key]: d.cantidad }; });
                 const mal = det.find(d => !Number.isInteger(d.cantidad) || d.cantidad > Math.max(0, num(oc.lineas[d.i].dist && oc.lineas[d.i].dist[q('#r-col').value]) - num(oc.lineas[d.i].recibido && oc.lineas[d.i].recibido[q('#r-col').value])));
                 if (mal) { toast('Cantidad no válida', `"${String(oc.lineas[mal.i].descripcion).slice(0, 40)}": indica un número entero que no supere lo pendiente.`, 'warning'); return false; }
                 const vencida = det.find(d => d.vence && d.vence < hoyISO());
@@ -1298,6 +1302,7 @@
                 const fGuia = (q('#r-file').files || [])[0];
                 await recepcionConStock(oc, { extras, baseN, onPaso: prog.paso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar: q('#r-correo').checked, ingresaStock, central, texto, titulo: incidencias.length ? `Recepción con incidencias en ${col.centro}` : `Recepción en ${col.centro}` });
                 if (ingresaStock) await aprenderNombres(oc, det);
+                else { const ex = extras.map(l => ({ i: oc.lineas.indexOf(l), insumoName: l.descripcion })).filter(d => d.i >= 0); if (ex.length) await aprenderNombres(oc, ex); }
                 if (fGuia) { prog.paso('Guardando la guía en la orden…'); await guardarFile(oc.id, fGuia, 'Guía de despacho ' + recId); }
                 } catch (err) { prog.error(err); throw err; }
                 prog.listo(`Listo: ${recId} · ${unidades} unidades${ingresaStock ? ` en ${central}` : ''}. Quedó registrada en Auditoría y en los informes contable y disponible.`);
@@ -1307,7 +1312,7 @@
         const pintar = () => {
             const key = ov.querySelector('#r-col').value, st = ov.querySelector('#r-stock').checked, lv = ov.querySelector('#r-lv').checked;
             ov.querySelector('#r-lineas').innerHTML = '<div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Recibido</th><th>Pendiente</th><th>Llega ahora</th>' + (st ? '<th>Producto en inventario</th>' + (lv ? '<th>Lote</th><th>Vence</th>' : '') : '') + '<th>Incidencia</th></tr></thead><tbody>' +
-                oc.lineas.map((l, i) => { const p = num(l.dist && l.dist[key]), ya = num(l.recibido && l.recibido[key]), pe = Math.max(0, p - ya); return p ? `<tr data-i="${i}" data-pe="${pe}"><td class="r-prod" data-l="Producto">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(l.descripcion, { codigo: l.codigoMP, candidata: true }) : ''}${esc(l.descripcion)}${l.codigoMP ? `<small class="soc-id">ID ${esc(l.codigoMP)}</small>` : ''}</td><td data-l="Pedido">${p}</td><td data-l="Recibido">${ya}</td><td data-l="Pendiente"><strong>${pe}</strong></td><td class="r-celda" data-l="Llega ahora"><input type="number" min="0" max="${pe}" class="r-c" value="" aria-label="Unidades que llegaron"><button type="button" class="btn btn-outline btn-sm r-ok" title="Llegó completo"${pe ? '' : ' disabled'}>✔ ${pe || 'listo'}</button></td>` +
+                oc.lineas.map((l, i) => { const p = num(l.dist && l.dist[key]), ya = num(l.recibido && l.recibido[key]), pe = Math.max(0, p - ya); return (p || l.agregada) ? `<tr data-i="${i}" data-pe="${pe}"${l.agregada && !p ? ' data-nuevo="1"' : ''}><td class="r-prod" data-l="Producto">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(l.descripcion, { codigo: l.codigoMP, candidata: true }) : ''}${esc(l.descripcion)}${l.codigoMP ? `<small class="soc-id">ID ${esc(l.codigoMP)}</small>` : ''}</td><td data-l="Pedido">${p}</td><td data-l="Recibido">${ya}</td><td data-l="Pendiente"><strong>${pe}</strong></td><td class="r-celda" data-l="Llega ahora"><input type="number" min="0" max="${pe}" class="r-c" value="" aria-label="Unidades que llegaron"><button type="button" class="btn btn-outline btn-sm r-ok" title="Llegó completo"${pe ? '' : ' disabled'}>✔ ${pe || 'listo'}</button></td>` +
                     (st ? `<td data-l="Producto en inventario"><input class="r-n" list="r-inv" aria-label="Producto en inventario" value="${esc(l.insumoName || ((catalogo.get(catId(l)) || {}).insumoName) || l.descripcion)}"></td>` + (lv ? `<td data-l="Lote"><input class="r-l" aria-label="Lote" placeholder="S/L"></td><td data-l="Vence"><input type="date" class="r-v" aria-label="Fecha de vencimiento"></td>` : '') : '') +
                     `<td data-l="Incidencia"><select class="r-t" aria-label="Incidencia"><option value="">Sin incidencia</option>${Object.entries(INCIDENCIAS).map(([k, t]) => `<option value="${k}">${esc(t)}</option>`).join('')}</select><input class="r-td" aria-label="Detalle de la incidencia" placeholder="Detalle"></td></tr>` : ''; }).join('') + '</tbody></table></div>';
         };
@@ -1317,17 +1322,17 @@
             const nombre = ov.querySelector('#ra-n').value.trim().toUpperCase(), cod = ov.querySelector('#ra-c').value.replace(/\D/g, ''), q = Math.floor(num(ov.querySelector('#ra-q').value));
             const ped = Math.floor(num(ov.querySelector('#ra-p').value)) || q;
             if (!nombre) { toast('Falta el producto', 'Escribe el nombre del producto.', 'warning'); return; }
-            if (!(ped > 0)) { toast('Falta la cantidad', 'Indica el pedido o lo que llega ahora (mayor que 0).', 'warning'); return; }
             if (q > ped) { toast('Cantidad no válida', 'Lo que llega ahora no puede superar el pedido.', 'warning'); return; }
             const key = ov.querySelector('#r-col').value;
-            const l = { descripcion: nombre, codigoMP: cod, licitacion: '', valorNeto: 0, dist: { [key]: ped }, recibido: {}, ingresado: {}, entregado: {}, agregada: true };
+            const l = { descripcion: nombre, codigoMP: cod, licitacion: '', valorNeto: 0, dist: ped > 0 ? { [key]: ped } : {}, recibido: {}, ingresado: {}, entregado: {}, agregada: true };
             oc.lineas.push(l); extras.push(l); pintar();
             const tr = ov.querySelector(`tr[data-i="${oc.lineas.length - 1}"]`); if (tr && q > 0) tr.querySelector('.r-c').value = q;
+            ov.querySelector('#r-add-f').hidden = true; if (tr) { tr.scrollIntoView({ block: 'center' }); const c = tr.querySelector('.r-c'); if (c && !c.value) c.focus(); }
             ['#ra-n', '#ra-c', '#ra-p'].forEach(i => { ov.querySelector(i).value = ''; }); ov.querySelector('#ra-q').value = '0'; resumen();
-            toast('Producto agregado', `${nombre} quedó en la lista de esta recepción. Completa producto en inventario, lote y vencimiento si corresponde.`, 'success');
+            toast('Producto agregado', `${nombre} quedó en la lista de esta recepción. Digita en “Llega ahora” las unidades que vienen y completa lote y vencimiento si corresponde.`, 'success');
         });
         const resumen = () => {
-            let pe = 0, lleg = 0, sobra = 0; ov.querySelectorAll('tr[data-i]').forEach(tr => { const v = num(tr.querySelector('.r-c').value); pe += num(tr.dataset.pe); lleg += Math.min(num(tr.dataset.pe), v); sobra += Math.max(0, v - num(tr.dataset.pe)); tr.classList.toggle('r-sobra', v > num(tr.dataset.pe)); });
+            let pe = 0, lleg = 0, sobra = 0; ov.querySelectorAll('tr[data-i]').forEach(tr => { const v = num(tr.querySelector('.r-c').value); pe += num(tr.dataset.pe); lleg += Math.min(num(tr.dataset.pe), v); if (!tr.dataset.nuevo) { sobra += Math.max(0, v - num(tr.dataset.pe)); tr.classList.toggle('r-sobra', v > num(tr.dataset.pe)); } });
             const el = ov.querySelector('#r-resumen'); if (el) el.innerHTML = `Pendiente: <b>${pe}</b> un. · llegan ahora: <b>${lleg}</b> · quedarían pendientes: <b>${Math.max(0, pe - lleg)}</b>${sobra ? ` · <span class="cierre-error">${sobra} de más</span>` : ''}`;
         };
         ov.addEventListener('input', (e) => { if (e.target.classList && e.target.classList.contains('r-c')) resumen(); });

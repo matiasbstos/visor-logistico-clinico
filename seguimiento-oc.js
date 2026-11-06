@@ -571,7 +571,7 @@
         root().querySelectorAll('[data-rc-pdf],[data-rc-docx],[data-rc-ed]').forEach(b => b.addEventListener('click', () => {
             if (!window.SAR_RecepConf) { toast('No disponible', 'El módulo de recepciones conformes no está cargado.', 'warning'); return; }
             const id = b.dataset.rcPdf || b.dataset.rcDocx || b.dataset.rcEd, rec = rcDe(id); if (!rec) return;
-            if (b.dataset.rcEd) window.SAR_RecepConf.editar({ oc: ocActual, rec, toast, usuario: usuario() });
+            if (b.dataset.rcEd) window.SAR_RecepConf.editar({ oc: ocActual, rec, toast, usuario: usuario(), guardarArchivo, eliminarCategoria: eliminarArchivosCategoria });
             else window.SAR_RecepConf.descargar(ocActual, rec, b.dataset.rcDocx ? 'docx' : 'pdf', toast);
         }));
         const baa = q('#soc-arch-add'); if (baa) baa.addEventListener('click', formAgregarArchivo);
@@ -1320,7 +1320,7 @@
                 try {
                     const recNueva = { recId, fecha, hora, guia: guia || '', columna: key, unidades, usuario: usuario(), ingresoAStock: !!ingresaStock, bodega: ingresaStock ? central : '', detalle: det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad })) };
                     const ocDoc = { ...oc, lineas: aplicarRecepcion(oc, key, det, [], null, ingresaStock).lineas };
-                    if (window.SAR_RecepConf) setTimeout(() => window.SAR_RecepConf.ofrecer({ oc: ocDoc, rec: recNueva, toast, usuario: usuario() }), 300);
+                    if (window.SAR_RecepConf) setTimeout(() => window.SAR_RecepConf.ofrecer({ oc: ocDoc, rec: recNueva, toast, usuario: usuario(), guardarArchivo, eliminarCategoria: eliminarArchivosCategoria }), 300);
                 } catch (e) { /* los documentos se pueden descargar después desde la lista de recepciones */ }
                 toast('Recepción cargada', ingresaStock ? `${recId}: ${unidades} unidades ingresadas a ${central}. Registrada en los informes contable y disponible (Auditoría). Entrégalas a los centros desde Actas de entrega.` : `${recId}: se actualizó lo recibido.`, 'success');
             }, { ancho: true, ok: 'Guardar recepción' });

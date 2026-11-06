@@ -40,7 +40,8 @@
         if (!d.lineas.length) d.lineas = lineasDe(rec);
         return d;
     }
-    const nombreBase = (oc, rec) => `RC ${String(oc.numeroOC || '').replace(/[^A-Za-z0-9-]+/g, '')} ${rec.recId}`.trim();
+    /** Mismo nombre del modelo: RC1298355-744-AG26.pdf (la 2.ª recepción de la orden en adelante lleva _02, _03…). */
+    const nombreBase = (oc, rec) => { const n = Number(String(rec.recId || '').match(/-(\d+)$/)?.[1] || 1); return `RC${String(oc.numeroOC || '').replace(/[^A-Za-z0-9-]+/g, '')}${n > 1 ? '_' + String(n).padStart(2, '0') : ''}`; };
 
     async function pdf(oc, rec, parcial) {
         const [PDFLib, logoBytes, firmaBytes] = await Promise.all([RC().cargarPDFLib(), RC().cargarLogo(), RC().cargarFirma()]);
@@ -158,8 +159,8 @@
     function ofrecer(ctx) {
         const { oc, toast } = ctx; let rec = ctx.rec; const auto = hayPendiente(oc);
         const ov = document.createElement('div'); ov.className = 'cierre-overlay';
-        ov.innerHTML = `<div class="cierre-box" role="dialog" aria-modal="true"><h3>Recepción ${esc(rec.recId)} guardada</h3>
-            <p class="cierre-hint">Quedó cargada. Estos son los documentos de la recepción conforme; también quedan en los archivos de la orden y en "Recepciones y recepción conforme", donde se pueden editar.</p>
+        ov.innerHTML = `<div class="cierre-box" role="dialog" aria-modal="true"><h3>Recepción conforme · ${esc(rec.recId)}</h3>
+            <p class="cierre-hint">${ctx.desdeOrden ? 'Documentos de la última recepción registrada de la orden.' : 'Quedó cargada.'} Aquí están los documentos de la recepción conforme, listos para descargar y enviar; también quedan en los archivos de la orden y en "Recepciones y recepción conforme", donde se pueden editar.</p>
             <label>Tipo de recepción conforme<select id="rco-tipo"><option value="1"${auto ? ' selected' : ''}>Parcial — solo lo que llegó en esta recepción${auto ? ' (el sistema detecta que aún falta mercadería)' : ''}</option><option value="0"${auto ? '' : ' selected'}>Total — todo lo recibido de la orden${auto ? '' : ' (el sistema detecta que no falta nada)'}</option></select></label>
             <div id="rco-est" class="cierre-hint">Guardando en los archivos de la orden…</div>
             <ul class="soc-arch"><li><i class="ph-bold ph-file-pdf"></i><div><strong>Recepción conforme (PDF)</strong><small>${num(rec.unidades)} unidades en esta recepción · modelo de la Corporación</small></div><button type="button" class="btn btn-primary btn-sm" id="rco-pdf">Descargar PDF</button></li>

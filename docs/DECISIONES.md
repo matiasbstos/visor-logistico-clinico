@@ -499,3 +499,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Una línea con entrega 0 y pedido N no toca el stock ni crea el insumo: solo registra N como pendiente del centro. Cuando llega el producto y se ingresa, el stock sube normal y el pendiente sigue ahí hasta que una acta lo entregue.
 - El pendiente se calcula solo a partir de las actas (pedido − entregado), nunca del stock, y el estado "Sin stock / Se pueden X / Completo" se obtiene cruzando con el stock actual: no hay doble descuento.
 - Un producto se reconoce por ID o por nombre indistintamente: si el pendiente se dejó solo con nombre y la entrega posterior trae el ID (o al revés), se descuenta del mismo pendiente y no queda uno "fantasma".
+
+### 4.78 Entrega 0 se muestra en "Productos pendientes de entrega" (v21.23)
+- En el acta en preparación, un producto con entrega 0 y pedido mayor ya no figura en "Productos entregados": pasa a la sección "Productos pendientes de entrega" (que se abre sola y indica cuántos van sin stock), con los mismos campos editables (pedido, entrega, quitar). Si luego se pone una entrega mayor que 0, vuelve a "Productos entregados".
+- El contador "Productos entregados (n)" cuenta solo los que realmente se entregan.

@@ -1379,8 +1379,11 @@ function doPost(e) {
   } catch (err) { return salida({ ok: false, error: String(err) }); }
 }
 const BASE = 'https://conveniomarco.mercadopublico.cl/';
-const TIENDAS_FIJAS = ['aseo3'];   // respaldo si no se pueden descubrir las tiendas
-function tiendas() {   // descubre las tiendas de Convenio Marco desde la portada (se recuerda 6 horas)
+const TIENDAS_FIJAS = ['insumos2', 'aseo3', 'escritorio3'];   // tiendas de Convenio Marco (insumos médicos, aseo, escritorio)
+function tiendas() {   // lista fija: la portada no las publica
+  return TIENDAS_FIJAS.slice();
+}
+function tiendasAuto() {   // (sin uso) descubrimiento desde la portada
   const cache = CacheService.getScriptCache(), g = cache.get('tiendas');
   if (g) return JSON.parse(g);
   let lista = TIENDAS_FIJAS.slice();
@@ -1397,7 +1400,7 @@ function tiendas() {   // descubre las tiendas de Convenio Marco desde la portad
 }
 function imagenDe(c) {   // busca el código en todas las tiendas y devuelve la ruta de la foto (o vacío)
   if (!c) return '';
-  const cache = CacheService.getScriptCache(), k = 'img' + c, g = cache.get(k);
+  const cache = CacheService.getScriptCache(), k = 'im2' + c, g = cache.get(k);
   if (g !== null) return g;
   const reqs = tiendas().map(t => ({ url: BASE + t + '/catalogsearch/result/?q=' + c, muteHttpExceptions: true, followRedirects: true }));
   let r = '';
@@ -1430,7 +1433,7 @@ function fotoPorDescripcion(desc) {   // busca por descripcion en todas las tien
   const PAR = { de: 1, del: 1, la: 1, el: 1, los: 1, las: 1, con: 1, para: 1, por: 1, igual: 1, o: 1, y: 1, a: 1, en: 1, superior: 1, un: 1, una: 1, unidades: 1, unidad: 1, formato: 1 };
   const toks = normT(desc).split(/\\s+/).filter(w => w && !PAR[w] && (w.length > 2 || /\\d/.test(w)));
   if (toks.length < 2) return null;
-  const cache = CacheService.getScriptCache(), k = 'dsc' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, toks.join(' '))).slice(0, 20), g = cache.get(k);
+  const cache = CacheService.getScriptCache(), k = 'ds2' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, toks.join(' '))).slice(0, 20), g = cache.get(k);
   if (g !== null) return g ? JSON.parse(g) : null;
   const q = encodeURIComponent(toks.slice(0, 7).join(' '));
   let mejor = null;

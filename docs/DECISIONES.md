@@ -445,3 +445,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.63 Avance por producto al buscar fotos (v21.08)
 - "Buscar fotos de esta orden" muestra una línea por producto (N de M, descripción y resultado: encontrada / por descripción / ya tenía / sin foto).
+
+### 4.64 Tiendas de Convenio Marco en el script (v21.09)
+- El script solo buscaba en `aseo3` (la portada no publica las tiendas), por eso las fotos de insumos médicos no aparecían. Ahora usa lista fija: `insumos2` (Insumos y Dispositivos Médicos), `aseo3` y `escritorio3`. Los glucómetros/tiras Accu-Chek no están en esas tiendas: su foto va a mano.

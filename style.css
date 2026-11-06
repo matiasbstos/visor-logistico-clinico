@@ -5594,3 +5594,8 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .sus-w{padding:8px 4px}.sus-acc{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:10px 0}.sus-chk{font-size:.9rem}
 .sus-t{width:100%;border-collapse:collapse;margin:8px 0 18px;font-size:.9rem}.sus-t th,.sus-t td{border-bottom:1px solid #e3e7ee;padding:6px 8px;text-align:left;vertical-align:top}.sus-t .n{text-align:center}
 .sus-mas{color:#0a7d3c}.sus-menos{color:#b42318}.sus-ok{opacity:.55}
+
+.sug-caja{position:fixed;z-index:99999;background:#fff;border:1px solid #c5ccd8;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);max-height:340px;overflow:auto}
+.sug-it{display:flex;gap:10px;align-items:center;padding:6px 10px;cursor:pointer;border-bottom:1px solid #eef0f4}.sug-it:hover{background:#eef4ff}
+.sug-f{flex:0 0 44px;display:flex;justify-content:center}.sug-f img{max-width:44px;max-height:44px;object-fit:contain}.sug-t{display:flex;flex-direction:column;min-width:0}.sug-t b{font-size:.88rem;line-height:1.2}.sug-t small{color:#6b7280}
+.dup-g{border:1px solid #e3e7ee;border-radius:10px;padding:6px 12px;margin:10px 0;background:#fcfcfe}.dup-g h4{margin:6px 0}

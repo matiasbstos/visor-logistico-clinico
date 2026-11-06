@@ -2025,6 +2025,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'view-ingreso-rapido': 'Ingreso rápido',
             'view-pendientes-entrega': 'Pendientes por entregar',
             'view-sustituciones': 'Cuadre de sustituciones',
+            'view-duplicados': 'Revisar productos parecidos',
             'view-errores': 'Directorio de errores',
             'view-actas-entrega': 'Actas de entrega',
             'view-auditoria': 'Auditoría',
@@ -2065,7 +2066,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Control de acceso por rol (espejo de las reglas CSS del menú; la barrera real son las reglas de Firestore)
             const VISTAS_BLOQUEADAS = {
                 enfermero: ['view-historial', 'view-ajustes', 'view-compras', 'view-informes', 'view-bodegas',
-                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-compras-agiles', 'view-ingreso-rapido', 'view-pendientes-entrega', 'view-sustituciones', 'view-actas-entrega', 'view-auditoria', 'view-oxigeno', 'view-errores'],
+                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-compras-agiles', 'view-ingreso-rapido', 'view-pendientes-entrega', 'view-sustituciones', 'view-duplicados', 'view-actas-entrega', 'view-auditoria', 'view-oxigeno', 'view-errores'],
                 operador: ['view-compras', 'view-usuarios', 'view-configuracion', 'view-errores']
             };
             const rolActual = String(document.body.dataset.userRole || '').toLowerCase();
@@ -2120,6 +2121,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (window.SAR_Errores) window.SAR_Errores.abrir();
                 } else if (hash === 'view-pendientes-entrega') {
                     if (window.SAR_Pendientes) window.SAR_Pendientes.abrir();
+                } else if (hash === 'view-duplicados') {
+                    if (window.SAR_Duplicados) window.SAR_Duplicados.abrir();
                 } else if (hash === 'view-sustituciones') {
                     if (window.SAR_Sustituciones) window.SAR_Sustituciones.abrir();
                 } else if (hash === 'view-ingreso-rapido') {

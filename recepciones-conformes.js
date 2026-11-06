@@ -27,13 +27,18 @@
     function hayPendiente(oc) {
         return RC().lineasActa(oc, 'SAR').some(l => num(l.pedido) > num(l.recibido));
     }
+    /** Total = todo lo recibido de la orden hasta ahora; Parcial = solo lo que llegó en esa recepción. */
+    function acumulado(oc) { return RC().lineasActa(oc, 'SAR').filter(l => num(l.recibido) > 0).map(l => ({ producto: l.producto, recibido: num(l.recibido) })); }
     function datos(oc, rec, parcialPorDefecto) {
         const c = rec.conforme || {};
-        return {
+        const d = {
             fecha: c.fecha || rec.fecha || hoyISO(), tipoDoc: c.tipoDoc || 'GUIA', numeroDoc: c.numeroDoc != null ? c.numeroDoc : (rec.guia || ''),
             contraparte: c.contraparte || RC().CONTRAPARTE_BASE, parcial: typeof c.parcial === 'boolean' ? c.parcial : !!parcialPorDefecto,
-            observaciones: c.observaciones || '', conFirma: c.conFirma !== false, lineas: lineasDe(rec)
+            observaciones: c.observaciones || '', conFirma: c.conFirma !== false, lineas: null
         };
+        d.lineas = Array.isArray(c.lineas) ? lineasDe(rec) : (d.parcial ? lineasDe(rec) : acumulado(oc));
+        if (!d.lineas.length) d.lineas = lineasDe(rec);
+        return d;
     }
     const nombreBase = (oc, rec) => `RC ${String(oc.numeroOC || '').replace(/[^A-Za-z0-9-]+/g, '')} ${rec.recId}`.trim();
 
@@ -91,6 +96,26 @@
         } catch (e) { if (prog) prog.error(); if (toast) toast('No se pudo generar', e.message || String(e), 'error'); }
     }
 
+    const categoriaDe = (rec) => 'Recepción conforme ' + rec.recId;
+    /** Deja el PDF y el Word de la recepción conforme dentro de los archivos de la orden (reemplaza los anteriores de esa recepción). */
+    async function guardarEnOrden(ctx, parcial) {
+        const { oc, rec } = ctx; if (!ctx.guardarArchivo) return false;
+        const base = nombreBase(oc, rec), cat = categoriaDe(rec);
+        const p = parcial == null ? hayPendiente(oc) : parcial;
+        const [a, w] = [await pdf(oc, rec, p), await docx(oc, rec, p)];
+        if (ctx.eliminarCategoria) await ctx.eliminarCategoria(oc.id, cat);
+        await ctx.guardarArchivo(oc.id, { nombre: base + '.pdf', categoria: cat, bytes: a, mime: 'application/pdf' });
+        await ctx.guardarArchivo(oc.id, { nombre: base + '.docx', categoria: cat, bytes: w, mime: MIME_DOCX });
+        return true;
+    }
+    /** Fija Parcial/Total de una recepción en la orden (solo el documento). */
+    async function fijarTipo(ctx, parcial) {
+        const f = fs(), ref = f.doc(f.collection(db(), 'Seguimiento_OC'), ctx.oc.id), snap = await f.getDoc(ref);
+        const recs = (snap.data().recepciones || []).map(r => r.recId === ctx.rec.recId ? { ...r, conforme: { ...(r.conforme || {}), parcial } } : r);
+        await f.updateDoc(ref, { recepciones: recs, actualizadoEn: f.serverTimestamp() });
+        ctx.rec = { ...ctx.rec, conforme: { ...(ctx.rec.conforme || {}), parcial } };
+    }
+
     /** Ventana para editar el documento de una recepción conforme (no toca el stock). */
     function editar(ctx) {
         const { oc, rec, toast } = ctx, d = datos(oc, rec, hayPendiente(oc));
@@ -122,27 +147,39 @@
                 const recs = (snap.data().recepciones || []).map(r => r.recId === rec.recId ? { ...r, conforme } : r);
                 await f.updateDoc(ref, { recepciones: recs, actualizadoEn: f.serverTimestamp() });
                 await f.setDoc(f.doc(f.collection(db(), 'Seguimiento_OC', oc.id, 'Eventos')), { tipo: 'CONFORME', texto: `Recepción conforme ${rec.recId} editada (${conforme.tipoDoc === 'FACTURA' ? 'factura' : 'guía'} N° ${conforme.numeroDoc || 's/n'}${conforme.parcial ? ', parcial' : ''}).`, autor: ctx.usuario || 'Usuario', fecha: f.serverTimestamp() });
-                if (prog) prog.listo(`Recepción conforme ${rec.recId} actualizada. Descarga el PDF o el Word desde la lista de recepciones.`, { informe: false, ms: 6000 });
+                if (prog) prog.paso('Actualizando los archivos de la orden…');
+                try { await guardarEnOrden({ ...ctx, rec: { ...rec, conforme } }, conforme.parcial); } catch (e) { toast('Archivos no actualizados', e.message || String(e), 'warning'); }
+                if (prog) prog.listo(`Recepción conforme ${rec.recId} actualizada y guardada en los archivos de la orden.`, { informe: false, ms: 6000 });
             } catch (e) { if (prog) prog.error(); toast('No se guardó', e.message || String(e), 'error'); }
         });
     }
 
     /** Ventana que aparece al terminar de guardar una recepción: ofrece sus documentos. */
     function ofrecer(ctx) {
-        const { oc, rec, toast } = ctx;
+        const { oc, toast } = ctx; let rec = ctx.rec; const auto = hayPendiente(oc);
         const ov = document.createElement('div'); ov.className = 'cierre-overlay';
         ov.innerHTML = `<div class="cierre-box" role="dialog" aria-modal="true"><h3>Recepción ${esc(rec.recId)} guardada</h3>
-            <p class="cierre-hint">Quedó cargada. Estos son los documentos de la recepción conforme (también los encuentras después en "Recepciones" de la orden, donde se pueden editar).</p>
-            <ul class="soc-arch"><li><i class="ph-bold ph-file-pdf"></i><div><strong>Recepción conforme (PDF)</strong><small>${num(rec.unidades)} unidades · modelo de la Corporación</small></div><button type="button" class="btn btn-primary btn-sm" id="rco-pdf">Descargar PDF</button></li>
+            <p class="cierre-hint">Quedó cargada. Estos son los documentos de la recepción conforme; también quedan en los archivos de la orden y en "Recepciones y recepción conforme", donde se pueden editar.</p>
+            <label>Tipo de recepción conforme<select id="rco-tipo"><option value="1"${auto ? ' selected' : ''}>Parcial — solo lo que llegó en esta recepción${auto ? ' (el sistema detecta que aún falta mercadería)' : ''}</option><option value="0"${auto ? '' : ' selected'}>Total — todo lo recibido de la orden${auto ? '' : ' (el sistema detecta que no falta nada)'}</option></select></label>
+            <div id="rco-est" class="cierre-hint">Guardando en los archivos de la orden…</div>
+            <ul class="soc-arch"><li><i class="ph-bold ph-file-pdf"></i><div><strong>Recepción conforme (PDF)</strong><small>${num(rec.unidades)} unidades en esta recepción · modelo de la Corporación</small></div><button type="button" class="btn btn-primary btn-sm" id="rco-pdf">Descargar PDF</button></li>
             <li><i class="ph-bold ph-file-doc"></i><div><strong>Recepción conforme (Word)</strong><small>Editable</small></div><button type="button" class="btn btn-outline btn-sm" id="rco-docx">Descargar Word</button></li></ul>
             <div class="cierre-acciones"><button type="button" class="btn btn-outline" id="rco-ed">Editar datos</button><button type="button" class="btn btn-outline" id="rco-x">Cerrar</button></div></div>`;
         document.body.appendChild(ov);
-        const q = (s) => ov.querySelector(s);
+        const q = (s) => ov.querySelector(s), parcialSel = () => q('#rco-tipo').value === '1';
+        const est = (t) => { q('#rco-est').textContent = t; };
+        const guardar = async () => {
+            est('Guardando en los archivos de la orden…');
+            try { const c = { ...ctx, oc, rec }; await guardarEnOrden(c, parcialSel()); est('✓ Guardada en los archivos de la orden (PDF y Word).'); }
+            catch (e) { est('No se pudo guardar en los archivos de la orden: ' + (e.message || e) + '. Puedes descargarla igual.'); }
+        };
         q('#rco-x').addEventListener('click', () => ov.remove());
-        q('#rco-pdf').addEventListener('click', () => descargar(oc, rec, 'pdf', toast));
-        q('#rco-docx').addEventListener('click', () => descargar(oc, rec, 'docx', toast));
-        q('#rco-ed').addEventListener('click', () => { ov.remove(); editar({ oc, rec, toast, usuario: ctx.usuario }); });
+        q('#rco-tipo').addEventListener('change', async () => { try { const c = { ...ctx, oc, rec }; await fijarTipo(c, parcialSel()); rec = c.rec; } catch (e) { /* se usa solo para este documento */ } guardar(); });
+        q('#rco-pdf').addEventListener('click', () => descargar(oc, { ...rec, conforme: { ...(rec.conforme || {}), parcial: parcialSel() } }, 'pdf', toast));
+        q('#rco-docx').addEventListener('click', () => descargar(oc, { ...rec, conforme: { ...(rec.conforme || {}), parcial: parcialSel() } }, 'docx', toast));
+        q('#rco-ed').addEventListener('click', () => { ov.remove(); editar({ ...ctx, oc, rec: { ...rec, conforme: { ...(rec.conforme || {}), parcial: parcialSel() } } }); });
+        guardar();
     }
-    window.SAR_RecepConf = { ofrecer, editar, descargar, lineasDe, datos, cuerpoWord, hayPendiente };
+    window.SAR_RecepConf = { guardarEnOrden, fijarTipo, ofrecer, editar, descargar, lineasDe, datos, cuerpoWord, hayPendiente };
     if (typeof module !== 'undefined') module.exports = window.SAR_RecepConf;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

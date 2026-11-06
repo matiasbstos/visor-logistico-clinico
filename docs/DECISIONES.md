@@ -543,3 +543,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.87 Editar recepción conforme: incluir los productos de la orden (v21.33)
 - El documento de una recepción lista solo lo que se registró como recibido en esa recepción (lo no recibido queda en "Pendiente de recibir"). En "Editar" hay un botón para incluir todos los productos de la orden con su cantidad pedida (ajustable), para cuando la conformidad abarca más de lo digitado en "Llega ahora".
+
+### 4.88 Alerta de stock agregado en Inicio y mover de bodega desde el stock (v21.34)
+- Inicio muestra la tarjeta "Stock agregado últimamente": últimos ingresos al stock (recepción de órdenes, ingreso de inventario/rápido y de proveedor) con unidades, producto, bodega de destino, documento y hace cuánto; solo personal; se refresca cada 5 minutos. Lee Historial_Movimientos (no escribe).
+- En la tabla de Existencias cada producto tiene el botón "Mover a otra bodega" (flechas): abre la transferencia entre bodegas con el producto y su bodega de origen ya elegidos; se elige destino y cantidad. Usa el mismo traspaso de siempre (deja historial y conserva lote y vencimiento).

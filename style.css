@@ -5585,3 +5585,4 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .pen-centro>summary::before{content:'▸';color:#5b6472}.pen-centro[open]>summary::before{content:'▾'}
 .pen-res{margin-left:auto}
 .pen-det{padding:0 4px 14px;display:grid;gap:10px}
+.act-cod{width:230px;max-width:100%;padding:3px 6px;font-size:12px;border:1px dashed #b8c0cc;border-radius:6px}

@@ -309,12 +309,15 @@
     // ---------------------------------------------------------------
     const catId = (l) => slug(String(l.codigoMP || l.descripcion || '').trim()).slice(0, 120);
     let diagFotos = { sinCodigo: 0, yaTenian: 0, encontradas: 0, noEncontradas: 0, motivos: {} };
-    async function registrarCatalogo(oc) {
-        const f = fs(); let n = 0; diagFotos = { sinCodigo: 0, yaTenian: 0, encontradas: 0, noEncontradas: 0, motivos: {} };
+    async function registrarCatalogo(oc, onPaso) {
+        const f = fs(); let n = 0; let vistos = 0; diagFotos = { sinCodigo: 0, yaTenian: 0, encontradas: 0, noEncontradas: 0, motivos: {} };
         const previos = await cargarCatalogo().catch(() => new Map());
         const nd = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+        const total = (oc.lineas || []).filter(l => catId(l) && String(l.descripcion || '').trim()).length;
+        if (onPaso) onPaso(`Revisando ${total} producto(s) de la orden…`);
         for (const l of (oc.lineas || [])) {
             const id = catId(l); if (!id || !String(l.descripcion || '').trim()) continue;
+            const antes = { ...diagFotos }; vistos++;
             try {
                 const prev = previos.get(id);
                 // ¿la misma descripción ya existe con otro código? Se avisa y la foto no se da por buena sin mirarla en la tienda.
@@ -333,6 +336,10 @@
                 }
                 await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: l.descripcion, descripcion_lower: String(l.descripcion).toLowerCase(), codigoMP: l.codigoMP || '', proveedor: oc.proveedor || '', ultimaOC: oc.numeroOC || '', sinOrden: false, valorNeto: num(l.valorNeto), ...foto, ...(parecido && !prev ? { avisoCodigo: `Misma descripción que el producto con código ${parecido.codigoMP || '(sin código)'}: confirma que es el mismo antes de usar su foto.` } : {}), actualizado: f.serverTimestamp() }, { merge: true }); n++;
             } catch (e) { /* el catálogo nunca debe frenar el ingreso de la orden */ }
+            if (onPaso) {
+                const d = diagFotos, res = d.encontradas > antes.encontradas ? '✔ foto encontrada (por confirmar)' : d.porDescripcion > (antes.porDescripcion || 0) ? '✔ foto hallada por descripción (por confirmar)' : d.yaTenian > antes.yaTenian ? 'ya tenía foto' : '✖ sin foto';
+                onPaso(`${vistos} de ${total} · ${String(l.descripcion).slice(0, 55)}… → ${res}`);
+            }
         }
         return n;
     }
@@ -535,7 +542,7 @@
         const bft = q('#soc-fotos'); if (bft) bft.addEventListener('click', async () => {
             bft.disabled = true;
             try {
-                await window.SAR_Progreso.correr('Buscando las fotos de esta orden…', async () => { await registrarCatalogo({ ...ocActual, id: ocActual.id }); if (window.SAR_Imagenes) await window.SAR_Imagenes.recargar(); }, 'Fotos buscadas');
+                await window.SAR_Progreso.correr('Buscando las fotos de esta orden…', async (prog) => { await registrarCatalogo({ ...ocActual, id: ocActual.id }, (t) => prog.paso(t)); if (window.SAR_Imagenes) await window.SAR_Imagenes.recargar(); }, 'Fotos buscadas');
                 const dg = diagFotos, partes = [];
                 if (dg.porDescripcion) partes.push(`${dg.porDescripcion} foto(s) halladas por la descripción (sin código): revísalas en Catálogo de productos`);
                 if (dg.sinCodigo) partes.push(`${dg.sinCodigo} producto(s) sin código y sin coincidencia clara por descripción: pega o sube la foto a mano`);

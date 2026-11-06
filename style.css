@@ -5567,3 +5567,5 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .irp-foto { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 8px 0 12px; }
 .irp-foto__b { cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
 .irp-dudas { font-size: 12px; color: #92400E; background: #FEF3C7; border-radius: 6px; padding: 4px 8px; margin-top: 6px; }
+
+.sar-prog .r-prog__l{max-height:40vh;overflow:auto}

@@ -47,42 +47,50 @@
         return [...porCentro.entries()].map(([centro, items]) => ({ centro, items })).sort((a, b) => a.centro.localeCompare(b.centro, 'es'));
     }
 
-    /** Cruza cada pendiente con el stock (por ID o por nombre, usando el catálogo para traducir descripciones). */
-    function cruzarStock(grupos, insumos, catalogo) {
-        const porCod = new Map(), porNom = new Map();
+    /** Cruza cada pendiente con el stock (por ID o por nombre, usando el catálogo para traducir descripciones)
+     *  y anota dónde está (bodega y estante) y el lote que vence primero. */
+    function cruzarStock(grupos, insumos, catalogo, asign, bodegas) {
+        const porCod = new Map(), porNom = new Map(), push = (m, k, v) => { if (!m.has(k)) m.set(k, []); m.get(k).push(v); };
         (insumos || []).forEach(x => {
             if (x.status === 'CUARENTENA') return;
-            const q = Math.max(0, num(x.quantity) - num(x.sobregiro)), c = String(x.codigoMP || '').replace(/\D/g, '');
-            if (c) porCod.set(c, (porCod.get(c) || 0) + q);
-            const n = norm(x.name); porNom.set(n, (porNom.get(n) || 0) + q);
+            const c = String(x.codigoMP || '').replace(/\D/g, ''); if (c) push(porCod, c, x); push(porNom, norm(x.name), x);
         });
         const cat = new Map(); (catalogo || []).forEach(c => { cat.set(norm(c.descripcion), c); });
+        const avail = (x) => Math.max(0, num(x.quantity) - num(x.sobregiro));
+        const idBodega = new Map((bodegas || []).map(b => [b.name, b.id]));
         grupos.forEach(g => g.items.forEach(p => {
-            let disp = 0; const c = String(p.codigo || '').replace(/\D/g, '');
-            if (c && porCod.has(c)) disp = porCod.get(c);
-            else {
-                const ce = cat.get(norm(p.nombre));
-                if (ce && ce.codigoMP && porCod.has(String(ce.codigoMP).replace(/\D/g, ''))) disp = porCod.get(String(ce.codigoMP).replace(/\D/g, ''));
-                else if (ce && ce.insumoName && porNom.has(norm(ce.insumoName))) disp = porNom.get(norm(ce.insumoName));
-                else if (porNom.has(norm(p.nombre))) disp = porNom.get(norm(p.nombre));
-            }
-            p.disponible = disp; p.entregable = Math.min(p.pendiente, disp);
+            let docs = []; const c = String(p.codigo || '').replace(/\D/g, ''), ce = cat.get(norm(p.nombre)), cc = ce && ce.codigoMP ? String(ce.codigoMP).replace(/\D/g, '') : '';
+            if (c && porCod.has(c)) docs = porCod.get(c);
+            else if (cc && porCod.has(cc)) docs = porCod.get(cc);
+            else if (ce && ce.insumoName && porNom.has(norm(ce.insumoName))) docs = porNom.get(norm(ce.insumoName));
+            else if (porNom.has(norm(p.nombre))) docs = porNom.get(norm(p.nombre));
+            p.disponible = docs.reduce((t, x) => t + avail(x), 0); p.entregable = Math.min(p.pendiente, p.disponible);
+            p.donde = docs.filter(x => avail(x) > 0).map(x => {
+                const bid = idBodega.get(x.location), ub = (asign || []).filter(a => a.bodegaId === bid && norm(a.insumoName) === norm(x.name) && num(a.cantidad) > 0).map(a => a.codigo);
+                return { bodega: x.location || 'Sin bodega', cantidad: avail(x), ubicaciones: ub };
+            });
+            const lotes = []; docs.forEach(x => (x.batches || []).forEach(b => { if (num(b.quantity) > 0) lotes.push(b); }));
+            lotes.sort((a, b) => String(a.expirationDate || '9999').localeCompare(String(b.expirationDate || '9999')));
+            p.lote = lotes[0] ? { batch: lotes[0].batch || '', vence: lotes[0].expirationDate || '' } : null;
         }));
         grupos.forEach(g => { g.listos = g.items.filter(p => p.entregable > 0).length; });
         return grupos;
     }
 
-    let grupos = [], cargado = false;
+    let grupos = [], cargado = false, catalogoDocs = [];
     async function traer() {
         const f = fs();
-        const [sa, si, sc] = await Promise.all([
+        const [sa, si, sc, sb, sg] = await Promise.all([
             f.getDocs(f.query(f.collection(db(), 'Actas_Entrega'), f.orderBy('creadoEn', 'desc'), f.limit(600))),
             f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(3000))),
-            f.getDocs(f.query(f.collection(db(), 'Catalogo_Productos'), f.limit(3000))).catch(() => null)
+            f.getDocs(f.query(f.collection(db(), 'Catalogo_Productos'), f.limit(3000))).catch(() => null),
+            f.getDocs(f.query(f.collection(db(), 'Bodegas'), f.limit(100))).catch(() => null),
+            f.getDocs(f.query(f.collection(db(), 'Asignaciones_Ubicacion'), f.limit(3000))).catch(() => null)
         ]);
-        const actas = [], ins = [], cat = [];
-        sa.forEach(d => actas.push({ id: d.id, ...d.data() })); si.forEach(d => ins.push(d.data())); if (sc) sc.forEach(d => cat.push(d.data()));
-        grupos = cruzarStock(calcularPendientes(actas), ins, cat); cargado = true;
+        const actas = [], ins = [], cat = [], bod = [], asg = [];
+        sa.forEach(d => actas.push({ id: d.id, ...d.data() })); si.forEach(d => ins.push(d.data())); if (sc) sc.forEach(d => cat.push({ id: d.id, ...d.data() }));
+        if (sb) sb.forEach(d => bod.push({ id: d.id, ...d.data() })); if (sg) sg.forEach(d => asg.push(d.data()));
+        catalogoDocs = cat; grupos = cruzarStock(calcularPendientes(actas), ins, cat, asg, bod); cargado = true;
         pintarCampana();
         return grupos;
     }
@@ -105,35 +113,88 @@
         r.innerHTML = `<div class="erp-card pen-cab"><div class="pen-grupo__cab"><div><h3>Pendientes por entregar</h3>
             <p class="act-hint">${total ? `<b>${grupos.length}</b> centro(s) · <b>${total}</b> producto(s) pendiente(s) · <b>${listos}</b> con stock para entregar ahora.` : 'Lo que cada centro pidió y aún no se le entrega, según las actas.'}</p></div>
             <div class="pen-acc"><button type="button" class="btn btn-outline btn-sm" id="pen-recargar"><i class="ph-bold ph-arrows-clockwise"></i> Actualizar</button>
-            ${grupos.length ? '<button type="button" class="btn btn-primary btn-sm" id="pen-imp-todo"><i class="ph-bold ph-printer"></i> Imprimir listado con fotos</button>' : ''}</div></div></div>
+            ${grupos.length ? '<button type="button" class="btn btn-outline btn-sm" id="pen-fotos"><i class="ph-bold ph-images"></i> Buscar fotos que faltan</button><button type="button" class="btn btn-outline btn-sm" id="pen-imp-todo"><i class="ph-bold ph-printer"></i> Imprimir pendientes</button><button type="button" class="btn btn-primary btn-sm" id="pen-pick-todo"><i class="ph-bold ph-clipboard-text"></i> Hoja de picking (todos)</button>' : ''}</div></div></div>
             ${grupos.length ? `<div class="erp-card pen-lista">${grupos.map((g, gi) => `<details class="pen-centro" data-gi="${gi}"${abiertos.has(g.centro) ? ' open' : ''}><summary>
                 <strong>${esc(g.centro)}</strong><span class="soc-n">${g.items.length}</span><span class="pen-res">${resumen(g)}</span></summary>
-                <div class="pen-det"><div class="pen-acc"><button type="button" class="btn btn-outline btn-sm" data-pen-imp="${gi}"><i class="ph-bold ph-printer"></i> Imprimir este centro</button></div>${filas(g)}</div></details>`).join('')}</div>`
+                <div class="pen-det"><div class="pen-acc"><button type="button" class="btn btn-primary btn-sm" data-pen-pick="${gi}"${g.listos ? '' : ' disabled'}><i class="ph-bold ph-clipboard-text"></i> Hoja de picking</button><button type="button" class="btn btn-outline btn-sm" data-pen-imp="${gi}"><i class="ph-bold ph-printer"></i> Imprimir pendientes</button></div>${filas(g)}</div></details>`).join('')}</div>`
             : '<div class="erp-card"><p class="act-hint">No hay pendientes por entregar. Cuando en un acta pongas un pedido mayor a lo que entregas (o agregues pendientes), aparecen aquí.</p></div>'}`;
         r.querySelector('#pen-recargar').addEventListener('click', abrir);
         const bt = r.querySelector('#pen-imp-todo'); if (bt) bt.addEventListener('click', () => imprimir(grupos));
+        const bp = r.querySelector('#pen-pick-todo'); if (bp) bp.addEventListener('click', () => picking(grupos.filter(g => g.listos)));
+        const bf = r.querySelector('#pen-fotos'); if (bf) bf.addEventListener('click', buscarFotos);
+        r.querySelectorAll('[data-pen-pick]').forEach(b => b.addEventListener('click', () => picking([grupos[+b.dataset.penPick]])));
         r.querySelectorAll('[data-pen-imp]').forEach(b => b.addEventListener('click', () => imprimir([grupos[+b.dataset.penImp]])));
         r.querySelectorAll('.pen-centro').forEach(d => d.addEventListener('toggle', () => { const g = grupos[+d.dataset.gi]; if (!g) return; if (d.open) abiertos.add(g.centro); else abiertos.delete(g.centro); if (d.open && window.SAR_Imagenes) window.SAR_Imagenes.rellenar(d); }));
     }
 
     /** Listado imprimible (con fotos) de lo que falta por entregar: una hoja por centro. */
     function imprimir(lista) {
-        const w = window.open('', '_blank'); if (!w) { toast('Ventana bloqueada', 'Permite las ventanas emergentes para imprimir el listado.', 'warning'); return; }
         const IM = window.SAR_Imagenes, hoy = new Date().toLocaleDateString('es-CL');
         const logo = new URL('assets/logo-corpo-melipilla.jpg', window.location.href).href;
-        const foto = (p) => { try { const e = IM && IM.buscar(p.nombre, p.codigo); const s = e && IM.src(e, 160); return s ? `<img src="${esc(s)}" alt="" referrerpolicy="no-referrer">` : '<span class="sf">sin foto</span>'; } catch (e) { return '<span class="sf">sin foto</span>'; } };
-        const hojas = lista.filter(Boolean).map(g => `<section><header><img class="lg" src="${esc(logo)}" alt=""><div><h1>Productos pendientes de entrega</h1><h2>${esc(g.centro)}</h2><p>SAR Elsa Romo Arpillerista · ${esc(hoy)}</p></div></header>
+        const foto = (p) => { try { const e = IM && (IM.buscarConCandidata ? IM.buscarConCandidata(p.nombre, p.codigo) : IM.buscar(p.nombre, p.codigo)); const s = e && IM.src(e, 160); return s ? `<img src="${esc(s)}" alt="" referrerpolicy="no-referrer">` : '<span class="sf">sin foto</span>'; } catch (e) { return '<span class="sf">sin foto</span>'; } };
+        const hojas = (lista || []).filter(Boolean).map(g => `<section><header><img class="lg" src="${esc(logo)}" alt=""><div><h1>Productos pendientes de entrega</h1><h2>${esc(g.centro)}</h2><p>SAR Elsa Romo Arpillerista · ${esc(hoy)}</p></div></header>
             <table><thead><tr><th>Foto</th><th>Producto</th><th>ID</th><th class="n">Pendiente</th><th class="n">Disponible</th></tr></thead><tbody>
             ${g.items.map(p => `<tr><td class="f">${foto(p)}</td><td>${esc(p.nombre)}</td><td>${esc(p.codigo || '')}</td><td class="n"><b>${p.pendiente}</b></td><td class="n">${p.disponible}</td></tr>`).join('')}</tbody></table>
             <p class="pie">${g.items.length} producto(s) pendiente(s).</p></section>`).join('');
-        w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Pendientes por entregar</title><style>
-            body{font:13px/1.35 Arial,sans-serif;color:#111;margin:0;padding:18px}section{page-break-after:always}section:last-child{page-break-after:auto}
-            header{display:flex;gap:14px;align-items:center;border-bottom:2px solid #1a3668;padding-bottom:8px;margin-bottom:10px}.lg{height:54px;width:auto}
-            h1{font-size:17px;margin:0}h2{font-size:15px;margin:2px 0;color:#1a3668}header p{margin:0;color:#555}
-            table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:5px 6px;text-align:left;vertical-align:middle}th{background:#eef1f6;font-size:12px}
-            .n{text-align:right;white-space:nowrap}.f{width:84px}.f img{width:76px;height:76px;object-fit:contain}.sf{color:#999;font-size:11px}tr{page-break-inside:avoid}.pie{margin-top:8px;color:#555}
-            @media print{body{padding:0}}</style></head><body>${hojas}<script>window.onload=function(){setTimeout(function(){window.print()},700)}<\/script></body></html>`);
+        ventana('Pendientes por entregar', hojas);
+    }
+    const CSS_DOC = `body{font:13px/1.35 Arial,sans-serif;color:#111;margin:0;padding:18px}section{page-break-after:always}section:last-child{page-break-after:auto}
+        header{display:flex;gap:14px;align-items:center;border-bottom:2px solid #1a3668;padding-bottom:8px;margin-bottom:10px}.lg{height:54px;width:auto}
+        h1{font-size:17px;margin:0}h2{font-size:15px;margin:2px 0;color:#1a3668}h3{font-size:13px;margin:14px 0 4px}header p{margin:0;color:#555}
+        table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:5px 6px;text-align:left;vertical-align:middle}th{background:#eef1f6;font-size:12px}
+        .n{text-align:right;white-space:nowrap}.f{width:84px}.f img{width:76px;height:76px;object-fit:contain}.sf{color:#999;font-size:11px}tr{page-break-inside:avoid}.pie{margin-top:8px;color:#555}
+        .ck{width:26px}.ck i{display:inline-block;width:18px;height:18px;border:2px solid #333;border-radius:3px}.big{font-size:20px;font-weight:700}small{color:#555}
+        @media print{body{padding:0}}`;
+    function ventana(titulo, cuerpo) {
+        const w = window.open('', '_blank'); if (!w) { toast('Ventana bloqueada', 'Permite las ventanas emergentes para imprimir.', 'warning'); return; }
+        w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>${CSS_DOC}</style></head><body>${cuerpo}<script>window.onload=function(){setTimeout(function(){window.print()},700)}<\/script></body></html>`);
         w.document.close();
+    }
+    /** Hoja de picking: qué retirar de la bodega para cada centro, con foto, dónde está, lote y cantidad. */
+    function picking(lista) {
+        const IM = window.SAR_Imagenes, hoy = new Date().toLocaleDateString('es-CL');
+        const logo = new URL('assets/logo-corpo-melipilla.jpg', window.location.href).href;
+        const foto = (p) => { try { const e = IM && (IM.buscarConCandidata ? IM.buscarConCandidata(p.nombre, p.codigo) : IM.buscar(p.nombre, p.codigo)); const s = e && IM.src(e, 160); return s ? `<img src="${esc(s)}" alt="" referrerpolicy="no-referrer">` : '<span class="sf">sin foto</span>'; } catch (e) { return '<span class="sf">sin foto</span>'; } };
+        const dondeTxt = (p) => (p.donde || []).map(d => `${esc(d.bodega)}${d.ubicaciones && d.ubicaciones.length ? ' · <b>' + esc(d.ubicaciones.join(', ')) + '</b>' : ''} <small>(${d.cantidad})</small>`).join('<br>') || '—';
+        const venceTxt = (p) => p.lote ? `${esc(p.lote.batch || 's/lote')}${p.lote.vence ? '<br><small>vence ' + esc(p.lote.vence) + '</small>' : ''}` : '—';
+        const hojas = (lista || []).filter(Boolean).map(g => {
+            const si = g.items.filter(p => p.entregable > 0), no = g.items.filter(p => !(p.entregable > 0));
+            return `<section><header><img class="lg" src="${esc(logo)}" alt=""><div><h1>Hoja de picking · retirar de bodega</h1><h2>Para: ${esc(g.centro)}</h2><p>SAR Elsa Romo Arpillerista · ${esc(hoy)}</p></div></header>
+            <table><thead><tr><th class="ck"></th><th>Foto</th><th>Producto</th><th>Dónde está</th><th>Lote (vence primero)</th><th class="n">Retirar</th><th class="n">Pendiente</th></tr></thead><tbody>
+            ${si.map(p => `<tr><td class="ck"><i></i></td><td class="f">${foto(p)}</td><td>${esc(p.nombre)}${p.codigo ? '<br><small>ID ' + esc(p.codigo) + '</small>' : ''}</td><td>${dondeTxt(p)}</td><td>${venceTxt(p)}</td><td class="n big">${p.entregable}</td><td class="n">${p.pendiente}</td></tr>`).join('')}</tbody></table>
+            <p class="pie">${si.length} producto(s) para retirar.</p>
+            ${no.length ? `<h3>Pendientes sin stock (no hay que retirar)</h3><table><tbody>${no.map(p => `<tr><td>${esc(p.nombre)}</td><td class="n">pendiente ${p.pendiente}</td></tr>`).join('')}</tbody></table>` : ''}</section>`;
+        }).join('');
+        ventana('Hoja de picking', hojas);
+    }
+    /** Busca las fotos de los productos pendientes que aún no tienen (por ID o por descripción) y las deja "por confirmar". */
+    async function buscarFotos() {
+        const IM = window.SAR_Imagenes, f = fs(); if (!IM) return;
+        const vistos = new Set(), faltan = [];
+        grupos.forEach(g => g.items.forEach(p => { const k = (p.codigo ? 'c' + p.codigo : 'n' + norm(p.nombre)); if (vistos.has(k)) return; vistos.add(k); const e = IM.buscarConCandidata ? IM.buscarConCandidata(p.nombre, p.codigo) : IM.buscar(p.nombre, p.codigo); if (!e) faltan.push(p); }));
+        if (!faltan.length) { toast('Fotos', 'Todos los productos pendientes ya tienen foto.', 'success'); return; }
+        let cfg = null; try { const sn = await f.getDoc(f.doc(f.collection(db(), 'Config_Correo'), 'principal')); cfg = sn.exists() ? sn.data() : null; } catch (e) { /* sin config */ }
+        if (!(cfg && cfg.webhookUrl && cfg.token)) { toast('Falta el script', 'Configura el script en Seguimiento de OC → Configurar correo para buscar fotos.', 'warning'); return; }
+        const slug = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 120);
+        let n = 0, ok = 0;
+        try {
+            await window.SAR_Progreso.correr('Buscando las fotos que faltan…', async (prog) => {
+                prog.paso(`${faltan.length} producto(s) sin foto`);
+                for (const p of faltan) {
+                    n++; let r = null;
+                    try { r = p.codigo ? await IM.buscarFoto(p.codigo, cfg) : await IM.buscarPorDescripcion(p.nombre, cfg); } catch (e) { r = null; }
+                    if (r && r.archivo) {
+                        const prev = catalogoDocs.find(c => (p.codigo && String(c.codigoMP || '') === String(p.codigo)) || norm(c.descripcion) === norm(p.nombre));
+                        const id = prev ? prev.id : slug(p.codigo || p.nombre) || 'pendiente';
+                        try { await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: p.nombre, descripcion_lower: String(p.nombre).toLowerCase(), codigoMP: p.codigo || '', imagenMP: r.archivo, fotoEstado: (r.origen === 'semilla') ? 'confirmada' : 'por_confirmar', ...(r.titulo ? { fotoTitulo: r.titulo } : {}), actualizado: f.serverTimestamp() }, { merge: true }); ok++; } catch (e) { r = null; }
+                    }
+                    prog.paso(`${n} de ${faltan.length} · ${String(p.nombre).slice(0, 55)}… → ${r && r.archivo ? '✔ foto encontrada (por confirmar)' : '✖ sin foto'}`);
+                }
+                await IM.recargar();
+            }, 'Búsqueda terminada');
+            toast(ok ? 'Fotos encontradas' : 'Sin coincidencias', ok ? `${ok} de ${faltan.length} con foto nueva: confírmalas en Catálogo de productos.` : 'No hubo coincidencias claras: sube la foto a mano en el Catálogo de productos.', ok ? 'success' : 'warning');
+        } catch (e) { toast('No se pudo buscar', e.message || String(e), 'error'); }
+        pintar();
     }
     async function abrir() {
         const r = root(); if (!r) return;

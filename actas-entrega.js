@@ -279,7 +279,7 @@
                 const d = datos[k], c = calc[k];
                 const limite = num(d.criticalLimit || d.stock_minimo || 50);
                 const prox = c.batches[0];
-                const cambios = { quantity: c.quantity, batches: c.batches, sobregiro: c.sobregiro, sobregiroDetalle: c.sobregiroDetalle, isCritical: c.quantity <= limite, ...(prox ? { batch: prox.batch, expirationDate: prox.expirationDate || '' } : {}), updatedAt: f.serverTimestamp() };
+                const cambios = { ...(r.i.codigoNuevo && r.i.codigo && !d.codigoMP ? { codigoMP: String(r.i.codigo) } : {}), quantity: c.quantity, batches: c.batches, sobregiro: c.sobregiro, sobregiroDetalle: c.sobregiroDetalle, isCritical: c.quantity <= limite, ...(prox ? { batch: prox.batch, expirationDate: prox.expirationDate || '' } : {}), updatedAt: f.serverTimestamp() };
                 if (r.i.nuevo) tx.set(r.ref, { ...d, ...cambios }); else tx.update(r.ref, cambios);
                 c.cubiertas.forEach(cu => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name, quantity: cu.qty, type: 'CUADRE_SOBREGIRO', user: usuario, date: f.serverTimestamp(), document: numero, batch: 'MULTI-LOTE', origin: b.origen, idInsumoOrigen: r.ref.id, observacion: `Cuadre automático al emitir ${numero}: ${cu.qty} u. del acta ${cu.acta} ya estaban entregadas sin respaldo`, actaId: cu.acta, cuadradoPor: numero }));
                 tx.set(r.hist, {
@@ -307,10 +307,10 @@
             return { ...acta, creadoEn: new Date().toISOString() };
         });
         // Productos que no venían de ninguna orden: quedan en el catálogo (nombre + ID) para reconocerlos la próxima vez y asociarlos a una orden
-        for (const i of items.filter(x => x.nuevo || x.manual)) {
+        for (const i of items.filter(x => x.nuevo || x.manual || x.codigoNuevo)) {
             try {
                 const cod = String(i.codigo || '').trim(), id = slugC(cod || i.nombre) || 'manual';
-                await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: i.nombre, descripcion_lower: String(i.nombre).toLowerCase(), codigoMP: cod, insumoName: i.nombre, sinOrden: true, origen: 'MANUAL', creadoEn: f.serverTimestamp(), creadoPor: usuario, actualizado: f.serverTimestamp() }, { merge: true });
+                await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: i.nombre, descripcion_lower: String(i.nombre).toLowerCase(), codigoMP: cod, insumoName: i.nombre, ...((i.nuevo || i.manual) ? { sinOrden: true, origen: 'MANUAL', creadoEn: f.serverTimestamp(), creadoPor: usuario } : {}), actualizado: f.serverTimestamp() }, { merge: true });
                 catCargado = false;
             } catch (e) { /* el acta ya se emitió */ }
         }
@@ -428,7 +428,7 @@
               <input id="act-centro" list="act-centros" value="${esc(borrador.centro)}" placeholder="Ej: Pomaire"><datalist id="act-centros">${listaCentros().map(c => `<option value="${esc(c)}">`).join('')}</datalist></label>
               <div class="act-centro-acc"><button type="button" class="btn btn-outline btn-sm" id="act-centro-add">+ Guardar este centro en la lista</button></div>
             <h4 class="act-h4">Productos entregados (${borrador.items.length})</h4>
-            ${borrador.items.length ? borrador.items.map((i, k) => `<div class="act-fila"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(i.nombre, { codigo: i.codigo }) : ''}${esc(i.nombre)}${i.manual ? ' <small>(manual · provisional)</small>' : ''}<small>${i.codigo ? '<b>ID ' + esc(i.codigo) + '</b> · ' : ''}Disponible: ${num(i.stock)}${num(i.solicitado) > num(i.cantidad) ? ` · pedido ${num(i.solicitado)} · <b>pendiente ${num(i.solicitado) - num(i.cantidad)}</b>` : ''}${num(i.cantidad) > num(i.stock) ? ` · <span class="act-sin">sin respaldo: ${num(i.cantidad) - num(i.stock)}</span>` : ''}</small></div>
+            ${borrador.items.length ? borrador.items.map((i, k) => `<div class="act-fila"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(i.nombre, { codigo: i.codigo }) : ''}${esc(i.nombre)}${i.manual ? ' <small>(manual · provisional)</small>' : ''}<small>${i.codigo ? '<b>ID ' + esc(i.codigo) + '</b> · ' : (i.manual ? '' : `<input class="act-cod" data-k="${k}" inputmode="numeric" placeholder="Sin ID: escríbelo aquí (opcional)" aria-label="ID de Mercado Público"> `)}Disponible: ${num(i.stock)}${num(i.solicitado) > num(i.cantidad) ? ` · pedido ${num(i.solicitado)} · <b>pendiente ${num(i.solicitado) - num(i.cantidad)}</b>` : ''}${num(i.cantidad) > num(i.stock) ? ` · <span class="act-sin">sin respaldo: ${num(i.cantidad) - num(i.stock)}</span>` : ''}</small></div>
                 <input type="number" min="0" value="${num(i.solicitado) > num(i.cantidad) ? num(i.solicitado) : ''}" class="act-qty act-sedit" data-k="${k}" placeholder="Pedido" aria-label="Cantidad pedida"><input type="number" min="1" value="${i.cantidad}" class="act-qty act-edit" data-k="${k}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-del" data-k="${k}" aria-label="Quitar">✕</button></div>`).join('') : '<p class="act-hint">Aún no agregas productos.</p>'}
             <details class="act-det"${borrador.pendientes.length ? ' open' : ''}><summary>Productos pendientes de entrega (opcional)</summary>
               ${borrador.pendientes.map((p, k) => `<div class="act-fila"><div class="act-fn">${esc(p.nombre)}</div><input type="number" min="1" value="${p.cantidad}" class="act-qty act-pedit" data-k="${k}"><button type="button" class="btn btn-outline act-pdel" data-k="${k}">✕</button></div>`).join('')}
@@ -490,6 +490,7 @@
             borrador.items.push({ id: s.id, nombre: s.name, codigo: s.codigo || '', cantidad: c, solicitado: sol > c ? sol : 0, stock: s.disp, controlado: s.controlado }); refrescar();
         }));
         $$('.act-edit').forEach(i => i.addEventListener('change', () => { borrador.items[+i.dataset.k].cantidad = Math.floor(num(i.value)); refrescar(); }));
+        $$('.act-cod').forEach(i => i.addEventListener('change', () => { const it = borrador.items[+i.dataset.k]; const v = String(i.value || '').replace(/\D/g, ''); if (!it || !v) return; it.codigo = v; it.codigoNuevo = true; refrescar(); }));
         $$('.act-sedit').forEach(i => i.addEventListener('change', () => { const it = borrador.items[+i.dataset.k]; const v = Math.floor(num(i.value)); it.solicitado = v > num(it.cantidad) ? v : 0; refrescar(); }));
         // Manual: al elegir un nombre del catálogo se completa el ID, y al escribir un ID conocido se completa el nombre
         const mn = document.getElementById('act-mn'), mid = document.getElementById('act-mid');

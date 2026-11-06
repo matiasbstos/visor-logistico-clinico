@@ -458,3 +458,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.66 Pendientes por entregar: vista condensada e impresión (v21.11)
 - Una fila por centro (pendientes y si hay stock para entregar); al pulsar se abre el listado de ese centro. Botón "Imprimir listado con fotos" (todos los centros, una hoja por centro) o "Imprimir este centro". El encabezado del documento lleva el logo de la Corporación.
 - Se quitó de esta pantalla el botón "Preparar acta"; generar el acta desde aquí queda pendiente (la función `precargar` sigue en actas-entrega.js).
+
+### 4.67 Hoja de picking, fotos pendientes e ID desde el acta (v21.12)
+- Pendientes por entregar: "Hoja de picking" (por centro o de todos): casilla, foto, producto/ID, dónde está (bodega y estante), lote que vence primero, cantidad a retirar y pendiente; abajo, lo que no tiene stock. Solo se retira lo que hay (mín. entre pendiente y disponible).
+- "Buscar fotos que faltan": busca por ID (o por descripción si no hay ID) las fotos de los productos pendientes sin foto y las deja "por confirmar" en el catálogo.
+- En un acta, un producto del stock sin ID muestra un campo para escribirlo; al emitir, el ID queda en el insumo y en el catálogo, y desde ahí se busca la foto.

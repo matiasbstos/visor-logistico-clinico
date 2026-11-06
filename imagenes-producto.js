@@ -120,5 +120,5 @@
     document.addEventListener('click', (e) => { const im = e.target && e.target.closest && e.target.closest('.prod-img img'); if (im) { e.preventDefault(); e.stopPropagation(); ampliar(im); } }, true);
     let t = null;
     if (typeof MutationObserver !== 'undefined') new MutationObserver(() => { if (!listo) return; clearTimeout(t); t = setTimeout(() => rellenar(), 250); }).observe(document.documentElement, { childList: true, subtree: true });
-    window.SAR_Imagenes = { buscarFoto, buscarPorDescripcion, ampliar, cargar, thumb, buscar, src, imgHTML, rellenar, archivoPara, urlMP, recargar: () => cargar(true) };
+    window.SAR_Imagenes = { buscarFoto, buscarPorDescripcion, buscarConCandidata, ampliar, cargar, thumb, buscar, src, imgHTML, rellenar, archivoPara, urlMP, recargar: () => cargar(true) };
 })(window, document);

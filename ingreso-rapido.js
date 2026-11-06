@@ -20,8 +20,8 @@
     const rol = () => String(document.body.dataset.userRole || '').toLowerCase();
     const puede = () => ['admin', 'administrador', 'global', 'superadmin', 'bodega', 'administrador_bodega', 'bodeguero'].includes(rol()) || rol() === '';
 
-    let bodegas = [], catalogo = [], filas = [], bodegaSel = '';
-    const filaVacia = () => ({ nombre: '', codigo: '', cantidad: '', lote: '', vence: '' });
+    let bodegas = [], catalogo = [], filas = [], bodegaSel = '', cfg = null;
+    const filaVacia = () => ({ nombre: '', codigo: '', cantidad: '', lote: '', vence: '', dudas: '' });
 
     /** Fecha flexible -> AAAA-MM-DD ('' si no se entiende). Mes/año => último día del mes. */
     function fecha(t) {
@@ -58,6 +58,49 @@
         const [b, c] = await Promise.all([f.getDocs(f.collection(db(), 'Bodegas')), f.getDocs(f.query(f.collection(db(), 'Catalogo_Productos'), f.limit(3000))).catch(() => null)]);
         bodegas = []; b.forEach(d => { const x = d.data(); if (x.isActive !== false) bodegas.push({ id: d.id, name: x.name || '' }); }); bodegas.sort((a, z) => a.name.localeCompare(z.name, 'es'));
         catalogo = []; if (c) c.forEach(d => catalogo.push({ id: d.id, ...d.data() }));
+        try { const s = await f.getDoc(f.doc(f.collection(db(), 'Config_Correo'), 'principal')); cfg = s.exists() ? s.data() : null; } catch (e) { cfg = null; }
+    }
+
+    /** Reduce la foto (lado mayor 1600 px, JPEG) para enviarla rápido; devuelve base64 sin cabecera. */
+    function reducir(file) {
+        return new Promise((ok, mal) => {
+            const url = URL.createObjectURL(file), im = new Image();
+            im.onload = () => { const k = Math.min(1, 1600 / Math.max(im.naturalWidth, im.naturalHeight)), c = document.createElement('canvas'); c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(url); ok(c.toDataURL('image/jpeg', 0.82).split(',')[1]); };
+            im.onerror = () => { URL.revokeObjectURL(url); mal(new Error('No pude abrir la foto ' + file.name)); };
+            im.src = url;
+        });
+    }
+    /** Lee las fotos con el Apps Script (API de Claude) y agrega los productos a la tabla para revisar. */
+    async function leerFotos(files) {
+        if (!cfg || !cfg.webhookUrl || !cfg.token) { toast('Falta conectar el script', 'Configura primero la URL y el token en Seguimiento de OC → Configurar correo.', 'warning'); return; }
+        const lista = Array.from(files).filter(f => /^image\//.test(f.type)); if (!lista.length) return;
+        const prog = window.SAR_Progreso.iniciar(`Leyendo ${lista.length} foto(s)…`, ['Preparando las fotos…']);
+        try {
+            const fotos = []; for (let i = 0; i < lista.length; i++) { prog.paso(`Preparando la foto ${i + 1} de ${lista.length}…`); fotos.push(await reducir(lista[i])); }
+            const encontrados = [];
+            for (let i = 0; i < fotos.length; i += 4) {
+                prog.paso(`Leyendo fotos ${i + 1}–${Math.min(i + 4, fotos.length)} de ${fotos.length}…`);
+                const r = await fetch(cfg.webhookUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ token: cfg.token, accion: 'foto', fotos: fotos.slice(i, i + 4) }) });
+                const j = await r.json();
+                if (!j.ok) throw new Error(j.error === 'sin_clave' ? 'SIN_CLAVE' : (j.error === 'token' ? 'El token del script no coincide.' : String(j.error || 'respuesta no válida')));
+                (j.productos || []).forEach(p => encontrados.push(p));
+            }
+            const mapa = new Map();
+            encontrados.forEach(p => {
+                const nombre = String(p.nombre || '').trim().toUpperCase(); if (!nombre) return;
+                const art = String(p.art || '').trim(), n = nombre + (art && !nombre.includes(art.toUpperCase()) ? ` (ART ${art.toUpperCase()})` : '');
+                const k = norm(n) + '|' + String(p.lote || '').trim().toUpperCase(), cajas = Math.floor(num(p.cajas)) || 0, previo = mapa.get(k);
+                if (previo) { previo.cantidad = String(Math.max(num(previo.cantidad), cajas) || ''); if (p.dudas) previo.dudas = (previo.dudas ? previo.dudas + ' · ' : '') + p.dudas; return; }
+                mapa.set(k, { nombre: n, codigo: codDe(n) || codDe(nombre), cantidad: cajas ? String(cajas) : '', lote: String(p.lote || '').trim().toUpperCase(), vence: fecha(p.vence) || '', dudas: [p.dudas, p.contenido ? 'Contenido: ' + p.contenido : '', p.barras ? 'Barras: ' + p.barras : ''].filter(Boolean).join(' · ') });
+            });
+            const nuevas = [...mapa.values()]; filas = filas.filter(x => x.nombre.trim() || x.cantidad).concat(nuevas);
+            prog.listo(nuevas.length ? `${nuevas.length} producto(s) leídos: revisa la tabla antes de ingresar` : 'No encontré productos en las fotos');
+            pintar();
+        } catch (e) {
+            prog.error();
+            if (e.message === 'SIN_CLAVE') toast('Falta la clave de lectura', 'Hay que guardar la clave de la API en el Apps Script (te explico el paso en la conversación).', 'warning');
+            else toast('No se pudieron leer las fotos', (e.message || String(e)).includes('Failed to fetch') ? 'No se pudo conectar con el script (¿acceso público y versión nueva publicada?).' : (e.message || String(e)), 'error');
+        }
     }
 
     function pintar() {
@@ -69,13 +112,15 @@
             <div class="act-fila"><select id="irp-b" aria-label="Bodega de destino"><option value="">— Elige la bodega de destino —</option>${bodegas.map(b => `<option value="${esc(b.name)}" ${b.name === bodegaSel ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select>
                 <button type="button" class="btn btn-outline" id="irp-nb">+ Nueva bodega</button></div></div>
         <div class="erp-card"><h3>Lista de productos <span class="soc-n">${filas.length}</span></h3>
+            <div class="irp-foto"><label class="btn btn-primary irp-foto__b"><i class="ph-bold ph-camera"></i> Leer desde fotos<input type="file" id="irp-fotos" accept="image/*" multiple capture="environment" hidden></label>
+                <small>Saca o elige fotos de las cajas (la cara con nombre, lote y vencimiento). Se leen solas y quedan en la tabla para que las revises. Hasta ~20 fotos por vez.</small></div>
             <details class="soc-det"><summary><strong>Pegar una lista</strong> (desde Excel, o lo que leí de una foto)</summary>
                 <p class="act-hint">Una línea por producto: <b>producto ; ID ; cantidad ; lote ; vencimiento</b> (el ID, el lote y el vencimiento son opcionales; separa con tabulador, punto y coma o coma).</p>
                 <textarea id="irp-txt" rows="6" placeholder="VENDA FIXOMULL ADHESIVA 10CM X 10M ; 3016531 ; 12 ; L2405 ; 03/2027"></textarea>
                 <button type="button" class="btn btn-outline" id="irp-pegar">Agregar a la tabla</button></details>
             <datalist id="irp-dl">${catalogo.slice(0, 1500).map(c => `<option value="${esc(String(c.descripcion || c.insumoName || '').toUpperCase())}">`).join('')}</datalist>
             <div class="irp-tabla"><div class="irp-fila irp-cab"><span>Producto</span><span>ID</span><span>Cantidad</span><span>Lote</span><span>Vence</span><span></span></div>
-            ${filas.map((x, i) => `<div class="irp-fila ${v.malas.has(i) ? 'irp-mala' : ''}"><input data-c="nombre" data-i="${i}" list="irp-dl" value="${esc(x.nombre)}" placeholder="Producto" autocomplete="off"><input data-c="codigo" data-i="${i}" inputmode="numeric" value="${esc(x.codigo)}" placeholder="ID"><input data-c="cantidad" data-i="${i}" type="number" min="1" value="${esc(x.cantidad)}" placeholder="Cant."><input data-c="lote" data-i="${i}" value="${esc(x.lote)}" placeholder="S/L"><input data-c="vence" data-i="${i}" type="date" value="${esc(x.vence)}"><button type="button" class="btn btn-outline btn-sm" data-del="${i}" aria-label="Quitar fila">✕</button></div>`).join('')}</div>
+            ${filas.map((x, i) => `${x.dudas ? `<div class="irp-dudas"><i class="ph-bold ph-warning"></i> ${esc(x.dudas)}</div>` : ''}<div class="irp-fila ${v.malas.has(i) ? 'irp-mala' : ''}"><input data-c="nombre" data-i="${i}" list="irp-dl" value="${esc(x.nombre)}" placeholder="Producto" autocomplete="off"><input data-c="codigo" data-i="${i}" inputmode="numeric" value="${esc(x.codigo)}" placeholder="ID"><input data-c="cantidad" data-i="${i}" type="number" min="1" value="${esc(x.cantidad)}" placeholder="Cant."><input data-c="lote" data-i="${i}" value="${esc(x.lote)}" placeholder="S/L"><input data-c="vence" data-i="${i}" type="date" value="${esc(x.vence)}"><button type="button" class="btn btn-outline btn-sm" data-del="${i}" aria-label="Quitar fila">✕</button></div>`).join('')}</div>
             <div class="act-fila"><button type="button" class="btn btn-outline" id="irp-add">+ Agregar fila</button><button type="button" class="btn btn-outline" id="irp-clr">Vaciar tabla</button></div>
             <p class="act-hint">${v.ok} fila(s) listas · ${v.unidades} unidades${v.malas.size ? ` · <b style="color:#B91C1C">${v.malas.size} con datos por completar (producto y cantidad)</b>` : ''}</p>
             <button type="button" class="btn btn-primary" id="irp-ok" ${v.ok && bodegaSel && !v.malas.size ? '' : 'disabled'}>Ingresar a ${esc(bodegaSel || 'la bodega')}</button></div>`;
@@ -101,6 +146,7 @@
             pintar();
         }));
         r.querySelector('#irp-ok').addEventListener('click', ingresar);
+        r.querySelector('#irp-fotos').addEventListener('change', (e) => { const fl = Array.from(e.target.files || []); e.target.value = ''; leerFotos(fl.slice(0, 20)); });
     }
     async function nuevaBodega() {
         const nombre = (prompt('Nombre de la nueva bodega (ej. Camión):') || '').trim(); if (!nombre) return;

@@ -1347,6 +1347,7 @@ function doPost(e) {
   try {
     const d = JSON.parse(e.postData.contents);
     if (d.token !== TOKEN) return salida({ ok: false, error: 'token' });
+    if (d.accion === 'foto') return salida(leerFotos(d.fotos));
     if (d.accion === 'imagenes') {   // foto de producto en la tienda de Convenio Marco (por el código entre paréntesis)
       const out = {}; (d.codigos || []).slice(0, 60).forEach(c => { out[c] = imagenDe(String(c).replace(/\\D/g, '')); });
       return salida({ ok: true, imagenes: out });
@@ -1394,7 +1395,21 @@ function imagenDe(c) {   // busca el código en todas las tiendas y devuelve la 
   cache.put(k, r, 21600);
   return r;
 }
-function salida(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }`;
+function salida(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
+function leerFotos(fotos) {   // lee fotos de cajas con la API de Claude (la clave va en Propiedades de la secuencia de comandos)
+  const clave = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!clave) return { ok: false, error: 'sin_clave' };
+  const content = [];
+  (fotos || []).slice(0, 6).forEach(f => content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: String(f) } }));
+  if (!content.length) return { ok: false, error: 'sin_fotos' };
+  content.push({ type: 'text', text: 'Eres un asistente de bodega de un servicio de salud en Chile. Mira las fotografias de cajas de insumos medicos. Responde SOLO con un arreglo JSON (sin texto adicional): un objeto por producto distinto (si varias fotos son del mismo producto y lote, unelas) con estas claves: nombre (descripcion completa como esta impresa, con marca, medida, talla y esterilidad), art (codigo del fabricante, por ejemplo AACOMP10; vacio si no hay), barras (numero bajo el codigo de barras; vacio si no hay), contenido (por ejemplo 20 cajas x 50 sobres, 30 unidades), lote (numero de lote tal cual), vence (fecha de VENCIMIENTO en formato AAAA-MM-DD; si solo hay mes y anio usa el ultimo dia del mes; nunca uses la fecha de fabricacion ni de esterilizacion; vacio si no se ve), cajas (numero de cajas de ese producto y lote que se ven en las fotos; 0 si no se puede saber), dudas (texto breve con lo que no se lee bien; vacio si todo esta claro). No inventes datos: deja vacio lo que no se vea.' });
+  const r = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', { method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-api-key': clave, 'anthropic-version': '2023-06-01' }, payload: JSON.stringify({ model: 'claude-sonnet-5-5', max_tokens: 3000, messages: [{ role: 'user', content: content }] }) });
+  const j = JSON.parse(r.getContentText());
+  if (r.getResponseCode() !== 200) return { ok: false, error: 'api:' + ((j.error && j.error.message) || r.getResponseCode()) };
+  const t = (j.content || []).map(x => x.text || '').join(''), a = t.indexOf('['), b = t.lastIndexOf(']');
+  if (a < 0 || b < a) return { ok: false, error: 'respuesta_ilegible' };
+  return { ok: true, productos: JSON.parse(t.slice(a, b + 1)) };
+}`;
 
     function formConfig() {
         const c = configCorreo;

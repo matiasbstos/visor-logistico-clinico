@@ -431,3 +431,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Nueva pantalla "Ingreso rápido" (Inventario): se elige o crea una bodega (p. ej. el camión), se pega la lista (Excel/texto, o lo que se lea de una fotografía) o se escribe en una tabla editable y se confirma. Cada producto entra con ID, lote y vencimiento, queda en el historial (INGRESO_INVENTARIO, "Inventario inicial") y se ve en todo el sistema (origenOC). El nombre y el ID quedan en el catálogo.
 - Reemplaza para este uso a la "Carga masiva (Excel)" antigua, cuyos insumos no se muestran en la fase actual y no llevan ID ni lotes.
 - Las fotografías de productos se leen en la conversación (Claude) y se vuelcan a esta pantalla; leer fotos directamente desde el sitio requiere una clave de API y queda para más adelante.
+
+### 4.60 Ingreso rápido leyendo fotografías (v21.05)
+- "Leer desde fotos" en Ingreso rápido: la app reduce las fotos y las envía al Apps Script (acción `foto`), que las lee con la API de Claude y devuelve nombre, código del fabricante (ART), lote, vencimiento (nunca la fecha de fabricación/esterilización), contenido, cajas visibles y dudas. Los productos quedan en la tabla editable para revisar antes de ingresar; las dudas se muestran sobre cada fila.
+- La clave de la API (`ANTHROPIC_API_KEY`) se guarda solo en Propiedades de la secuencia de comandos del Apps Script; nunca en el repositorio ni en el sitio. La cantidad es una sugerencia (cajas visibles): siempre se confirma.

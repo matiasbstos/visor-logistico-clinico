@@ -463,3 +463,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Pendientes por entregar: "Hoja de picking" (por centro o de todos): casilla, foto, producto/ID, dónde está (bodega y estante), lote que vence primero, cantidad a retirar y pendiente; abajo, lo que no tiene stock. Solo se retira lo que hay (mín. entre pendiente y disponible).
 - "Buscar fotos que faltan": busca por ID (o por descripción si no hay ID) las fotos de los productos pendientes sin foto y las deja "por confirmar" en el catálogo.
 - En un acta, un producto del stock sin ID muestra un campo para escribirlo; al emitir, el ID queda en el insumo y en el catálogo, y desde ahí se busca la foto.
+
+### 4.68 Foto por descripción al emitir un acta (v21.13)
+- Al emitir un acta, los productos sin foto se buscan en segundo plano (por ID; si no hay ID, por la descripción en las tiendas de Convenio Marco) y quedan "por confirmar" en el catálogo. No se asigna ID automáticamente: el número que muestra la tienda puede no coincidir con el ID de la orden (sin verificar), por eso el ID lo escribe el usuario.

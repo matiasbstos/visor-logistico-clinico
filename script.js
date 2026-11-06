@@ -2021,6 +2021,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'view-donde-esta': '¿Dónde está?',
             'view-seguimiento-oc': 'Seguimiento de OC',
             'view-compras-agiles': 'Compras ágiles',
+            'view-ingreso-rapido': 'Ingreso rápido',
             'view-errores': 'Directorio de errores',
             'view-actas-entrega': 'Actas de entrega',
             'view-auditoria': 'Auditoría',
@@ -2061,7 +2062,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Control de acceso por rol (espejo de las reglas CSS del menú; la barrera real son las reglas de Firestore)
             const VISTAS_BLOQUEADAS = {
                 enfermero: ['view-historial', 'view-ajustes', 'view-compras', 'view-informes', 'view-bodegas',
-                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-compras-agiles', 'view-actas-entrega', 'view-auditoria', 'view-oxigeno', 'view-errores'],
+                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-compras-agiles', 'view-ingreso-rapido', 'view-actas-entrega', 'view-auditoria', 'view-oxigeno', 'view-errores'],
                 operador: ['view-compras', 'view-usuarios', 'view-configuracion', 'view-errores']
             };
             const rolActual = String(document.body.dataset.userRole || '').toLowerCase();
@@ -2114,6 +2115,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (window.SAR_Saldos) window.SAR_Saldos.abrir();
                 } else if (hash === 'view-errores') {
                     if (window.SAR_Errores) window.SAR_Errores.abrir();
+                } else if (hash === 'view-ingreso-rapido') {
+                    if (window.SAR_IngresoRapido) window.SAR_IngresoRapido.abrir();
                 } else if (hash === 'view-compras-agiles') {
                     if (window.SAR_ComprasAgiles) window.SAR_ComprasAgiles.abrir();
                 } else if (hash === 'view-seguimiento-oc') {

@@ -426,3 +426,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Solo administradores. En la ficha de la orden, "Recepciones registradas" → Anular (pide motivo). Lo recibido vuelve a "por recibir", se retira del stock lo que ingresó (primero el lote registrado, luego S/L, luego FEFO inverso) y queda en la bitácora ("Recepción anulada"), en el historial (ANULACION_RECEPCION) y en el informe de recepciones con estado ANULADA.
 - Se bloquea si ese stock ya se usó (actas de entrega u otros movimientos): primero se eliminan esas actas. La recepción conforme ya emitida no cambia sola: se edita o regenera aparte.
 - Las recepciones anteriores al registro detallado (sin detalle por línea en la bitácora) no se pueden anular automáticamente.
+
+### 4.59 Ingreso rápido de inventario (v21.04)
+- Nueva pantalla "Ingreso rápido" (Inventario): se elige o crea una bodega (p. ej. el camión), se pega la lista (Excel/texto, o lo que se lea de una fotografía) o se escribe en una tabla editable y se confirma. Cada producto entra con ID, lote y vencimiento, queda en el historial (INGRESO_INVENTARIO, "Inventario inicial") y se ve en todo el sistema (origenOC). El nombre y el ID quedan en el catálogo.
+- Reemplaza para este uso a la "Carga masiva (Excel)" antigua, cuyos insumos no se muestran en la fase actual y no llevan ID ni lotes.
+- Las fotografías de productos se leen en la conversación (Claude) y se vuelcan a esta pantalla; leer fotos directamente desde el sitio requiere una clave de API y queda para más adelante.

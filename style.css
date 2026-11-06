@@ -5558,3 +5558,9 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .sar-cargando strong { font-size: 15px; font-weight: 600; }
 .soc-rec-anul { opacity: .6; text-decoration: line-through; }
 .soc-rec-anul b { text-decoration: none; display: inline-block; }
+
+.irp-tabla { display: flex; flex-direction: column; gap: 6px; margin: 12px 0; overflow-x: auto; }
+.irp-fila { display: grid; grid-template-columns: minmax(220px, 3fr) 110px 90px 110px 140px 40px; gap: 6px; align-items: center; min-width: 760px; }
+.irp-fila input { padding: 8px; border: 1px solid #CBD5E1; border-radius: 6px; font: inherit; min-width: 0; }
+.irp-cab { font-size: 12px; font-weight: 700; color: #64748B; text-transform: uppercase; }
+.irp-mala input { border-color: #DC2626; background: #FEF2F2; }

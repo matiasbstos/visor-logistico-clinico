@@ -482,3 +482,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.73 Aviso de versión nueva (v21.18)
 - Si hay una versión publicada distinta de la que tiene abierta el navegador, aparece abajo el aviso "Hay una versión nueva del visor" con el botón Actualizar (se revisa cada 3 min y al volver a la pestaña). Motivo: el botón de foto del acta ya estaba desplegado pero la pantalla abierta seguía en la versión anterior.
+
+### 4.74 Entrega 0 con pedido = pendiente del centro (v21.19)
+- En el acta (ingreso manual o producto del stock) se puede poner cantidad a entregar 0 con un pedido mayor: el producto no mueve stock ni genera sobregiro, queda en la lista de pendientes del acta con su ID y aparece en "Pendientes por entregar" del centro. Su nombre/ID/foto se guardan en el catálogo.
+- El acta debe llevar al menos un producto con cantidad a entregar mayor que 0 (un acta solo de pendientes queda para después si se necesita).

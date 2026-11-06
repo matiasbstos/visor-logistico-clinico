@@ -140,8 +140,9 @@
         if (!String(b.centro || '').trim()) errores.push('Indica a qué centro se entrega.');
         if (!b.origen) errores.push('Elige la bodega de origen.');
         if (!b.items.length) errores.push('Agrega al menos un producto.');
+        else if (!b.items.some(i => num(i.cantidad) > 0)) errores.push('Al menos un producto debe llevar cantidad a entregar mayor que 0 (los de 0 quedan como pendientes del centro).');
         if (b.items.length > MAX_ITEMS) errores.push(`Máximo ${MAX_ITEMS} productos por acta.`);
-        b.items.forEach(i => { if (!(num(i.cantidad) > 0) || num(i.cantidad) !== Math.floor(num(i.cantidad))) errores.push(`Cantidad inválida en ${i.nombre}.`); else if (!String(i.nombre || '').trim() || (i.manual && String(i.nombre).trim().length < 3)) errores.push('Un producto manual necesita nombre.'); else if (i.controlado && num(i.cantidad) > num(i.stock)) errores.push(`${i.nombre}: es medicamento controlado, no puede entregarse sin stock en sistema (requiere folio DAU en registro separado).`); });
+        b.items.forEach(i => { if (!(num(i.cantidad) > 0 || (num(i.cantidad) === 0 && num(i.solicitado) > 0)) || num(i.cantidad) !== Math.floor(num(i.cantidad))) errores.push(`Cantidad inválida en ${i.nombre}.`); else if (!String(i.nombre || '').trim() || (i.manual && String(i.nombre).trim().length < 3)) errores.push('Un producto manual necesita nombre.'); else if (i.controlado && num(i.cantidad) > num(i.stock)) errores.push(`${i.nombre}: es medicamento controlado, no puede entregarse sin stock en sistema (requiere folio DAU en registro separado).`); });
         return errores;
     }
 
@@ -222,6 +223,9 @@
     /** Emite el acta: correlativo + descuento + sobregiro + historial en una sola transacción. */
     async function emitir(b, usuario) {
         const f = fs();
+        // Productos con cantidad 0 y pedido: no se entregan, quedan como pendientes del centro (y su nombre/ID/foto van al catálogo)
+        const soloPend = b.items.filter(i => num(i.cantidad) === 0 && num(i.solicitado) > 0);
+        if (soloPend.length) b = { ...b, items: b.items.filter(i => num(i.cantidad) > 0), pendientes: [...(b.pendientes || []), ...soloPend.map(i => ({ nombre: i.nombre, cantidad: num(i.solicitado), ...(i.codigo ? { codigoMP: String(i.codigo) } : {}) }))] };
         const anio = new Date().getFullYear();
         const ctrRef = f.doc(f.collection(db(), 'Contadores'), `acta-${anio}`);
         const fecha = new Date().toISOString().slice(0, 10);
@@ -293,7 +297,7 @@
             const acta = {
                 numero, fecha, centro: b.centro.trim(), bodegaOrigen: b.origen, estado: 'EMITIDA', stockDescontado: true,
                 conSobregiro: itemsActa.some(i => i.sinRespaldo > 0),
-                items: itemsActa, pendientes: [...b.pendientes.map(p => ({ nombre: p.nombre, cantidad: num(p.cantidad) })), ...autoPend],
+                items: itemsActa, pendientes: [...b.pendientes.map(p => ({ nombre: p.nombre, cantidad: num(p.cantidad), ...(p.codigoMP ? { codigoMP: String(p.codigoMP) } : {}) })), ...autoPend],
                 documentos: b.documentos.map(d => ({ tipo: d.tipo, numero: d.numero, detalle: d.detalle || '' })),
                 entrega: { nombre: firma.nombre, cargo: firma.cargo }, recibe: { nombre: (b.recibe && b.recibe.nombre) || '', cargo: (b.recibe && b.recibe.cargo) || '' },
                 creadoPor: usuario, creadoEn: f.serverTimestamp()
@@ -307,14 +311,14 @@
             return { ...acta, creadoEn: new Date().toISOString() };
         });
         // Productos que no venían de ninguna orden: quedan en el catálogo (nombre + ID) para reconocerlos la próxima vez y asociarlos a una orden
-        for (const i of items.filter(x => x.nuevo || x.manual || x.codigoNuevo || x.imagen)) {
+        for (const i of [...items, ...soloPend].filter(x => x.nuevo || x.manual || x.codigoNuevo || x.imagen)) {
             try {
                 const cod = String(i.codigo || '').trim(), id = slugC(cod || i.nombre) || 'manual';
                 await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: i.nombre, descripcion_lower: String(i.nombre).toLowerCase(), codigoMP: cod, insumoName: i.nombre, ...(i.imagen ? { imagen: i.imagen } : {}), ...((i.nuevo || i.manual) ? { sinOrden: true, origen: 'MANUAL', creadoEn: f.serverTimestamp(), creadoPor: usuario } : {}), actualizado: f.serverTimestamp() }, { merge: true });
                 catCargado = false;
             } catch (e) { /* el acta ya se emitió */ }
         }
-        buscarFotosEnSegundoPlano(items);   // sin esperar: el acta ya quedó emitida
+        buscarFotosEnSegundoPlano([...items, ...soloPend]);   // sin esperar: el acta ya quedó emitida
         return resultado;
     }
 
@@ -435,8 +439,8 @@
               <p class="act-hint">Se asume que lo tienes físicamente. Queda como insumo provisional y como <b>sobregiro</b> (saldo contable negativo) hasta que ingrese la OC/SDC y se cuadre.</p>
               <div class="act-fila act-docs"><input id="act-mn" list="act-mnl" placeholder="Nombre del insumo" autocomplete="off"><datalist id="act-mnl">${catalogo.slice(0, 1500).map(c => `<option value="${esc(String(c.descripcion || c.insumoName || '').toUpperCase())}">`).join('')}</datalist><input id="act-mid" inputmode="numeric" placeholder="ID del producto (Mercado Público)" autocomplete="off"></div>
               <div class="act-fila act-docs act-mfoto"><label class="btn btn-outline btn-sm"><i class="ph-bold ph-camera"></i> Cargar foto del producto (opcional)<input type="file" accept="image/*,.webp,.jpg,.jpeg,.png,.gif,.bmp,.avif" id="act-mimg" hidden></label>${manualImg ? `<img src="${esc(manualImg)}" alt="" class="act-mimg-v"><button type="button" class="btn btn-outline btn-sm" id="act-mimg-q">Quitar</button>` : '<small>WEBP, JPG, PNG… (queda en el catálogo)</small>'}</div>
-              <div class="act-fila act-docs"><input id="act-ms" type="number" min="0" class="act-qty" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input id="act-mq" type="number" min="1" value="1" class="act-qty" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline" id="act-madd">Agregar</button></div>
-              <p class="act-hint">Pedido = lo solicitado en total (opcional); el segundo número es lo que entregas ahora. Lo que falte queda como pendiente en el acta. El nombre y el ID quedan guardados en el catálogo.</p>
+              <div class="act-fila act-docs"><input id="act-ms" type="number" min="0" class="act-qty" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input id="act-mq" type="number" min="0" value="1" class="act-qty" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline" id="act-madd">Agregar</button></div>
+              <p class="act-hint">Pedido = lo solicitado en total (opcional); el segundo número es lo que entregas ahora. Lo que falte queda como pendiente en el acta; si no tienes nada para entregar, pon 0 y el pedido: todo queda pendiente para el centro. El nombre y el ID quedan guardados en el catálogo.</p>
               <label class="act-l act-chk"><input type="checkbox" id="act-mc"> Es medicamento controlado (no se permite sin stock)</label></details>
             <div class="act-stock">${!borrador.origen ? '<p class="act-hint">Elige una bodega para ver su stock.</p>' : !lista.length ? '<p class="act-hint">Sin resultados. Si no está en el sistema, agrégalo a mano abajo.</p>' : lista.map(s => `
               <div class="act-fila${yaEsta(s.id) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(s.name, { codigo: s.codigo }) : ''}${esc(s.name)}${s.controlado ? ' <small>(controlado)</small>' : ''}${s.provisional ? ' <small>(provisional)</small>' : ''}<small>${s.codigo ? '<b>ID ' + esc(s.codigo) + '</b> · ' : '<span class="act-sin">sin ID</span> · '}${s.disp > 0 ? 'Disponible: ' + s.disp : '<span class="act-sin">Sin stock en sistema</span>'}${s.sobregiro > 0 ? ' · sobregiro: ' + s.sobregiro : ''}</small></div>
@@ -450,7 +454,7 @@
               <div class="act-centro-acc"><button type="button" class="btn btn-outline btn-sm" id="act-centro-add">+ Guardar este centro en la lista</button></div>
             <h4 class="act-h4">Productos entregados (${borrador.items.length})</h4>
             ${borrador.items.length ? borrador.items.map((i, k) => `<div class="act-fila"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(i.nombre, { codigo: i.codigo }) : ''}${esc(i.nombre)}${i.manual ? ' <small>(manual · provisional)</small>' : ''}<small>${i.codigo ? '<b>ID ' + esc(i.codigo) + '</b> · ' : (i.manual ? '' : `<input class="act-cod" data-k="${k}" inputmode="numeric" placeholder="Sin ID: escríbelo aquí (opcional)" aria-label="ID de Mercado Público"> `)}Disponible: ${num(i.stock)}${num(i.solicitado) > num(i.cantidad) ? ` · pedido ${num(i.solicitado)} · <b>pendiente ${num(i.solicitado) - num(i.cantidad)}</b>` : ''}${num(i.cantidad) > num(i.stock) ? ` · <span class="act-sin">sin respaldo: ${num(i.cantidad) - num(i.stock)}</span>` : ''}</small>${fotoDe(i, k)}</div>
-                <input type="number" min="0" value="${num(i.solicitado) > num(i.cantidad) ? num(i.solicitado) : ''}" class="act-qty act-sedit" data-k="${k}" placeholder="Pedido" aria-label="Cantidad pedida"><input type="number" min="1" value="${i.cantidad}" class="act-qty act-edit" data-k="${k}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-del" data-k="${k}" aria-label="Quitar">✕</button></div>`).join('') : '<p class="act-hint">Aún no agregas productos.</p>'}
+                <input type="number" min="0" value="${num(i.solicitado) > num(i.cantidad) ? num(i.solicitado) : ''}" class="act-qty act-sedit" data-k="${k}" placeholder="Pedido" aria-label="Cantidad pedida"><input type="number" min="0" value="${i.cantidad}" class="act-qty act-edit" data-k="${k}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-del" data-k="${k}" aria-label="Quitar">✕</button></div>`).join('') : '<p class="act-hint">Aún no agregas productos.</p>'}
             <details class="act-det"${borrador.pendientes.length ? ' open' : ''}><summary>Productos pendientes de entrega (opcional)</summary>
               ${borrador.pendientes.map((p, k) => `<div class="act-fila"><div class="act-fn">${esc(p.nombre)}</div><input type="number" min="1" value="${p.cantidad}" class="act-qty act-pedit" data-k="${k}"><button type="button" class="btn btn-outline act-pdel" data-k="${k}">✕</button></div>`).join('')}
               <div class="act-fila"><input id="act-pn" placeholder="Nombre del producto pendiente"><input id="act-pq" type="number" min="1" value="1" class="act-qty"><button type="button" class="btn btn-outline" id="act-padd">Añadir</button></div></details>
@@ -519,7 +523,8 @@
         $$('.act-add').forEach(b => b.addEventListener('click', () => {
             const s = stock.find(x => x.id === b.dataset.id); const inp = r.querySelector(`.act-qty[data-qid="${CSS.escape(b.dataset.id)}"]`);
             const c = Math.floor(num(inp && inp.value));
-            if (!s || !(c > 0)) { toast('Cantidad', 'Indica una cantidad mayor que 0.', 'warning'); return; }
+            const solS = Math.floor(num((r.querySelector(`.act-qty[data-sid="${CSS.escape(b.dataset.id)}"]`) || {}).value));
+            if (!s || !(c > 0 || (c === 0 && solS > 0))) { toast('Cantidad', 'Indica una cantidad mayor que 0 (o 0 con el pedido, para dejarlo pendiente).', 'warning'); return; }
             if (borrador.items.length >= MAX_ITEMS) { toast('Límite', `Máximo ${MAX_ITEMS} productos por acta.`, 'warning'); return; }
             if (s.controlado && c > s.disp) { toast('Medicamento controlado', 'No puede entregarse sin stock en sistema.', 'error'); return; }
             const sp = r.querySelector(`.act-qty[data-sid="${CSS.escape(b.dataset.id)}"]`), sol = Math.floor(num(sp && sp.value));
@@ -543,8 +548,8 @@
         const mi = $('#act-mimg'); if (mi) mi.addEventListener('change', async () => { const file = mi.files && mi.files[0]; if (!file) return; try { manualImg = await reducirFoto(file); const n = $('#act-mn').value, d = $('#act-mid').value, q = $('#act-mq').value, s = $('#act-ms').value; refrescar(); if ($('#act-mn')) { $('#act-mn').value = n; $('#act-mid').value = d; $('#act-mq').value = q; $('#act-ms').value = s; } } catch (e) { toast('Foto', e.message || 'No se pudo leer la foto.', 'error'); } });
         const mq = $('#act-mimg-q'); if (mq) mq.addEventListener('click', () => { manualImg = ''; refrescar(); });
         $('#act-madd').addEventListener('click', () => {
-            const n = $('#act-mn').value.trim().toUpperCase(); const c = Math.floor(num($('#act-mq').value));
-            if (n.length < 3 || !(c > 0)) { toast('Ingreso manual', 'Escribe el nombre del insumo y una cantidad mayor que 0.', 'warning'); return; }
+            const n = $('#act-mn').value.trim().toUpperCase(); const c = Math.floor(num($('#act-mq').value)); const solM = Math.floor(num($('#act-ms').value));
+            if (n.length < 3 || !(c > 0 || (c === 0 && solM > 0))) { toast('Ingreso manual', 'Escribe el nombre del insumo y la cantidad a entregar (si no la tienes, pon 0 y anota el pedido: queda como pendiente).', 'warning'); return; }
             if ($('#act-mc').checked) { toast('Medicamento controlado', 'No se permite sin stock en sistema: use el circuito con folio DAU.', 'error'); return; }
             if (borrador.items.length >= MAX_ITEMS) { toast('Límite', `Máximo ${MAX_ITEMS} productos por acta.`, 'warning'); return; }
             const cod = String(($('#act-mid').value || '').replace(/\D/g, ''));

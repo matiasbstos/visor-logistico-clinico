@@ -40,7 +40,7 @@
                 if (num(i.solicitado) > 0) fijar(centro, it, num(i.solicitado) - num(i.entregadoTotal != null ? i.entregadoTotal : i.cantidad), a);
                 else if (ant) fijar(centro, it, ant.pendiente - num(i.cantidad), a);
             });
-            (a.pendientes || []).forEach(p => { if (p && p.nombre && num(p.cantidad) > 0) fijar(centro, { nombre: p.nombre, codigo: '' }, num(p.cantidad), a); });
+            (a.pendientes || []).forEach(p => { if (p && p.nombre && num(p.cantidad) > 0) fijar(centro, { nombre: p.nombre, codigo: p.codigoMP || '' }, num(p.cantidad), a); });
         });
         const porCentro = new Map();
         [...mapa.values()].filter(p => p.pendiente > 0).forEach(p => { if (!porCentro.has(p.centro)) porCentro.set(p.centro, []); porCentro.get(p.centro).push(p); });

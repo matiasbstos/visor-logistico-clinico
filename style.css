@@ -5564,3 +5564,6 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .irp-fila input { padding: 8px; border: 1px solid #CBD5E1; border-radius: 6px; font: inherit; min-width: 0; }
 .irp-cab { font-size: 12px; font-weight: 700; color: #64748B; text-transform: uppercase; }
 .irp-mala input { border-color: #DC2626; background: #FEF2F2; }
+.irp-foto { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 8px 0 12px; }
+.irp-foto__b { cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+.irp-dudas { font-size: 12px; color: #92400E; background: #FEF3C7; border-radius: 6px; padding: 4px 8px; margin-top: 6px; }

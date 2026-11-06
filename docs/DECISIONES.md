@@ -469,3 +469,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.69 Impresión más compacta (v21.14)
 - Hoja de picking y listado de pendientes: los centros ya no empiezan cada uno en una hoja nueva (quedaban hojas casi vacías); se siguen uno tras otro separados por una línea, con fotos y espaciado más pequeños. Una fila nunca se corta entre dos hojas.
+
+### 4.70 Búsqueda por ID en todos los buscadores y foto desde el acta (v21.15)
+- `id-producto.js` une por nombre el ID de insumos y catálogo: Existencias, Ajuste de stock, Historial, Toma de inventario y ¿Dónde está? ahora encuentran un producto escribiendo su ID (Catálogo y Actas ya lo hacían).
+- En cada producto del acta que aún no tiene foto, un desplegable "Agregar foto del producto" permite cargarla (se reduce y se guarda en el catálogo al emitir).

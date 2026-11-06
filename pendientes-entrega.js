@@ -26,24 +26,27 @@
         const orden = (a) => String(a.fecha || '') + String(a.numero || '');
         const lista = (actas || []).filter(a => a && a.estado !== 'ANULADA').slice().sort((a, b) => orden(a) < orden(b) ? -1 : 1);
         const mapa = new Map();   // centro|clave → {centro, nombre, codigo, pendiente, desde}
-        const clave = (c, it) => norm(c) + '|' + (it.codigo ? 'c:' + String(it.codigo).replace(/\D/g, '') : 'n:' + norm(it.nombre));
+        const kc = (c, it) => it.codigo && String(it.codigo).replace(/\D/g, '') ? norm(c) + '|c:' + String(it.codigo).replace(/\D/g, '') : '', kn = (c, it) => norm(c) + '|n:' + norm(it.nombre);
+        // Un mismo producto puede figurar primero solo por nombre y después con su ID (o al revés): se busca por ambas claves para que no queden pendientes duplicados ni "fantasma".
+        const buscar = (c, it) => (kc(c, it) && mapa.get(kc(c, it))) || mapa.get(kn(c, it));
         const fijar = (centro, it, valor, acta) => {
-            const k = clave(centro, it), p = mapa.get(k) || { centro, nombre: it.nombre, codigo: it.codigo ? String(it.codigo) : '', pendiente: 0, desde: acta.numero };
+            const p = buscar(centro, it) || { centro, nombre: it.nombre, codigo: it.codigo ? String(it.codigo) : '', pendiente: 0, desde: acta.numero };
             if (!p.codigo && it.codigo) p.codigo = String(it.codigo);
             if (valor > 0 && !(p.pendiente > 0)) p.desde = acta.numero;
-            p.pendiente = Math.max(0, valor); p.ultima = acta.numero; mapa.set(k, p);
+            p.pendiente = Math.max(0, valor); p.ultima = acta.numero;
+            mapa.set(kn(centro, it), p); if (kc(centro, it)) mapa.set(kc(centro, it), p);
         };
         lista.forEach(a => {
             const centro = String(a.centro || '').trim(); if (!centro) return;
             (a.items || []).forEach(i => {
-                const it = { nombre: i.nombre, codigo: i.codigoMP || '' }, ant = mapa.get(clave(centro, it));
+                const it = { nombre: i.nombre, codigo: i.codigoMP || '' }, ant = buscar(centro, it);
                 if (num(i.solicitado) > 0) fijar(centro, it, num(i.solicitado) - num(i.entregadoTotal != null ? i.entregadoTotal : i.cantidad), a);
                 else if (ant) fijar(centro, it, ant.pendiente - num(i.cantidad), a);
             });
             (a.pendientes || []).forEach(p => { if (p && p.nombre && num(p.cantidad) > 0) fijar(centro, { nombre: p.nombre, codigo: p.codigoMP || '' }, num(p.cantidad), a); });
         });
         const porCentro = new Map();
-        [...mapa.values()].filter(p => p.pendiente > 0).forEach(p => { if (!porCentro.has(p.centro)) porCentro.set(p.centro, []); porCentro.get(p.centro).push(p); });
+        [...new Set(mapa.values())].filter(p => p.pendiente > 0).forEach(p => { if (!porCentro.has(p.centro)) porCentro.set(p.centro, []); porCentro.get(p.centro).push(p); });
         return [...porCentro.entries()].map(([centro, items]) => ({ centro, items })).sort((a, b) => a.centro.localeCompare(b.centro, 'es'));
     }
 

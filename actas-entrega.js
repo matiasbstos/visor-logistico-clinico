@@ -140,7 +140,7 @@
         if (!String(b.centro || '').trim()) errores.push('Indica a qué centro se entrega.');
         if (!b.origen) errores.push('Elige la bodega de origen.');
         if (!b.items.length) errores.push('Agrega al menos un producto.');
-        else if (!b.items.some(i => num(i.cantidad) > 0)) errores.push('Al menos un producto debe llevar cantidad a entregar mayor que 0 (los de 0 quedan como pendientes del centro).');
+        else if (!b.items.some(i => num(i.cantidad) > 0 || num(i.solicitado) > 0)) errores.push('Indica cantidad a entregar, o 0 con la cantidad pedida para dejarlo pendiente del centro.');
         if (b.items.length > MAX_ITEMS) errores.push(`Máximo ${MAX_ITEMS} productos por acta.`);
         b.items.forEach(i => { if (!(num(i.cantidad) > 0 || (num(i.cantidad) === 0 && num(i.solicitado) > 0)) || num(i.cantidad) !== Math.floor(num(i.cantidad))) errores.push(`Cantidad inválida en ${i.nombre}.`); else if (!String(i.nombre || '').trim() || (i.manual && String(i.nombre).trim().length < 3)) errores.push('Un producto manual necesita nombre.'); else if (i.controlado && num(i.cantidad) > num(i.stock)) errores.push(`${i.nombre}: es medicamento controlado, no puede entregarse sin stock en sistema (requiere folio DAU en registro separado).`); });
         return errores;

@@ -476,3 +476,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.71 Fotos de producto: WEBP y todos los formatos (v21.16)
 - Los selectores de foto (acta, catálogo "Subir", Ingreso rápido) aceptan explícitamente WEBP, JPG, PNG, GIF, BMP y AVIF (la tienda de Convenio Marco entrega WEBP). Cualquier formato se reduce y se guarda como JPEG; se verificó que un WEBP se lee y convierte bien.
+
+### 4.72 Foto en el formulario de ingreso manual del acta (v21.17)
+- El formulario "¿No está en el sistema? Ingreso manual" tiene el botón "Cargar foto del producto (opcional)" (WEBP, JPG, PNG…): la foto se ve en miniatura, se agrega con el producto y queda en el catálogo al emitir. (Antes solo aparecía en la fila ya agregada.)

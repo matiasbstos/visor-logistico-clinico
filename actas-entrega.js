@@ -434,6 +434,7 @@
             <details class="act-det act-manual"${borrador.items.some(i => i.manual) ? ' open' : ''}><summary>¿No está en el sistema? Ingreso manual</summary>
               <p class="act-hint">Se asume que lo tienes físicamente. Queda como insumo provisional y como <b>sobregiro</b> (saldo contable negativo) hasta que ingrese la OC/SDC y se cuadre.</p>
               <div class="act-fila act-docs"><input id="act-mn" list="act-mnl" placeholder="Nombre del insumo" autocomplete="off"><datalist id="act-mnl">${catalogo.slice(0, 1500).map(c => `<option value="${esc(String(c.descripcion || c.insumoName || '').toUpperCase())}">`).join('')}</datalist><input id="act-mid" inputmode="numeric" placeholder="ID del producto (Mercado Público)" autocomplete="off"></div>
+              <div class="act-fila act-docs act-mfoto"><label class="btn btn-outline btn-sm"><i class="ph-bold ph-camera"></i> Cargar foto del producto (opcional)<input type="file" accept="image/*,.webp,.jpg,.jpeg,.png,.gif,.bmp,.avif" id="act-mimg" hidden></label>${manualImg ? `<img src="${esc(manualImg)}" alt="" class="act-mimg-v"><button type="button" class="btn btn-outline btn-sm" id="act-mimg-q">Quitar</button>` : '<small>WEBP, JPG, PNG… (queda en el catálogo)</small>'}</div>
               <div class="act-fila act-docs"><input id="act-ms" type="number" min="0" class="act-qty" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input id="act-mq" type="number" min="1" value="1" class="act-qty" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline" id="act-madd">Agregar</button></div>
               <p class="act-hint">Pedido = lo solicitado en total (opcional); el segundo número es lo que entregas ahora. Lo que falte queda como pendiente en el acta. El nombre y el ID quedan guardados en el catálogo.</p>
               <label class="act-l act-chk"><input type="checkbox" id="act-mc"> Es medicamento controlado (no se permite sin stock)</label></details>
@@ -539,6 +540,8 @@
         $$('.act-pedit').forEach(i => i.addEventListener('change', () => { borrador.pendientes[+i.dataset.k].cantidad = Math.floor(num(i.value)) || 1; refrescar(); }));
         $$('.act-pdel').forEach(b => b.addEventListener('click', () => { borrador.pendientes.splice(+b.dataset.k, 1); refrescar(); }));
         $$('.act-ddel').forEach(b => b.addEventListener('click', () => { borrador.documentos.splice(+b.dataset.k, 1); refrescar(); }));
+        const mi = $('#act-mimg'); if (mi) mi.addEventListener('change', async () => { const file = mi.files && mi.files[0]; if (!file) return; try { manualImg = await reducirFoto(file); const n = $('#act-mn').value, d = $('#act-mid').value, q = $('#act-mq').value, s = $('#act-ms').value; refrescar(); if ($('#act-mn')) { $('#act-mn').value = n; $('#act-mid').value = d; $('#act-mq').value = q; $('#act-ms').value = s; } } catch (e) { toast('Foto', e.message || 'No se pudo leer la foto.', 'error'); } });
+        const mq = $('#act-mimg-q'); if (mq) mq.addEventListener('click', () => { manualImg = ''; refrescar(); });
         $('#act-madd').addEventListener('click', () => {
             const n = $('#act-mn').value.trim().toUpperCase(); const c = Math.floor(num($('#act-mq').value));
             if (n.length < 3 || !(c > 0)) { toast('Ingreso manual', 'Escribe el nombre del insumo y una cantidad mayor que 0.', 'warning'); return; }
@@ -549,7 +552,7 @@
             if (par) { toast('Ya existe', `"${par.name}" ya está en esta bodega: agrégalo desde la lista.`, 'warning'); return; }
             if (!cod && !confirm('No indicaste el ID del producto. Sirve para asociar la foto y la orden de compra después. ¿Agregar sin ID?')) return;
             const sol = Math.floor(num($('#act-ms').value));
-            borrador.items.push({ id: null, manual: true, nombre: n, codigo: cod, cantidad: c, solicitado: sol > c ? sol : 0, stock: 0 }); refrescar();
+            borrador.items.push({ id: null, manual: true, nombre: n, codigo: cod, cantidad: c, solicitado: sol > c ? sol : 0, stock: 0, ...(manualImg ? { imagen: manualImg } : {}) }); manualImg = ''; refrescar();
         });
         $('#act-padd').addEventListener('click', () => {
             const n = $('#act-pn').value.trim(); const c = Math.floor(num($('#act-pq').value));
@@ -673,7 +676,7 @@
         pintar();
     }
 
-    let precarga = null;
+    let precarga = null, manualImg = '';
     function precargar(centro, lista) { precarga = { centro, lista: lista || [] }; if (window.location.hash === '#view-actas-entrega') abrir(); else window.location.hash = 'view-actas-entrega'; }
     window.SAR_ActasEntrega = { precargar, listaCentros, abrir, planificar, cuadrar, restaurarConSobregiro, detalleDe, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, lotesDeDoc };
     if (typeof module !== 'undefined') module.exports = window.SAR_ActasEntrega;

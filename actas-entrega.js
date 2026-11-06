@@ -483,7 +483,7 @@
         const IM = window.SAR_Imagenes; let tiene = false;
         try { tiene = !!(IM && (IM.buscar(i.nombre, i.codigo) || (IM.buscarConCandidata && IM.buscarConCandidata(i.nombre, i.codigo)))); } catch (e) { tiene = false; }
         if (tiene) return '';
-        return `<details class="act-foto"><summary>Agregar foto del producto</summary><input type="file" accept="image/*" class="act-img" data-k="${k}" aria-label="Foto del producto"></details>`;
+        return `<details class="act-foto"><summary>Agregar foto del producto</summary><input type="file" accept="image/*,.webp,.jpg,.jpeg,.png,.gif,.bmp,.avif" class="act-img" data-k="${k}" aria-label="Foto del producto"></details>`;
     }
     function reducirFoto(file) {
         return new Promise((ok, mal) => {

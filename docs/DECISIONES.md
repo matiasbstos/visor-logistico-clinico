@@ -570,3 +570,11 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.94 Acta: la búsqueda de productos abarca todo lo registrado (v21.40)
 - Además del catálogo (ahora hasta 5000), se suman a las sugerencias y a la lista "sin stock en esta bodega" los productos de Insumos de otras bodegas, líneas de Seguimiento_OC y actas anteriores (items/pendientes), sin duplicar por nombre o ID. Se indica "registrado en …".
 - Motivo: un producto cargado antes (p. ej. BOLSA DE BASURA IMPEKE, ID 4538976) no aparecía si no estaba en Catalogo_Productos ni en la bodega elegida.
+
+### 4.95 Actas de entrega: el stock sale al confirmar la entrega con el acta firmada (v21.41)
+- Actas nuevas: al emitir se numera y se genera el documento, pero NO se descuenta stock ni se actualiza lo entregado de la OC. Quedan `confirmacion.estado = 'PENDIENTE'` (chip "ENTREGA POR CONFIRMAR"). Su cantidad queda **reservada**: en nuevas actas el disponible = existencias − sobregiro − reservado en actas por confirmar (y la línea de la OC resta lo reservado).
+- "Confirmar entrega (subir acta firmada)": exige subir PDF/foto (≤6 MB) y ejecuta la misma transacción de siempre (lotes FEFO, sobregiro, historial ENTREGA_ACTA, OC entregado). Pasa a `CONFIRMADA`, `stockDescontado: true`.
+- Actas ya emitidas (stock ya descontado): solo "Subir acta firmada" (respaldo; no toca stock). "Ver acta firmada" abre el archivo.
+- Respaldo guardado en partes en `Contadores/respaldo-<N>-<i>` (colección ya abierta al personal, sin cambiar reglas) y, si hay OC, también en sus archivos ("Acta firmada N").
+- Eliminar un acta por confirmar no toca stock (solo la marca ANULADA). Editar un acta por confirmar está bloqueado.
+- Confirmar/subir firmada exige rol administrador (reglas actuales de Actas_Entrega).

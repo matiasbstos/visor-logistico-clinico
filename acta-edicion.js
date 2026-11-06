@@ -16,6 +16,7 @@
         return f.runTransaction(db(), async (tx) => {
             const as = await tx.get(actaRef); if (!as.exists()) throw new Error('El acta no existe.');
             const a = as.data(); if (a.estado !== 'EMITIDA') throw new Error('Solo se pueden editar actas emitidas.');
+            if (a.confirmacion && a.confirmacion.estado === 'PENDIENTE') throw new Error('Esta acta aún no descuenta stock (entrega por confirmar). Confirma la entrega con el acta firmada o elimínala y emite otra.');
             const centro = String(N.centro || '').trim(); if (!centro) throw new Error('Indica el centro.');
             if (!N.items.length) throw new Error('El acta debe tener al menos un producto (si no corresponde, elimínala).');
             const ids = [...new Set([...(a.items || []).map(i => i.id), ...N.items.map(i => i.id)])];

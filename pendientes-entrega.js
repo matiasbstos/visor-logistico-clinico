@@ -138,13 +138,13 @@
             <p class="pie">${g.items.length} producto(s) pendiente(s).</p></section>`).join('');
         ventana('Pendientes por entregar', hojas);
     }
-    const CSS_DOC = `body{font:13px/1.35 Arial,sans-serif;color:#111;margin:0;padding:18px}section{page-break-after:always}section:last-child{page-break-after:auto}
-        header{display:flex;gap:14px;align-items:center;border-bottom:2px solid #1a3668;padding-bottom:8px;margin-bottom:10px}.lg{height:54px;width:auto}
-        h1{font-size:17px;margin:0}h2{font-size:15px;margin:2px 0;color:#1a3668}h3{font-size:13px;margin:14px 0 4px}header p{margin:0;color:#555}
-        table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:5px 6px;text-align:left;vertical-align:middle}th{background:#eef1f6;font-size:12px}
-        .n{text-align:right;white-space:nowrap}.f{width:84px}.f img{width:76px;height:76px;object-fit:contain}.sf{color:#999;font-size:11px}tr{page-break-inside:avoid}.pie{margin-top:8px;color:#555}
-        .ck{width:26px}.ck i{display:inline-block;width:18px;height:18px;border:2px solid #333;border-radius:3px}.big{font-size:20px;font-weight:700}small{color:#555}
-        @media print{body{padding:0}}`;
+    const CSS_DOC = `body{font:12px/1.25 Arial,sans-serif;color:#111;margin:0;padding:10px}section{margin:0 0 16px;padding-bottom:6px;border-bottom:1px dashed #aaa}section:last-child{border-bottom:0}
+        header{display:flex;gap:10px;align-items:center;border-bottom:2px solid #1a3668;padding-bottom:4px;margin-bottom:6px;page-break-after:avoid;break-after:avoid}.lg{height:38px;width:auto}
+        h1{font-size:15px;margin:0}h2{font-size:14px;margin:1px 0;color:#1a3668}h3{font-size:12px;margin:8px 0 3px;page-break-after:avoid}header p{margin:0;color:#555}
+        table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:2px 5px;text-align:left;vertical-align:middle}th{background:#eef1f6;font-size:12px}
+        .n{text-align:right;white-space:nowrap}.f{width:54px}.f img{width:48px;height:48px;object-fit:contain}.sf{color:#999;font-size:11px}tr{page-break-inside:avoid}.pie{margin:4px 0 0;color:#555;font-size:12px}
+        .ck{width:26px}.ck i{display:inline-block;width:18px;height:18px;border:2px solid #333;border-radius:3px}.big{font-size:17px;font-weight:700}small{color:#555}
+        @page{margin:10mm}@media print{body{padding:0}}`;
     function ventana(titulo, cuerpo) {
         const w = window.open('', '_blank'); if (!w) { toast('Ventana bloqueada', 'Permite las ventanas emergentes para imprimir.', 'warning'); return; }
         w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>${CSS_DOC}</style></head><body>${cuerpo}<script>window.onload=function(){setTimeout(function(){window.print()},700)}<\/script></body></html>`);

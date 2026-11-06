@@ -550,3 +550,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.89 Existencias: lo último que ingresó va primero (v21.35)
 - La tabla de Existencias se leía en orden de ID de documento y en páginas de 20: los productos creados o ingresados después (IDs "tras_…") quedaban en una página lejana y parecía que no estaban. Ahora se ordena por última modificación (lo recién ingresado, movido o entregado arriba) y, al guardar una recepción que ingresa al stock, la tabla se vuelve a leer sola.
+
+### 4.90 Existencias: paginación numerada (v21.35→v21.36)
+- Abajo de la tabla ahora se ven los números de página (1 2 3 … con la actual marcada), las flechas anterior/siguiente y el texto "Página X de Y · N producto(s)".

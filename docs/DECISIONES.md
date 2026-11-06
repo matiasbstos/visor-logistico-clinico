@@ -521,3 +521,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.82 Agregar producto en la recepción: solo con el nombre (v21.28)
 - "Agregar producto" exige únicamente el nombre. El producto entra a la tabla aunque no tenga pedido ni unidades; las unidades se digitan después en "Llega ahora" y, si no había pedido, esa cantidad pasa a ser su pedido (queda en la orden como producto agregado). Si se agrega y no se digitan unidades, al guardar se pide indicarlas o quitarlo.
 - El producto agregado también se guarda en el catálogo (nombre/ID) aunque la recepción no ingrese al stock. Al agregar, el formulario se cierra y el cursor queda en "Llega ahora" del producto nuevo.
+
+### 4.83 Recepción conforme por recepción (PDF/Word/edición) y avisos visibles (v21.29)
+- Los avisos de "Guardar recepción" (p. ej. "N producto(s) no existen en el inventario y se crearían como nuevos… pulsa Guardar otra vez") ahora también se escriben dentro de la ventana, en un recuadro sobre los botones, y los toasts quedan por encima de cualquier ventana (antes podían quedar tapados y parecía que el botón se quedaba pegado).
+- Al terminar de guardar una recepción (con el indicador de carga y el aviso "Recepción cargada") se abre una ventana con sus documentos de recepción conforme: PDF (modelo de la Corporación) y Word, más "Editar datos".
+- En la OC, la lista pasa a llamarse "Recepciones y recepción conforme": cada recepción (REC-…) tiene botones PDF, Word y Editar. El documento se arma con lo recibido en ESA recepción (productos y cantidades), y se puede editar fecha, tipo y N° de guía/factura, contraparte, total/parcial, firma, observaciones y las líneas. Los cambios se guardan en `recepciones[].conforme` y no tocan el stock; los archivos se rehacen al descargarlos, por eso siempre salen con los datos vigentes. Queda evento CONFORME en la bitácora.
+- El flujo antiguo "Recepción conforme" de la orden (con envío de correo y guía adjunta) sigue disponible.

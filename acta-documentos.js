@@ -201,6 +201,11 @@
             ${fila(0, nombres(ent), lim(rec.nombre) || lim(rec.cargo) ? nombres(rec) : par('', { despues: 0, linea: 240 }))}
             ${fila(1466, par(run('Firma:', { b: true }), { despues: 0, linea: 240 }), par(run('Firma:', { b: true }), { despues: 0, linea: 240 }))}</w:tbl>`);
         cuerpo.push(par('', { despues: 0 }));
+        return empaquetar(cuerpo, logoBytes);
+    }
+
+    /** Empaqueta párrafos/tablas OOXML en un .docx (Calibri, carta). Reutilizable por otros documentos. */
+    function empaquetar(cuerpo, logoBytes) {
         const NS = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing"';
         const documento = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${NS}><w:body>${cuerpo.join('')}<w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1152" w:right="1701" w:bottom="1134" w:left="1701" w:header="709" w:footer="709" w:gutter="0"/></w:sectPr></w:body></w:document>`;
         const estilos = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:styles xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:docDefaults><w:rPrDefault><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri" w:eastAsia="Calibri" w:cs="Calibri"/><w:sz w:val="24"/><w:szCs w:val="24"/><w:lang w:val="es-CL"/></w:rPr></w:rPrDefault><w:pPrDefault><w:pPr><w:spacing w:after="160" w:line="259" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults><w:style w:type="paragraph" w:default="1" w:styleId="Normal"><w:name w:val="Normal"/></w:style></w:styles>`;
@@ -215,6 +220,6 @@
         return zip(archivos);
     }
 
-    window.SAR_ActaDoc = { generarPDF, generarDOCX, fechaLarga, nombreArchivo, lineaItem, lineaPend, lineaDoc };
+    window.SAR_ActaDoc = { empaquetar, run, par, celda, borde, x, generarPDF, generarDOCX, fechaLarga, nombreArchivo, lineaItem, lineaPend, lineaDoc };
     if (typeof module !== 'undefined') module.exports = window.SAR_ActaDoc;
 })(typeof window !== 'undefined' ? window : globalThis);

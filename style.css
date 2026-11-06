@@ -1058,7 +1058,7 @@ gemini-analysis {
     position: fixed;
     bottom: 30px;
     right: 30px;
-    z-index: 10000;
+    z-index: 2147483000;
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -5599,3 +5599,5 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .sug-it{display:flex;gap:10px;align-items:center;padding:6px 10px;cursor:pointer;border-bottom:1px solid #eef0f4}.sug-it:hover{background:#eef4ff}
 .sug-f{flex:0 0 44px;display:flex;justify-content:center}.sug-f img{max-width:44px;max-height:44px;object-fit:contain}.sug-t{display:flex;flex-direction:column;min-width:0}.sug-t b{font-size:.88rem;line-height:1.2}.sug-t small{color:#6b7280}
 .dup-g{border:1px solid #e3e7ee;border-radius:10px;padding:6px 12px;margin:10px 0;background:#fcfcfe}.dup-g h4{margin:6px 0}
+.r-aviso{margin:10px 0;padding:10px 14px;border-radius:8px;font-size:.92rem;border:1px solid #f0c36d;background:#fff8e6;color:#7a4b00}.r-aviso--error{border-color:#f1a7a7;background:#fdecec;color:#8a1c1c}
+.soc-rc-bts{display:flex;gap:6px;flex-wrap:wrap;margin-right:8px}.rce-l{align-items:flex-end}

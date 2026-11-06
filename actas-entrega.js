@@ -215,13 +215,22 @@
         await fs().setDoc(fs().doc(fs().collection(db(), 'Centros_Entrega'), id), { nombre: n, creadoPor: usuarioEmail(), creadoEn: fs().serverTimestamp() }, { merge: true });
         centrosGuardados.push(n); return true;
     }
+    // Actas emitidas que aún esperan el acta firmada: su stock sigue en bodega pero está comprometido (reservado)
+    let pendConf = [];
+    async function cargarPendConf() {
+        const f = fs();
+        try { const sn = await f.getDocs(f.query(f.collection(db(), 'Actas_Entrega'), f.where('confirmacion.estado', '==', 'PENDIENTE'), f.limit(300))); pendConf = []; sn.forEach(d => { const a = d.data(); if (a.estado === 'EMITIDA') pendConf.push({ id: d.id, ...a }); }); } catch (e) { pendConf = []; }
+    }
+    const reservadoItem = (id, nombre) => pendConf.reduce((t, a) => t + (a.items || []).filter(i => (id && i.id === id) || (!i.id && nombre && normN(i.nombre) === normN(nombre))).reduce((s2, i) => s2 + num(i.cantidad), 0), 0);
+    const reservadoOC = (ocId, key, ocI) => pendConf.filter(a => a.oc && a.oc.id === ocId && a.oc.columna === key).reduce((t, a) => t + (a.items || []).filter(i => i.ocI === ocI).reduce((s2, i) => s2 + num(i.cantidad), 0), 0);
     async function cargarStock() {
         stock = [];
+        await cargarPendConf();
         if (!borrador.origen) return;
         await cargarCatalogo();
         const f = fs();
         const snap = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('location', '==', borrador.origen), f.limit(1500)));
-        snap.forEach(d => { const x = d.data(); if (x.status !== 'CUARENTENA') stock.push({ id: d.id, codigo: String(x.codigoMP || '') || codDe(x.name), name: x.name || '', quantity: num(x.quantity), sobregiro: num(x.sobregiro), disp: Math.max(0, num(x.quantity) - num(x.sobregiro)), controlado: !!x.controlado, provisional: !!x.provisional, batches: lotesDeDoc(x) }); });
+        snap.forEach(d => { const x = d.data(); if (x.status !== 'CUARENTENA') stock.push({ id: d.id, codigo: String(x.codigoMP || '') || codDe(x.name), name: x.name || '', quantity: num(x.quantity), sobregiro: num(x.sobregiro), reserv: reservadoItem(d.id, x.name), disp: Math.max(0, num(x.quantity) - num(x.sobregiro) - reservadoItem(d.id, x.name)), controlado: !!x.controlado, provisional: !!x.provisional, batches: lotesDeDoc(x) }); });
         stock.sort((a, b) => (b.disp > 0) - (a.disp > 0) || a.name.localeCompare(b.name, 'es'));
     }
     async function cargarHistorial() {
@@ -230,9 +239,94 @@
         historial = []; snap.forEach(d => historial.push({ id: d.id, ...d.data() }));
     }
 
-    /** Emite el acta: correlativo + descuento + sobregiro + historial en una sola transacción. */
-    async function emitir(b, usuario) {
+
+    /** Emite el acta SIN descontar stock: queda "por confirmar" hasta subir el acta firmada (el stock solo se reserva). */
+    async function emitirDiferido(b, usuario) {
         const f = fs();
+        const soloPend = b.items.filter(i => num(i.cantidad) === 0 && num(i.solicitado) > 0);
+        if (soloPend.length) b = { ...b, items: b.items.filter(i => num(i.cantidad) > 0), pendientes: [...(b.pendientes || []), ...soloPend.map(i => ({ nombre: i.nombre, cantidad: num(i.solicitado), ...(i.codigo ? { codigoMP: String(i.codigo) } : {}) }))] };
+        const anio = new Date().getFullYear(), ctrRef = f.doc(f.collection(db(), 'Contadores'), `acta-${anio}`), fecha = new Date().toISOString().slice(0, 10);
+        const items = b.items.map(i => ({ ...i }));
+        await cargarPendConf();
+        const resultado = await f.runTransaction(db(), async (tx) => {
+            const cs = await tx.get(ctrRef); const n = (cs.exists() ? num(cs.data().ultimo) : 0) + 1; const numero = numeroActa(anio, n);
+            let ocLineas = null, autoPend = [];
+            if (b.oc) {
+                const ocRef = f.doc(f.collection(db(), 'Seguimiento_OC'), b.oc.id), ocSnap = await tx.get(ocRef);
+                if (!ocSnap.exists()) throw new Error('La orden de compra ya no existe.');
+                ocLineas = ocSnap.data().lineas || [];
+                items.forEach(i => {
+                    const l = ocLineas[i.ocI]; if (!l) throw new Error(`${i.nombre}: la línea de la orden no existe.`);
+                    const ent = num(l.entregado && l.entregado[b.oc.key]), disp = num(l.ingresado && l.ingresado[b.oc.key]) - ent - reservadoOC(b.oc.id, b.oc.key, i.ocI);
+                    if (num(i.cantidad) > disp) throw new Error(`${i.nombre}: solo quedan ${Math.max(0, disp)} u. por entregar de esta orden (hay actas por confirmar o alguien entregó antes). Actualiza la pantalla.`);
+                    i.solicitado = num(l.dist && l.dist[b.oc.key]); i.entregadoTotal = ent + num(i.cantidad);
+                });
+                const yaEn = new Set(items.map(i => i.ocI));
+                autoPend = ocLineas.map((l, idx) => ({ l, idx, p: num(l.dist && l.dist[b.oc.key]) - num(l.entregado && l.entregado[b.oc.key]) - items.filter(i => i.ocI === idx).reduce((t, i) => t + num(i.cantidad), 0) }))
+                    .filter(x => !yaEn.has(x.idx) && x.p > 0).map(x => ({ nombre: String(x.l.descripcion || '').toUpperCase(), cantidad: x.p }));
+            }
+            const itemsActa = items.map(i => ({ id: i.id || null, nombre: String(i.nombre || '').toUpperCase() === i.nombre ? i.nombre : i.nombre, cantidad: num(i.cantidad), ...(i.manual && !i.id ? { manual: true } : {}), ...(i.codigo ? { codigoMP: String(i.codigo) } : {}), ...(!b.oc && num(i.solicitado) > num(i.cantidad) ? { solicitado: num(i.solicitado), entregadoTotal: num(i.cantidad) } : {}), ...(i.fisico && normN(i.fisico) !== normN(i.nombre) ? { entregaFisica: { nombre: String(i.fisico).trim().toUpperCase(), ...(codDe(i.fisico) ? { codigoMP: codDe(i.fisico) } : {}) } } : {}), ...(b.oc ? { ocI: i.ocI, solicitado: i.solicitado, entregadoTotal: i.entregadoTotal } : {}) }));
+            tx.set(ctrRef, { ultimo: n, anio, updatedAt: f.serverTimestamp() });
+            const acta = {
+                numero, fecha, centro: b.centro.trim(), bodegaOrigen: b.origen, estado: 'EMITIDA', stockDescontado: false, conSobregiro: false,
+                confirmacion: { estado: 'PENDIENTE' },
+                items: itemsActa, pendientes: [...b.pendientes.map(p => ({ nombre: p.nombre, cantidad: num(p.cantidad), ...(p.codigoMP ? { codigoMP: String(p.codigoMP) } : {}) })), ...autoPend],
+                documentos: b.documentos.map(d => ({ tipo: d.tipo, numero: d.numero, detalle: d.detalle || '' })),
+                entrega: { nombre: firma.nombre, cargo: firma.cargo }, recibe: { nombre: (b.recibe && b.recibe.nombre) || '', cargo: (b.recibe && b.recibe.cargo) || '' },
+                creadoPor: usuario, creadoEn: f.serverTimestamp()
+            };
+            if (b.oc) acta.oc = { id: b.oc.id, numeroOC: b.oc.numeroOC || '', columna: b.oc.key, memo: b.oc.memo || '', cdp: b.oc.cdp || '' };
+            tx.set(f.doc(f.collection(db(), 'Actas_Entrega'), numero), acta);
+            return { ...acta, creadoEn: new Date().toISOString() };
+        });
+        for (const i of [...items, ...soloPend].filter(x => x.manual || x.codigoNuevo || x.imagen)) {
+            try {
+                const cod = String(i.codigo || '').trim(), id = slugC(cod || i.nombre) || 'manual';
+                await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: i.nombre, descripcion_lower: String(i.nombre).toLowerCase(), codigoMP: cod, insumoName: i.nombre, ...(i.imagen ? { imagen: i.imagen } : {}), ...(i.manual ? { sinOrden: true, origen: 'MANUAL', creadoEn: f.serverTimestamp(), creadoPor: usuario } : {}), actualizado: f.serverTimestamp() }, { merge: true });
+                catCargado = false;
+            } catch (e) { /* el acta ya se emitió */ }
+        }
+        buscarFotosEnSegundoPlano([...items, ...soloPend]);
+        await cargarPendConf();
+        return resultado;
+    }
+
+    // Respaldo (acta firmada escaneada): se guarda en partes en Contadores (colección ya abierta al personal) y, si el acta viene de una orden, también en los archivos de la OC
+    const TROZO_R = 700000, MAX_R = 6 * 1024 * 1024;
+    async function guardarRespaldo(numero, file, usuario, ocId) {
+        const f = fs(); if (!file) throw new Error('Falta el archivo del acta firmada.');
+        if (!/^(application\/pdf|image\/)/.test(file.type || '')) throw new Error('El respaldo debe ser PDF o una foto/imagen.');
+        if (file.size > MAX_R) throw new Error('El archivo pesa más de 6 MB. Reduce la calidad del escaneo.');
+        const u = new Uint8Array(await file.arrayBuffer()); let bin = ''; for (let i = 0; i < u.length; i += 0x8000) bin += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000));
+        const b64 = btoa(bin), partes = []; for (let i = 0; i < b64.length; i += TROZO_R) partes.push(b64.slice(i, i + TROZO_R));
+        for (let i = 0; i < partes.length; i++) await f.setDoc(f.doc(f.collection(db(), 'Contadores'), `respaldo-${numero}-${String(i).padStart(3, '0')}`), { tipo: 'respaldo-acta', actaId: numero, n: i, b64: partes[i], mime: file.type, updatedAt: f.serverTimestamp() });
+        if (ocId && window.SAR_SeguimientoOC && window.SAR_SeguimientoOC.guardarArchivo) { try { await window.SAR_SeguimientoOC.guardarArchivo(ocId, { nombre: file.name, categoria: 'Acta firmada ' + numero, bytes: u, mime: file.type }); } catch (e) { /* queda igual en el acta */ } }
+        return { nombre: file.name, mime: file.type, tamano: u.length, partes: partes.length, subidoPor: usuario, fecha: new Date().toISOString() };
+    }
+    async function verRespaldo(a) {
+        const f = fs(), r = a.respaldo; if (!r) return;
+        const bs = []; for (let i = 0; i < r.partes; i++) { const d = await f.getDoc(f.doc(f.collection(db(), 'Contadores'), `respaldo-${a.numero}-${String(i).padStart(3, '0')}`)); if (!d.exists()) throw new Error('Falta una parte del archivo.'); bs.push(d.data().b64); }
+        const bin = atob(bs.join('')), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+        window.open(URL.createObjectURL(new Blob([u], { type: r.mime || 'application/pdf' })), '_blank');
+    }
+    /** Confirma la entrega: sube el acta firmada y recién ahí se descuenta el stock (misma lógica de lotes, sobregiro, historial y orden de compra). */
+    async function confirmarEntrega(a, file, usuario) {
+        const f = fs();
+        const resp = await guardarRespaldo(a.numero, file, usuario, a.oc && a.oc.id);
+        const b = { origen: a.bodegaOrigen, centro: a.centro, pendientes: a.pendientes || [], documentos: a.documentos || [], recibe: a.recibe || {}, oc: a.oc && a.oc.id ? { id: a.oc.id, key: a.oc.columna, numeroOC: a.oc.numeroOC, memo: a.oc.memo, cdp: a.oc.cdp } : null,
+            items: (a.items || []).map(i => ({ id: i.id || null, manual: !i.id, nombre: i.nombre, codigo: i.codigoMP || '', cantidad: num(i.cantidad), solicitado: num(i.solicitado), ocI: i.ocI, fisico: i.entregaFisica ? i.entregaFisica.nombre : '' })) };
+        return emitir(b, usuario, { numero: a.numero, respaldo: resp });
+    }
+    async function subirFirmada(a, file, usuario) {
+        const resp = await guardarRespaldo(a.numero, file, usuario, a.oc && a.oc.id);
+        await fs().updateDoc(fs().doc(fs().collection(db(), 'Actas_Entrega'), a.numero), { respaldo: resp, respaldoEn: fs().serverTimestamp() });
+        return resp;
+    }
+    const pedirArchivo = () => new Promise((ok) => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'application/pdf,image/*'; i.onchange = () => ok(i.files && i.files[0] || null); i.oncancel = () => ok(null); i.click(); });
+
+    /** Emite el acta: correlativo + descuento + sobregiro + historial en una sola transacción. */
+    async function emitir(b, usuario, opc) {
+        const f = fs(); opc = opc || {};
         // Productos con cantidad 0 y pedido: no se entregan, quedan como pendientes del centro (y su nombre/ID/foto van al catálogo)
         const soloPend = b.items.filter(i => num(i.cantidad) === 0 && num(i.solicitado) > 0);
         if (soloPend.length) b = { ...b, items: b.items.filter(i => num(i.cantidad) > 0), pendientes: [...(b.pendientes || []), ...soloPend.map(i => ({ nombre: i.nombre, cantidad: num(i.solicitado), ...(i.codigo ? { codigoMP: String(i.codigo) } : {}) }))] };
@@ -250,10 +344,10 @@
         }
         const refs = items.map(i => ({ i, ref: i.nuevo ? f.doc(f.collection(db(), 'Insumos')) : f.doc(f.collection(db(), 'Insumos'), i.id), hist: f.doc(f.collection(db(), 'Historial_Movimientos')), histC: f.doc(f.collection(db(), 'Historial_Movimientos')) }));
         const resultado = await f.runTransaction(db(), async (tx) => {
-            const cs = await tx.get(ctrRef);
-            const n = (cs.exists() ? num(cs.data().ultimo) : 0) + 1;
-            const numero = numeroActa(anio, n);
+            let n = 0, numero = opc.numero;
+            if (!numero) { const cs = await tx.get(ctrRef); n = (cs.exists() ? num(cs.data().ultimo) : 0) + 1; numero = numeroActa(anio, n); }
             const actaRef = f.doc(f.collection(db(), 'Actas_Entrega'), numero);
+            if (opc.numero) { const as0 = await tx.get(actaRef); const c0 = as0.exists() && as0.data().confirmacion; if (!c0 || c0.estado !== 'PENDIENTE' || as0.data().estado !== 'EMITIDA') throw new Error('Esta acta ya no está pendiente de confirmar.'); }
             const snaps = [];
             for (const r of refs) snaps.push(r.i.nuevo ? null : await tx.get(r.ref));
             // Entrega desde una orden de compra (v20.55): se valida y se actualiza lo entregado de cada línea
@@ -295,7 +389,7 @@
                 const prox = c.batches[0];
                 const cambios = { ...(r.i.codigoNuevo && r.i.codigo && !d.codigoMP ? { codigoMP: String(r.i.codigo) } : {}), quantity: c.quantity, batches: c.batches, sobregiro: c.sobregiro, sobregiroDetalle: c.sobregiroDetalle, isCritical: c.quantity <= limite, ...(prox ? { batch: prox.batch, expirationDate: prox.expirationDate || '' } : {}), updatedAt: f.serverTimestamp() };
                 if (r.i.nuevo) tx.set(r.ref, { ...d, ...cambios }); else tx.update(r.ref, cambios);
-                c.cubiertas.forEach(cu => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name, quantity: cu.qty, type: 'CUADRE_SOBREGIRO', user: usuario, date: f.serverTimestamp(), document: numero, batch: 'MULTI-LOTE', origin: b.origen, idInsumoOrigen: r.ref.id, observacion: `Cuadre automático al emitir ${numero}: ${cu.qty} u. del acta ${cu.acta} ya estaban entregadas sin respaldo`, actaId: cu.acta, cuadradoPor: numero }));
+                c.cubiertas.forEach(cu => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name, quantity: cu.qty, type: 'CUADRE_SOBREGIRO', user: usuario, date: f.serverTimestamp(), document: numero, batch: 'MULTI-LOTE', origin: b.origen, idInsumoOrigen: r.ref.id, observacion: `Cuadre automático al ${opc.numero ? 'confirmar' : 'emitir'} ${numero}: ${cu.qty} u. del acta ${cu.acta} ya estaban entregadas sin respaldo`, actaId: cu.acta, cuadradoPor: numero }));
                 tx.set(r.hist, {
                     insumoName: d.name, quantity: num(r.i.cantidad), type: 'ENTREGA_ACTA', user: usuario, date: f.serverTimestamp(), document: numero,
                     batch: c.usados.length === 1 ? c.usados[0].batch : (c.usados.length ? 'MULTI-LOTE' : 'SIN-RESPALDO'), origin: b.origen, dest: b.centro, lotes: c.usados,
@@ -303,7 +397,7 @@
                     observacion: `Acta de entrega ${numero}${c.faltante > 0 ? ` · ${c.faltante} u. sin respaldo en sistema (sobregiro)` : ''}${r.i.nuevo ? ' · insumo provisional' : ''}`, actaId: numero
                 });
             });
-            tx.set(ctrRef, { ultimo: n, anio, updatedAt: f.serverTimestamp() });
+            if (!opc.numero) tx.set(ctrRef, { ultimo: n, anio, updatedAt: f.serverTimestamp() });
             const acta = {
                 numero, fecha, centro: b.centro.trim(), bodegaOrigen: b.origen, estado: 'EMITIDA', stockDescontado: true,
                 conSobregiro: itemsActa.some(i => i.sinRespaldo > 0),
@@ -313,7 +407,8 @@
                 creadoPor: usuario, creadoEn: f.serverTimestamp()
             };
             if (b.oc) acta.oc = { id: b.oc.id, numeroOC: b.oc.numeroOC || '', columna: b.oc.key, memo: b.oc.memo || '', cdp: b.oc.cdp || '' };
-            tx.set(actaRef, acta);
+            if (opc.numero) tx.update(actaRef, { items: itemsActa, stockDescontado: true, conSobregiro: acta.conSobregiro, confirmacion: { estado: 'CONFIRMADA', fecha: fecha, por: usuario, ...(opc.respaldo ? { respaldo: opc.respaldo } : {}) }, respaldo: opc.respaldo || null, confirmadaEn: f.serverTimestamp() });
+            else tx.set(actaRef, acta);
             if (b.oc) {
                 tx.update(ocRef, { lineas: ocLineas, actualizadoEn: f.serverTimestamp() });
                 tx.set(f.doc(f.collection(db(), 'Seguimiento_OC', b.oc.id, 'Eventos')), { tipo: 'ENTREGA', texto: `Acta ${numero} a ${b.centro.trim()}${b.oc.memo ? ' (memo ' + b.oc.memo + ')' : ''}:\n` + itemsActa.map(i => `- ${i.nombre}: ${i.cantidad} un.`).join('\n'), autor: usuario, fecha: f.serverTimestamp(), columna: b.oc.key, actaId: numero });
@@ -360,6 +455,7 @@
             if (!as.exists()) throw new Error('El acta no existe.');
             const a = as.data();
             if (a.estado === 'ANULADA') throw new Error('El acta ya estaba anulada.');
+            if (a.confirmacion && a.confirmacion.estado === 'PENDIENTE') { tx.update(actaRef, { estado: 'ANULADA', stockDescontado: false, anuladaEn: f.serverTimestamp(), anuladaPor: usuario, anulacionMotivo: motivo }); return; }   // nunca salió del stock
             const refs = a.items.map(i => ({ i, ref: f.doc(f.collection(db(), 'Insumos'), i.id), hist: f.doc(f.collection(db(), 'Historial_Movimientos')) }));
             const snaps = []; for (const r of refs) snaps.push(await tx.get(r.ref));
             let ocRef = null, ocLineas = null;
@@ -470,7 +566,7 @@
               <p class="act-hint">Pedido = lo solicitado en total (opcional); el segundo número es lo que entregas ahora. Lo que falte queda como pendiente en el acta; si no tienes nada para entregar, pon 0 y el pedido: todo queda pendiente para el centro. El nombre y el ID quedan guardados en el catálogo.</p>
               <label class="act-l act-chk"><input type="checkbox" id="act-mc"> Es medicamento controlado (no se permite sin stock)</label></details>
             <div class="act-stock">${!borrador.origen ? '<p class="act-hint">Elige una bodega para ver su stock.</p>' : !lista.length ? '<p class="act-hint">Sin resultados. Si no está en el sistema, agrégalo a mano abajo.</p>' : lista.map(s => `
-              <div class="act-fila${yaEsta(s.id) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(s.name, { codigo: s.codigo }) : ''}${esc(s.name)}${s.controlado ? ' <small>(controlado)</small>' : ''}${s.provisional ? ' <small>(provisional)</small>' : ''}<small>${s.codigo ? '<b>ID ' + esc(s.codigo) + '</b> · ' : '<span class="act-sin">sin ID</span> · '}${s.disp > 0 ? 'Disponible: ' + s.disp : '<span class="act-sin">Sin stock en sistema</span>'}${s.sobregiro > 0 ? ' · sobregiro: ' + s.sobregiro : ''}</small></div>
+              <div class="act-fila${yaEsta(s.id) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(s.name, { codigo: s.codigo }) : ''}${esc(s.name)}${s.controlado ? ' <small>(controlado)</small>' : ''}${s.provisional ? ' <small>(provisional)</small>' : ''}<small>${s.codigo ? '<b>ID ' + esc(s.codigo) + '</b> · ' : '<span class="act-sin">sin ID</span> · '}${s.disp > 0 ? 'Disponible: ' + s.disp + (s.reserv > 0 ? ' · reservado en actas por confirmar: ' + s.reserv : '') : '<span class="act-sin">Sin stock en sistema</span>'}${s.sobregiro > 0 ? ' · sobregiro: ' + s.sobregiro : ''}</small></div>
                 ${yaEsta(s.id) ? '<span class="act-chip">agregado</span>' : `<input type="number" min="0" class="act-qty" data-sid="${esc(s.id)}" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input type="number" min="1" value="1" class="act-qty" data-qid="${esc(s.id)}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-add" data-id="${esc(s.id)}">Agregar</button>`}</div>`).join('')}
               ${enCat.length ? '<p class="act-hint"><b>Del catálogo o registrados antes, sin stock en esta bodega</b> (se agregan como manual · provisional):</p>' + enCat.map(x => `
               <div class="act-fila${yaCat(x) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}${esc(x.nombre)} <small>(${x.derivado ? 'registrado en ' + esc(x.derivado) : 'catálogo'})</small><small>${x.codigo ? '<b>ID ' + esc(x.codigo) + '</b>' : '<span class="act-sin">sin ID</span>'} · <span class="act-sin">Sin stock en esta bodega</span></small></div>
@@ -503,8 +599,9 @@
         </div></div>
         <div data-act-tab="emitidas"${tab === 'emitidas' ? '' : ' hidden'}>
         <h3 class="act-h">Actas emitidas</h3>
-        <div class="act-hist">${historial.length ? historial.map(a => `<div class="act-fila${a.estado === 'ANULADA' ? ' act-anulada' : ''}"><div class="act-fn"><strong>${esc(a.numero)}</strong> · ${esc(a.centro)}<small>${esc(a.fecha)} · ${a.tipo === 'OXIGENO' ? 'oxígeno · ' : ''}${(a.items || []).length} ${a.tipo === 'OXIGENO' ? 'balones' : 'productos'} · ${esc(a.bodegaOrigen)} · ${esc(a.creadoPor || '')}${a.estado === 'ANULADA' ? ' · <b>ANULADA</b>' : ''}${a.conSobregiro ? ' · <b class="act-sin">con sobregiro</b>' : ''}</small></div>
+        <div class="act-hist">${historial.length ? historial.map(a => `<div class="act-fila${a.estado === 'ANULADA' ? ' act-anulada' : ''}"><div class="act-fn"><strong>${esc(a.numero)}</strong> · ${esc(a.centro)}<small>${esc(a.fecha)} · ${a.tipo === 'OXIGENO' ? 'oxígeno · ' : ''}${(a.items || []).length} ${a.tipo === 'OXIGENO' ? 'balones' : 'productos'} · ${esc(a.bodegaOrigen)} · ${esc(a.creadoPor || '')}${a.estado === 'ANULADA' ? ' · <b>ANULADA</b>' : ''}${a.confirmacion && a.confirmacion.estado === 'PENDIENTE' && a.estado === 'EMITIDA' ? ' · <b class="act-sin">ENTREGA POR CONFIRMAR (stock aún en bodega)</b>' : ''}${a.estado === 'EMITIDA' && a.tipo !== 'OXIGENO' && a.respaldo ? ' · <b>firmada ✔</b>' : ''}${a.conSobregiro ? ' · <b class="act-sin">con sobregiro</b>' : ''}</small></div>
             <button type="button" class="btn btn-outline act-dl" data-n="${esc(a.numero)}" data-f="pdf">PDF</button><button type="button" class="btn btn-outline act-dl" data-n="${esc(a.numero)}" data-f="docx">Word</button>
+            ${a.estado === 'EMITIDA' && a.tipo !== 'OXIGENO' && a.confirmacion && a.confirmacion.estado === 'PENDIENTE' && esAdmin() ? `<button type="button" class="btn btn-primary act-conf" data-n="${esc(a.numero)}">Confirmar entrega (subir acta firmada)</button>` : ''}${a.estado === 'EMITIDA' && a.tipo !== 'OXIGENO' && !(a.confirmacion && a.confirmacion.estado === 'PENDIENTE') && !a.respaldo && esAdmin() ? `<button type="button" class="btn btn-outline act-firm" data-n="${esc(a.numero)}">Subir acta firmada</button>` : ''}${a.respaldo ? `<button type="button" class="btn btn-outline act-verr" data-n="${esc(a.numero)}">Ver acta firmada</button>` : ''}
             ${esAdmin() && a.estado === 'EMITIDA' ? `<button type="button" class="btn btn-outline act-ed" data-n="${esc(a.numero)}">Editar</button>` : ''}${esAdmin() && a.estado !== 'ANULADA' && a.tipo !== 'OXIGENO' ? `<button type="button" class="btn btn-outline act-an" data-n="${esc(a.numero)}">Eliminar acta</button>` : ''}</div>`).join('') : '<p class="act-hint">Todavía no hay actas emitidas.</p>'}</div></div>
         <div data-act-tab="seguimiento" id="seg-root"${tab === 'seguimiento' ? '' : ' hidden'}></div>`;
         r.querySelectorAll('.act-tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; pintar(); }));
@@ -623,6 +720,22 @@
         $('#act-limpiar').addEventListener('click', () => { if (!confirm('¿Vaciar el borrador?')) return; borrador = { ...vacio(), origen: borrador.origen }; guardarBorrador(); pintar(); });
         $('#act-emitir').addEventListener('click', onEmitir);
         ['pdf', 'docx'].forEach(fm => { const bt = document.getElementById('act-prueba-' + fm); if (bt) bt.addEventListener('click', async () => { bt.disabled = true; try { await probarActa(fm); } finally { bt.disabled = false; } }); });
+        $$('.act-conf').forEach(b => b.addEventListener('click', async () => {
+            const a = historial.find(x => x.numero === b.dataset.n); if (!a) return;
+            if (!confirm(`Confirmar la entrega del acta ${a.numero} a ${a.centro}.\n\nVas a subir el acta firmada (PDF o foto). Al guardarla se DESCUENTAN del stock de ${a.bodegaOrigen} los ${(a.items || []).length} productos del acta.\n\n¿Continuar?`)) return;
+            const file = await pedirArchivo(); if (!file) return;
+            const prog = window.SAR_Progreso.iniciar('Confirmando la entrega…', ['Subiendo el acta firmada y descontando el stock…']);
+            try { await confirmarEntrega(a, file, usuarioEmail()); await Promise.all([cargarStock(), cargarHistorial()]); pintar(); prog.listo(`Entrega ${a.numero} confirmada · stock descontado`, { informe: true }); }
+            catch (e) { prog.error(); toast('No se confirmó', e.message || String(e), 'error'); }
+        }));
+        $$('.act-firm').forEach(b => b.addEventListener('click', async () => {
+            const a = historial.find(x => x.numero === b.dataset.n); if (!a) return;
+            const file = await pedirArchivo(); if (!file) return;
+            const prog = window.SAR_Progreso.iniciar('Guardando el acta firmada…', ['Subiendo el respaldo…']);
+            try { await subirFirmada(a, file, usuarioEmail()); await cargarHistorial(); pintar(); prog.listo(`Acta firmada de ${a.numero} guardada (el stock no cambia)`, { informe: false }); }
+            catch (e) { prog.error(); toast('No se guardó', e.message || String(e), 'error'); }
+        }));
+        $$('.act-verr').forEach(b => b.addEventListener('click', async () => { const a = historial.find(x => x.numero === b.dataset.n); try { await verRespaldo(a); } catch (e) { toast('Acta firmada', e.message || String(e), 'error'); } }));
         $$('.act-dl').forEach(b => b.addEventListener('click', async () => {
             const a = historial.find(x => x.numero === b.dataset.n); if (!a) return;
             b.disabled = true; try { await descargar(actaParaDoc(a), b.dataset.f); } catch (e) { toast('Descarga', e.message, 'error'); } finally { b.disabled = false; }
@@ -686,15 +799,15 @@
         const total = borrador.items.reduce((s, i) => s + num(i.cantidad), 0);
         const sin = borrador.items.map(i => ({ n: i.nombre, f: Math.max(0, num(i.cantidad) - num(i.stock)) })).filter(x => x.f > 0);
         const avisoSin = sin.length ? `\n\nSIN RESPALDO EN SISTEMA (quedan como sobregiro, saldo contable negativo hasta cuadrar con la OC/SDC):\n${sin.map(x => `• ${x.n}: ${x.f} u.`).join('\n')}` : '';
-        if (!confirm(`Se emitirá el acta para ${borrador.centro.trim()} con ${borrador.items.length} productos (${total} unidades) y se descontarán de ${borrador.origen}.${avisoSin}\n\n¿Emitir?`)) return;
+        if (!confirm(`Se emitirá el acta para ${borrador.centro.trim()} con ${borrador.items.length} productos (${total} unidades).\n\nEl stock de ${borrador.origen} NO se descuenta ahora: queda reservado hasta que confirmes la entrega subiendo el acta firmada (desde "Actas emitidas").${avisoSin}\n\n¿Emitir?`)) return;
         emitiendo = true; const btn = document.getElementById('act-emitir'); if (btn) btn.disabled = true;
-        const prog = window.SAR_Progreso.iniciar('Emitiendo el acta de entrega…', ['Numerando el acta y descontando el stock…']);
+        const prog = window.SAR_Progreso.iniciar('Emitiendo el acta de entrega…', ['Numerando el acta…']);
         try {
             const centroNuevo = borrador.centro;
-            const acta = await emitir(borrador, usuarioEmail());
+            const acta = await emitirDiferido(borrador, usuarioEmail());
             prog.paso('Generando el documento PDF…');
             guardarCentro(centroNuevo).catch(() => {});
-            toast('Acta emitida', `${acta.numero} · stock descontado.`, 'success');
+            toast('Acta emitida', `${acta.numero} · el stock sale al subir el acta firmada.`, 'success');
             borrador = { ...vacio(), origen: borrador.origen, centro: '' }; guardarBorrador();
             await Promise.all([cargarStock(), cargarHistorial()]);
             pintar();
@@ -705,7 +818,7 @@
                     catch (e2) { toast('Acta no guardada en la orden', e2.message || String(e2), 'warning'); }
                 }
             } catch (e) { toast('Descarga', 'El acta se emitió, pero el PDF no se pudo generar: ' + e.message + ' Descárgalo desde "Actas emitidas".', 'warning'); }
-            prog.listo(`Acta ${acta.numero} emitida y registrada`, { informe: true });
+            prog.listo(`Acta ${acta.numero} emitida · pendiente de confirmar la entrega`, { informe: true });
         } catch (e) { prog.error(); toast('No se emitió', e.message, 'error'); if (btn) btn.disabled = false; }
         finally { emitiendo = false; }
     }

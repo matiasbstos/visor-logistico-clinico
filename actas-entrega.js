@@ -162,7 +162,17 @@
     const codDe = (nombre) => { const n = normN(nombre); const c = catalogo.find(x => x.codigoMP && (normN(x.insumoName) === n || normN(x.descripcion) === n)); return c ? String(c.codigoMP) : ''; };
     async function cargarCatalogo() {
         if (catCargado) return; catCargado = true;
-        try { const sn = await fs().getDocs(fs().query(fs().collection(db(), 'Catalogo_Productos'), fs().limit(3000))); catalogo = []; sn.forEach(d => catalogo.push({ id: d.id, ...d.data() })); } catch (e) { catCargado = false; }
+        try { const sn = await fs().getDocs(fs().query(fs().collection(db(), 'Catalogo_Productos'), fs().limit(5000))); catalogo = []; sn.forEach(d => catalogo.push({ id: d.id, ...d.data() })); } catch (e) { catCargado = false; return; }
+        // Otros lugares donde puede haber quedado registrado un producto (otras bodegas, órdenes de compra, actas anteriores): se suman a la búsqueda
+        const f = fs(), vistoN = new Set(catalogo.map(c => normN(c.descripcion || c.insumoName))), vistoC = new Set(catalogo.map(c => String(c.codigoMP || '')).filter(Boolean));
+        const sumar = (nombre, cod, origen, imagen) => {
+            const nom = String(nombre || '').trim(); if (nom.length < 3) return; const c = cod ? String(cod).replace(/\D/g, '') : '', nn = normN(nom);
+            if (vistoN.has(nn) || (c && vistoC.has(c))) return; vistoN.add(nn); if (c) vistoC.add(c);
+            catalogo.push({ id: null, descripcion: nom, insumoName: nom, codigoMP: c, derivado: origen, ...(imagen ? { imagen } : {}) });
+        };
+        try { const sn = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(4000))); sn.forEach(d => { const x = d.data(); sumar(x.name, x.codigoMP, 'otra bodega'); }); } catch (e) { /* sin permiso o sin conexión */ }
+        try { const sn = await f.getDocs(f.query(f.collection(db(), 'Seguimiento_OC'), f.limit(400))); sn.forEach(d => (d.data().lineas || []).forEach(l => sumar(l.descripcion, l.codigoMP, 'orden de compra'))); } catch (e) { /* idem */ }
+        try { const sn = await f.getDocs(f.query(f.collection(db(), 'Actas_Entrega'), f.orderBy('creadoEn', 'desc'), f.limit(150))); sn.forEach(d => { const a = d.data(); (a.items || []).forEach(i => sumar(i.nombre, i.codigoMP, 'acta anterior')); (a.pendientes || []).forEach(i => sumar(i.nombre, i.codigoMP, 'acta anterior')); }); } catch (e) { /* idem */ }
     }
     let pdfLibPromesa = null, logoPromesa = null;
 
@@ -430,7 +440,7 @@
                 const nom = String(c.descripcion || c.insumoName || '').toUpperCase(), cod = c.codigoMP ? String(c.codigoMP) : '', nn = normN(nom);
                 if (!nom || vistos.has(nn) || (cod && codS.has(cod))) return;
                 if (!(nom.toLowerCase().includes(q) || cod.includes(q))) return;
-                vistos.add(nn); out.push({ ci, nombre: nom, codigo: cod, imagen: c.imagen || '' });
+                vistos.add(nn); out.push({ ci, nombre: nom, codigo: cod, imagen: c.imagen || '', derivado: c.derivado || '' });
             });
             return out.slice(0, 15);
         })();
@@ -462,8 +472,8 @@
             <div class="act-stock">${!borrador.origen ? '<p class="act-hint">Elige una bodega para ver su stock.</p>' : !lista.length ? '<p class="act-hint">Sin resultados. Si no está en el sistema, agrégalo a mano abajo.</p>' : lista.map(s => `
               <div class="act-fila${yaEsta(s.id) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(s.name, { codigo: s.codigo }) : ''}${esc(s.name)}${s.controlado ? ' <small>(controlado)</small>' : ''}${s.provisional ? ' <small>(provisional)</small>' : ''}<small>${s.codigo ? '<b>ID ' + esc(s.codigo) + '</b> · ' : '<span class="act-sin">sin ID</span> · '}${s.disp > 0 ? 'Disponible: ' + s.disp : '<span class="act-sin">Sin stock en sistema</span>'}${s.sobregiro > 0 ? ' · sobregiro: ' + s.sobregiro : ''}</small></div>
                 ${yaEsta(s.id) ? '<span class="act-chip">agregado</span>' : `<input type="number" min="0" class="act-qty" data-sid="${esc(s.id)}" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input type="number" min="1" value="1" class="act-qty" data-qid="${esc(s.id)}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-add" data-id="${esc(s.id)}">Agregar</button>`}</div>`).join('')}
-              ${enCat.length ? '<p class="act-hint"><b>Del catálogo, sin stock en esta bodega</b> (se agregan como manual · provisional):</p>' + enCat.map(x => `
-              <div class="act-fila${yaCat(x) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}${esc(x.nombre)} <small>(catálogo)</small><small>${x.codigo ? '<b>ID ' + esc(x.codigo) + '</b>' : '<span class="act-sin">sin ID</span>'} · <span class="act-sin">Sin stock en esta bodega</span></small></div>
+              ${enCat.length ? '<p class="act-hint"><b>Del catálogo o registrados antes, sin stock en esta bodega</b> (se agregan como manual · provisional):</p>' + enCat.map(x => `
+              <div class="act-fila${yaCat(x) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}${esc(x.nombre)} <small>(${x.derivado ? 'registrado en ' + esc(x.derivado) : 'catálogo'})</small><small>${x.codigo ? '<b>ID ' + esc(x.codigo) + '</b>' : '<span class="act-sin">sin ID</span>'} · <span class="act-sin">Sin stock en esta bodega</span></small></div>
                 ${yaCat(x) ? '<span class="act-chip">agregado</span>' : `<input type="number" min="0" class="act-qty" data-csid="${x.ci}" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input type="number" min="0" value="1" class="act-qty" data-cqid="${x.ci}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-addcat" data-ci="${x.ci}">Agregar</button>`}</div>`).join('') : ''}
               ${stock.filter(s => !q || s.name.toLowerCase().includes(q) || String(s.codigo || '').includes(q)).length > 80 ? '<p class="act-hint">Hay más resultados: afina la búsqueda.</p>' : ''}</div>
           </div>
@@ -561,7 +571,7 @@
         // Sugerencias con foto: al escribir una letra aparece el nombre sugerido, su ID y su fotografía (stock de la bodega + catálogo, incluidos los ingresados manualmente)
         const fuenteSug = () => {
             const a = stock.map(x => ({ nombre: x.name, codigo: x.codigo, nota: x.provisional ? 'manual · provisional' : `disp. ${x.disp}` }));
-            const b = catalogo.map(c => ({ nombre: String(c.descripcion || c.insumoName || '').toUpperCase(), codigo: c.codigoMP ? String(c.codigoMP) : '', nota: 'catálogo' })).filter(x => x.nombre);
+            const b = catalogo.map(c => ({ nombre: String(c.descripcion || c.insumoName || '').toUpperCase(), codigo: c.codigoMP ? String(c.codigoMP) : '', nota: c.derivado ? 'registrado en ' + c.derivado : 'catálogo' })).filter(x => x.nombre);
             return a.concat(b);
         };
         if (window.SAR_Sugerir) {

@@ -566,3 +566,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.93 Acta: el buscador de "Stock disponible" también muestra el catálogo (v21.39)
 - Al buscar (2+ letras), además del stock de la bodega se listan los productos del catálogo que no están en ella (p. ej. ingresados a mano antes), con ID y foto, bajo "Del catálogo, sin stock en esta bodega".
 - Al agregarlos quedan como manual · provisional (mismo tratamiento del ingreso manual), con pedido/entrega y pendiente si es 0.
+
+### 4.94 Acta: la búsqueda de productos abarca todo lo registrado (v21.40)
+- Además del catálogo (ahora hasta 5000), se suman a las sugerencias y a la lista "sin stock en esta bodega" los productos de Insumos de otras bodegas, líneas de Seguimiento_OC y actas anteriores (items/pendientes), sin duplicar por nombre o ID. Se indica "registrado en …".
+- Motivo: un producto cargado antes (p. ej. BOLSA DE BASURA IMPEKE, ID 4538976) no aparecía si no estaba en Catalogo_Productos ni en la bodega elegida.

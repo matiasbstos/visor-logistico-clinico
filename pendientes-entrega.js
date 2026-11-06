@@ -88,24 +88,52 @@
     }
 
     // ---------------- Pantalla ----------------
+    const abiertos = new Set();
+    const resumen = (g) => g.listos
+        ? `<span class="pen-ok">Hay stock para entregar ${g.listos} de ${g.items.length}</span>`
+        : '<span class="pen-sin">Sin stock por ahora</span>';
+    function filas(g) {
+        return `<div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pendiente</th><th>Disponible</th><th>Estado</th></tr></thead><tbody>
+            ${g.items.map(p => `<tr><td>${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(p.nombre, { codigo: p.codigo }) : ''}${esc(p.nombre)}${p.codigo ? ` <small class="soc-id">ID ${esc(p.codigo)}</small>` : ''}</td>
+                <td><strong>${p.pendiente}</strong></td><td>${p.disponible}</td>
+                <td>${p.entregable >= p.pendiente ? '<span class="pen-ok">Completo</span>' : p.entregable > 0 ? `<span class="pen-parcial">Se pueden ${p.entregable}</span>` : '<span class="pen-sin">Sin stock</span>'}</td></tr>`).join('')}
+            </tbody></table></div>`;
+    }
     function pintar() {
         const r = root(); if (!r) return;
         const total = grupos.reduce((s, g) => s + g.items.length, 0), listos = grupos.reduce((s, g) => s + g.listos, 0);
-        r.innerHTML = `<div class="erp-card pen-cab"><h3>Pendientes por entregar</h3>
-            <p class="act-hint">Lo que cada centro pidió y todavía no se le entrega, según las actas. ${total ? `<b>${total}</b> producto(s) pendiente(s), <b>${listos}</b> con stock para entregar ahora.` : ''}</p>
-            <button type="button" class="btn btn-outline btn-sm" id="pen-recargar"><i class="ph-bold ph-arrows-clockwise"></i> Actualizar</button></div>
-            ${grupos.length ? grupos.map((g, gi) => `<div class="erp-card pen-grupo"><div class="pen-grupo__cab"><h3>${esc(g.centro)} <span class="soc-n">${g.items.length}</span></h3>
-                <button type="button" class="btn ${g.listos ? 'btn-primary' : 'btn-outline'} btn-sm" data-pen-acta="${gi}"${g.listos ? '' : ' disabled'}><i class="ph-bold ph-file-text"></i> Preparar acta con lo disponible</button></div>
-                <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pendiente</th><th>Disponible</th><th>Estado</th></tr></thead><tbody>
-                ${g.items.map(p => `<tr><td>${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(p.nombre, { codigo: p.codigo }) : ''}${esc(p.nombre)}${p.codigo ? ` <small class="soc-id">ID ${esc(p.codigo)}</small>` : ''}<br><small>desde el acta ${esc(p.desde)}</small></td>
-                    <td><strong>${p.pendiente}</strong></td><td>${p.disponible}</td>
-                    <td>${p.entregable >= p.pendiente ? '<span class="pen-ok">Se puede entregar completo</span>' : p.entregable > 0 ? `<span class="pen-parcial">Se pueden entregar ${p.entregable}</span>` : '<span class="pen-sin">Sin stock</span>'}</td></tr>`).join('')}
-                </tbody></table></div></div>`).join('') : '<div class="erp-card"><p class="act-hint">No hay pendientes por entregar. Cuando en un acta pongas un pedido mayor a lo que entregas (o agregues pendientes), aparecen aquí.</p></div>'}`;
+        r.innerHTML = `<div class="erp-card pen-cab"><div class="pen-grupo__cab"><div><h3>Pendientes por entregar</h3>
+            <p class="act-hint">${total ? `<b>${grupos.length}</b> centro(s) · <b>${total}</b> producto(s) pendiente(s) · <b>${listos}</b> con stock para entregar ahora.` : 'Lo que cada centro pidió y aún no se le entrega, según las actas.'}</p></div>
+            <div class="pen-acc"><button type="button" class="btn btn-outline btn-sm" id="pen-recargar"><i class="ph-bold ph-arrows-clockwise"></i> Actualizar</button>
+            ${grupos.length ? '<button type="button" class="btn btn-primary btn-sm" id="pen-imp-todo"><i class="ph-bold ph-printer"></i> Imprimir listado con fotos</button>' : ''}</div></div></div>
+            ${grupos.length ? `<div class="erp-card pen-lista">${grupos.map((g, gi) => `<details class="pen-centro" data-gi="${gi}"${abiertos.has(g.centro) ? ' open' : ''}><summary>
+                <strong>${esc(g.centro)}</strong><span class="soc-n">${g.items.length}</span><span class="pen-res">${resumen(g)}</span></summary>
+                <div class="pen-det"><div class="pen-acc"><button type="button" class="btn btn-outline btn-sm" data-pen-imp="${gi}"><i class="ph-bold ph-printer"></i> Imprimir este centro</button></div>${filas(g)}</div></details>`).join('')}</div>`
+            : '<div class="erp-card"><p class="act-hint">No hay pendientes por entregar. Cuando en un acta pongas un pedido mayor a lo que entregas (o agregues pendientes), aparecen aquí.</p></div>'}`;
         r.querySelector('#pen-recargar').addEventListener('click', abrir);
-        r.querySelectorAll('[data-pen-acta]').forEach(b => b.addEventListener('click', () => {
-            const g = grupos[+b.dataset.penActa]; if (!g || !window.SAR_ActasEntrega || !window.SAR_ActasEntrega.precargar) return;
-            window.SAR_ActasEntrega.precargar(g.centro, g.items.filter(p => p.entregable > 0).map(p => ({ nombre: p.nombre, codigo: p.codigo, pendiente: p.pendiente, entregable: p.entregable })));
-        }));
+        const bt = r.querySelector('#pen-imp-todo'); if (bt) bt.addEventListener('click', () => imprimir(grupos));
+        r.querySelectorAll('[data-pen-imp]').forEach(b => b.addEventListener('click', () => imprimir([grupos[+b.dataset.penImp]])));
+        r.querySelectorAll('.pen-centro').forEach(d => d.addEventListener('toggle', () => { const g = grupos[+d.dataset.gi]; if (!g) return; if (d.open) abiertos.add(g.centro); else abiertos.delete(g.centro); if (d.open && window.SAR_Imagenes) window.SAR_Imagenes.rellenar(d); }));
+    }
+
+    /** Listado imprimible (con fotos) de lo que falta por entregar: una hoja por centro. */
+    function imprimir(lista) {
+        const w = window.open('', '_blank'); if (!w) { toast('Ventana bloqueada', 'Permite las ventanas emergentes para imprimir el listado.', 'warning'); return; }
+        const IM = window.SAR_Imagenes, hoy = new Date().toLocaleDateString('es-CL');
+        const logo = new URL('assets/logo-corpo-melipilla.jpg', window.location.href).href;
+        const foto = (p) => { try { const e = IM && IM.buscar(p.nombre, p.codigo); const s = e && IM.src(e, 160); return s ? `<img src="${esc(s)}" alt="" referrerpolicy="no-referrer">` : '<span class="sf">sin foto</span>'; } catch (e) { return '<span class="sf">sin foto</span>'; } };
+        const hojas = lista.filter(Boolean).map(g => `<section><header><img class="lg" src="${esc(logo)}" alt=""><div><h1>Productos pendientes de entrega</h1><h2>${esc(g.centro)}</h2><p>SAR Elsa Romo Arpillerista · ${esc(hoy)}</p></div></header>
+            <table><thead><tr><th>Foto</th><th>Producto</th><th>ID</th><th class="n">Pendiente</th><th class="n">Disponible</th></tr></thead><tbody>
+            ${g.items.map(p => `<tr><td class="f">${foto(p)}</td><td>${esc(p.nombre)}</td><td>${esc(p.codigo || '')}</td><td class="n"><b>${p.pendiente}</b></td><td class="n">${p.disponible}</td></tr>`).join('')}</tbody></table>
+            <p class="pie">${g.items.length} producto(s) pendiente(s).</p></section>`).join('');
+        w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Pendientes por entregar</title><style>
+            body{font:13px/1.35 Arial,sans-serif;color:#111;margin:0;padding:18px}section{page-break-after:always}section:last-child{page-break-after:auto}
+            header{display:flex;gap:14px;align-items:center;border-bottom:2px solid #1a3668;padding-bottom:8px;margin-bottom:10px}.lg{height:54px;width:auto}
+            h1{font-size:17px;margin:0}h2{font-size:15px;margin:2px 0;color:#1a3668}header p{margin:0;color:#555}
+            table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:5px 6px;text-align:left;vertical-align:middle}th{background:#eef1f6;font-size:12px}
+            .n{text-align:right;white-space:nowrap}.f{width:84px}.f img{width:76px;height:76px;object-fit:contain}.sf{color:#999;font-size:11px}tr{page-break-inside:avoid}.pie{margin-top:8px;color:#555}
+            @media print{body{padding:0}}</style></head><body>${hojas}<script>window.onload=function(){setTimeout(function(){window.print()},700)}<\/script></body></html>`);
+        w.document.close();
     }
     async function abrir() {
         const r = root(); if (!r) return;

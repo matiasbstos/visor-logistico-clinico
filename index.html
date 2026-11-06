@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=21.03",
+                "./script.js": "./script.js?v=21.04",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -65,7 +65,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
     <meta name="theme-color" content="#1A3668">
-    <link rel="stylesheet" href="style.css?v=21.03">
+    <link rel="stylesheet" href="style.css?v=21.04">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web" defer></script>
@@ -275,6 +275,9 @@
                     </div>
                     <a href="#" class="menu-item normal" data-target="view-compras" data-title="Solicitudes de Compra">
                         <i class="ph-bold ph-shopping-cart"></i><span class="menu-label">Solicitudes de Compra</span>
+                    </a>
+                    <a href="#" class="menu-item normal" data-target="view-ingreso-rapido" data-title="Ingreso rápido">
+                        <i class="ph-bold ph-lightning"></i><span class="menu-label">Ingreso rápido</span>
                     </a>
                     <a href="#" class="menu-item normal" data-target="view-compras-agiles" data-title="Compras ágiles">
                         <i class="ph-bold ph-handshake"></i><span class="menu-label">Compras ágiles</span>
@@ -2627,6 +2630,10 @@
 
             <section id="view-errores" class="view-section" style="display:none;">
                 <div class="dashboard-container" id="err-root"></div>
+            </section>
+
+            <section id="view-ingreso-rapido" class="view-section" style="display:none;">
+                <div class="dashboard-container" id="irp-root"></div>
             </section>
 
             <section id="view-compras-agiles" class="view-section" style="display:none;">
@@ -5855,28 +5862,29 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=21.03"></script>
-    <script type="module" src="patch-plantillas.js?v=21.03"></script>
+    <script type="module" src="script.js?v=21.04"></script>
+    <script type="module" src="patch-plantillas.js?v=21.04"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="bodegas-estantes.js?v=21.03"></script>
-    <script src="bodegas-cierre.js?v=21.03"></script>
-    <script src="progreso.js?v=21.03"></script>
-    <script src="oc-lector.js?v=21.03"></script>
-    <script src="acta-edicion.js?v=21.03"></script>
-    <script src="anonimizar-pacientes.js?v=21.03"></script>
-    <script src="cdp-presupuesto.js?v=21.03"></script>
-    <script src="imagenes-producto.js?v=21.03"></script>
-    <script src="catalogo-vista.js?v=21.03"></script>
-    <script src="seguimiento-oc.js?v=21.03"></script>
-    <script src="compras-agiles.js?v=21.03"></script>
-    <script src="home-compras.js?v=21.03"></script>
-    <script src="login-animado.js?v=21.03"></script>
-    <script src="errores.js?v=21.03"></script>
-    <script src="saldos-contables.js?v=21.03"></script>
-    <script src="recepcion-conforme.js?v=21.03"></script>
-    <script src="acta-documentos.js?v=21.03"></script>
-    <script src="actas-entrega.js?v=21.03"></script>
-    <script src="oxigeno.js?v=21.03"></script>
-    <script src="visor-adquisiciones.js?v=21.03"></script>
+    <script src="bodegas-estantes.js?v=21.04"></script>
+    <script src="bodegas-cierre.js?v=21.04"></script>
+    <script src="progreso.js?v=21.04"></script>
+    <script src="oc-lector.js?v=21.04"></script>
+    <script src="acta-edicion.js?v=21.04"></script>
+    <script src="anonimizar-pacientes.js?v=21.04"></script>
+    <script src="cdp-presupuesto.js?v=21.04"></script>
+    <script src="imagenes-producto.js?v=21.04"></script>
+    <script src="catalogo-vista.js?v=21.04"></script>
+    <script src="seguimiento-oc.js?v=21.04"></script>
+    <script src="compras-agiles.js?v=21.04"></script>
+    <script src="ingreso-rapido.js?v=21.04"></script>
+    <script src="home-compras.js?v=21.04"></script>
+    <script src="login-animado.js?v=21.04"></script>
+    <script src="errores.js?v=21.04"></script>
+    <script src="saldos-contables.js?v=21.04"></script>
+    <script src="recepcion-conforme.js?v=21.04"></script>
+    <script src="acta-documentos.js?v=21.04"></script>
+    <script src="actas-entrega.js?v=21.04"></script>
+    <script src="oxigeno.js?v=21.04"></script>
+    <script src="visor-adquisiciones.js?v=21.04"></script>
 </body>
 </html>

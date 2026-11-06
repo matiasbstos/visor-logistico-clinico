@@ -129,7 +129,7 @@
         T('Orden de Compra: ' + (oc.numeroOC || ''), ML, y, 10.5, true); y += 22;
         T(`Con fecha ${fechaCorta(d.fecha)}, en calidad de contraparte técnica, certifico lo siguiente:`, ML, y, 10.5, false); y += 22;
         // Caja con lo recibido (se parte en otra página si es muy larga)
-        const items = lineasRecibidas(oc, centro).map(l => envolver(`${String(l.producto).toUpperCase()} (CANTIDAD:${miles(l.recibido)})`, 10.5, false, MR - ML - 44));
+        const items = (d.lineas || lineasRecibidas(oc, centro)).map(l => envolver(`${String(l.producto).toUpperCase()} (CANTIDAD:${miles(l.recibido)})`, 10.5, false, MR - ML - 44));
         const encab = `Que se recibió conforme en forma ${d.parcial ? 'Parcial' : 'Total'} de los productos, donde se recibió lo siguiente:`;
         const caja = (x0, x1, yTop, yBot) => { const t = 0.8; [[x0, yTop, x1, yTop], [x0, yBot, x1, yBot], [x0, yTop, x0, yBot], [x1, yTop, x1, yBot]].forEach(([a, b, c, e]) => page.drawLine({ start: { x: a, y: H - b }, end: { x: c, y: H - e }, thickness: t, color: negro })); };
         let top = y, cy = y + 16; T(encab, ML + 6, cy, 8.5, false); cy += 16;
@@ -260,5 +260,5 @@
         });
     }
 
-    window.SAR_RecepcionConforme = { editar, regenerar, abrir, nombreAdjunto, nombreActa, lineasActa, validar, armarCorreo, generarActaPDF, DESTINATARIOS_BASE };
+    window.SAR_RecepcionConforme = { cargarPDFLib, cargarLogo, cargarFirma, bajar, fechaCorta, CONTRAPARTE_BASE, FIRMA_BASE, editar, regenerar, abrir, nombreAdjunto, nombreActa, lineasActa, validar, armarCorreo, generarActaPDF, DESTINATARIOS_BASE };
 })(window, document);

@@ -509,8 +509,8 @@
                     return `<td class="soc-est--${estadoLinea(p, r)}"><strong>${r}</strong> / ${p}</td>`; }).join('')}</tr>`).join('')}
                 </tbody></table></div>
                 <div class="soc-resumen">${tot.filter(t => verTodos || t.centro === CENTRO_PROPIO).map(t => `<span><strong>${esc(t.centro)}</strong>: pendiente ${t.pendiente} un. · ${peso(t.netoPend)} neto de ${peso(t.netoTotal)}</span>`).join('')}</div></details>
-            ${(oc.recepciones || []).length ? `<details class="erp-card soc-det" id="soc-recs"><summary><h3>Recepciones registradas</h3><span class="soc-n">${oc.recepciones.length}</span></summary>
-                <ul class="soc-arch">${oc.recepciones.map(r => `<li class="${r.anulada ? 'soc-rec-anul' : ''}"><i class="ph-bold ph-truck"></i><div><strong>${esc(r.recId)}</strong>${r.anulada ? ' · <b>ANULADA</b>' : ''}<small>${esc(fmtFecha(r.fecha))} ${esc(r.hora || '')} · ${num(r.unidades)} u.${r.guia ? ' · guía ' + esc(r.guia) : ''}${r.ingresoAStock ? ' · ingresó a ' + esc(r.bodega || 'bodega') : ' · sin ingreso a stock'} · ${esc(r.usuario || '')}${r.anulada ? ' · motivo: ' + esc(r.anuladaMotivo || '') : ''}</small></div>${esAdmin() && !r.anulada ? `<button type="button" class="btn btn-outline btn-sm" data-anular-rec="${esc(r.recId)}">Anular</button>` : ''}</li>`).join('')}</ul></details>` : ''}
+            ${(oc.recepciones || []).length ? `<details class="erp-card soc-det" id="soc-recs"><summary><h3>Recepciones y recepción conforme</h3><span class="soc-n">${oc.recepciones.length}</span></summary>
+                <ul class="soc-arch">${oc.recepciones.map(r => `<li class="${r.anulada ? 'soc-rec-anul' : ''}"><i class="ph-bold ph-truck"></i><div><strong>${esc(r.recId)}</strong>${r.anulada ? ' · <b>ANULADA</b>' : ''}<small>${esc(fmtFecha(r.fecha))} ${esc(r.hora || '')} · ${num(r.unidades)} u.${r.guia ? ' · guía ' + esc(r.guia) : ''}${r.ingresoAStock ? ' · ingresó a ' + esc(r.bodega || 'bodega') : ' · sin ingreso a stock'} · ${esc(r.usuario || '')}${r.anulada ? ' · motivo: ' + esc(r.anuladaMotivo || '') : ''}</small></div>${!r.anulada ? `<span class="soc-rc-bts"><button type="button" class="btn btn-outline btn-sm" data-rc-pdf="${esc(r.recId)}">PDF</button><button type="button" class="btn btn-outline btn-sm" data-rc-docx="${esc(r.recId)}">Word</button><button type="button" class="btn btn-outline btn-sm" data-rc-ed="${esc(r.recId)}">Editar</button></span>` : ''}${esAdmin() && !r.anulada ? `<button type="button" class="btn btn-outline btn-sm" data-anular-rec="${esc(r.recId)}">Anular</button>` : ''}</li>`).join('')}</ul></details>` : ''}
             <div class="erp-card"><h3>Discrepancias <span class="soc-n">${disc.length}</span></h3>
                 ${disc.length ? '<ul class="soc-disc">' + disc.map(d => `<li class="soc-disc--${d.nivel}">${esc(d.texto)}</li>`).join('') + '</ul>' : '<p class="bodega-estantes__hint">Sin discrepancias.</p>'}
                 ${(oc.incidencias || []).filter(i => i.estado === 'ABIERTA').map(i => `<button type="button" class="btn btn-outline btn-sm" data-resolver="${esc(i.id)}">Resolver: ${esc(i.producto.slice(0, 30))}</button>`).join(' ')}</div>
@@ -566,6 +566,13 @@
             const prog = window.SAR_Progreso.iniciar('Anulando la recepción…', ['Preparando la anulación…']);
             try { await anularRecepcion(ocActual, recId, motivo, (t) => prog.paso(t)); prog.listo(`Recepción ${recId} anulada: stock y cantidades revertidos`, { informe: true }); }
             catch (e) { prog.error(); toast('No se anuló la recepción', e.message || String(e), 'error'); }
+        }));
+        const rcDe = (id) => (ocActual.recepciones || []).find(r => r.recId === id);
+        root().querySelectorAll('[data-rc-pdf],[data-rc-docx],[data-rc-ed]').forEach(b => b.addEventListener('click', () => {
+            if (!window.SAR_RecepConf) { toast('No disponible', 'El módulo de recepciones conformes no está cargado.', 'warning'); return; }
+            const id = b.dataset.rcPdf || b.dataset.rcDocx || b.dataset.rcEd, rec = rcDe(id); if (!rec) return;
+            if (b.dataset.rcEd) window.SAR_RecepConf.editar({ oc: ocActual, rec, toast, usuario: usuario() });
+            else window.SAR_RecepConf.descargar(ocActual, rec, b.dataset.rcDocx ? 'docx' : 'pdf', toast);
         }));
         const baa = q('#soc-arch-add'); if (baa) baa.addEventListener('click', formAgregarArchivo);
         const brEd = q('#soc-rc-edit'); if (brEd) brEd.addEventListener('click', () => {
@@ -1262,8 +1269,11 @@
             <label class="soc-toggle" id="r-stock-w"><input type="checkbox" id="r-stock" checked> Ingresar lo recibido al stock de ${esc(central)} (así se descuenta al entregarlo por acta)</label>
             <label>Observación (opcional)<input type="text" id="r-obs" maxlength="300"></label>
             <label class="soc-toggle"><input type="checkbox" id="r-correo" checked> Avisar por correo a la lista</label>
+            <div id="r-aviso" class="r-aviso" hidden></div>
             <datalist id="r-inv">${nombresAuto().map(n => `<option value="${esc(n)}">`).join('')}</datalist>`,
             async (o) => {
+                // Los avisos también se escriben dentro de la ventana (los toasts podían quedar tapados por ella)
+                const toast = (t, m, tipo) => { window.showToast && window.showToast(t, m, tipo || 'info'); if (tipo === 'warning' || tipo === 'error') { const b = o.querySelector('#r-aviso'); if (b) { b.hidden = false; b.className = 'r-aviso r-aviso--' + tipo; b.innerHTML = `<b>${esc(t)}</b> ${esc(m)}`; b.scrollIntoView({ block: 'center', behavior: 'smooth' }); } } };
                 const q = (s) => o.querySelector(s), key = q('#r-col').value, ingresaStock = q('#r-stock').checked; central = q('#r-dest').value || central;
                 const det = [], incidencias = [];
                 o.querySelectorAll('tr[data-i]').forEach(tr => {
@@ -1307,6 +1317,11 @@
                 } catch (err) { prog.error(err); throw err; }
                 prog.listo(`Listo: ${recId} · ${unidades} unidades${ingresaStock ? ` en ${central}` : ''}. Quedó registrada en Auditoría y en los informes contable y disponible.`);
                 await new Promise(r => setTimeout(r, 1400));
+                try {
+                    const recNueva = { recId, fecha, hora, guia: guia || '', columna: key, unidades, usuario: usuario(), ingresoAStock: !!ingresaStock, bodega: ingresaStock ? central : '', detalle: det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad })) };
+                    const ocDoc = { ...oc, lineas: aplicarRecepcion(oc, key, det, [], null, ingresaStock).lineas };
+                    if (window.SAR_RecepConf) setTimeout(() => window.SAR_RecepConf.ofrecer({ oc: ocDoc, rec: recNueva, toast, usuario: usuario() }), 300);
+                } catch (e) { /* los documentos se pueden descargar después desde la lista de recepciones */ }
                 toast('Recepción cargada', ingresaStock ? `${recId}: ${unidades} unidades ingresadas a ${central}. Registrada en los informes contable y disponible (Auditoría). Entrégalas a los centros desde Actas de entrega.` : `${recId}: se actualizó lo recibido.`, 'success');
             }, { ancho: true, ok: 'Guardar recepción' });
         const pintar = () => {

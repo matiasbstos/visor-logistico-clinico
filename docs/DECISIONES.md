@@ -486,3 +486,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.74 Entrega 0 con pedido = pendiente del centro (v21.19)
 - En el acta (ingreso manual o producto del stock) se puede poner cantidad a entregar 0 con un pedido mayor: el producto no mueve stock ni genera sobregiro, queda en la lista de pendientes del acta con su ID y aparece en "Pendientes por entregar" del centro. Su nombre/ID/foto se guardan en el catálogo.
 - El acta debe llevar al menos un producto con cantidad a entregar mayor que 0 (un acta solo de pendientes queda para después si se necesita).
+
+### 4.75 Ingreso manual no se cierra al cargar foto (v21.20)
+- Al elegir o quitar la foto del producto manual en el acta, solo se actualiza la vista previa en el sitio; ya no se redibuja el acta, así que el apartado "Ingreso manual" queda abierto y con lo escrito.
+- El estado abierto/cerrado del apartado se recuerda durante la edición del borrador.

@@ -562,3 +562,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.92 Correo de recepción: logo del Visor y sin mención de la Corporación (v21.38)
 - La cabecera del correo muestra el logo del Visor (assets/logo/marca-512.png) junto al logo del SAR.
 - Se elimina toda mención a la Corporación Municipal de Melipilla en el correo; el subtítulo queda "SAR Elsa Romo Aravena".
+
+### 4.93 Acta: el buscador de "Stock disponible" también muestra el catálogo (v21.39)
+- Al buscar (2+ letras), además del stock de la bodega se listan los productos del catálogo que no están en ella (p. ej. ingresados a mano antes), con ID y foto, bajo "Del catálogo, sin stock en esta bodega".
+- Al agregarlos quedan como manual · provisional (mismo tratamiento del ingreso manual), con pedido/entrega y pendiente si es 0.

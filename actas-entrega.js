@@ -423,6 +423,18 @@
         const q = busqueda.trim().toLowerCase();
         const lista = stock.filter(s => !q || s.name.toLowerCase().includes(q) || String(s.codigo || '').includes(q)).slice(0, 80);
         const yaEsta = (id) => borrador.items.some(i => i.id === id);
+        // Productos del catálogo (p. ej. ingresados a mano antes) que no están en el stock de esta bodega: también aparecen al buscar
+        const enCat = (!borrador.origen || q.length < 2) ? [] : (() => {
+            const vistos = new Set(stock.map(x => normN(x.name))), codS = new Set(stock.map(x => String(x.codigo || '')).filter(Boolean)), out = [];
+            catalogo.forEach((c, ci) => {
+                const nom = String(c.descripcion || c.insumoName || '').toUpperCase(), cod = c.codigoMP ? String(c.codigoMP) : '', nn = normN(nom);
+                if (!nom || vistos.has(nn) || (cod && codS.has(cod))) return;
+                if (!(nom.toLowerCase().includes(q) || cod.includes(q))) return;
+                vistos.add(nn); out.push({ ci, nombre: nom, codigo: cod, imagen: c.imagen || '' });
+            });
+            return out.slice(0, 15);
+        })();
+        const yaCat = (x) => borrador.items.some(i => i.manual && (normN(i.nombre) === normN(x.nombre) || (x.codigo && i.codigo === x.codigo)));
         const esCero = (i) => num(i.cantidad) === 0 && num(i.solicitado) > 0;   // no se entrega nada: queda pendiente del centro
         const pares = borrador.items.map((i, k) => [i, k]);
         const entregan = pares.filter(([i]) => !esCero(i)), enCero = pares.filter(([i]) => esCero(i));
@@ -450,6 +462,9 @@
             <div class="act-stock">${!borrador.origen ? '<p class="act-hint">Elige una bodega para ver su stock.</p>' : !lista.length ? '<p class="act-hint">Sin resultados. Si no está en el sistema, agrégalo a mano abajo.</p>' : lista.map(s => `
               <div class="act-fila${yaEsta(s.id) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(s.name, { codigo: s.codigo }) : ''}${esc(s.name)}${s.controlado ? ' <small>(controlado)</small>' : ''}${s.provisional ? ' <small>(provisional)</small>' : ''}<small>${s.codigo ? '<b>ID ' + esc(s.codigo) + '</b> · ' : '<span class="act-sin">sin ID</span> · '}${s.disp > 0 ? 'Disponible: ' + s.disp : '<span class="act-sin">Sin stock en sistema</span>'}${s.sobregiro > 0 ? ' · sobregiro: ' + s.sobregiro : ''}</small></div>
                 ${yaEsta(s.id) ? '<span class="act-chip">agregado</span>' : `<input type="number" min="0" class="act-qty" data-sid="${esc(s.id)}" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input type="number" min="1" value="1" class="act-qty" data-qid="${esc(s.id)}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-add" data-id="${esc(s.id)}">Agregar</button>`}</div>`).join('')}
+              ${enCat.length ? '<p class="act-hint"><b>Del catálogo, sin stock en esta bodega</b> (se agregan como manual · provisional):</p>' + enCat.map(x => `
+              <div class="act-fila${yaCat(x) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}${esc(x.nombre)} <small>(catálogo)</small><small>${x.codigo ? '<b>ID ' + esc(x.codigo) + '</b>' : '<span class="act-sin">sin ID</span>'} · <span class="act-sin">Sin stock en esta bodega</span></small></div>
+                ${yaCat(x) ? '<span class="act-chip">agregado</span>' : `<input type="number" min="0" class="act-qty" data-csid="${x.ci}" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input type="number" min="0" value="1" class="act-qty" data-cqid="${x.ci}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-addcat" data-ci="${x.ci}">Agregar</button>`}</div>`).join('') : ''}
               ${stock.filter(s => !q || s.name.toLowerCase().includes(q) || String(s.codigo || '').includes(q)).length > 80 ? '<p class="act-hint">Hay más resultados: afina la búsqueda.</p>' : ''}</div>
           </div>
           <div class="act-col">
@@ -525,6 +540,14 @@
             try { const nuevo = await guardarCentro(n); toast(nuevo ? 'Centro guardado' : 'Ya estaba en la lista', n, nuevo ? 'success' : 'info'); pintar(); } catch (e) { toast('No se guardó el centro', e.message || String(e), 'error'); }
         });
         ['act-centro', 'act-rn', 'act-rc', 'act-en', 'act-ec'].forEach(id => { const e = document.getElementById(id); if (e) e.addEventListener('change', () => { leerCampos(); guardarBorrador(); if (id === 'act-centro') pintar(); }); });
+        $$('.act-addcat').forEach(b => b.addEventListener('click', () => {
+            const c0 = catalogo[+b.dataset.ci]; if (!c0) return;
+            const c = Math.floor(num((r.querySelector(`.act-qty[data-cqid="${b.dataset.ci}"]`) || {}).value)), solC = Math.floor(num((r.querySelector(`.act-qty[data-csid="${b.dataset.ci}"]`) || {}).value));
+            if (!(c > 0 || (c === 0 && solC > 0))) { toast('Cantidad', 'Indica una cantidad mayor que 0 (o 0 con el pedido, para dejarlo pendiente).', 'warning'); return; }
+            if (borrador.items.length >= MAX_ITEMS) { toast('Límite', `Máximo ${MAX_ITEMS} productos por acta.`, 'warning'); return; }
+            const nom = String(c0.descripcion || c0.insumoName || '').toUpperCase(), cod = c0.codigoMP ? String(c0.codigoMP) : '';
+            borrador.items.push({ id: null, manual: true, nombre: nom, codigo: cod, cantidad: c, solicitado: solC > c ? solC : 0, stock: 0, ...(c0.imagen ? { imagen: c0.imagen } : {}) }); refrescar();
+        }));
         $$('.act-add').forEach(b => b.addEventListener('click', () => {
             const s = stock.find(x => x.id === b.dataset.id); const inp = r.querySelector(`.act-qty[data-qid="${CSS.escape(b.dataset.id)}"]`);
             const c = Math.floor(num(inp && inp.value));

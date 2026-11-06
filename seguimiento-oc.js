@@ -179,8 +179,13 @@
             ...tot.map(t => `- ${t.centro}: recibido ${t.recibido} de ${t.pedido} unidades${t.pendiente ? ` (pendiente ${t.pendiente})` : ' (completo)'}`)].join('\n');
     }
     function armarCorreo(oc, titulo, texto, autor, hoy) {
-        const cuerpo = `${texto}\n\n— Estado de la orden —\n${resumenTexto(oc, hoy)}\n\nEnviado desde el sistema de inventario SAR Melipilla por ${autor}.`;
-        return { subject: `OC ${oc.numeroOC} · ${titulo}`, text: cuerpo, html: '<div style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap">' + esc(cuerpo) + '</div>' };
+        const cuerpo = `${texto}\n\n— Estado de la orden —\n${resumenTexto(oc, hoy)}\n\nCORREO DE RESPALDO: informa solamente el registro de esta acción en el sistema (por ejemplo, la recepción de los productos). Generado automáticamente por el sistema Visor Logístico SAR (registrado por ${autor}). No requiere respuesta.`;
+        const plano = '<div style="font-family:Arial,sans-serif;font-size:14px;white-space:pre-wrap">' + esc(cuerpo) + '</div>';
+        let html = plano;
+        try {   // versión con la identidad visual del SAR (si el módulo no está, sale el texto de siempre)
+            if (window.SAR_CorreoHTML) { const pl = estadoPlazo(oc, hoy); html = window.SAR_CorreoHTML.armar({ titulo, texto, autor, orden: { numeroOC: oc.numeroOC, proveedor: oc.proveedor || '', plazo: `Aceptada el ${fmtFecha(oc.aceptada)} · plazo ${num(oc.plazoDiasHabiles) || 5} días hábiles · vence el ${fmtFecha(pl.limite)} · ${pl.texto}`, centros: totalesPorCentro(oc).map(t => ({ centro: t.centro, recibido: t.recibido, pedido: t.pedido, pendiente: t.pendiente })) } }); }
+        } catch (e) { html = plano; }
+        return { subject: `OC ${oc.numeroOC} · ${titulo}`, text: cuerpo, html };
     }
     const INCIDENCIAS = { DANADO: 'Dañado / defectuoso', VENCIMIENTO_CORTO: 'Vencimiento corto', DISTINTO: 'Producto distinto al pedido', FALTANTE: 'Faltante', OTRO: 'Otro' };
     const emailValido = (e) => /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(String(e || '').trim());

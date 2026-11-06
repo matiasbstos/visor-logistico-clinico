@@ -314,7 +314,27 @@
                 catCargado = false;
             } catch (e) { /* el acta ya se emitió */ }
         }
+        buscarFotosEnSegundoPlano(items);   // sin esperar: el acta ya quedó emitida
         return resultado;
+    }
+
+    /** Tras emitir: si un producto del acta no tiene foto, la busca (por ID o, si no hay, por su descripción) y la deja "por confirmar" en el catálogo. */
+    async function buscarFotosEnSegundoPlano(items) {
+        try {
+            const IM = window.SAR_Imagenes, f = fs(); if (!IM || !IM.buscarFoto) return;
+            const faltan = items.filter(i => !(IM.buscar(i.nombre, i.codigo) || (IM.buscarConCandidata && IM.buscarConCandidata(i.nombre, i.codigo)))).slice(0, 10); if (!faltan.length) return;
+            const sn = await f.getDoc(f.doc(f.collection(db(), 'Config_Correo'), 'principal')); const cfg = sn.exists() ? sn.data() : null;
+            if (!(cfg && cfg.webhookUrl && cfg.token)) return;
+            let n = 0;
+            for (const i of faltan) {
+                const cod = String(i.codigo || '').trim();
+                const r = cod ? await IM.buscarFoto(cod, cfg) : await IM.buscarPorDescripcion(i.nombre, cfg);
+                if (!(r && r.archivo)) continue;
+                const prev = catalogo.find(c => (cod && String(c.codigoMP || '') === cod) || normN(c.descripcion) === normN(i.nombre));
+                await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), prev ? prev.id : (slugC(cod || i.nombre) || 'manual')), { descripcion: i.nombre, descripcion_lower: String(i.nombre).toLowerCase(), codigoMP: cod, imagenMP: r.archivo, fotoEstado: r.origen === 'semilla' ? 'confirmada' : 'por_confirmar', ...(r.titulo ? { fotoTitulo: r.titulo } : {}), actualizado: f.serverTimestamp() }, { merge: true }); n++;
+            }
+            if (n) { catCargado = false; if (IM.recargar) IM.recargar(); toast('Fotos', `${n} foto(s) encontrada(s) para productos del acta: confírmalas en Catálogo de productos.`, 'info'); }
+        } catch (e) { /* la foto es un extra: nunca debe afectar al acta */ }
     }
 
     /** Anula un acta emitida: devuelve el stock a la bodega de origen. */

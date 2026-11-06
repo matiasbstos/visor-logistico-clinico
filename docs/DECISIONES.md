@@ -479,3 +479,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.72 Foto en el formulario de ingreso manual del acta (v21.17)
 - El formulario "¿No está en el sistema? Ingreso manual" tiene el botón "Cargar foto del producto (opcional)" (WEBP, JPG, PNG…): la foto se ve en miniatura, se agrega con el producto y queda en el catálogo al emitir. (Antes solo aparecía en la fila ya agregada.)
+
+### 4.73 Aviso de versión nueva (v21.18)
+- Si hay una versión publicada distinta de la que tiene abierta el navegador, aparece abajo el aviso "Hay una versión nueva del visor" con el botón Actualizar (se revisa cada 3 min y al volver a la pestaña). Motivo: el botón de foto del acta ya estaba desplegado pero la pantalla abierta seguía en la versión anterior.

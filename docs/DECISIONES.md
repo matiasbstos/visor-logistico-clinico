@@ -466,3 +466,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.68 Foto por descripción al emitir un acta (v21.13)
 - Al emitir un acta, los productos sin foto se buscan en segundo plano (por ID; si no hay ID, por la descripción en las tiendas de Convenio Marco) y quedan "por confirmar" en el catálogo. No se asigna ID automáticamente: el número que muestra la tienda puede no coincidir con el ID de la orden (sin verificar), por eso el ID lo escribe el usuario.
+
+### 4.69 Impresión más compacta (v21.14)
+- Hoja de picking y listado de pendientes: los centros ya no empiezan cada uno en una hoja nueva (quedaban hojas casi vacías); se siguen uno tras otro separados por una línea, con fotos y espaciado más pequeños. Una fila nunca se corta entre dos hojas.

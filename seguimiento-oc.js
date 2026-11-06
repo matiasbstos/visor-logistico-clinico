@@ -1070,7 +1070,7 @@
         det.forEach(d => { const l = lineas[d.i]; l.recibido[key] = num(l.recibido[key]) + d.cantidad; if (ingresaStock) l.ingresado[key] = num(l.ingresado[key]) + d.cantidad; if (d.insumoName) l.insumoName = d.insumoName; });
         return { lineas, incidencias: [...(data.incidencias || []), ...incidencias.map((n, k) => ({ id: `inc-${Date.now()}-${k}`, ...n, estado: 'ABIERTA', fecha: hoyISO(), ...(extra || {}) }))] };
     }
-    async function recepcionConStock(oc, { onPaso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar, ingresaStock, central, texto, titulo }) {
+    async function recepcionConStock(oc, { extras, baseN, onPaso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar, ingresaStock, central, texto, titulo }) {
         const f = fs(); const paso = (t) => { if (onPaso) onPaso(t); };
         const aplicadoLocal = aplicarRecepcion(oc, key, det, incidencias, null, ingresaStock);
         let correo = null;
@@ -1097,6 +1097,10 @@
             const os = await tx.get(ocRef); if (!os.exists()) throw new Error('La orden ya no existe.');
             const lecturas = []; for (const g of grupos.values()) lecturas.push([g, await tx.get(g.ref)]);
             const fresca = os.data();
+            if (extras && extras.length) {   // productos agregados en la recepción: se suman a las líneas de la orden
+                if ((fresca.lineas || []).length !== baseN) throw new Error('La orden cambió mientras recibías. Cierra la ventana y vuelve a abrir la recepción.');
+                fresca.lineas = [...(fresca.lineas || []), ...extras.map(l => ({ ...l, agregadaPor: usuario(), agregadaEn: hoyISO() }))];
+            }
             det.forEach(d => { const l = (fresca.lineas || [])[d.i] || {}, pe = num(l.dist && l.dist[key]) - num(l.recibido && l.recibido[key]); if (d.cantidad > Math.max(0, pe)) throw new Error(`"${String(l.descripcion || '').slice(0, 40)}": solo quedan ${Math.max(0, pe)} por recibir (otra recepción se registró antes). Cierra y vuelve a abrir.`); });
             tx.update(ocRef, { ...aplicarRecepcion(fresca, key, det, incidencias, null, ingresaStock), ...(guia ? { ultimaGuia: guia } : {}), ultimaRecepcion: fecha, recepciones: [...(fresca.recepciones || []), { recId, fecha, hora, guia: guia || '', columna: key, bodega: ingresaStock ? central : '', ingresoAStock: !!ingresaStock, usuario: usuario(), unidades: det.reduce((t, d) => t + d.cantidad, 0), detalle: det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, insumoName: d.insumoName || '', cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })) }], actualizadoEn: f.serverTimestamp() });
             tx.set(evRef, { tipo: 'RECEPCION', texto, autor: usuario(), fecha: f.serverTimestamp(), ...(correo ? { correo } : {}), columna: key, guia, recId, horaLlegada: hora, bodegaDestino: central, fechaRecepcion: fecha, ingresoAStock: !!ingresaStock, detalle: det.map(d => ({ i: d.i, bodega: central, insumoName: d.insumoName || '', descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })), incidencias: incidencias.map(n => ({ producto: n.producto, tipo: n.tipo, detalle: n.detalle })) });
@@ -1229,7 +1233,8 @@
         return { paso: P.paso, listo: (txt, sinInforme) => P.listo(txt, { informe: !sinInforme, ms: 60000, aviso: false }), error: () => P.error() };
     }
     async function formRecepcion() {
-        const oc = ocActual; const cols = oc.columnas || [];
+        // Copia de trabajo: si se agregan productos que el lector no leyó, solo se guardan al confirmar la recepción
+        const oc0 = ocActual; const oc = { ...oc0, lineas: [...(oc0.lineas || [])] }; const baseN = oc0.lineas.length, extras = []; const cols = oc.columnas || [];
         let central = 'Bodega Central', nombresInv = [], bodegasLista = [], catalogo = new Map();
         cargarCatalogo().then(m => { catalogo = m; const lv = ov && ov.querySelector('#r-lineas'); if (lv) lv.querySelectorAll('tr[data-i] .r-n').forEach(inp => { const c = catalogo.get(catId(oc.lineas[+inp.closest('tr').dataset.i] || {})); if (c && c.insumoName && inp.value === (oc.lineas[+inp.closest('tr').dataset.i] || {}).descripcion) inp.value = c.insumoName; }); const dl = ov && ov.querySelector('#r-inv'); if (dl) dl.innerHTML = nombresAuto().map(n => `<option value="${esc(n)}">`).join(''); }).catch(() => {});
         const nombresAuto = () => [...new Set([...nombresInv, ...[...catalogo.values()].map(c => c.insumoName).filter(Boolean)])];
@@ -1247,6 +1252,11 @@
             <label>Guía de despacho (foto o PDF, opcional: queda guardada en la orden)<input type="file" id="r-file" accept="application/pdf,image/*"></label>
             <div class="soc-barra-rec"><button type="button" class="btn btn-outline btn-sm" id="r-total"><i class="ph-bold ph-checks"></i> Marcar todo recibido</button><button type="button" class="btn btn-outline btn-sm" id="r-nada">Limpiar</button><span id="r-resumen" class="soc-resumen-rec"></span></div>
             <div id="r-lineas"></div>
+            <div class="r-extra"><button type="button" class="btn btn-outline btn-sm" id="r-add"><i class="ph-bold ph-plus"></i> Agregar un producto que no vino en la orden</button>
+              <div id="r-add-f" class="r-add-f" hidden><small>Si el lector no alcanzó a leer algún producto del documento, agrégalo aquí: queda en la orden como producto agregado y se recibe como cualquier otro (lote y vencimiento los puedes completar ahora o después).</small>
+                <div class="soc-fila"><label>Producto (descripción)<input type="text" id="ra-n" autocomplete="off" placeholder="Escribe una o más letras para ver sugerencias"></label><label>ID Mercado Público (opcional)<input type="text" id="ra-c" inputmode="numeric" autocomplete="off"></label></div>
+                <div class="soc-fila"><label>Pedido según el documento<input type="number" id="ra-p" min="1" placeholder="Si no lo sabes, igual a lo que llega"></label><label>Llega ahora<input type="number" id="ra-q" min="0" value="0"></label></div>
+                <button type="button" class="btn btn-sm" id="ra-ok">Agregar a la recepción</button></div></div>
             <label class="soc-toggle"><input type="checkbox" id="r-lv"> Anotar lote y vencimiento ahora (también se puede hacer después)</label>
             <label>Bodega de destino<span class="r-dest-fila"><select id="r-dest"><option>${esc(central)}</option></select><button type="button" class="btn btn-outline btn-sm" id="r-nueva-b">+ Nueva bodega</button></span></label>
             <label class="soc-toggle" id="r-stock-w"><input type="checkbox" id="r-stock" checked> Ingresar lo recibido al stock de ${esc(central)} (así se descuenta al entregarlo por acta)</label>
@@ -1280,13 +1290,13 @@
                 if (avisos.length && o.dataset.aviso !== firma) { o.dataset.aviso = firma; toast('Revisa antes de guardar', avisos.join('. ') + '. Si es correcto, pulsa Guardar recepción otra vez.', 'warning'); return false; }
                 const nRec = eventos.filter(e => e.tipo === 'RECEPCION').length + 1, recId = `REC-${String(oc.numeroOC).replace(/[^A-Za-z0-9-]+/g, '')}-${String(nRec).padStart(2, '0')}`, hora = new Date().toTimeString().slice(0, 5);
                 const texto = `${recId} · Recepción en ${col.centro}${col.memo ? ' (memo ' + col.memo + (col.cdp ? ', CDP ' + col.cdp : '') + ')' : ''} el ${fmtFecha(fecha)} a las ${hora}${guia ? ' · guía N° ' + guia : ''}:\n` +
-                    (det.length ? det.map(d => `- ${oc.lineas[d.i].descripcion}: ${d.cantidad} un.${d.lote ? ' · lote ' + d.lote : ''}${d.vence ? ' · vence ' + fmtFecha(d.vence) : ''}`).join('\n') : '- (sin unidades recibidas)') +
+                    (det.length ? det.map(d => `- ${oc.lineas[d.i].descripcion}${oc.lineas[d.i].agregada ? ' (agregado en la recepción)' : ''}: ${d.cantidad} un.${d.lote ? ' · lote ' + d.lote : ''}${d.vence ? ' · vence ' + fmtFecha(d.vence) : ''}`).join('\n') : '- (sin unidades recibidas)') +
                     (incidencias.length ? '\nINCIDENCIAS:\n' + incidencias.map(n => `- ${n.producto}: ${INCIDENCIAS[n.tipo]}${n.detalle ? ' — ' + n.detalle : ''}`).join('\n') : '') + (obs ? '\nObs.: ' + obs : '') + (ingresaStock ? `\nIngresado al stock de ${central}.` : '');
                 const unidades = det.reduce((t, d) => t + d.cantidad, 0);
                 const prog = progresoRecepcion(o, ['Validando la recepción…']);
                 try {
                 const fGuia = (q('#r-file').files || [])[0];
-                await recepcionConStock(oc, { onPaso: prog.paso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar: q('#r-correo').checked, ingresaStock, central, texto, titulo: incidencias.length ? `Recepción con incidencias en ${col.centro}` : `Recepción en ${col.centro}` });
+                await recepcionConStock(oc, { extras, baseN, onPaso: prog.paso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar: q('#r-correo').checked, ingresaStock, central, texto, titulo: incidencias.length ? `Recepción con incidencias en ${col.centro}` : `Recepción en ${col.centro}` });
                 if (ingresaStock) await aprenderNombres(oc, det);
                 if (fGuia) { prog.paso('Guardando la guía en la orden…'); await guardarFile(oc.id, fGuia, 'Guía de despacho ' + recId); }
                 } catch (err) { prog.error(err); throw err; }
@@ -1301,6 +1311,21 @@
                     (st ? `<td data-l="Producto en inventario"><input class="r-n" list="r-inv" aria-label="Producto en inventario" value="${esc(l.insumoName || ((catalogo.get(catId(l)) || {}).insumoName) || l.descripcion)}"></td>` + (lv ? `<td data-l="Lote"><input class="r-l" aria-label="Lote" placeholder="S/L"></td><td data-l="Vence"><input type="date" class="r-v" aria-label="Fecha de vencimiento"></td>` : '') : '') +
                     `<td data-l="Incidencia"><select class="r-t" aria-label="Incidencia"><option value="">Sin incidencia</option>${Object.entries(INCIDENCIAS).map(([k, t]) => `<option value="${k}">${esc(t)}</option>`).join('')}</select><input class="r-td" aria-label="Detalle de la incidencia" placeholder="Detalle"></td></tr>` : ''; }).join('') + '</tbody></table></div>';
         };
+        ov.querySelector('#r-add').addEventListener('click', () => { const f = ov.querySelector('#r-add-f'); f.hidden = !f.hidden; if (!f.hidden) ov.querySelector('#ra-n').focus(); });
+        if (window.SAR_Sugerir) window.SAR_Sugerir.enlazar(ov.querySelector('#ra-n'), () => [...nombresInv.map(n => ({ nombre: n, codigo: '', nota: 'inventario' })), ...[...catalogo.values()].map(c => ({ nombre: String(c.descripcion || c.insumoName || '').toUpperCase(), codigo: c.codigoMP ? String(c.codigoMP) : '', nota: 'catálogo' })).filter(x => x.nombre)], (x) => { const c = ov.querySelector('#ra-c'); if (c && x.codigo && !c.value) c.value = x.codigo; });
+        ov.querySelector('#ra-ok').addEventListener('click', () => {
+            const nombre = ov.querySelector('#ra-n').value.trim().toUpperCase(), cod = ov.querySelector('#ra-c').value.replace(/\D/g, ''), q = Math.floor(num(ov.querySelector('#ra-q').value));
+            const ped = Math.floor(num(ov.querySelector('#ra-p').value)) || q;
+            if (!nombre) { toast('Falta el producto', 'Escribe el nombre del producto.', 'warning'); return; }
+            if (!(ped > 0)) { toast('Falta la cantidad', 'Indica el pedido o lo que llega ahora (mayor que 0).', 'warning'); return; }
+            if (q > ped) { toast('Cantidad no válida', 'Lo que llega ahora no puede superar el pedido.', 'warning'); return; }
+            const key = ov.querySelector('#r-col').value;
+            const l = { descripcion: nombre, codigoMP: cod, licitacion: '', valorNeto: 0, dist: { [key]: ped }, recibido: {}, ingresado: {}, entregado: {}, agregada: true };
+            oc.lineas.push(l); extras.push(l); pintar();
+            const tr = ov.querySelector(`tr[data-i="${oc.lineas.length - 1}"]`); if (tr && q > 0) tr.querySelector('.r-c').value = q;
+            ['#ra-n', '#ra-c', '#ra-p'].forEach(i => { ov.querySelector(i).value = ''; }); ov.querySelector('#ra-q').value = '0'; resumen();
+            toast('Producto agregado', `${nombre} quedó en la lista de esta recepción. Completa producto en inventario, lote y vencimiento si corresponde.`, 'success');
+        });
         const resumen = () => {
             let pe = 0, lleg = 0, sobra = 0; ov.querySelectorAll('tr[data-i]').forEach(tr => { const v = num(tr.querySelector('.r-c').value); pe += num(tr.dataset.pe); lleg += Math.min(num(tr.dataset.pe), v); sobra += Math.max(0, v - num(tr.dataset.pe)); tr.classList.toggle('r-sobra', v > num(tr.dataset.pe)); });
             const el = ov.querySelector('#r-resumen'); if (el) el.innerHTML = `Pendiente: <b>${pe}</b> un. · llegan ahora: <b>${lleg}</b> · quedarían pendientes: <b>${Math.max(0, pe - lleg)}</b>${sobra ? ` · <span class="cierre-error">${sobra} de más</span>` : ''}`;

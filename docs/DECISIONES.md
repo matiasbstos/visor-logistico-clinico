@@ -553,3 +553,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.90 Existencias: paginación numerada (v21.35→v21.36)
 - Abajo de la tabla ahora se ven los números de página (1 2 3 … con la actual marcada), las flechas anterior/siguiente y el texto "Página X de Y · N producto(s)".
+
+### 4.91 Correo de recepción con identidad visual y aviso de respaldo (v21.37)
+- El correo de recepción/estado de orden se envía ahora también como HTML (Apps Script ya acepta `html`; sin redeploy): franja de 4 colores SAR, cabecera azul con logo y "Visor Logístico", tabla de productos, incidencias/observaciones, barras de avance por centro.
+- Aviso destacado: "CORREO DE RESPALDO… generado automáticamente por el sistema Visor Logístico SAR; no requiere respuesta". También en el pie del texto plano (fallback).
+- Módulo nuevo `correo-html.js` (`SAR_CorreoHTML`); si falla, se envía el HTML simple anterior.

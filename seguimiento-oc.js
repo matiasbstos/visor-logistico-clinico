@@ -320,7 +320,13 @@
                 // ¿la misma descripción ya existe con otro código? Se avisa y la foto no se da por buena sin mirarla en la tienda.
                 const parecido = [...previos.values()].find(x => x.id !== id && nd(x.descripcion) === nd(l.descripcion) && String(x.codigoMP || '') !== String(l.codigoMP || ''));
                 let foto = {};
-                if (!l.codigoMP) diagFotos.sinCodigo++;
+                if (!l.codigoMP && !(prev && (prev.imagenMP || prev.fotoEstado))) {
+                    try {
+                        const r = window.SAR_Imagenes && await window.SAR_Imagenes.buscarPorDescripcion(l.descripcion, configCorreo);
+                        if (r && r.archivo) { diagFotos.porDescripcion = (diagFotos.porDescripcion || 0) + 1; foto = { imagenMP: r.archivo, fotoEstado: 'por_confirmar', fotoTitulo: r.titulo || '' }; }
+                        else diagFotos.sinCodigo++;
+                    } catch (e) { diagFotos.sinCodigo++; }
+                } else if (!l.codigoMP) diagFotos.yaTenian++;
                 else if (prev && (prev.imagenMP || prev.fotoEstado)) diagFotos.yaTenian++;
                 if (l.codigoMP && window.SAR_Imagenes && !(prev && (prev.imagenMP || prev.fotoEstado))) {
                     try { const r = await window.SAR_Imagenes.buscarFoto(l.codigoMP, configCorreo); if (r.archivo) diagFotos.encontradas++; else { diagFotos.noEncontradas++; const m = String(r.motivo || 'no_en_tiendas').split(':')[0]; diagFotos.motivos[m] = (diagFotos.motivos[m] || 0) + 1; if (r.motivo && r.motivo.includes(':')) diagFotos.detalle = r.motivo; } if (r.archivo) foto = { imagenMP: r.archivo, fotoEstado: (r.origen === 'semilla' && !parecido) ? 'confirmada' : 'por_confirmar' }; } catch (e) { foto = {}; }
@@ -531,14 +537,15 @@
             try {
                 await window.SAR_Progreso.correr('Buscando las fotos de esta orden…', async () => { await registrarCatalogo({ ...ocActual, id: ocActual.id }); if (window.SAR_Imagenes) await window.SAR_Imagenes.recargar(); }, 'Fotos buscadas');
                 const dg = diagFotos, partes = [];
-                if (dg.sinCodigo) partes.push(`${dg.sinCodigo} producto(s) SIN código en la orden (no se pueden buscar: pega o sube la foto a mano)`);
+                if (dg.porDescripcion) partes.push(`${dg.porDescripcion} foto(s) halladas por la descripción (sin código): revísalas en Catálogo de productos`);
+                if (dg.sinCodigo) partes.push(`${dg.sinCodigo} producto(s) sin código y sin coincidencia clara por descripción: pega o sube la foto a mano`);
                 if (dg.yaTenian) partes.push(`${dg.yaTenian} ya tenían foto o estaban por confirmar`);
                 if (dg.encontradas) partes.push(`${dg.encontradas} foto(s) encontrada(s): confírmalas en Catálogo de productos`);
                 if (dg.noEncontradas) {
                     const mt = dg.motivos || {};
                     partes.push(`${dg.noEncontradas} sin foto: ` + [mt.no_en_tiendas ? 'el script no la encontró en ninguna tienda de Convenio Marco' : '', mt.sin_script ? 'falta configurar el script (Configurar correo)' : '', mt.script_rechazo ? 'el script rechazó la consulta (revisa la clave)' : '', mt.script_inaccesible ? 'no se pudo conectar con el script' : ''].filter(Boolean).join('; ') + (dg.detalle ? ` [${dg.detalle}]` : ''));
                 }
-                toast(dg.encontradas ? 'Fotos buscadas' : 'No se encontraron fotos nuevas', partes.join(' · ') || 'Sin cambios.', dg.encontradas ? 'success' : 'warning');
+                toast((dg.encontradas || dg.porDescripcion) ? 'Fotos buscadas' : 'No se encontraron fotos nuevas', partes.join(' · ') || 'Sin cambios.', (dg.encontradas || dg.porDescripcion) ? 'success' : 'warning');
                 pintarDetalle();
             } catch (e) { toast('No se pudo buscar', e.message || String(e), 'error'); } finally { bft.disabled = false; }
         });
@@ -1348,6 +1355,7 @@ function doPost(e) {
     const d = JSON.parse(e.postData.contents);
     if (d.token !== TOKEN) return salida({ ok: false, error: 'token' });
     if (d.accion === 'foto') return salida(leerFotos(d.fotos));
+    if (d.accion === 'porDescripcion') { const o = {}; (d.items || []).slice(0, 25).forEach(it => { o[it.k] = fotoPorDescripcion(it.q); }); return salida({ ok: true, fotos: o }); }
     if (d.accion === 'imagenes') {   // foto de producto en la tienda de Convenio Marco (por el código entre paréntesis)
       const out = {}; (d.codigos || []).slice(0, 60).forEach(c => { out[c] = imagenDe(String(c).replace(/\\D/g, '')); });
       return salida({ ok: true, imagenes: out });
@@ -1409,6 +1417,31 @@ function leerFotos(fotos) {   // lee fotos de cajas con la API de Claude (la cla
   const t = (j.content || []).map(x => x.text || '').join(''), a = t.indexOf('['), b = t.lastIndexOf(']');
   if (a < 0 || b < a) return { ok: false, error: 'respuesta_ilegible' };
   return { ok: true, productos: JSON.parse(t.slice(a, b + 1)) };
+}
+function normT(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' '); }
+function fotoPorDescripcion(desc) {   // busca por descripcion en todas las tiendas y elige el resultado mas parecido (siempre queda "por confirmar")
+  const PAR = { de: 1, del: 1, la: 1, el: 1, los: 1, las: 1, con: 1, para: 1, por: 1, igual: 1, o: 1, y: 1, a: 1, en: 1, superior: 1, un: 1, una: 1, unidades: 1, unidad: 1, formato: 1 };
+  const toks = normT(desc).split(/\\s+/).filter(w => w && !PAR[w] && (w.length > 2 || /\\d/.test(w)));
+  if (toks.length < 2) return null;
+  const cache = CacheService.getScriptCache(), k = 'dsc' + Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, toks.join(' '))).slice(0, 20), g = cache.get(k);
+  if (g !== null) return g ? JSON.parse(g) : null;
+  const q = encodeURIComponent(toks.slice(0, 7).join(' '));
+  let mejor = null;
+  try {
+    const res = UrlFetchApp.fetchAll(tiendas().map(t => ({ url: BASE + t + '/catalogsearch/result/?q=' + q, muteHttpExceptions: true, followRedirects: true })));
+    res.forEach(r => {
+      let h = ''; try { h = r.getContentText(); } catch (e) { return; }
+      h.split(/class="[^"]*product-item-info/).slice(1, 25).forEach(b => {
+        const im = b.match(/media\\/catalog\\/product\\/(\\d\\/\\d\\/[^"'?\\s]+)/), t = b.match(/product-item-link[^>]*>\\s*([^<]+?)\\s*</);
+        if (!im || !t) return;
+        const tt = ' ' + normT(t[1]) + ' ', ok = toks.filter(w => tt.indexOf(' ' + w + ' ') >= 0).length, p = ok / toks.length;
+        if (!mejor || p > mejor.puntaje) mejor = { archivo: im[1], titulo: t[1].slice(0, 160), puntaje: Math.round(p * 100) / 100 };
+      });
+    });
+  } catch (e) { /* sin red */ }
+  if (mejor && mejor.puntaje < 0.6) mejor = null;
+  cache.put(k, mejor ? JSON.stringify(mejor) : '', 21600);
+  return mejor;
 }`;
 
     function formConfig() {

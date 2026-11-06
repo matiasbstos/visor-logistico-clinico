@@ -89,6 +89,12 @@
         const g = await adivinar(c); if (g) return { archivo: g, origen: 'supuesto' };
         return { archivo: '', origen: '', motivo };
     }
+    /** Sin código: el script busca por la descripción en las tiendas y devuelve el resultado más parecido (siempre "por confirmar"). */
+    async function buscarPorDescripcion(desc, cfg) {
+        if (!(cfg && cfg.webhookUrl && cfg.token) || !String(desc || '').trim()) return null;
+        const r = await fetch(cfg.webhookUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ token: cfg.token, accion: 'porDescripcion', items: [{ k: 'a', q: String(desc) }] }) });
+        const j = await r.json(); return (j && j.ok && j.fotos && j.fotos.a) || null;
+    }
     const archivoPara = async (codigo, cfg) => (await buscarFoto(codigo, cfg)).archivo;
     /** Sin Apps Script: prueba los nombres de archivo habituales (código−7, con o sin _1) cargando la imagen. */
     function probar(url) { return new Promise(ok => { const im = new Image(); im.onload = () => ok(im.naturalWidth > 20); im.onerror = () => ok(false); im.src = url; }); }
@@ -114,5 +120,5 @@
     document.addEventListener('click', (e) => { const im = e.target && e.target.closest && e.target.closest('.prod-img img'); if (im) { e.preventDefault(); e.stopPropagation(); ampliar(im); } }, true);
     let t = null;
     if (typeof MutationObserver !== 'undefined') new MutationObserver(() => { if (!listo) return; clearTimeout(t); t = setTimeout(() => rellenar(), 250); }).observe(document.documentElement, { childList: true, subtree: true });
-    window.SAR_Imagenes = { buscarFoto, ampliar, cargar, thumb, buscar, src, imgHTML, rellenar, archivoPara, urlMP, recargar: () => cargar(true) };
+    window.SAR_Imagenes = { buscarFoto, buscarPorDescripcion, ampliar, cargar, thumb, buscar, src, imgHTML, rellenar, archivoPara, urlMP, recargar: () => cargar(true) };
 })(window, document);

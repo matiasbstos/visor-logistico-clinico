@@ -558,3 +558,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - El correo de recepción/estado de orden se envía ahora también como HTML (Apps Script ya acepta `html`; sin redeploy): franja de 4 colores SAR, cabecera azul con logo y "Visor Logístico", tabla de productos, incidencias/observaciones, barras de avance por centro.
 - Aviso destacado: "CORREO DE RESPALDO… generado automáticamente por el sistema Visor Logístico SAR; no requiere respuesta". También en el pie del texto plano (fallback).
 - Módulo nuevo `correo-html.js` (`SAR_CorreoHTML`); si falla, se envía el HTML simple anterior.
+
+### 4.92 Correo de recepción: logo del Visor y sin mención de la Corporación (v21.38)
+- La cabecera del correo muestra el logo del Visor (assets/logo/marca-512.png) junto al logo del SAR.
+- Se elimina toda mención a la Corporación Municipal de Melipilla en el correo; el subtítulo queda "SAR Elsa Romo Aravena".

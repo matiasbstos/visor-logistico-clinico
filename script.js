@@ -3314,6 +3314,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>
                     <div style="display:flex;gap:8px">
                         ${isCritical ? '<button class="btn btn-primary text-sm font-bold" style="background-color: #3730a3;"><i class="ph-fill ph-sparkle"></i> ALTERNATIVA</button>' : '<button class="btn btn-outline text-primary text-sm font-bold"><i class="ph-fill ph-sparkle"></i> ALTERNATIVA</button>'}
+                        <button class="btn btn-icon btn-mover-bodega" title="Mover a otra bodega" aria-label="Mover a otra bodega"><i class="ph ph-arrows-left-right"></i></button>
                         <button class="btn btn-icon btn-kardex" title="Ver Kardex y Trazabilidad"><i class="ph ph-chart-line-up"></i></button>
                         <button class="btn btn-icon btn-edit-insumo"><i class="ph ph-pencil-simple"></i></button>
                         <button class="btn btn-icon btn-delete-insumo admin-only"><i class="ph ph-trash"></i></button>
@@ -4154,6 +4155,28 @@ document.addEventListener('DOMContentLoaded', () => {
                         window.openKardexModal(docId, itemName);
                     }
                 }
+            });
+
+            // 9d-1.6 MOVER UN PRODUCTO DEL STOCK A OTRA BODEGA (abre la transferencia con el producto ya elegido)
+            inventoryTableBody.addEventListener('click', async (e) => {
+                const mv = (e.target && typeof e.target.closest === 'function') ? e.target.closest('.btn-mover-bodega') : null;
+                if (!mv) return;
+                e.preventDefault();
+                try {
+                    const id = mv.closest('tr').dataset.id;
+                    const ds = await getDoc(doc(db, 'Insumos', id));
+                    if (!ds.exists()) { showToast('Mover', 'El producto ya no existe.', 'warning'); return; }
+                    const d = ds.data(), from = d.location || 'Bodega Central';
+                    const bs = await getDocs(collection(db, 'Bodegas'));
+                    const destinos = []; bs.forEach(x => { const b = x.data(); if (b.name && b.isActive !== false && b.name !== from) destinos.push(b.name); });
+                    if (!destinos.length) { showToast('Mover', 'No hay otra bodega a la que mover. Crea una en Bodegas.', 'warning'); return; }
+                    document.getElementById('transfer-from-name').value = from;
+                    const insumoSelect = document.getElementById('transfer-insumo-id'), toSelect = document.getElementById('transfer-to-id');
+                    insumoSelect.innerHTML = `<option value="${ds.id}" data-qty="${d.quantity}" data-batch="${window.escapeHTML(d.batch || 'S/L')}" data-name="${window.escapeHTML(d.name)}" selected>${window.escapeHTML(d.name)} (Stock: ${d.quantity})</option>`;
+                    toSelect.innerHTML = '<option value="" disabled selected>Seleccione destino...</option>' + destinos.sort((a, z) => a.localeCompare(z, 'es')).map(n => `<option value="${window.escapeHTML(n)}">${window.escapeHTML(n)}</option>`).join('');
+                    const tt = document.getElementById('transfer-type'); if (tt) { tt.value = 'BODEGA'; tt.dispatchEvent(new Event('change')); }
+                    document.getElementById('modal-transferencia').classList.add('active');
+                } catch (err) { showToast('Mover', 'No se pudo abrir el traspaso: ' + (err.message || err), 'error'); }
             });
 
             // 9d-2. ABRIR MODAL DE EDICIÓN

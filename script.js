@@ -3191,6 +3191,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (btnPrevPage) btnPrevPage.disabled = currentPageIndex === 0;
             if (btnNextPage) btnNextPage.disabled = end >= filteredInventorySnapshots.length;
+            // Paginación numerada: 1 2 3 … con la página actual marcada
+            const total = Math.max(1, Math.ceil(filteredInventorySnapshots.length / PAGE_SIZE)), act = currentPageIndex + 1;
+            const nums = document.getElementById('inv-page-nums');
+            if (nums) {
+                const set = new Set([1, total, act, act - 1, act + 1, act - 2, act + 2].filter(n => n >= 1 && n <= total)), orden = [...set].sort((a, b) => a - b);
+                nums.innerHTML = orden.map((n, i) => (i && n - orden[i - 1] > 1 ? '<span class="text-muted" style="align-self:center;">…</span>' : '') + `<button type="button" class="btn page-btn${n === act ? ' active' : ''}" data-inv-page="${n}" aria-label="Página ${n}"${n === act ? ' aria-current="page"' : ''}>${n}</button>`).join('');
+            }
+            const info = document.getElementById('pagination-info');
+            if (info) info.textContent = `Página ${act} de ${total} · ${filteredInventorySnapshots.length} producto(s)`;
 
             renderInventoryTableFromSnapshot(mockSnapshot);
         }
@@ -3388,6 +3397,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (btnNextPage) {
             btnNextPage.addEventListener('click', loadNextPage);
         }
+        const invNums = document.getElementById('inv-page-nums');
+        if (invNums) invNums.addEventListener('click', (e) => {
+            const b = e.target.closest && e.target.closest('[data-inv-page]'); if (!b) return;
+            currentPageIndex = Number(b.dataset.invPage) - 1; renderCurrentPage();
+        });
 
         // Conectar botón UI de página anterior Firestore
         if (btnPrevPage) {

@@ -503,13 +503,13 @@
         const a = document.createElement('a'); a.href = url; a.download = nombre; document.body.appendChild(a); a.click();
         setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1500);
     }
-    async function descargar(acta, formato) {
+    async function descargar(acta, formato, opc) {
         const D = window.SAR_ActaDoc; if (!D) throw new Error('Módulo de documentos no cargado.');
         const logoBytes = await cargarLogo();
         if (formato === 'pdf') {
             const PDFLib = await cargarPDFLib();
             const bytes = await D.generarPDF(acta, { PDFLib, logoBytes });
-            bajar(bytes, D.nombreArchivo(acta, 'pdf'), 'application/pdf');
+            if (!(opc && opc.sinBajar)) bajar(bytes, D.nombreArchivo(acta, 'pdf'), 'application/pdf');
             return { bytes, nombre: D.nombreArchivo(acta, 'pdf') };
         } else {
             bajar(D.generarDOCX(acta, { logoBytes }), D.nombreArchivo(acta, 'docx'), 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
@@ -526,6 +526,7 @@
 
     function pintar() {
         const r = root(); if (!r) return;
+        if (modalCierre) modalCierre();
         const q = busqueda.trim().toLowerCase();
         const lista = stock.filter(s => !q || s.name.toLowerCase().includes(q) || String(s.codigo || '').includes(q)).slice(0, 80);
         const yaEsta = (id) => borrador.items.some(i => i.id === id);
@@ -550,7 +551,7 @@
         r.innerHTML = `
         <div class="page-header mb-24"><div class="page-title"><h2>Actas de entrega</h2>
             <p>Arma el acta desde el stock de la bodega. Al emitirla queda con su número; el stock sale cuando subes el acta firmada.</p></div>
-            <div class="page-actions">${tab === 'seguimiento' ? '<button type="button" class="btn btn-outline act-volver"><i class="ph-bold ph-arrow-left"></i> Volver a actas</button>' : '<button type="button" class="btn btn-outline act-goseg"><i class="ph-bold ph-magnifying-glass"></i> Seguimiento de actas</button>'}</div></div>
+</div>
         <nav class="act-tabs" role="tablist" aria-label="Secciones de actas de entrega"${tab === 'seguimiento' ? ' hidden' : ''}>${TABS.map(t => `<button type="button" role="tab" class="act-tab${t[0] === tab ? ' active' : ''}" data-tab="${t[0]}" aria-selected="${t[0] === tab}"><i class="ph-bold ${t[1]}"></i><span>${t[2]}</span>${t[0] === 'emitidas' ? `<em>${historial.length}</em>` : ''}</button>`).join('')}</nav>
         <div data-act-tab="emitir"${tab === 'emitir' ? '' : ' hidden'}>
         <div class="act-grid">
@@ -600,19 +601,23 @@
         </div></div>
         <div data-act-tab="emitidas"${tab === 'emitidas' ? '' : ' hidden'}>
         <h3 class="act-h">Actas emitidas</h3>
+        <div class="act-busq"><input type="search" id="act-bq" class="form-control" placeholder="Buscar acta: número, centro, producto, fecha, estado…" aria-label="Buscar en actas emitidas"><small id="act-bq-n"></small></div>
         <div class="act-hist">${historial.length ? historial.map(a => {
             const pend = a.estado === 'EMITIDA' && a.tipo !== 'OXIGENO' && a.confirmacion && a.confirmacion.estado === 'PENDIENTE', n = esc(a.numero), ox = a.tipo === 'OXIGENO';
             const chip = a.estado === 'ANULADA' ? '<span class="act-chip act-c-anu">Anulada</span>' : pend ? '<span class="act-chip act-c-pen">Por confirmar</span>' : (a.respaldo ? '<span class="act-chip act-c-ok">Firmada</span>' : (ox ? '' : '<span class="act-chip act-c-sin">Sin acta firmada</span>'));
-            const prim = a.estado !== 'EMITIDA' || ox || !esAdmin() ? '' : pend ? `<button type="button" class="btn btn-primary act-conf" data-n="${n}"><i class="ph-bold ph-seal-check"></i> Confirmar entrega</button>` : (a.respaldo ? '' : `<button type="button" class="btn btn-outline act-firm" data-n="${n}"><i class="ph-bold ph-upload-simple"></i> Subir firmada</button>`);
-            const ver = a.respaldo ? `<button type="button" class="btn btn-outline act-verr" data-n="${n}">Ver firmada</button>` : '';
-            const mas = (esAdmin() && a.estado === 'EMITIDA') || (esAdmin() && a.estado !== 'ANULADA' && !ox) ? `<details class="act-mas"><summary class="btn btn-outline" aria-haspopup="menu" aria-label="Más acciones del acta ${n}">⋯</summary><div class="act-mas-m">${esAdmin() && a.estado === 'EMITIDA' ? `<button type="button" class="act-ed" data-n="${n}">Editar</button>` : ''}${esAdmin() && a.estado !== 'ANULADA' && !ox ? `<button type="button" class="act-an act-peligro" data-n="${n}">Eliminar acta</button>` : ''}</div></details>` : '';
-            return `<div class="act-hrow${a.estado === 'ANULADA' ? ' act-anulada' : ''}"><div class="act-hinfo"><div class="act-htit"><strong>${n}</strong><span>${esc(a.centro)}</span>${chip}${a.conSobregiro ? '<span class="act-chip act-c-sin" title="Parte de lo entregado no tenía respaldo en el sistema">Con sobregiro</span>' : ''}</div><small>${esc(a.fecha)} · ${ox ? 'oxígeno · ' : ''}${(a.items || []).length} ${ox ? 'balones' : 'productos'} · ${esc(a.bodegaOrigen)} · ${esc(a.creadoPor || '')}</small></div>
-            <div class="act-hbtns"><button type="button" class="btn btn-outline act-dl" data-n="${n}" data-f="pdf">PDF</button><button type="button" class="btn btn-outline act-dl" data-n="${n}" data-f="docx">Word</button>${prim}${ver}${mas}</div></div>`; }).join('') : '<div class="act-hint">Todavía no hay actas emitidas. <button type="button" class="btn btn-primary act-ir-emitir">Emitir la primera acta</button></div>'}</div></div>
+            const q = norm2([a.numero, a.centro, a.fecha, a.creadoPor, a.bodegaOrigen, pend ? 'por confirmar' : '', a.respaldo ? 'firmada' : 'sin firmar', a.estado === 'ANULADA' ? 'anulada' : '', a.conSobregiro ? 'sobregiro' : '', (a.items || []).map(i => i.nombre).join(' ')].join(' '));
+            return `<div class="act-hrow${a.estado === 'ANULADA' ? ' act-anulada' : ''}" data-ver="${n}" data-q="${esc(q)}" role="button" tabindex="0" aria-label="Ver el acta ${n}"><div class="act-hinfo"><div class="act-htit"><strong>${n}</strong><span>${esc(a.centro)}</span>${chip}${a.conSobregiro ? '<span class="act-chip act-c-sin" title="Parte de lo entregado no tenía respaldo en el sistema">Con sobregiro</span>' : ''}</div><small>${esc(a.fecha)} · ${ox ? 'oxígeno · ' : ''}${(a.items || []).length} ${ox ? 'balones' : 'productos'} · ${esc(a.bodegaOrigen)} · ${esc(a.creadoPor || '')}</small></div>
+            <div class="act-hbtns"><span class="btn btn-primary act-verbtn"><i class="ph-bold ph-eye"></i> Ver acta</span></div></div></div>`; }).join('') : '<div class="act-hint">Todavía no hay actas emitidas. <button type="button" class="btn btn-primary act-ir-emitir">Emitir la primera acta</button></div>'}</div></div>
         <div data-act-tab="seguimiento" id="seg-root"${tab === 'seguimiento' ? '' : ' hidden'}></div>`;
         r.querySelectorAll('.act-tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; pintar(); }));
         const irA = (t) => { tab = t; pintar(); const h = root() && root().querySelector('h2'); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } };
         r.querySelectorAll('.act-goseg').forEach(b => b.addEventListener('click', () => irA('seguimiento')));
         r.querySelectorAll('.act-volver').forEach(b => b.addEventListener('click', () => irA('emitidas')));
+        const bq = r.querySelector('#act-bq');
+        if (bq) { const filas = [...r.querySelectorAll('.act-hrow[data-q]')], cuenta = r.querySelector('#act-bq-n'), vacio = document.createElement('p'); vacio.className = 'act-hint'; vacio.textContent = 'Ninguna acta coincide con la búsqueda.'; vacio.hidden = true; if (filas.length) filas[filas.length - 1].parentNode.appendChild(vacio);
+            const filtrar = () => { const t = norm2(bq.value).split(' ').filter(Boolean); let n = 0; filas.forEach(f => { const ok = t.every(x => f.dataset.q.includes(x)); f.hidden = !ok; if (ok) n++; }); vacio.hidden = n > 0 || !t.length; if (cuenta) cuenta.textContent = t.length ? `${n} de ${filas.length}` : ''; };
+            bq.addEventListener('input', filtrar); bq.value = busquedaActas; filtrar(); bq.addEventListener('input', () => { busquedaActas = bq.value; }); }
+        r.querySelectorAll('.act-hrow[data-ver]').forEach(f => { const ir = () => verActa(f.dataset.ver); f.addEventListener('click', ir); f.addEventListener('keydown', (k) => { if (k.key === 'Enter' || k.key === ' ') { k.preventDefault(); ir(); } }); });
         r.querySelectorAll('.act-ir-emitir').forEach(b => b.addEventListener('click', () => irA('emitir')));
         r.addEventListener('click', (e) => r.querySelectorAll('.act-mas[open]').forEach(d => { if (!d.contains(e.target) || e.target.closest('.act-mas-m button')) d.open = false; }));
         r.addEventListener('keydown', (e) => { if (e.key === 'Escape') r.querySelectorAll('.act-mas[open]').forEach(d => { d.open = false; const sm = d.querySelector('summary'); if (sm) sm.focus(); }); });
@@ -731,6 +736,11 @@
         $('#act-limpiar').addEventListener('click', () => { if (!confirm('¿Vaciar el borrador?')) return; borrador = { ...vacio(), origen: borrador.origen }; guardarBorrador(); pintar(); });
         $('#act-emitir').addEventListener('click', onEmitir);
         ['pdf', 'docx'].forEach(fm => { const bt = document.getElementById('act-prueba-' + fm); if (bt) bt.addEventListener('click', async () => { bt.disabled = true; try { await probarActa(fm); } finally { bt.disabled = false; } }); });
+        accionesActa($$);
+    }
+
+    /** Acciones de un acta (confirmar, subir firmada, ver firmada, descargar, editar, eliminar) sobre los botones que entregue el selector. */
+    function accionesActa($$) {
         $$('.act-conf').forEach(b => b.addEventListener('click', async () => {
             const a = historial.find(x => x.numero === b.dataset.n); if (!a) return;
             if (!confirm(`Confirmar la entrega del acta ${a.numero} a ${a.centro}.\n\nVas a subir el acta firmada (PDF o foto). Al guardarla se DESCUENTAN del stock de ${a.bodegaOrigen} los ${(a.items || []).length} productos del acta.\n\n¿Continuar?`)) return;
@@ -767,6 +777,61 @@
                 prog.listo(`Acta ${b.dataset.n} eliminada: stock devuelto${arch ? ' y archivo borrado de la orden' : ''}`, { informe: true }); await Promise.all([cargarHistorial(), cargarStock()]); borrador.items = []; guardarBorrador(); pintar(); }
             catch (e) { prog.error(); toast('No se anuló', e.message, 'error'); }
         }));
+    }
+
+
+    // ---------------------------------------------------------------
+    // Ver un acta (sin descargarla) + bitácora del acta
+    // ---------------------------------------------------------------
+    let busquedaActas = '', modalCierre = null;
+    const norm2 = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const tsDe = (v) => { try { if (v && v.toDate) return v.toDate(); if (typeof v === 'string' && v) return new Date(v.length === 10 ? v + 'T12:00:00' : v); } catch (e) { /* sin fecha */ } return null; };
+    const fh = (d) => d ? d.toLocaleString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+    async function bitacoraActa(a) {
+        const f = fs(), ev = [];
+        ev.push({ d: tsDe(a.creadoEn) || tsDe(a.fecha), t: 'Acta emitida', x: `Por ${a.creadoPor || '—'} · ${(a.items || []).length} productos para ${a.centro}.` });
+        if (a.confirmacion && a.confirmacion.estado === 'PENDIENTE') ev.push({ d: null, t: 'Entrega por confirmar', x: 'El stock sigue en bodega (reservado) hasta subir el acta firmada.', pend: true });
+        try {
+            const sn = await f.getDocs(f.query(f.collection(db(), 'Historial_Movimientos'), f.where('actaId', '==', a.numero), f.limit(200)));
+            let ent = 0, fEnt = null; const otros = [];
+            sn.forEach(d => { const m = d.data(), dt = tsDe(m.date); if (m.type === 'ENTREGA_ACTA') { ent++; if (!fEnt || (dt && dt > fEnt)) fEnt = dt; } else if (m.type === 'EDICION_ACTA') otros.push({ d: dt, t: 'Acta modificada', x: `${m.user || ''}: ${m.observacion || ''}` }); else if (m.type === 'ANULACION_ACTA') otros.push({ d: dt, t: 'Stock devuelto por anulación', x: `${m.insumoName || ''} (${m.quantity || 0} u.)` }); });
+            if (ent && a.confirmacion && a.confirmacion.estado === 'CONFIRMADA') ev.push({ d: tsDe(a.confirmadaEn) || fEnt, t: 'Entrega confirmada · stock descontado', x: `Por ${a.confirmacion.por || '—'} · ${ent} movimiento${ent > 1 ? 's' : ''} de stock.` });
+            else if (ent) ev.push({ d: fEnt, t: 'Stock descontado', x: `${ent} movimiento${ent > 1 ? 's' : ''} de stock registrados al emitir.` });
+            otros.forEach(o => ev.push(o));
+        } catch (e) { ev.push({ d: null, t: 'No se pudo leer el historial de movimientos', x: String(e.message || e) }); }
+        if (a.respaldo) ev.push({ d: tsDe(a.respaldo.fecha), t: 'Acta firmada subida', x: `${a.respaldo.nombre || ''} · por ${a.respaldo.subidoPor || '—'}` });
+        if (a.estado === 'ANULADA') ev.push({ d: tsDe(a.anuladaEn), t: 'Acta eliminada (anulada)', x: `Por ${a.anuladaPor || '—'}. Motivo: ${a.anulacionMotivo || '—'}` });
+        return ev.sort((x, y) => (x.d ? x.d.getTime() : Infinity) - (y.d ? y.d.getTime() : Infinity));
+    }
+    async function verActa(numero) {
+        const a = historial.find(x => x.numero === numero); if (!a) return;
+        if (modalCierre) modalCierre();
+        const n = esc(a.numero), pend = a.estado === 'EMITIDA' && a.tipo !== 'OXIGENO' && a.confirmacion && a.confirmacion.estado === 'PENDIENTE', ox = a.tipo === 'OXIGENO';
+        const estado = a.estado === 'ANULADA' ? '<span class="act-chip act-c-anu">Anulada</span>' : pend ? '<span class="act-chip act-c-pen">Por confirmar</span>' : (a.respaldo ? '<span class="act-chip act-c-ok">Firmada</span>' : (ox ? '' : '<span class="act-chip act-c-sin">Sin acta firmada</span>'));
+        const prim = a.estado !== 'EMITIDA' || ox || !esAdmin() ? '' : pend ? `<button type="button" class="btn btn-primary act-conf" data-n="${n}"><i class="ph-bold ph-seal-check"></i> Confirmar entrega</button>` : (a.respaldo ? '' : `<button type="button" class="btn btn-primary act-firm" data-n="${n}"><i class="ph-bold ph-upload-simple"></i> Subir firmada</button>`);
+        const verf = a.respaldo ? `<button type="button" class="btn btn-outline act-verr" data-n="${n}">Ver acta firmada</button>` : '';
+        const mas = (esAdmin() && a.estado === 'EMITIDA') || (esAdmin() && a.estado !== 'ANULADA' && !ox) ? `<details class="act-mas"><summary class="btn btn-outline" aria-haspopup="menu" aria-label="Más acciones">⋯</summary><div class="act-mas-m">${esAdmin() && a.estado === 'EMITIDA' ? `<button type="button" class="act-ed" data-n="${n}">Editar</button>` : ''}${esAdmin() && a.estado !== 'ANULADA' && !ox ? `<button type="button" class="act-an act-peligro" data-n="${n}">Eliminar acta</button>` : ''}</div></details>` : '';
+        const o = document.createElement('div'); o.className = 'bit-modal act-vmodal'; o.setAttribute('role', 'dialog'); o.setAttribute('aria-modal', 'true'); o.setAttribute('aria-labelledby', 'act-vt');
+        o.innerHTML = `<div class="act-vc" tabindex="-1">
+          <div class="act-vh"><div><h3 id="act-vt">${n} · ${esc(a.centro)}</h3><small>${esc(a.fecha)} · ${esc(a.bodegaOrigen)} · ${(a.items || []).length} ${ox ? 'balones' : 'productos'}</small> ${estado}</div>
+            <div class="act-vb"><details class="act-mas"><summary class="btn btn-outline" aria-haspopup="menu"><i class="ph-bold ph-download-simple"></i> Descargar ▾</summary><div class="act-mas-m"><button type="button" class="act-dl" data-n="${n}" data-f="pdf">PDF</button><button type="button" class="act-dl" data-n="${n}" data-f="docx">Word</button></div></details>${prim}${verf}${mas}<button type="button" class="btn btn-outline" id="act-vx" aria-label="Cerrar">✕</button></div></div>
+          <div class="act-vcuerpo"><div class="act-vdoc"><p class="act-hint" id="act-vcarga">Preparando el acta…</p></div>
+            <aside class="act-vbit"><h4>Bitácora del acta</h4><ol class="act-vtl" id="act-vtl"><li class="act-hint">Cargando…</li></ol></aside></div></div>`;
+        document.body.appendChild(o); document.body.style.overflow = 'hidden';
+        let urlPdf = null;
+        const cerrar = () => { document.removeEventListener('keydown', tec); document.body.style.overflow = ''; if (urlPdf) URL.revokeObjectURL(urlPdf); o.remove(); modalCierre = null; };
+        const tec = (k) => { if (k.key === 'Escape') cerrar(); };
+        document.addEventListener('keydown', tec); modalCierre = cerrar;
+        o.querySelector('#act-vx').addEventListener('click', cerrar); o.addEventListener('mousedown', (e) => { if (e.target === o) cerrar(); });
+        o.addEventListener('click', (e) => { o.querySelectorAll('.act-mas[open]').forEach(d => { if (!d.contains(e.target) || e.target.closest('.act-mas-m button')) d.open = false; }); });
+        accionesActa((sel) => o.querySelectorAll(sel));
+        o.querySelector('#act-vx').focus();
+        descargar(actaParaDoc(a), 'pdf', { sinBajar: true }).then((r) => {
+            if (!document.body.contains(o)) return;
+            urlPdf = URL.createObjectURL(new Blob([r.bytes], { type: 'application/pdf' }));
+            o.querySelector('.act-vdoc').innerHTML = `<iframe class="act-vpdf" src="${urlPdf}#toolbar=0&navpanes=0" title="Acta ${n}"></iframe><a class="act-vabrir" href="${urlPdf}" target="_blank" rel="noopener">Abrir en una pestaña nueva</a>`;
+        }).catch((e) => { const c = o.querySelector('#act-vcarga'); if (c) c.textContent = 'No se pudo mostrar el acta: ' + (e.message || e) + '. Puedes descargarla con el botón Descargar.'; });
+        bitacoraActa(a).then((ev) => { const l = o.querySelector('#act-vtl'); if (l) l.innerHTML = ev.map(x => `<li${x.pend ? ' class="pend"' : ''}><b>${esc(x.t)}</b><small>${x.d ? esc(fh(x.d)) : 'pendiente'}</small><span>${esc(x.x)}</span></li>`).join(''); });
     }
 
     /** Acta de prueba: arma el documento como si se emitiera, sin tocar stock ni órdenes. */

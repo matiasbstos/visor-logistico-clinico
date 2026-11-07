@@ -5677,3 +5677,17 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .bit-barra-av { background: #CBD5E1; } .bit-barra-av i { background: #5E9E1F; }
 #bit-mas { margin-top: 4px; }
 @media (max-width: 767px) { .bit-fila { grid-template-columns: minmax(0, 1fr) auto; } .bit-f4 { grid-column: 1 / -1; } .bit-f5 { display: none; } .bit-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; } .bit-chip { flex: 0 0 auto; } .bit-kpis { grid-template-columns: repeat(3, 1fr); } }
+
+/* Ver acta + bitácora (v21.46) */
+.act-hrow[data-ver] { cursor: pointer; } .act-hrow[data-ver]:hover { background: #F8FAFC; } .act-hrow[data-ver]:focus-visible { outline: 3px solid var(--brand-green, #8CC63F); outline-offset: -3px; } .act-hrow[hidden] { display: none; }
+.act-verbtn { display: inline-flex; align-items: center; gap: 6px; pointer-events: none; }
+.act-busq { display: flex; align-items: center; gap: 12px; margin: 0 0 12px; } .act-busq input { max-width: 460px; } .act-busq small { color: #475569; }
+.act-vmodal { align-items: stretch; padding: 12px; } .act-vc { background: #fff; border-radius: 12px; width: min(1180px, 100%); margin: 0 auto; display: flex; flex-direction: column; max-height: 100%; overflow: hidden; }
+.act-vh { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; padding: 14px 18px; border-bottom: 1px solid #E2E8F0; } .act-vh h3 { margin: 0; color: var(--sar-blue, #1A3668); } .act-vh small { color: #475569; margin-right: 8px; }
+.act-vb { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; } .act-vb .btn { min-height: 40px; }
+.act-vcuerpo { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 0; flex: 1; min-height: 0; overflow: hidden; }
+.act-vdoc { padding: 12px; background: #F1F5F9; display: flex; flex-direction: column; gap: 6px; min-height: 0; } .act-vpdf { flex: 1; width: 100%; min-height: 60vh; border: 0; background: #fff; border-radius: 6px; } .act-vabrir { font-size: 12.5px; align-self: flex-end; }
+.act-vbit { padding: 14px 16px; overflow-y: auto; border-left: 1px solid #E2E8F0; } .act-vbit h4 { margin: 0 0 10px; color: #334155; }
+.act-vtl { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid #E2E8F0; } .act-vtl li { position: relative; padding: 0 0 14px 10px; display: flex; flex-direction: column; gap: 1px; } .act-vtl li::before { content: ''; position: absolute; left: -20px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--brand-green, #8CC63F); } .act-vtl li.pend::before { background: #F59E0B; }
+.act-vtl small { color: #475569; } .act-vtl span { font-size: 13px; color: #334155; overflow-wrap: anywhere; }
+@media (max-width: 860px) { .act-vcuerpo { grid-template-columns: 1fr; overflow-y: auto; } .act-vbit { border-left: 0; border-top: 1px solid #E2E8F0; } .act-vpdf { min-height: 50vh; } .act-vmodal { padding: 0; } .act-vc { border-radius: 0; } }

@@ -522,7 +522,7 @@
     // ---------------------------------------------------------------
     const root = () => document.getElementById('act-root');
     let tab = 'emitir';
-    const TABS = [['emitir', 'ph-file-plus', 'Emitir acta'], ['emitidas', 'ph-files', 'Actas emitidas'], ['seguimiento', 'ph-magnifying-glass', 'Seguimiento de acta']];
+    const TABS = [['emitir', 'ph-file-plus', 'Emitir acta'], ['emitidas', 'ph-files', 'Actas emitidas']];
 
     function pintar() {
         const r = root(); if (!r) return;
@@ -549,8 +549,9 @@
         const errores = validarBorrador(borrador);
         r.innerHTML = `
         <div class="page-header mb-24"><div class="page-title"><h2>Actas de entrega</h2>
-            <p>Arma el acta desde el stock de la bodega. Al emitirla se descuenta el stock y queda con su número.</p></div></div>
-        <nav class="act-tabs" role="tablist" aria-label="Secciones de actas de entrega">${TABS.map(t => `<button type="button" role="tab" class="act-tab${t[0] === tab ? ' active' : ''}" data-tab="${t[0]}" aria-selected="${t[0] === tab}"><i class="ph-bold ${t[1]}"></i><span>${t[2]}</span>${t[0] === 'emitidas' ? `<em>${historial.length}</em>` : ''}</button>`).join('')}</nav>
+            <p>Arma el acta desde el stock de la bodega. Al emitirla queda con su número; el stock sale cuando subes el acta firmada.</p></div>
+            <div class="page-actions">${tab === 'seguimiento' ? '<button type="button" class="btn btn-outline act-volver"><i class="ph-bold ph-arrow-left"></i> Volver a actas</button>' : '<button type="button" class="btn btn-outline act-goseg"><i class="ph-bold ph-magnifying-glass"></i> Seguimiento de actas</button>'}</div></div>
+        <nav class="act-tabs" role="tablist" aria-label="Secciones de actas de entrega"${tab === 'seguimiento' ? ' hidden' : ''}>${TABS.map(t => `<button type="button" role="tab" class="act-tab${t[0] === tab ? ' active' : ''}" data-tab="${t[0]}" aria-selected="${t[0] === tab}"><i class="ph-bold ${t[1]}"></i><span>${t[2]}</span>${t[0] === 'emitidas' ? `<em>${historial.length}</em>` : ''}</button>`).join('')}</nav>
         <div data-act-tab="emitir"${tab === 'emitir' ? '' : ' hidden'}>
         <div class="act-grid">
           <div class="act-col">
@@ -599,12 +600,18 @@
         </div></div>
         <div data-act-tab="emitidas"${tab === 'emitidas' ? '' : ' hidden'}>
         <h3 class="act-h">Actas emitidas</h3>
-        <div class="act-hist">${historial.length ? historial.map(a => `<div class="act-fila${a.estado === 'ANULADA' ? ' act-anulada' : ''}"><div class="act-fn"><strong>${esc(a.numero)}</strong> · ${esc(a.centro)}<small>${esc(a.fecha)} · ${a.tipo === 'OXIGENO' ? 'oxígeno · ' : ''}${(a.items || []).length} ${a.tipo === 'OXIGENO' ? 'balones' : 'productos'} · ${esc(a.bodegaOrigen)} · ${esc(a.creadoPor || '')}${a.estado === 'ANULADA' ? ' · <b>ANULADA</b>' : ''}${a.confirmacion && a.confirmacion.estado === 'PENDIENTE' && a.estado === 'EMITIDA' ? ' · <b class="act-sin">ENTREGA POR CONFIRMAR (stock aún en bodega)</b>' : ''}${a.estado === 'EMITIDA' && a.tipo !== 'OXIGENO' && a.respaldo ? ' · <b>firmada ✔</b>' : ''}${a.conSobregiro ? ' · <b class="act-sin">con sobregiro</b>' : ''}</small></div>
-            <button type="button" class="btn btn-outline act-dl" data-n="${esc(a.numero)}" data-f="pdf">PDF</button><button type="button" class="btn btn-outline act-dl" data-n="${esc(a.numero)}" data-f="docx">Word</button>
-            ${a.estado === 'EMITIDA' && a.tipo !== 'OXIGENO' && a.confirmacion && a.confirmacion.estado === 'PENDIENTE' && esAdmin() ? `<button type="button" class="btn btn-primary act-conf" data-n="${esc(a.numero)}">Confirmar entrega (subir acta firmada)</button>` : ''}${a.estado === 'EMITIDA' && a.tipo !== 'OXIGENO' && !(a.confirmacion && a.confirmacion.estado === 'PENDIENTE') && !a.respaldo && esAdmin() ? `<button type="button" class="btn btn-outline act-firm" data-n="${esc(a.numero)}">Subir acta firmada</button>` : ''}${a.respaldo ? `<button type="button" class="btn btn-outline act-verr" data-n="${esc(a.numero)}">Ver acta firmada</button>` : ''}
-            ${esAdmin() && a.estado === 'EMITIDA' ? `<button type="button" class="btn btn-outline act-ed" data-n="${esc(a.numero)}">Editar</button>` : ''}${esAdmin() && a.estado !== 'ANULADA' && a.tipo !== 'OXIGENO' ? `<button type="button" class="btn btn-outline act-an" data-n="${esc(a.numero)}">Eliminar acta</button>` : ''}</div>`).join('') : '<p class="act-hint">Todavía no hay actas emitidas.</p>'}</div></div>
+        <div class="act-hist">${historial.length ? historial.map(a => {
+            const pend = a.estado === 'EMITIDA' && a.tipo !== 'OXIGENO' && a.confirmacion && a.confirmacion.estado === 'PENDIENTE', n = esc(a.numero), ox = a.tipo === 'OXIGENO';
+            const chip = a.estado === 'ANULADA' ? '<span class="act-chip act-c-anu">Anulada</span>' : pend ? '<span class="act-chip act-c-pen">Por confirmar</span>' : (a.respaldo ? '<span class="act-chip act-c-ok">Firmada</span>' : (ox ? '' : '<span class="act-chip act-c-sin">Sin acta firmada</span>'));
+            const prim = a.estado !== 'EMITIDA' || ox || !esAdmin() ? '' : pend ? `<button type="button" class="btn btn-primary act-conf" data-n="${n}"><i class="ph-bold ph-seal-check"></i> Confirmar entrega</button>` : (a.respaldo ? '' : `<button type="button" class="btn btn-outline act-firm" data-n="${n}"><i class="ph-bold ph-upload-simple"></i> Subir firmada</button>`);
+            const ver = a.respaldo ? `<button type="button" class="btn btn-outline act-verr" data-n="${n}">Ver firmada</button>` : '';
+            const mas = (esAdmin() && a.estado === 'EMITIDA') || (esAdmin() && a.estado !== 'ANULADA' && !ox) ? `<details class="act-mas"><summary class="btn btn-outline" aria-label="Más acciones">⋯</summary><div class="act-mas-m">${esAdmin() && a.estado === 'EMITIDA' ? `<button type="button" class="act-ed" data-n="${n}">Editar</button>` : ''}${esAdmin() && a.estado !== 'ANULADA' && !ox ? `<button type="button" class="act-an act-peligro" data-n="${n}">Eliminar acta</button>` : ''}</div></details>` : '';
+            return `<div class="act-hrow${a.estado === 'ANULADA' ? ' act-anulada' : ''}"><div class="act-hinfo"><div class="act-htit"><strong>${n}</strong><span>${esc(a.centro)}</span>${chip}${a.conSobregiro ? '<span class="act-chip act-c-sin" title="Parte de lo entregado no tenía respaldo en el sistema">Con sobregiro</span>' : ''}</div><small>${esc(a.fecha)} · ${ox ? 'oxígeno · ' : ''}${(a.items || []).length} ${ox ? 'balones' : 'productos'} · ${esc(a.bodegaOrigen)} · ${esc(a.creadoPor || '')}</small></div>
+            <div class="act-hbtns"><button type="button" class="btn btn-outline act-dl" data-n="${n}" data-f="pdf">PDF</button><button type="button" class="btn btn-outline act-dl" data-n="${n}" data-f="docx">Word</button>${prim}${ver}${mas}</div></div>`; }).join('') : '<p class="act-hint">Todavía no hay actas emitidas.</p>'}</div></div>
         <div data-act-tab="seguimiento" id="seg-root"${tab === 'seguimiento' ? '' : ' hidden'}></div>`;
         r.querySelectorAll('.act-tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; pintar(); }));
+        r.querySelectorAll('.act-goseg').forEach(b => b.addEventListener('click', () => { tab = 'seguimiento'; pintar(); }));
+        r.querySelectorAll('.act-volver').forEach(b => b.addEventListener('click', () => { tab = 'emitidas'; pintar(); }));
         if (window.SAR_Saldos && window.SAR_Saldos.pintarSeg) window.SAR_Saldos.pintarSeg();
         enlazar();
     }

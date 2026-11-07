@@ -578,3 +578,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Respaldo guardado en partes en `Contadores/respaldo-<N>-<i>` (colección ya abierta al personal, sin cambiar reglas) y, si hay OC, también en sus archivos ("Acta firmada N").
 - Eliminar un acta por confirmar no toca stock (solo la marca ANULADA). Editar un acta por confirmar está bloqueado.
 - Confirmar/subir firmada exige rol administrador (reglas actuales de Actas_Entrega).
+
+### 4.96 Actas: menos pestañas y filas ordenadas (v21.42)
+- Pestañas solo "Emitir acta" y "Actas emitidas"; "Seguimiento de actas" pasa a botón en la cabecera (con "Volver a actas").
+- Filas de actas emitidas: número, centro y estado (Por confirmar / Firmada / Sin acta firmada / Anulada); acción principal visible (Confirmar entrega / Subir firmada), PDF, Word, Ver firmada; Editar y Eliminar en menú "⋯".
+- Código de OC (ChileCompra): 1298355 = unidad de compra, 936 = correlativo, CM/AG/SE… = tipo de compra (CM Convenio Marco, AG Compra Ágil, SE sin emisión automática, CC Compra Coordinada, MC Microcompra, R1 <3 UTM, CA sin resolución; D1/C1/F3/G1/FG tratos directos), 26 = año.

@@ -597,3 +597,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.99 Bitácora: ajustes de la revisión UX (v21.45)
 - Panel: foco atrapado, Escape global, vuelve a la fila de origen, no se repinta con el panel abierto; orden título/estado/alerta/KPIs; solo los 5 correos más recientes con "Ver los N anteriores".
 - Lista: estados con ícono, alerta visible como texto, buscador antes de los filtros, leyenda de reglas, filas más compactas en celular.
+
+### 4.100 Actas: ver el acta sin descargar, buscador y bitácora por acta (v21.46)
+- "Seguimiento de actas" deja de ser una vista aparte: en "Actas emitidas" hay un buscador que recorta la lista en vivo (número, centro, producto, fecha, estado).
+- Al pinchar una fila se abre el acta (vista previa del PDF, sin descargar) con su bitácora (emitida, entrega confirmada/stock descontado, modificaciones, acta firmada subida, eliminación) y las acciones: Descargar ▾ (PDF/Word), Confirmar entrega / Subir firmada / Ver acta firmada y ⋯ (Editar, Eliminar).

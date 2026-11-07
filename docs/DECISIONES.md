@@ -618,3 +618,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.103 Bitácora: ajustes de la revisión UX/UI de la ventana (v21.50)
 - Foco visible azul y sin recorte; aria-pressed en el selector de vista; el cambio de vista conserva scroll y foco; la evidencia mueve el foco al correo; chip de etapa propio; contador de discrepancias/por revisar en la cabecera; tablas con región enfocable; respeto de prefers-reduced-motion; stepper en 2 columnas en móvil.
+
+### 4.104 Avisos por correo de actas de entrega y movimientos de inventario (v21.51)
+- Nuevo módulo `avisos-correo.js`: mismo correo HTML con identidad visual, mismos tres destinatarios y mismo Apps Script que la recepción de OC.
+- Actas de entrega: correo al emitir (PDF adjunto), al confirmar la entrega (acta firmada adjunta, detalle y fecha), al subir la firmada y al eliminar. Cada envío queda registrado en `Contadores/aviso-<acta>-<evento>` y aparece en la bitácora del acta ("Correo de respaldo enviado").
+- Movimientos: un oyente de Historial_Movimientos avisa (una vez por operación, agrupando líneas) ajustes, traspasos entre bodegas, ingresos, cargas masivas, mermas, tomas/eliminaciones/reinicios de inventario, cierres de bodega y ediciones de acta. No avisa los consumos a paciente (salidas), ni lo que ya tiene correo propio (recepción de OC, entrega de acta, anulación de acta, cuadres).
+- Solo envía el navegador que hizo la operación; si el envío automático no está configurado no abre borradores y queda registrado "sin configurar".

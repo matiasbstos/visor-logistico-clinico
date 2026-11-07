@@ -5663,3 +5663,17 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
   .bit-fila { grid-template-columns: 1fr auto; gap: 6px 10px; } .bit-f3 { grid-column: 1 / -1; } .bit-f4 { grid-column: 1; } .bit-f5 { grid-column: 2; grid-row: 1; text-align: right; } .bit-f2 { grid-column: 2; grid-row: 1; justify-self: end; } .bit-f5 { display: none; }
   .bit-kpis { grid-template-columns: repeat(2, 1fr); } .bit-drawer { padding: 16px; }
 }
+
+/* Bitácora: ajustes de la revisión UX (v21.45) */
+.bit-e-cor { background: #E2E8F0; color: #334155; } .bit-est i { margin-right: 2px; }
+.bit-fila { grid-template-columns: minmax(180px, 1.6fr) 1.1fr 1.3fr 1.2fr; } .bit-f1 { min-width: 0; } .bit-f1 strong { white-space: nowrap; } .bit-f1 small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bit-avf { color: #9A3412 !important; font-weight: 600; }
+.bit-ley { font-size: 12.5px; color: #475569; margin: 0 0 12px; } .bit-barra-q { max-width: none; }
+.bit-chip em:empty { display: none; }
+.bit-dhb { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; } .bit-dh .btn, #bit-ir { min-height: 40px; }
+.bit-sub { color: #475569; font-size: 13px; margin: 8px 0 0; } .bit-kpis { margin-bottom: 4px; } .bit-kpis .bit-falta { background: #FEF2F2; }
+.bit-alertas strong { display: block; color: #7C2D12; margin-bottom: 2px; font-size: 13px; }
+.bit-asunto { font-weight: 400; color: #334155; } .bit-gm, .bit-res summary { display: inline-flex; align-items: center; min-height: 32px; }
+.bit-barra-av { background: #CBD5E1; } .bit-barra-av i { background: #5E9E1F; }
+#bit-mas { margin-top: 4px; }
+@media (max-width: 767px) { .bit-fila { grid-template-columns: minmax(0, 1fr) auto; } .bit-f4 { grid-column: 1 / -1; } .bit-f5 { display: none; } .bit-chips { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 4px; } .bit-chip { flex: 0 0 auto; } .bit-kpis { grid-template-columns: repeat(3, 1fr); } }

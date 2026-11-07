@@ -5691,3 +5691,6 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .act-vtl { list-style: none; margin: 0; padding: 0 0 0 14px; border-left: 2px solid #E2E8F0; } .act-vtl li { position: relative; padding: 0 0 14px 10px; display: flex; flex-direction: column; gap: 1px; } .act-vtl li::before { content: ''; position: absolute; left: -20px; top: 4px; width: 10px; height: 10px; border-radius: 50%; background: var(--brand-green, #8CC63F); } .act-vtl li.pend::before { background: #F59E0B; }
 .act-vtl small { color: #475569; } .act-vtl span { font-size: 13px; color: #334155; overflow-wrap: anywhere; }
 @media (max-width: 860px) { .act-vcuerpo { grid-template-columns: 1fr; overflow-y: auto; } .act-vbit { border-left: 0; border-top: 1px solid #E2E8F0; } .act-vpdf { min-height: 50vh; } .act-vmodal { padding: 0; } .act-vc { border-radius: 0; } }
+
+/* Bitácora: trazabilidad por centro (v21.48) */
+.bit-tabla tr.bit-otro td { background: #FFF7ED; font-weight: 600; } .bit-adj .bit-vin { background: #E0F2FE; color: #075985; } .bit-adj .bit-cen { background: #FEF3C7; color: #92400E; font-weight: 600; }

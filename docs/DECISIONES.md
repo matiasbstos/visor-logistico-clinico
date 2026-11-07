@@ -603,3 +603,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Al pinchar una fila se abre el acta (vista previa del PDF, sin descargar) con su bitácora (emitida, entrega confirmada/stock descontado, modificaciones, acta firmada subida, eliminación) y las acciones: Descargar ▾ (PDF/Word), Confirmar entrega / Subir firmada / Ver acta firmada y ⋯ (Editar, Eliminar).
 
 - v21.47: corrección de un cierre de etiqueta sobrante en las filas de actas emitidas.
+
+### 4.101 Bitácora: análisis por hilo, memo/SDC/CDP y trazabilidad por centro (v21.48)
+- El script lee el hilo completo: si un mensaje nombra la orden, las respuestas del mismo hilo quedan asociadas ("del mismo hilo"). Extrae memo, SDC y CDP de cada correo; los correos que solo traen esas referencias se guardan como "sueltos" y el Visor los vincula a la orden por el memo/CDP de sus columnas ("vinculado por memo N").
+- El Visor detecta qué centros se mencionan en cada correo (asunto, extracto, destinatarios) y muestra la tabla "Trazabilidad por centro y memo" (pedido, recibido, entregado, estado). Si hay unidades recibidas para otros centros sin entregar, la orden recibe una alerta ("No son stock del SAR") y el filtro "Para otros centros".
+- Archivo del script pasa a `visor_bitacora_oc_v2.json` (reescanea 150 días). Si la primera pasada no alcanza el tiempo, continúa en la siguiente (campo `completo`).
+- Requiere pegar el código nuevo y publicar una nueva versión de la implementación.

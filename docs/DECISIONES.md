@@ -583,3 +583,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Pestañas solo "Emitir acta" y "Actas emitidas"; "Seguimiento de actas" pasa a botón en la cabecera (con "Volver a actas").
 - Filas de actas emitidas: número, centro y estado (Por confirmar / Firmada / Sin acta firmada / Anulada); acción principal visible (Confirmar entrega / Subir firmada), PDF, Word, Ver firmada; Editar y Eliminar en menú "⋯".
 - Código de OC (ChileCompra): 1298355 = unidad de compra, 936 = correlativo, CM/AG/SE… = tipo de compra (CM Convenio Marco, AG Compra Ágil, SE sin emisión automática, CC Compra Coordinada, MC Microcompra, R1 <3 UTM, CA sin resolución; D1/C1/F3/G1/FG tratos directos), 26 = año.
+
+### 4.97 Actas: ajustes de la revisión UX (v21.43)
+- Menú "⋯" se cierra con clic fuera, Escape y al elegir; en la última fila abre hacia arriba; foco al título al ir/volver de Seguimiento; botones de 40 px (44 px en móvil); anuladas con número tachado en vez de opacidad; estado vacío con botón "Emitir la primera acta".

@@ -5614,3 +5614,9 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .act-mas-m { position: absolute; right: 0; top: calc(100% + 4px); z-index: 20; background: #fff; border: 1px solid #E2E8F0; border-radius: 8px; box-shadow: 0 8px 24px rgba(15,23,42,.15); min-width: 150px; padding: 4px; display: flex; flex-direction: column; }
 .act-mas-m button { background: none; border: 0; text-align: left; padding: 9px 12px; font: inherit; font-size: 13px; cursor: pointer; border-radius: 6px; } .act-mas-m button:hover { background: #F1F5F9; } .act-mas-m .act-peligro { color: #B91C1C; }
 .page-header .page-actions { display: flex; gap: 8px; align-items: center; }
+
+/* Revisión UX (v21.43) */
+.act-hrow:last-child .act-mas-m { top: auto; bottom: calc(100% + 4px); }
+.act-hbtns .btn { min-height: 40px; } .act-mas-m .act-peligro { border-top: 1px solid #E2E8F0; margin-top: 4px; }
+.act-hinfo small { color: #475569; } .act-hrow.act-anulada { opacity: 1; color: #64748B; } .act-hrow.act-anulada .act-htit strong { text-decoration: line-through; }
+@media (max-width: 767px) { .act-mas-m button { min-height: 44px; } .act-hbtns { width: 100%; } .act-hbtns .act-conf, .act-hbtns .act-firm { flex: 1 1 auto; } }

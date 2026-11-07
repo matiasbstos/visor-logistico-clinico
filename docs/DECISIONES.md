@@ -615,3 +615,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Arriba: línea de ciclo de vida de 6 etapas (Orden → Despacho y guías → Recepción en bodega → Recepción conforme → Factura → Distribución a centros) con estado hecho / en curso / pendiente / revisar / sin datos.
 - Hallazgos agrupados (Discrepancia, Revisar, Información, Concordancia): memos distintos en correos vs. cuadro del Visor, centros mencionados (compra a nombre del SAR para varios centros), guías sin conforme, conforme TOTAL/PARCIAL vs. Visor, último correo sin respuesta, adjuntos. Cada hallazgo enlaza a los correos que lo respaldan.
 - Bitácora debajo, subdividida por etapa (o cronológica); no se pierde ningún dato, solo se estructura. Menciones de centros ahora usan el conjunto global de centros del Visor, también para órdenes «Solo en correo».
+
+### 4.103 Bitácora: ajustes de la revisión UX/UI de la ventana (v21.50)
+- Foco visible azul y sin recorte; aria-pressed en el selector de vista; el cambio de vista conserva scroll y foco; la evidencia mueve el foco al correo; chip de etapa propio; contador de discrepancias/por revisar en la cabecera; tablas con región enfocable; respeto de prefers-reduced-motion; stepper en 2 columnas en móvil.

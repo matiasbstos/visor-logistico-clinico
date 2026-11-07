@@ -593,3 +593,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Las órdenes se agrupan por clave `1298355-NNN-XX26`; cada correo se clasifica por palabras clave (OC, despacho, guía, factura, reclamo, recepción conforme) y, en recepciones conformes, se detecta si declara TOTAL o PARCIAL.
 - Discrepancia = el correo de recepción conforme dice TOTAL pero el Visor tiene faltantes (o dice PARCIAL y ya está todo recibido). Sin gestión = sin correos o más de 7 días sin movimiento y sin recibir nada. Varias guías/despachos = pedido fragmentado.
 - Solo lectura del correo: no envía ni modifica nada.
+
+### 4.99 Bitácora: ajustes de la revisión UX (v21.45)
+- Panel: foco atrapado, Escape global, vuelve a la fila de origen, no se repinta con el panel abierto; orden título/estado/alerta/KPIs; solo los 5 correos más recientes con "Ver los N anteriores".
+- Lista: estados con ícono, alerta visible como texto, buscador antes de los filtros, leyenda de reglas, filas más compactas en celular.

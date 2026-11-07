@@ -30,8 +30,8 @@
         recepcion_conforme: ['ph-seal-check', 'Recepción conforme'], reclamo: ['ph-warning', 'Reclamo / atraso'], otro: ['ph-envelope-simple', 'Correo']
     };
     const ESTADOS = {
-        DISCREPANCIA: { n: 0, cls: 'bit-e-disc', txt: 'Discrepancia' }, SIN_GESTION: { n: 1, cls: 'bit-e-sin', txt: 'Sin gestión' }, PARCIAL: { n: 2, cls: 'bit-e-par', txt: 'Parcial · falta recibir' },
-        GESTION: { n: 3, cls: 'bit-e-ges', txt: 'En gestión' }, COMPLETA: { n: 4, cls: 'bit-e-ok', txt: 'Completa' }, CERRADA: { n: 5, cls: 'bit-e-cer', txt: 'Cerrada' }, SOLO_CORREO: { n: 2, cls: 'bit-e-sin', txt: 'Solo en correo (no está en el Visor)' }
+        DISCREPANCIA: { n: 0, cls: 'bit-e-disc', txt: 'Discrepancia', ico: 'ph-warning-octagon' }, SIN_GESTION: { n: 1, cls: 'bit-e-sin', txt: 'Sin gestión', ico: 'ph-clock' }, PARCIAL: { n: 2, cls: 'bit-e-par', txt: 'Parcial', ico: 'ph-chart-pie-slice' },
+        GESTION: { n: 3, cls: 'bit-e-ges', txt: 'En gestión', ico: 'ph-chat-circle' }, COMPLETA: { n: 4, cls: 'bit-e-ok', txt: 'Completa', ico: 'ph-check-circle' }, CERRADA: { n: 5, cls: 'bit-e-cer', txt: 'Cerrada', ico: 'ph-lock-simple' }, SOLO_CORREO: { n: 2, cls: 'bit-e-cor', txt: 'Solo en correo', ico: 'ph-envelope-simple', tip: 'Aparece en el correo pero no está ingresada en el Visor' }
     };
 
     /** Lógica pura: orden del Visor (o null) + correos → caso con estado, faltante y alertas. */
@@ -67,7 +67,7 @@
     // ---------------------------------------------------------------
     // Datos
     // ---------------------------------------------------------------
-    let cfg = { url: '', token: '' }, ordenes = [], correos = null, casos = [], filtro = 'TODOS', texto = '', abierto = null, cargando = false, error = '';
+    let verMas = false, cfg = { url: '', token: '' }, ordenes = [], correos = null, casos = [], filtro = 'TODOS', texto = '', abierto = null, cargando = false, error = '';
     const refCfg = () => fs().doc(fs().collection(db(), 'Contadores'), 'config-bitacora');
     async function cargarCfg() { try { const s = await fs().getDoc(refCfg()); cfg = s.exists() ? { url: s.data().url || '', token: s.data().token || '' } : { url: '', token: '' }; } catch (e) { /* sin config */ } }
     async function cargarOrdenes() { const sn = await fs().getDocs(fs().query(fs().collection(db(), 'Seguimiento_OC'), fs().limit(500))); ordenes = []; sn.forEach(d => ordenes.push({ id: d.id, ...d.data() })); }
@@ -99,45 +99,54 @@
             <div class="page-actions"><button type="button" class="btn btn-outline" id="bit-cfg"><i class="ph-bold ph-gear"></i> Configurar</button><button type="button" class="btn btn-primary" id="bit-act"${cargando ? ' disabled' : ''}><i class="ph-bold ph-arrows-clockwise"></i> ${cargando ? 'Revisando…' : 'Revisar el correo ahora'}</button></div></div>
         ${error ? `<div class="bit-aviso" role="alert">${esc(error)}</div>` : ''}
         ${!correos && !error ? '<div class="bit-aviso">Aún no hay datos del correo. Configura el script (botón "Configurar") para empezar. Mientras tanto se muestran las órdenes del Visor.</div>' : ''}
+        <div class="bit-barra bit-barra-q"><input type="search" id="bit-q" class="form-control" placeholder="Buscar por N° de orden o proveedor" value="${esc(texto)}" aria-label="Buscar orden"></div>
         <div class="bit-chips" role="group" aria-label="Filtrar por estado">${chips.map(c => `<button type="button" class="bit-chip${filtro === c[0] ? ' on' : ''}" data-f="${c[0]}">${c[1]} <em>${c[2]}</em></button>`).join('')}</div>
-        <div class="bit-barra"><input type="search" id="bit-q" class="form-control" placeholder="Buscar por N° de orden o proveedor" value="${esc(texto)}" aria-label="Buscar orden"></div>
+        <p class="bit-ley">Sin gestión = sin correos o más de ${DIAS_SIN_GESTION} días sin movimiento. Discrepancia = la recepción conforme enviada no coincide con lo que el Visor tiene recibido.</p>
         <div class="bit-lista">${lista.length ? lista.map(c => { const e = ESTADOS[c.estado], pct = c.pedido ? Math.round(c.recibido * 100 / c.pedido) : 0; return `
           <button type="button" class="bit-fila" data-k="${esc(c.clave)}">
             <span class="bit-f1"><strong>${esc(c.clave)}</strong><small>${esc(tipoDe(c.clave))}${c.oc && c.oc.proveedor ? ' · ' + esc(c.oc.proveedor) : ''}</small></span>
-            <span class="bit-f2"><span class="bit-est ${e.cls}">${e.txt}</span></span>
+            <span class="bit-f2"><span class="bit-est ${e.cls}" ${e.tip ? 'title="' + esc(e.tip) + '"' : ''}><i class="ph-bold ${e.ico}"></i> ${e.txt}</span></span>
             <span class="bit-f3">${c.pedido ? `<span class="bit-barra-av" aria-hidden="true"><i style="width:${pct}%"></i></span><small>${c.recibido}/${c.pedido} u. · ${c.falta ? 'faltan ' + c.falta : 'completo'}</small>` : '<small>—</small>'}</span>
-            <span class="bit-f4"><small>${c.ultimo ? esc(hace(c.diasSin)) : 'sin correos'}</small>${c.ultimo ? `<small>${esc((CLASES[c.ultimo.clase] || CLASES.otro)[1])}</small>` : ''}</span>
-            <span class="bit-f5">${c.alertas.length ? `<i class="ph-bold ph-warning-circle bit-alerta" title="${esc(c.alertas[0])}"></i>` : ''}</span></button>`; }).join('') : '<p class="act-hint" style="padding:16px;">No hay órdenes en este filtro.</p>'}</div>
+            <span class="bit-f4"><small>${c.ultimo ? esc(hace(c.diasSin)) + ' · ' + esc((CLASES[c.ultimo.clase] || CLASES.otro)[1]) : 'Sin correos todavía'}</small>${c.alertas.length ? `<small class="bit-avf"><i class="ph-bold ph-warning-circle"></i> ${c.alertas.length} alerta${c.alertas.length > 1 ? 's' : ''}</small>` : ''}</span></button>`; }).join('') : '<p class="act-hint" style="padding:16px;">No hay órdenes en este filtro.</p>'}</div>
         <div id="bit-panel"></div>`;
         r.querySelectorAll('.bit-chip').forEach(b => b.addEventListener('click', () => { filtro = b.dataset.f; pintar(); }));
         const qi = r.querySelector('#bit-q'); if (qi) qi.addEventListener('input', () => { texto = qi.value; const pos = qi.selectionStart; pintar(); const n = root().querySelector('#bit-q'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } });
-        r.querySelectorAll('.bit-fila').forEach(b => b.addEventListener('click', () => { abierto = b.dataset.k; panel(); }));
+        r.querySelectorAll('.bit-fila').forEach(b => b.addEventListener('click', () => { abierto = b.dataset.k; verMas = false; panel(); }));
         r.querySelector('#bit-cfg').addEventListener('click', configurar);
         r.querySelector('#bit-act').addEventListener('click', () => actualizar(true));
-        if (abierto) panel();
+        if (abierto && !document.getElementById('bit-vel')) panel();
     }
     function panel() {
         const c = casos.find(x => x.clave === abierto), p = document.getElementById('bit-panel'); if (!c || !p) return;
         const e = ESTADOS[c.estado];
-        p.innerHTML = `<div class="bit-vel" id="bit-vel"></div><aside class="bit-drawer" role="dialog" aria-modal="true" aria-label="Caso ${esc(c.clave)}">
-          <div class="bit-dh"><div><h3>${esc(c.clave)}</h3><small>${esc(tipoDe(c.clave))}${c.oc && c.oc.proveedor ? ' · ' + esc(c.oc.proveedor) : ''}</small></div><button type="button" class="btn btn-outline" id="bit-x" aria-label="Cerrar">✕</button></div>
-          <div class="bit-resumen"><span class="bit-est ${e.cls}">${e.txt}</span>
-            <div class="bit-kpis"><div><b>${c.pedido || '—'}</b><small>pedido</small></div><div><b>${c.pedido ? c.recibido : '—'}</b><small>recibido</small></div><div class="${c.falta ? 'bit-falta' : ''}"><b>${c.pedido ? c.falta : '—'}</b><small>faltan</small></div><div><b>${c.conformes}</b><small>conformes enviadas</small></div></div>
-            ${c.oc ? '<button type="button" class="btn btn-outline" id="bit-ir"><i class="ph-bold ph-arrow-square-out"></i> Abrir en Seguimiento de OC</button>' : ''}</div>
-          ${c.alertas.length ? `<div class="bit-alertas">${c.alertas.map(a => `<p><i class="ph-bold ph-warning-circle"></i> ${esc(a)}</p>`).join('')}</div>` : ''}
+        p.innerHTML = `<div class="bit-vel" id="bit-vel"></div><aside class="bit-drawer" role="dialog" aria-modal="true" aria-labelledby="bit-h3" tabindex="-1">
+          <div class="bit-dh"><div><h3 id="bit-h3">${esc(c.clave)}</h3><small>${esc(tipoDe(c.clave))}${c.oc && c.oc.proveedor ? ' · ' + esc(c.oc.proveedor) : ''}</small></div><div class="bit-dhb">${c.oc ? '<button type="button" class="btn btn-outline" id="bit-ir"><i class="ph-bold ph-arrow-square-out"></i> Abrir en Seguimiento de OC</button>' : ''}<button type="button" class="btn btn-outline" id="bit-x" aria-label="Cerrar">✕</button></div></div>
+          <div class="bit-resumen"><span class="bit-est ${e.cls}"><i class="ph-bold ${e.ico}"></i> ${e.txt}</span></div>
+          ${c.alertas.length ? `<div class="bit-alertas" role="note"><strong>Qué revisar</strong>${c.alertas.map(a => `<p>${esc(a)}</p>`).join('')}</div>` : ''}
+          <div class="bit-kpis"><div><b>${c.pedido || '—'}</b><small>pedido</small></div><div><b>${c.pedido ? c.recibido : '—'}</b><small>recibido</small></div><div class="${c.falta ? 'bit-falta' : ''}"><b>${c.pedido ? c.falta : '—'}</b><small>faltan</small></div></div>
+          <p class="bit-sub">${c.conformes} recepción${c.conformes === 1 ? '' : 'es'} conforme${c.conformes === 1 ? '' : 's'} informada${c.conformes === 1 ? '' : 's'} por correo.</p>
           ${c.productos.length ? `<details class="bit-det" open><summary>Qué falta recibir (${c.productos.length} productos)</summary><table class="bit-tabla"><thead><tr><th>Producto</th><th>Pedido</th><th>Recibido</th><th>Falta</th></tr></thead><tbody>${c.productos.map(x => `<tr><td>${esc(x.producto)}</td><td>${x.pedido}</td><td>${x.recibido}</td><td><b>${x.pendiente}</b></td></tr>`).join('')}</tbody></table></details>` : ''}
-          <h4 class="bit-h">Historial (${c.eventos.length})</h4>
-          <ol class="bit-tl">${c.eventos.length ? c.eventos.map(ev => { const cl = CLASES[ev.clase] || CLASES.otro; return `
-            <li class="bit-ev bit-${esc(ev.clase || 'otro')}"><span class="bit-ico"><i class="ph-bold ${cl[0]}"></i></span>
+          <h4 class="bit-h">Correos de esta orden (${c.eventos.length})</h4>
+          <ol class="bit-tl">${c.eventos.length ? c.eventos.map((ev, ix) => { const cl = CLASES[ev.clase] || CLASES.otro; return `
+            <li class="bit-ev bit-${esc(ev.clase || 'otro')}"${ix >= 5 && !verMas ? ' hidden data-mas="1"' : ''}><span class="bit-ico"><i class="ph-bold ${cl[0]}"></i></span>
               <div class="bit-evc"><div class="bit-evh"><b>${cl[1]}</b>${ev.declara ? `<span class="bit-tag">declara ${esc(ev.declara)}</span>` : ''}<span class="bit-dir ${ev.dir === 'ENVIADO' ? 'env' : 'rec'}">${ev.dir === 'ENVIADO' ? (ev.reenviado ? 'Reenviado' : 'Enviado') : 'Recibido'}</span><small>${esc(fechaHora(ev.fecha))}</small></div>
               <div class="bit-asunto">${esc(ev.asunto)}</div><small class="bit-qs">${ev.dir === 'ENVIADO' ? 'Para: ' + esc(ev.para) : 'De: ' + esc(ev.de)}</small>
               ${ev.resumen ? `<details class="bit-res"><summary>Ver extracto</summary><p>${esc(ev.resumen)}</p></details>` : ''}
               ${(ev.adjuntos || []).length ? `<div class="bit-adj">${ev.adjuntos.map(a => `<span><i class="ph-bold ph-paperclip"></i> ${esc(a)}</span>`).join('')}</div>` : ''}
-              ${ev.hilo ? `<a class="bit-gm" target="_blank" rel="noopener" href="https://mail.google.com/mail/?authuser=${encodeURIComponent(CUENTA)}#all/${encodeURIComponent(ev.hilo)}">Abrir en Gmail</a>` : ''}</div></li>`; }).join('') : '<li class="act-hint">No hay correos asociados todavía.</li>'}</ol></aside>`;
-        const cerrar = () => { abierto = null; p.innerHTML = ''; };
+              ${ev.hilo ? `<a class="bit-gm" target="_blank" rel="noopener" href="https://mail.google.com/mail/?authuser=${encodeURIComponent(CUENTA)}#all/${encodeURIComponent(ev.hilo)}">Abrir en Gmail</a>` : ''}</div></li>`; }).join('') : '<li class="act-hint">Sin correos todavía.</li>'}</ol>${c.eventos.length > 5 && !verMas ? `<button type="button" class="btn btn-outline" id="bit-mas">Ver los ${c.eventos.length - 5} anteriores</button>` : ''}</aside>`;
+        const origen = document.activeElement, dr = p.querySelector('.bit-drawer');
+        const cerrar = () => { document.removeEventListener('keydown', teclas); document.body.style.overflow = ''; abierto = null; verMas = false; p.innerHTML = ''; if (origen && origen.focus && document.contains(origen)) origen.focus(); };
+        const teclas = (k) => {
+            if (k.key === 'Escape') { cerrar(); return; }
+            if (k.key !== 'Tab') return;
+            const fs2 = [...dr.querySelectorAll('button, a[href], summary, input')].filter(el => !el.closest('[hidden]') && el.offsetParent !== null); if (!fs2.length) return;
+            const a0 = fs2[0], z = fs2[fs2.length - 1];
+            if (k.shiftKey && (document.activeElement === a0 || document.activeElement === dr)) { k.preventDefault(); z.focus(); } else if (!k.shiftKey && document.activeElement === z) { k.preventDefault(); a0.focus(); }
+        };
+        document.addEventListener('keydown', teclas); document.body.style.overflow = 'hidden';
         p.querySelector('#bit-x').addEventListener('click', cerrar); p.querySelector('#bit-vel').addEventListener('click', cerrar);
-        p.querySelector('.bit-drawer').addEventListener('keydown', (k) => { if (k.key === 'Escape') cerrar(); });
-        const ir = p.querySelector('#bit-ir'); if (ir) ir.addEventListener('click', () => { const so = window.SAR_SeguimientoOC; const m = document.querySelector('.menu-item[data-target="view-seguimiento-oc"]'); if (m) m.click(); if (so && so.abrirCuando) so.abrirCuando(c.oc.id); });
+        const mas = p.querySelector('#bit-mas'); if (mas) mas.addEventListener('click', () => { verMas = true; p.querySelectorAll('[data-mas]').forEach(li => li.hidden = false); mas.remove(); });
+        const ir = p.querySelector('#bit-ir'); if (ir) ir.addEventListener('click', () => { const so = window.SAR_SeguimientoOC; const m = document.querySelector('.menu-item[data-target="view-seguimiento-oc"]'); cerrar(); if (m) m.click(); if (so && so.abrirCuando) so.abrirCuando(c.oc.id); });
         const x = p.querySelector('#bit-x'); if (x) x.focus();
     }
 

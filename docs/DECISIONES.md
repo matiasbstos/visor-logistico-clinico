@@ -601,3 +601,5 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.100 Actas: ver el acta sin descargar, buscador y bitácora por acta (v21.46)
 - "Seguimiento de actas" deja de ser una vista aparte: en "Actas emitidas" hay un buscador que recorta la lista en vivo (número, centro, producto, fecha, estado).
 - Al pinchar una fila se abre el acta (vista previa del PDF, sin descargar) con su bitácora (emitida, entrega confirmada/stock descontado, modificaciones, acta firmada subida, eliminación) y las acciones: Descargar ▾ (PDF/Word), Confirmar entrega / Subir firmada / Ver acta firmada y ⋯ (Editar, Eliminar).
+
+- v21.47: corrección de un cierre de etiqueta sobrante en las filas de actas emitidas.

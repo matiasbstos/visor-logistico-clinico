@@ -586,3 +586,10 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.97 Actas: ajustes de la revisión UX (v21.43)
 - Menú "⋯" se cierra con clic fuera, Escape y al elegir; en la última fila abre hacia arriba; foco al título al ir/volver de Seguimiento; botones de 40 px (44 px en móvil); anuladas con número tachado en vez de opacidad; estado vacío con botón "Emitir la primera acta".
+
+### 4.98 Bitácora de órdenes de compra (casos tipo ticket) con revisión del correo (v21.44)
+- Nueva vista "Bitácora de órdenes" (bitacora-oc.js): cada OC es un caso con estado (Discrepancia, Sin gestión, Parcial, En gestión, Completa, Cerrada, Solo en correo), avance pedido/recibido/falta, último movimiento y línea de tiempo de correos (recibidos, enviados, reenviados) con adjuntos y enlace a Gmail.
+- Script de Apps Script propio (código dentro de la vista, botón "Configurar"), que se instala con la cuenta compras.sar@cormumel.cl (distinta de la del script de fotos). `instalar` programa revisiones a las 07:00, 12:00 y 17:00; guarda el resultado en un JSON en Drive de esa cuenta; el Visor lo lee con URL + token (Contadores/config-bitacora, sin reglas nuevas).
+- Las órdenes se agrupan por clave `1298355-NNN-XX26`; cada correo se clasifica por palabras clave (OC, despacho, guía, factura, reclamo, recepción conforme) y, en recepciones conformes, se detecta si declara TOTAL o PARCIAL.
+- Discrepancia = el correo de recepción conforme dice TOTAL pero el Visor tiene faltantes (o dice PARCIAL y ya está todo recibido). Sin gestión = sin correos o más de 7 días sin movimiento y sin recibir nada. Varias guías/despachos = pedido fragmentado.
+- Solo lectura del correo: no envía ni modifica nada.

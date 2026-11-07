@@ -609,3 +609,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - El Visor detecta qué centros se mencionan en cada correo (asunto, extracto, destinatarios) y muestra la tabla "Trazabilidad por centro y memo" (pedido, recibido, entregado, estado). Si hay unidades recibidas para otros centros sin entregar, la orden recibe una alerta ("No son stock del SAR") y el filtro "Para otros centros".
 - Archivo del script pasa a `visor_bitacora_oc_v2.json` (reescanea 150 días). Si la primera pasada no alcanza el tiempo, continúa en la siguiente (campo `completo`).
 - Requiere pegar el código nuevo y publicar una nueva versión de la implementación.
+
+### 4.102 Bitácora: caso en ventana completa con ciclo de vida y análisis profundo (v21.49)
+- El detalle de cada orden deja de ser un panel lateral y pasa a ventana a pantalla completa (diálogo modal, Esc / «Volver a la lista», foco devuelto a la fila).
+- Arriba: línea de ciclo de vida de 6 etapas (Orden → Despacho y guías → Recepción en bodega → Recepción conforme → Factura → Distribución a centros) con estado hecho / en curso / pendiente / revisar / sin datos.
+- Hallazgos agrupados (Discrepancia, Revisar, Información, Concordancia): memos distintos en correos vs. cuadro del Visor, centros mencionados (compra a nombre del SAR para varios centros), guías sin conforme, conforme TOTAL/PARCIAL vs. Visor, último correo sin respuesta, adjuntos. Cada hallazgo enlaza a los correos que lo respaldan.
+- Bitácora debajo, subdividida por etapa (o cronológica); no se pierde ningún dato, solo se estructura. Menciones de centros ahora usan el conjunto global de centros del Visor, también para órdenes «Solo en correo».

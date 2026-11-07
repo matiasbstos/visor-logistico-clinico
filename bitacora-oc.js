@@ -86,17 +86,16 @@
     }
     function armarCasos() {
         const porClave = new Map(); ordenes.forEach(o => { const k = claveOC(o.numeroOC); if (k) porClave.set(k, o); });
+        const conocidos = [...new Set(ordenes.flatMap(o => (o.columnas || []).map(c => c.centro)).filter(x => x && x !== 'SAR'))].map(n => ({ n, t: norm(n).split(' ').filter(w => w.length >= 4 && !GENERICAS.has(w)) })).filter(x => x.t.length);
         const cor = (correos && correos.ocs) || {}, sueltos = (correos && correos.sueltos) || [], claves = new Set([...porClave.keys(), ...Object.keys(cor)]);
         casos = [...claves].map(k => {
             const oc = porClave.get(k) || null; let evs = ((cor[k] && cor[k].eventos) || []).map(e => ({ ...e }));
             if (oc) {
                 const memos = new Set((oc.columnas || []).flatMap(c => digs(c.memo))), cdps = new Set((oc.columnas || []).flatMap(c => digs(c.cdp))), ya = new Set(evs.map(e => e.id));
                 sueltos.forEach(e => { if (ya.has(e.id)) return; const r = e.refs || {}, m = (r.memo || []).find(x => memos.has(String(parseInt(x, 10)))), c = (r.cdp || []).concat(r.sdc || []).find(x => cdps.has(String(parseInt(x, 10)))); if (m || c) evs.push({ ...e, vinculo: m ? 'memo ' + m : 'CDP/SDC ' + c }); });
-                // centros mencionados en cada correo (para ver a quién corresponde lo comprado)
-                const otros = [...new Set((oc.columnas || []).map(c => c.centro).filter(x => x && x !== 'SAR'))].map(n => ({ n, t: norm(n).split(' ').filter(w => w.length >= 4 && !GENERICAS.has(w)) })).filter(x => x.t.length);
-                evs.forEach(e => { const tx = norm([e.asunto, e.resumen, e.para, e.cc, e.de].join(' ')); const m = otros.filter(x => x.t.some(w => tx.includes(w))).map(x => x.n); if (m.length) e.centros = m; });
             }
-            const c = calcularCaso(oc, evs); return { clave: k, oc, ...c };
+            evs.forEach(e => { const tx = norm([e.asunto, e.resumen, e.para, e.cc, e.de, (e.adjuntos || []).join(' ')].join(' ')); const m = conocidos.filter(x => x.t.some(w => tx.includes(w))).map(x => x.n); if (m.length) e.centros = m; else delete e.centros; });
+            const c = calcularCaso(oc, evs); const an = analizar({ ...c, oc, clave: k }); return { clave: k, oc, ...c, ...an };
         });
         casos.sort((a, b) => ESTADOS[a.estado].n - ESTADOS[b.estado].n || b.falta - a.falta || String(b.ultimo ? b.ultimo.fecha : '').localeCompare(String(a.ultimo ? a.ultimo.fecha : '')));
     }
@@ -124,50 +123,144 @@
           <button type="button" class="bit-fila" data-k="${esc(c.clave)}">
             <span class="bit-f1"><strong>${esc(c.clave)}</strong><small>${esc(tipoDe(c.clave))}${c.oc && c.oc.proveedor ? ' · ' + esc(c.oc.proveedor) : ''}</small></span>
             <span class="bit-f2"><span class="bit-est ${e.cls}" ${e.tip ? 'title="' + esc(e.tip) + '"' : ''}><i class="ph-bold ${e.ico}"></i> ${e.txt}</span></span>
-            <span class="bit-f3">${c.pedido ? `<span class="bit-barra-av" aria-hidden="true"><i style="width:${pct}%"></i></span><small>${c.recibido}/${c.pedido} u. · ${c.falta ? 'faltan ' + c.falta : 'completo'}</small>` : '<small>—</small>'}</span>
+            <span class="bit-f3">${c.pedido ? `<span class="bit-barra-av" aria-hidden="true"><i style="width:${pct}%"></i></span><small>${c.recibido}/${c.pedido} u. · ${c.falta ? 'faltan ' + c.falta : 'completo'}</small>` : `<small>Etapa: ${esc(c.etapaActual)}</small>${c.dividida ? '<small class="bit-avf">Posible compra compartida</small>' : ''}`}</span>
             <span class="bit-f4"><small>${c.ultimo ? esc(hace(c.diasSin)) + ' · ' + esc((CLASES[c.ultimo.clase] || CLASES.otro)[1]) : 'Sin correos todavía'}</small>${c.alertas.length ? `<small class="bit-avf"><i class="ph-bold ph-warning-circle"></i> ${c.alertas.length} alerta${c.alertas.length > 1 ? 's' : ''}</small>` : ''}</span></button>`; }).join('') : '<p class="act-hint" style="padding:16px;">No hay órdenes en este filtro.</p>'}</div>
         <div id="bit-panel"></div>`;
         r.querySelectorAll('.bit-chip').forEach(b => b.addEventListener('click', () => { filtro = b.dataset.f; pintar(); }));
         const qi = r.querySelector('#bit-q'); if (qi) qi.addEventListener('input', () => { texto = qi.value; const pos = qi.selectionStart; pintar(); const n = root().querySelector('#bit-q'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } });
-        r.querySelectorAll('.bit-fila').forEach(b => b.addEventListener('click', () => { abierto = b.dataset.k; verMas = false; panel(); }));
+        r.querySelectorAll('.bit-fila').forEach(b => b.addEventListener('click', () => { window.__bitOrigen = b; abierto = b.dataset.k; vistaCron = false; panel(); }));
         r.querySelector('#bit-cfg').addEventListener('click', configurar);
         r.querySelector('#bit-act').addEventListener('click', () => actualizar(true));
-        if (abierto && !document.getElementById('bit-vel')) panel();
+        if (abierto && !document.querySelector('.bit-full')) panel();
     }
+    // ---------------------------------------------------------------
+    // Análisis profundo: etapas, concordancias y discrepancias
+    // ---------------------------------------------------------------
+    const ETAPAS = [
+        { id: 'orden', t: 'Orden', ico: 'ph-file-text' }, { id: 'despacho', t: 'Despacho y guías', ico: 'ph-truck' }, { id: 'recepcion', t: 'Recepción en bodega', ico: 'ph-package' },
+        { id: 'conforme', t: 'Recepción conforme', ico: 'ph-seal-check' }, { id: 'factura', t: 'Factura', ico: 'ph-invoice' }, { id: 'distribucion', t: 'Distribución a centros', ico: 'ph-share-network' }
+    ];
+    const ETAPA_DE = { oc_enviada: 'orden', despacho: 'despacho', guia: 'despacho', recepcion_conforme: 'conforme', factura: 'factura', reclamo: 'consultas', otro: 'consultas' };
+    const etapaDeEv = (ev) => ETAPA_DE[ev.clase] || 'consultas';
+    const RE_DIVIDE = /distribu|reparti|dividi|divisi[oó]n|entre (los )?centros|para (los )?centros|cada centro|destino|corresponde(n)? a/i;
+
+    /** Etapas del ciclo de vida + hallazgos (concordancias / discrepancias). Puro: usa solo el caso ya calculado. */
+    function analizar(c) {
+        const ev = c.eventos || [], oc = c.oc, ahora = Date.now();
+        const asc = ev.slice().sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+        const de = (cl) => asc.filter(e => cl.includes(e.clase));
+        const primera = (arr) => arr[0] ? arr[0].fecha : null, ultima = (arr) => arr.length ? arr[arr.length - 1].fecha : null;
+        const guias = de(['guia', 'despacho']), conformes = de(['recepcion_conforme']).filter(e => e.dir === 'ENVIADO'), facturas = de(['factura']), ordenes = de(['oc_enviada']);
+        const memosCorreo = [...new Set(ev.flatMap(e => ((e.refs && e.refs.memo) || []).map(x => String(parseInt(x, 10)))))];
+        const memosVisor = oc ? [...new Set((oc.columnas || []).flatMap(x => digs(x.memo)))] : [];
+        const centrosCorreo = [...new Set(ev.flatMap(e => e.centros || []))];
+        const centrosVisor = oc ? [...new Set((oc.columnas || []).map(x => x.centro).filter(x => x && x !== 'SAR'))] : [];
+        const textoDivide = ev.filter(e => RE_DIVIDE.test([e.asunto, e.resumen].join(' ')));
+        const dividida = memosCorreo.length > 1 || centrosCorreo.length > 0 || centrosVisor.length > 0 || textoDivide.length > 0;
+        const dias = (iso) => iso ? Math.floor((ahora - new Date(iso).getTime()) / 86400000) : null;
+
+        // ---- etapas
+        const et = {};
+        et.orden = { estado: ordenes.length || ev.length || oc ? 'hecho' : 'nd', fecha: primera(ordenes) || primera(asc), det: ordenes.length ? `${ordenes.length} correo${ordenes.length > 1 ? 's' : ''} de la orden` : (oc ? 'Registrada en el Visor' : 'Inferida de los correos') };
+        et.despacho = { estado: guias.length ? 'hecho' : (c.estado === 'COMPLETA' ? 'nd' : 'pend'), fecha: primera(guias), det: guias.length ? `${guias.length} guía${guias.length > 1 ? 's' : ''}/despacho${guias.length > 1 ? 's' : ''}${guias.length > 1 ? ' · llegó fragmentado' : ''}` : 'Sin guía ni aviso de despacho' };
+        if (oc && c.pedido) et.recepcion = { estado: c.falta === 0 ? 'hecho' : (c.recibido > 0 ? 'curso' : 'pend'), fecha: null, det: `${c.recibido}/${c.pedido} u. recibidas${c.falta ? ' · faltan ' + c.falta : ''}` };
+        else et.recepcion = { estado: 'nd', fecha: null, det: oc ? 'Sin líneas del SAR' : 'No está cargada en el Visor' };
+        et.conforme = { estado: conformes.length ? (c.estado === 'DISCREPANCIA' ? 'alerta' : 'hecho') : ((c.falta === 0 && c.pedido) || guias.length ? 'pend' : 'nd'), fecha: primera(conformes), det: conformes.length ? `${conformes.length} enviada${conformes.length > 1 ? 's' : ''}${conformes[conformes.length - 1].declara ? ' · declara ' + conformes[conformes.length - 1].declara : ''}` : 'Aún no se envía' };
+        et.factura = { estado: facturas.length ? 'hecho' : 'pend', fecha: primera(facturas), det: facturas.length ? `${facturas.length} correo${facturas.length > 1 ? 's' : ''} de factura` : 'Sin factura en el correo' };
+        const cs = c.centros || [];
+        if (cs.length > 1) { const tot = cs.reduce((t, x) => t + x.pedido, 0), ent = cs.reduce((t, x) => t + x.entregado, 0); et.distribucion = { estado: tot && ent >= tot ? 'hecho' : (ent > 0 ? 'curso' : 'pend'), fecha: null, det: `${cs.length} centros/memos · ${ent}/${tot} u. entregadas` }; }
+        else if (dividida) et.distribucion = { estado: 'curso', fecha: null, det: `Posible compra compartida${centrosCorreo.length ? ': ' + centrosCorreo.length + ' centro(s) en los correos' : (memosCorreo.length > 1 ? ': ' + memosCorreo.length + ' memos' : '')}` };
+        else et.distribucion = { estado: 'nd', fecha: null, det: 'Sin señales de división' };
+        const etapas = ETAPAS.map(x => ({ ...x, ...et[x.id] }));
+
+        // ---- hallazgos
+        const H = [], add = (nivel, titulo, detalle, evid) => H.push({ nivel, titulo, detalle, evid: (evid || []).slice(0, 4) });
+        if (!oc) add('warn', 'La orden no está cargada en Seguimiento de OC', 'Sin cuadro de distribución no se puede comprobar qué corresponde al SAR y qué a otros centros. Ingrésala para cruzar productos y cantidades.', []);
+        if (memosCorreo.length > 1) add('warn', `Los correos citan ${memosCorreo.length} memos distintos (${memosCorreo.join(', ')})`, 'Una misma orden con varios memos suele ser una compra a nombre del SAR con productos para distintos centros.', ev.filter(e => (e.refs && e.refs.memo || []).length));
+        if (oc && memosVisor.length) {
+            const faltan = memosCorreo.filter(m => !memosVisor.includes(m)), sinCorreo = memosVisor.filter(m => !memosCorreo.includes(m));
+            if (memosCorreo.length && !faltan.length) add('ok', 'Concordancia de memos', `Los memos de los correos (${memosCorreo.join(', ')}) están en el cuadro de distribución del Visor.`, []);
+            if (faltan.length) add('bad', `Memo${faltan.length > 1 ? 's' : ''} ${faltan.join(', ')} aparece${faltan.length > 1 ? 'n' : ''} en los correos pero no en el cuadro del Visor`, 'Puede haber productos o centros de esta orden que el Visor no está contando.', ev.filter(e => (e.refs && e.refs.memo || []).some(m => faltan.includes(String(parseInt(m, 10))))));
+            if (sinCorreo.length && ev.length) add('info', `Memo${sinCorreo.length > 1 ? 's' : ''} ${sinCorreo.join(', ')} del Visor sin ninguna mención en el correo`, 'No hay correos que respalden la gestión de esos memos.', []);
+        }
+        if (centrosCorreo.length) {
+            const fuera = oc ? centrosCorreo.filter(x => !centrosVisor.includes(x)) : [];
+            add(fuera.length ? 'bad' : 'warn', `Los correos mencionan ${centrosCorreo.length} centro${centrosCorreo.length > 1 ? 's' : ''}: ${centrosCorreo.join(', ')}`, fuera.length ? `${fuera.join(', ')} no figura${fuera.length > 1 ? 'n' : ''} en el cuadro de distribución del Visor.` : 'Lo comprado a nombre del SAR podría ser para esos centros: confirma qué parte corresponde a cada uno antes de ingresarlo a stock.', ev.filter(e => (e.centros || []).length));
+        }
+        if (textoDivide.length) add('info', 'Correos que hablan de repartir o destinar lo comprado', 'Las frases que mencionan distribución, reparto o destino a centros están marcadas en la bitácora.', textoDivide);
+        (c.otros > 0 && oc) && add('bad', `${c.otros} u. recibidas para otros centros siguen en bodega`, 'No son stock del SAR: deben entregarse con acta al centro de destino.', []);
+        if (guias.length && !conformes.length) add('warn', 'Hay guía o despacho, pero no se ha enviado la recepción conforme', `Primer aviso hace ${dias(primera(guias))} día(s).`, guias);
+        if (guias.length > conformes.length && conformes.length) add('warn', `${guias.length} guías/despachos y solo ${conformes.length} recepción(es) conforme(s)`, 'Si la orden llegó fragmentada, cada entrega debería tener su recepción conforme.', guias);
+        if (guias.length > 1) add('info', `Llegó fragmentada en ${guias.length} envíos`, guias.map(g => fecha(g.fecha)).join(' · '), guias);
+        if (c.ultimaConf && c.ultimaConf.declara) {
+            if (oc && c.estado === 'DISCREPANCIA') add('bad', `La recepción conforme dice ${c.ultimaConf.declara}, pero el Visor no coincide`, c.alertas[0] || '', [c.ultimaConf]);
+            else if (oc && c.pedido) add('ok', `La recepción conforme (${c.ultimaConf.declara}) coincide con el Visor`, `${c.recibido}/${c.pedido} u. recibidas.`, [c.ultimaConf]);
+            else add('info', `La recepción conforme declara ${c.ultimaConf.declara}`, 'Sin datos del Visor para verificarlo.', [c.ultimaConf]);
+        }
+        if (conformes.length && guias.length && new Date(primera(conformes)) < new Date(primera(guias))) add('warn', 'La recepción conforme es anterior a la primera guía', 'Revisa si se informó antes de recibir o si falta el correo de la guía.', conformes);
+        const ult = asc[asc.length - 1];
+        if (ult && ult.clase === 'reclamo') add('bad', 'El último correo es un reclamo o aviso de atraso', `Hace ${dias(ult.fecha)} día(s) y sin movimientos posteriores.`, [ult]);
+        else if (ult && ult.dir === 'RECIBIDO' && dias(ult.fecha) >= 3 && c.estado !== 'COMPLETA' && c.estado !== 'CERRADA') add('warn', 'Último correo recibido sin respuesta enviada', `Hace ${dias(ult.fecha)} día(s).`, [ult]);
+        const adj = ev.flatMap(e => e.adjuntos || []), pdf = adj.filter(x => /\.pdf$/i.test(x)).length, xml = adj.filter(x => /\.xml$/i.test(x)).length;
+        if (adj.length) add('info', `Documentos adjuntos: ${adj.length}`, `${pdf} PDF${xml ? ', ' + xml + ' XML (DTE)' : ''}${adj.length - pdf - xml ? ', ' + (adj.length - pdf - xml) + ' otros' : ''}.`, []);
+        const orden = { bad: 0, warn: 1, info: 2, ok: 3 }; H.sort((x, y) => orden[x.nivel] - orden[y.nivel]);
+        const actual = [...etapas].reverse().find(x => x.estado === 'hecho' || x.estado === 'curso' || x.estado === 'alerta');
+        return { etapas, hallazgos: H, etapaActual: actual ? actual.t : 'Sin datos', dividida, memosCorreo, centrosCorreo };
+    }
+
+    const NIVEL = { bad: ['ph-x-circle', 'Discrepancia'], warn: ['ph-warning', 'Revisar'], info: ['ph-info', 'Información'], ok: ['ph-check-circle', 'Concordancia'] };
+    function evHTML(ev, etapaTxt) {
+        const cl = CLASES[ev.clase] || CLASES.otro, r = ev.refs || {}, ch = [];
+        (r.memo || []).forEach(x => ch.push('memo ' + x)); (r.sdc || []).forEach(x => ch.push('SDC ' + x)); (r.cdp || []).forEach(x => ch.push('CDP ' + x));
+        const marca = RE_DIVIDE.test([ev.asunto, ev.resumen].join(' '));
+        return `<li class="bit-ev bit-${esc(ev.clase || 'otro')}" id="ev-${esc(ev.id)}"><span class="bit-ico"><i class="ph-bold ${cl[0]}"></i></span>
+          <div class="bit-evc"><div class="bit-evh"><b>${cl[1]}</b>${ev.declara ? `<span class="bit-tag">declara ${esc(ev.declara)}</span>` : ''}<span class="bit-dir ${ev.dir === 'ENVIADO' ? 'env' : 'rec'}">${ev.dir === 'ENVIADO' ? (ev.reenviado ? 'Reenviado' : 'Enviado') : 'Recibido'}</span>${etapaTxt ? `<span class="bit-dir rec">${esc(etapaTxt)}</span>` : ''}<small>${esc(fechaHora(ev.fecha))}</small></div>
+          <div class="bit-asunto">${esc(ev.asunto)}</div><small class="bit-qs">${ev.dir === 'ENVIADO' ? 'Para: ' + esc(ev.para) : 'De: ' + esc(ev.de)}</small>
+          ${(ch.length || ev.vinculo || ev.porHilo || (ev.centros || []).length || marca) ? `<div class="bit-adj">${ch.map(x => `<span>${esc(x)}</span>`).join('')}${ev.vinculo ? `<span class="bit-vin">vinculado por ${esc(ev.vinculo)}</span>` : ''}${ev.porHilo ? '<span class="bit-vin">del mismo hilo</span>' : ''}${(ev.centros || []).map(x => `<span class="bit-cen">menciona: ${esc(x)}</span>`).join('')}${marca ? '<span class="bit-cen">habla de repartir/destinar</span>' : ''}</div>` : ''}
+          ${ev.resumen ? `<details class="bit-res"><summary>Ver extracto</summary><p>${esc(ev.resumen)}</p></details>` : ''}
+          ${(ev.adjuntos || []).length ? `<div class="bit-adj">${ev.adjuntos.map(a => `<span><i class="ph-bold ph-paperclip"></i> ${esc(a)}</span>`).join('')}</div>` : ''}
+          ${ev.hilo ? `<a class="bit-gm" target="_blank" rel="noopener" href="https://mail.google.com/mail/?authuser=${encodeURIComponent(CUENTA)}#all/${encodeURIComponent(ev.hilo)}">Abrir en Gmail</a>` : ''}</div></li>`;
+    }
+    let vistaCron = false;
     function panel() {
         const c = casos.find(x => x.clave === abierto), p = document.getElementById('bit-panel'); if (!c || !p) return;
-        const e = ESTADOS[c.estado];
-        p.innerHTML = `<div class="bit-vel" id="bit-vel"></div><aside class="bit-drawer" role="dialog" aria-modal="true" aria-labelledby="bit-h3" tabindex="-1">
-          <div class="bit-dh"><div><h3 id="bit-h3">${esc(c.clave)}</h3><small>${esc(tipoDe(c.clave))}${c.oc && c.oc.proveedor ? ' · ' + esc(c.oc.proveedor) : ''}</small></div><div class="bit-dhb">${c.oc ? '<button type="button" class="btn btn-outline" id="bit-ir"><i class="ph-bold ph-arrow-square-out"></i> Abrir en Seguimiento de OC</button>' : ''}<button type="button" class="btn btn-outline" id="bit-x" aria-label="Cerrar">✕</button></div></div>
-          <div class="bit-resumen"><span class="bit-est ${e.cls}"><i class="ph-bold ${e.ico}"></i> ${e.txt}</span></div>
-          ${c.alertas.length ? `<div class="bit-alertas" role="note"><strong>Qué revisar</strong>${c.alertas.map(a => `<p>${esc(a)}</p>`).join('')}</div>` : ''}
-          <div class="bit-kpis"><div><b>${c.pedido || '—'}</b><small>pedido</small></div><div><b>${c.pedido ? c.recibido : '—'}</b><small>recibido</small></div><div class="${c.falta ? 'bit-falta' : ''}"><b>${c.pedido ? c.falta : '—'}</b><small>faltan</small></div></div>
-          ${c.centros.length > 1 ? `<details class="bit-det" open><summary>Trazabilidad por centro y memo (${c.centros.length})</summary><table class="bit-tabla"><thead><tr><th>Centro</th><th>Memo</th><th>Pedido</th><th>Recibido</th><th>Entregado</th><th>Estado</th></tr></thead><tbody>${c.centros.map(x => `<tr${x.centro !== 'SAR' && x.entregable > 0 ? ' class="bit-otro"' : ''}><td>${esc(x.centro)}</td><td>${esc(x.memo || '—')}</td><td>${x.pedido}</td><td>${x.recibido}</td><td>${x.entregado}</td><td>${esc(ETIQ_ENT[x.estado] || x.estado)}</td></tr>`).join('')}</tbody></table></details>` : ''}
-          <p class="bit-sub">${c.conformes} recepción${c.conformes === 1 ? '' : 'es'} conforme${c.conformes === 1 ? '' : 's'} informada${c.conformes === 1 ? '' : 's'} por correo.</p>
-          ${c.productos.length ? `<details class="bit-det" open><summary>Qué falta recibir (${c.productos.length} productos)</summary><table class="bit-tabla"><thead><tr><th>Producto</th><th>Pedido</th><th>Recibido</th><th>Falta</th></tr></thead><tbody>${c.productos.map(x => `<tr><td>${esc(x.producto)}</td><td>${x.pedido}</td><td>${x.recibido}</td><td><b>${x.pendiente}</b></td></tr>`).join('')}</tbody></table></details>` : ''}
-          <h4 class="bit-h">Correos de esta orden (${c.eventos.length})</h4>
-          <ol class="bit-tl">${c.eventos.length ? c.eventos.map((ev, ix) => { const cl = CLASES[ev.clase] || CLASES.otro; return `
-            <li class="bit-ev bit-${esc(ev.clase || 'otro')}"${ix >= 5 && !verMas ? ' hidden data-mas="1"' : ''}><span class="bit-ico"><i class="ph-bold ${cl[0]}"></i></span>
-              <div class="bit-evc"><div class="bit-evh"><b>${cl[1]}</b>${ev.declara ? `<span class="bit-tag">declara ${esc(ev.declara)}</span>` : ''}<span class="bit-dir ${ev.dir === 'ENVIADO' ? 'env' : 'rec'}">${ev.dir === 'ENVIADO' ? (ev.reenviado ? 'Reenviado' : 'Enviado') : 'Recibido'}</span><small>${esc(fechaHora(ev.fecha))}</small></div>
-              <div class="bit-asunto">${esc(ev.asunto)}</div>
-              ${(() => { const r = ev.refs || {}, ch = []; (r.memo || []).forEach(x => ch.push('memo ' + x)); (r.sdc || []).forEach(x => ch.push('SDC ' + x)); (r.cdp || []).forEach(x => ch.push('CDP ' + x)); return (ch.length || ev.vinculo || ev.porHilo || (ev.centros || []).length) ? `<div class="bit-adj">${ch.map(x => `<span>${esc(x)}</span>`).join('')}${ev.vinculo ? `<span class="bit-vin">vinculado por ${esc(ev.vinculo)}</span>` : ''}${ev.porHilo ? '<span class="bit-vin">del mismo hilo</span>' : ''}${(ev.centros || []).map(x => `<span class="bit-cen">menciona: ${esc(x)}</span>`).join('')}</div>` : ''; })()}<small class="bit-qs">${ev.dir === 'ENVIADO' ? 'Para: ' + esc(ev.para) : 'De: ' + esc(ev.de)}</small>
-              ${ev.resumen ? `<details class="bit-res"><summary>Ver extracto</summary><p>${esc(ev.resumen)}</p></details>` : ''}
-              ${(ev.adjuntos || []).length ? `<div class="bit-adj">${ev.adjuntos.map(a => `<span><i class="ph-bold ph-paperclip"></i> ${esc(a)}</span>`).join('')}</div>` : ''}
-              ${ev.hilo ? `<a class="bit-gm" target="_blank" rel="noopener" href="https://mail.google.com/mail/?authuser=${encodeURIComponent(CUENTA)}#all/${encodeURIComponent(ev.hilo)}">Abrir en Gmail</a>` : ''}</div></li>`; }).join('') : '<li class="act-hint">Sin correos todavía.</li>'}</ol>${c.eventos.length > 5 && !verMas ? `<button type="button" class="btn btn-outline" id="bit-mas">Ver los ${c.eventos.length - 5} anteriores</button>` : ''}</aside>`;
-        const origen = document.activeElement, dr = p.querySelector('.bit-drawer');
-        const cerrar = () => { document.removeEventListener('keydown', teclas); document.body.style.overflow = ''; abierto = null; verMas = false; p.innerHTML = ''; if (origen && origen.focus && document.contains(origen)) origen.focus(); };
+        const e = ESTADOS[c.estado], ev = c.eventos;
+        const porEtapa = [...ETAPAS.map(x => ({ id: x.id, t: x.t, ico: x.ico })), { id: 'consultas', t: 'Consultas, reclamos y otros', ico: 'ph-chat-circle' }].map(x => ({ ...x, evs: ev.filter(y => etapaDeEv(y) === x.id) }));
+        const EST = { hecho: ['ph-check-circle', 'Listo'], curso: ['ph-circle-half', 'En curso'], pend: ['ph-clock', 'Pendiente'], alerta: ['ph-warning-octagon', 'Revisar'], nd: ['ph-minus-circle', 'Sin datos'] };
+        const hall = ['bad', 'warn', 'info', 'ok'].map(n => ({ n, items: c.hallazgos.filter(h => h.nivel === n) })).filter(g => g.items.length);
+        p.innerHTML = `<div class="bit-full" role="dialog" aria-modal="true" aria-labelledby="bit-h3" tabindex="-1">
+          <header class="bit-fh"><button type="button" class="btn btn-outline" id="bit-x"><i class="ph-bold ph-arrow-left"></i> Volver a la lista</button>
+            <div class="bit-ft"><h3 id="bit-h3">${esc(c.clave)}</h3><small>${esc(tipoDe(c.clave))}${c.oc && c.oc.proveedor ? ' · ' + esc(c.oc.proveedor) : ''}</small></div>
+            <span class="bit-est ${e.cls}"><i class="ph-bold ${e.ico}"></i> ${e.txt}</span>
+            ${c.oc ? '<button type="button" class="btn btn-outline" id="bit-ir"><i class="ph-bold ph-arrow-square-out"></i> Abrir en Seguimiento de OC</button>' : ''}</header>
+          <nav class="bit-fnav" aria-label="Secciones"><a href="#bit-s-ciclo">Ciclo de vida</a><a href="#bit-s-hall">Hallazgos (${c.hallazgos.length})</a><a href="#bit-s-bit">Bitácora (${ev.length})</a><a href="#bit-s-prod">Productos y centros</a></nav>
+          <div class="bit-fb">
+            <section id="bit-s-ciclo" aria-label="Ciclo de vida"><ol class="bit-steps">${c.etapas.map((x, i) => `<li class="bit-st bit-st-${x.estado}"><span class="bit-sti"><i class="ph-bold ${EST[x.estado][0]}"></i></span><b>${i + 1}. ${esc(x.t)}</b><small class="bit-stv">${EST[x.estado][1]}${x.fecha ? ' · ' + esc(fecha(x.fecha)) : ''}</small><small>${esc(x.det)}</small></li>`).join('')}</ol>
+              <div class="bit-kpis bit-kpis4"><div><b>${c.pedido || '—'}</b><small>pedido (SAR)</small></div><div><b>${c.pedido ? c.recibido : '—'}</b><small>recibido</small></div><div class="${c.falta ? 'bit-falta' : ''}"><b>${c.pedido ? c.falta : '—'}</b><small>faltan</small></div><div class="${c.otros ? 'bit-falta' : ''}"><b>${c.oc ? c.otros : '—'}</b><small>en bodega para otros centros</small></div></div></section>
+            <section id="bit-s-hall" aria-label="Hallazgos"><h4 class="bit-h">Hallazgos del análisis</h4>${hall.length ? hall.map(g => `<div class="bit-hg bit-hg-${g.n}"><h5><i class="ph-bold ${NIVEL[g.n][0]}"></i> ${NIVEL[g.n][1]} (${g.items.length})</h5>${g.items.map(h => `<div class="bit-hi"><b>${esc(h.titulo)}</b>${h.detalle ? `<p>${esc(h.detalle)}</p>` : ''}${h.evid.length ? `<div class="bit-evl">${h.evid.map(x => `<a href="#ev-${esc(x.id)}" data-ev="${esc(x.id)}">${esc(fecha(x.fecha))} · ${esc((CLASES[x.clase] || CLASES.otro)[1])}</a>`).join('')}</div>` : ''}</div>`).join('')}</div>`).join('') : '<p class="act-hint">Sin hallazgos todavía.</p>'}</section>
+            <section id="bit-s-bit" aria-label="Bitácora"><div class="bit-bh"><h4 class="bit-h">Bitácora (${ev.length} correos)</h4><div class="bit-seg" role="group" aria-label="Vista"><button type="button" class="${vistaCron ? '' : 'on'}" data-v="etapa">Por etapa</button><button type="button" class="${vistaCron ? 'on' : ''}" data-v="cron">Cronológica</button></div></div>
+              ${vistaCron ? `<ol class="bit-tl">${ev.length ? ev.map(x => evHTML(x, (ETAPAS.find(y => y.id === etapaDeEv(x)) || { t: 'Consultas' }).t)).join('') : '<li class="act-hint">Sin correos todavía.</li>'}</ol>`
+                : porEtapa.map(g => `<details class="bit-grp" ${g.evs.length ? 'open' : ''}><summary><i class="ph-bold ${g.ico}"></i> ${esc(g.t)} <em>${g.evs.length}</em></summary>${g.evs.length ? `<ol class="bit-tl">${g.evs.map(x => evHTML(x)).join('')}</ol>` : '<p class="act-hint">Sin correos en esta etapa.</p>'}</details>`).join('')}</section>
+            <section id="bit-s-prod" aria-label="Productos y centros"><h4 class="bit-h">Productos y centros</h4>
+              ${c.centros.length ? `<div class="bit-sc"><table class="bit-tabla"><thead><tr><th>Centro</th><th>Memo</th><th>Pedido</th><th>Recibido</th><th>En bodega</th><th>Entregado</th><th>Estado</th></tr></thead><tbody>${c.centros.map(x => `<tr${x.centro !== 'SAR' && x.entregable > 0 ? ' class="bit-otro"' : ''}><td>${esc(x.centro)}</td><td>${esc(x.memo || '—')}</td><td>${x.pedido}</td><td>${x.recibido}</td><td>${x.entregable}</td><td>${x.entregado}</td><td>${esc(ETIQ_ENT[x.estado] || x.estado)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="act-hint">Esta orden no está en el Visor: no hay cuadro de distribución para comparar.</p>'}
+              ${c.productos.length ? `<h5 class="bit-h5">Qué falta recibir al SAR (${c.productos.length})</h5><div class="bit-sc"><table class="bit-tabla"><thead><tr><th>Producto</th><th>Pedido</th><th>Recibido</th><th>Falta</th></tr></thead><tbody>${c.productos.map(x => `<tr><td>${esc(x.producto)}</td><td>${x.pedido}</td><td>${x.recibido}</td><td><b>${x.pendiente}</b></td></tr>`).join('')}</tbody></table></div>` : ''}</section>
+          </div></div>`;
+        const dr = p.querySelector('.bit-full'), origen = window.__bitOrigen || null; document.body.style.overflow = 'hidden';
+        const cerrar = () => { document.removeEventListener('keydown', teclas); document.body.style.overflow = ''; abierto = null; p.innerHTML = ''; if (origen && document.contains(origen)) origen.focus(); };
         const teclas = (k) => {
             if (k.key === 'Escape') { cerrar(); return; }
             if (k.key !== 'Tab') return;
-            const fs2 = [...dr.querySelectorAll('button, a[href], summary, input')].filter(el => !el.closest('[hidden]') && el.offsetParent !== null); if (!fs2.length) return;
+            const fs2 = [...dr.querySelectorAll('button, a[href], summary, input')].filter(el => el.offsetParent !== null); if (!fs2.length) return;
             const a0 = fs2[0], z = fs2[fs2.length - 1];
             if (k.shiftKey && (document.activeElement === a0 || document.activeElement === dr)) { k.preventDefault(); z.focus(); } else if (!k.shiftKey && document.activeElement === z) { k.preventDefault(); a0.focus(); }
         };
-        document.addEventListener('keydown', teclas); document.body.style.overflow = 'hidden';
-        p.querySelector('#bit-x').addEventListener('click', cerrar); p.querySelector('#bit-vel').addEventListener('click', cerrar);
-        const mas = p.querySelector('#bit-mas'); if (mas) mas.addEventListener('click', () => { verMas = true; p.querySelectorAll('[data-mas]').forEach(li => li.hidden = false); mas.remove(); });
+        document.addEventListener('keydown', teclas);
+        p.querySelector('#bit-x').addEventListener('click', cerrar);
+        p.querySelectorAll('.bit-seg button').forEach(b => b.addEventListener('click', () => { vistaCron = b.dataset.v === 'cron'; const y = dr.querySelector('.bit-fb').scrollTop; document.removeEventListener('keydown', teclas); panel(); const n = document.querySelector('.bit-fb'); if (n) { n.scrollTop = y; const s2 = document.getElementById('bit-s-bit'); if (s2) s2.scrollIntoView({ block: 'start' }); } }));
+        p.querySelectorAll('.bit-fnav a').forEach(a => a.addEventListener('click', (k) => { k.preventDefault(); const t = p.querySelector(a.getAttribute('href')); if (t) t.scrollIntoView({ behavior: 'smooth', block: 'start' }); }));
+        p.querySelectorAll('[data-ev]').forEach(a => a.addEventListener('click', (k) => { k.preventDefault(); const t = document.getElementById('ev-' + a.dataset.ev); if (t) { const g = t.closest('details'); if (g) g.open = true; t.scrollIntoView({ behavior: 'smooth', block: 'center' }); t.classList.add('bit-flash'); setTimeout(() => t.classList.remove('bit-flash'), 1800); } }));
         const ir = p.querySelector('#bit-ir'); if (ir) ir.addEventListener('click', () => { const so = window.SAR_SeguimientoOC; const m = document.querySelector('.menu-item[data-target="view-seguimiento-oc"]'); cerrar(); if (m) m.click(); if (so && so.abrirCuando) so.abrirCuando(c.oc.id); });
-        const x = p.querySelector('#bit-x'); if (x) x.focus();
+        p.querySelector('#bit-x').focus();
     }
 
     // ---------------------------------------------------------------
@@ -314,6 +407,6 @@ function doPost(e) {
         try { await cargarOrdenes(); if (cfg.url && cfg.token) correos = await llamar('leer'); } catch (e) { error = 'No se pudo leer el correo: ' + (e.message || e); }
         armarCasos(); pintar();
     }
-    window.SAR_Bitacora = { abrir, calcularCaso, claveOC, SCRIPT_BITACORA };
+    window.SAR_Bitacora = { abrir, calcularCaso, analizar, claveOC, SCRIPT_BITACORA };
     if (typeof module !== 'undefined') module.exports = window.SAR_Bitacora;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

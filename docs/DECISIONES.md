@@ -722,3 +722,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.125 Colores de marca como tokens en toda la hoja de estilos (v21.71)
 - 286 colores escritos a mano (`#1A3668`, `#E2E8F0`, `#64748B`, `#0F172A`, verde, rojo, naranja, amarillo, azul oscuro y azul claro) pasan a variables (`--sar-*`, `--id-borde`, `--text-*`). Comparación de capturas antes/después de Inicio y Existencias: sin diferencias visibles. Ahora cambiar la paleta es editar un solo lugar.
 - Pendiente: grises intermedios, estilos de botón duplicados y revisión con datos reales de Seguimiento de OC.
+
+### 4.126 Modo seguro (v21.72)
+- Ante el aviso «La página no responde»: abrir `https://sarinventario.web.app/?seguro=1` carga el sitio sin `menu-lateral.js`, `cargando-global.js` ni `buscador-global.js` (los módulos nuevos de la sesión). Sirve para aislar si alguno causa un congelamiento. Si el sitio abre bien con `?seguro=1` y mal sin él, el problema está en esos módulos; si falla igual, está en otra parte.
+- La pestaña ya congelada no se actualiza sola: hay que elegir «Salir de la página» y abrir el sitio de nuevo (Ctrl+Shift+R).

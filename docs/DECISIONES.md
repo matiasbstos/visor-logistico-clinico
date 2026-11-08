@@ -808,3 +808,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.142 Oxígeno: agregar tipos de gas y capacidades propias (v21.88)
 - «Capacidad» y «Tipo de gas» (al agregar balones y al cambiarlos) son listas desplegables con la opción **＋ Agregar nueva…**: al elegirla aparece un campo para escribirla.
 - Lo que se agrega queda guardado (`Contadores/oxigeno-opciones`) y aparece en las listas para todos; también se suman las que ya usan los balones. Las capacidades se normalizan («3m3» → «3 m³»).
+
+### 4.143 Quitar opciones propias de gas y capacidad (v21.89)
+- Cuando en la lista de «Capacidad» o «Tipo de gas» se elige una opción **agregada por el usuario**, aparece **Quitar esta opción de la lista**. Las opciones base (oxígeno medicinal, aire comprimido, 0,5/1/2/3/5 m³) no se pueden quitar.
+- Si algún balón usa esa opción, no se quita y se avisa cuántos la usan (hay que cambiarles el gas/capacidad primero). Quitar una opción no borra balones ni historial.

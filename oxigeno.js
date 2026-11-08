@@ -118,13 +118,28 @@
         if (nuevoG) opciones.gases = unicos(opciones.gases.concat(gas)); if (nuevoC) opciones.capacidades = unicos(opciones.capacidades.concat(cap));
         try { const f = fs(); await f.setDoc(f.doc(f.collection(db(), 'Contadores'), 'oxigeno-opciones'), { tipo: 'oxigeno-opciones', gases: opciones.gases, capacidades: opciones.capacidades, updatedAt: f.serverTimestamp() }, { merge: true }); } catch (e) { console.warn('[Oxígeno] opciones', e && e.code); }
     }
+    const esPropia = (tipo, v) => (tipo === 'gas' ? opciones.gases : opciones.capacidades).includes(v);
+    const enUso = (tipo, v) => equipos.filter(e => tipo === 'gas' ? normGas(e.gas) === v : (e.capacidad || '') === v).length;
+    async function quitarOpcion(tipo, v) {
+        const n = enUso(tipo, v); if (n) { toast('No se puede quitar', `«${v}» la usan ${n} balón(es). Cámbiales ${tipo === 'gas' ? 'el gas' : 'la capacidad'} primero.`, 'warning'); return false; }
+        if (tipo === 'gas') opciones.gases = opciones.gases.filter(x => x !== v); else opciones.capacidades = opciones.capacidades.filter(x => x !== v);
+        try { const f = fs(); await f.setDoc(f.doc(f.collection(db(), 'Contadores'), 'oxigeno-opciones'), { gases: opciones.gases, capacidades: opciones.capacidades, updatedAt: f.serverTimestamp() }, { merge: true }); } catch (e) { toast('Oxígeno', 'No se pudo guardar el cambio (código OX-02).', 'error'); return false; }
+        toast('Opción quitada', `«${v}» ya no aparece en la lista.`, 'success'); return true;
+    }
     /** Lista desplegable con «＋ Agregar nueva…»; al elegirla aparece un campo para escribirla. */
-    function campoLista(id, etiqueta, opts, actual) {
+    function campoLista(id, etiqueta, opts, actual, tipo) {
         const todas = opts.includes(actual) || !actual ? opts : opts.concat(actual);
-        return `<label class="act-l">${etiqueta}<select id="${id}" data-nueva="1">${todas.map(x => `<option value="${esc(x)}"${x === actual ? ' selected' : ''}>${esc(x)}</option>`).join('')}<option value="__nuevo">＋ Agregar nueva…</option></select><input id="${id}-n" hidden placeholder="Escribe la nueva opción y se guarda para la próxima" autocomplete="off"></label>`;
+        return `<label class="act-l">${etiqueta}<select id="${id}" data-nueva="1">${todas.map(x => `<option value="${esc(x)}"${x === actual ? ' selected' : ''}>${esc(x)}</option>`).join('')}<option value="__nuevo">＋ Agregar nueva…</option></select><input id="${id}-n" hidden placeholder="Escribe la nueva opción y se guarda para la próxima" autocomplete="off"><button type="button" class="oxi-quitar" data-quitar="${id}" data-tipo="${tipo}"${esPropia(tipo, actual) ? '' : ' hidden'}>Quitar esta opción de la lista</button></label>`;
     }
     const valLista = (q, id) => { const s = q('#' + id); if (!s) return ''; return s.value === '__nuevo' ? (q('#' + id + '-n').value || '').trim() : s.value; };
-    if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('change', (e) => { const s = e.target; if (s && s.matches && s.matches('select[data-nueva]')) { const n = document.getElementById(s.id + '-n'); if (n) { n.hidden = s.value !== '__nuevo'; if (!n.hidden) n.focus(); } } });
+    if (typeof document !== 'undefined' && document.addEventListener) {
+        document.addEventListener('change', (e) => { const s = e.target; if (s && s.matches && s.matches('select[data-nueva]')) { const n = document.getElementById(s.id + '-n'); if (n) { n.hidden = s.value !== '__nuevo'; if (!n.hidden) n.focus(); } const b = s.parentElement.querySelector('.oxi-quitar'); if (b) b.hidden = !esPropia(b.dataset.tipo, s.value); } });
+        document.addEventListener('click', async (e) => {
+            const b = e.target.closest && e.target.closest('.oxi-quitar'); if (!b) return;
+            const s = document.getElementById(b.dataset.quitar); if (!s) return; const v = s.value;
+            if (await quitarOpcion(b.dataset.tipo, v)) { const op = [...s.options].find(x => x.value === v); if (op) op.remove(); s.selectedIndex = 0; s.dispatchEvent(new Event('change', { bubbles: true })); }
+        });
+    }
     async function cargar() {
         const f = fs();
         try { const os = await f.getDoc(f.doc(f.collection(db(), 'Contadores'), 'oxigeno-opciones')); if (os.exists()) { const d = os.data(); opciones = { gases: d.gases || [], capacidades: d.capacidades || [] }; } } catch (e) {}
@@ -313,8 +328,8 @@
     function dialogoAlta() {
         modal('Agregar balones portátiles', `
             <label class="act-l">N° de serie (se guarda tal cual, como texto; uno por línea o separados por coma)<textarea id="oxi-series" rows="4" style="width:100%" placeholder="Ej: 12345&#10;12346"></textarea></label>
-            ${campoLista('oxi-cap', 'Capacidad', listaCap(), '1 m³')}
-            ${campoLista('oxi-gas', 'Tipo de gas', listaGas(), GASES[0])}
+            ${campoLista('oxi-cap', 'Capacidad', listaCap(), '1 m³', 'cap')}
+            ${campoLista('oxi-gas', 'Tipo de gas', listaGas(), GASES[0], 'gas')}
             <label class="act-l">Proveedor (quien lo cargó)<input id="oxi-prov" list="oxi-provs" autocomplete="off" placeholder="Opcional"><datalist id="oxi-provs">${[...new Set(equipos.map(e => e.proveedor).filter(Boolean))].map(p => `<option value="${esc(p)}">`).join('')}</datalist></label>
             <label class="act-l">Estado actual<select id="oxi-est"><option value="LLENO">Lleno</option><option value="VACIO">Vacío</option></select></label>
             <label class="act-l">Fecha de carga (si está lleno)<input id="oxi-fc" type="date" value="${hoy()}"></label>
@@ -332,8 +347,8 @@
         modal(`${a.txt} · N° ${e.serie}`, `
             <label class="act-l">Fecha<input id="oxi-f" type="date" value="${hoy()}"></label>
             ${a.pide === 'proveedor' ? '<label class="act-l">Proveedor / lugar de recarga<input id="oxi-p" placeholder="Ej: proveedor, centro de recarga"></label><label class="act-l">N° guía / factura (opcional)<input id="oxi-d"></label>' : ''}
-            ${a.pide === 'capacidad' ? campoLista('oxi-c', 'Nueva capacidad', listaCap(), e.capacidad || '1 m³') : ''}
-            ${a.pide === 'gas' ? campoLista('oxi-g', 'Tipo de gas', listaGas(), normGas(e.gas)) : ''}
+            ${a.pide === 'capacidad' ? campoLista('oxi-c', 'Nueva capacidad', listaCap(), e.capacidad || '1 m³', 'cap') : ''}
+            ${a.pide === 'gas' ? campoLista('oxi-g', 'Tipo de gas', listaGas(), normGas(e.gas), 'gas') : ''}
             ${a.pide === 'estadoDevuelto' ? `<label class="act-l">Vuelve<select id="oxi-dev"><option value="VACIO">Vacío</option><option value="LLENO">Lleno</option></select></label>` : ''}
             <label class="act-l">${a.nota ? 'Qué pasó (obligatorio)' : 'Detalle (opcional)'}<input id="oxi-t"></label>`, async (q) => {
             const g = (s) => { const n = q(s); return n ? n.value : ''; };
@@ -369,6 +384,6 @@
         pintar();
     }
 
-    window.SAR_Oxigeno = { normGas, GASES, fechaCL, normCap, capacidades, editarActa, listarLlenos, abrir, resumen, accionesPara, aplicarAccion, parsearSeries, validarEntrega, nombreEnActa, registrarAccion, crearEquipos, entregar, ESTADOS, ACCIONES };
+    window.SAR_Oxigeno = { _quitar: quitarOpcion, normGas, GASES, fechaCL, normCap, capacidades, editarActa, listarLlenos, abrir, resumen, accionesPara, aplicarAccion, parsearSeries, validarEntrega, nombreEnActa, registrarAccion, crearEquipos, entregar, ESTADOS, ACCIONES };
     if (typeof module !== 'undefined') module.exports = window.SAR_Oxigeno;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: { dataset: {} } });

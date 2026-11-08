@@ -772,3 +772,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - El precinto lleva un **código de barras Code 128 (juego C)** con los dígitos del folio: `PI-2026-0001` se lee como `20260001` (79 módulos, legible a 203 dpi de la Zebra). Se dibuja igual en pantalla/impresión (SVG) y en el PDF. Verificado: la secuencia de símbolos coincide con la de la biblioteca de referencia (reportlab).
 - La lista «últimos ingresos» muestra **«Préstamo desde: <centro>»** cuando el ingreso vino de otro centro, en vez de «Proveedor».
 - Pendiente: escanear el precinto al registrar el conteo; devolución al centro que prestó.
+
+### 4.136 Devolución de préstamos recibidos de otros centros (v21.82)
+- Cada ingreso por «Préstamo / traspaso desde otro centro» crea, en la misma transacción, un registro `Contadores/prestamo-<id>` con centro, producto, lote y cantidad, en estado PENDIENTE.
+- En Ingresos aparece el panel **Préstamos de otros centros por devolver** (solo si hay pendientes): por cada uno, cantidad pendiente y botón **Devolver** (parcial o total). Devolver descuenta el stock (primero el lote prestado, luego los más próximos a vencer), valida que haya stock suficiente, actualiza lo devuelto y registra en el historial un movimiento `DEVOLUCION_PRESTAMO` hacia el centro.
+- Al devolver todo, el préstamo pasa a DEVUELTO y desaparece del panel. Los préstamos anteriores a esta versión no tienen registro pendiente.

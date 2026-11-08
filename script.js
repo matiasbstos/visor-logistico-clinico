@@ -4764,7 +4764,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <div>
                                     <div class="font-bold text-sm">${window.escapeHTML(data.item || data.insumoName || 'S/N')}</div>
                                     <div class="text-sm text-muted" style="font-size:10px;">
-                                        Lote: ${window.escapeHTML(data.batch || 'S/I')} | Proveedor: ${window.escapeHTML(data.provider || 'S/I')}
+                                        Lote: ${window.escapeHTML(data.batch || 'S/I')} | ${data.origenTipo === 'prestamo_otro_centro' ? 'Préstamo desde: ' : 'Proveedor: '}${window.escapeHTML(data.provider || 'S/I')}
                                     </div>
                                 </div>
                             </div>

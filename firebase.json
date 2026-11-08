@@ -26,6 +26,7 @@
       "_temp_test/**",
       "functions/**",
       "docs/**",
+      "tests/**",
       "*.md",
       "*.py",
       "*.mjs",

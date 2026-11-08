@@ -638,3 +638,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.107 Primeros pasos con barra de avance en el Inicio (v21.54)
 - Nuevo `primeros-pasos.js`: tarjeta en el Inicio (solo personal) con 6 pasos que se marcan solos al detectar el dato: bodegas, inventario, orden de compra, correo de avisos configurado, acta emitida y acta firmada confirmada. Barra de avance, botón «Ir» a cada pantalla y paso siguiente resaltado.
 - Al completar todo se celebra una vez y luego desaparece; «Ocultar por ahora» la oculta en ese equipo. Solo lee datos; respeta prefers-reduced-motion.
+
+### 4.108 Licencias y términos, versiones fijas de bibliotecas y pruebas de humo (v21.55)
+- Nuevo `acerca.js`: ventana «Licencias y términos» en el menú lateral (uso del sistema, datos y licencias de las bibliotecas de terceros). Accesible: foco, Esc y rol de diálogo.
+- Se fijan las versiones de Phosphor Icons (2.1.1), Chart.js (4.4.1) y html5-qrcode (2.3.8): antes se cargaba «la última» desde un CDN, lo que podía romper el sitio o inyectar código sin que nadie lo notara.
+- `tests/humo.js` (no se publica): pruebas de humo con Playwright (carga sin errores, barras de columnas, licencias). Se corre en local contra `python3 -m http.server`.

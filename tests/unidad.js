@@ -2,7 +2,7 @@
 const assert = require('assert'); globalThis.window = globalThis; globalThis.SAR_SeguimientoOC = {};
 globalThis.document = { getElementById: () => null, addEventListener() {}, querySelector: () => null, readyState: 'complete', scripts: [], body: { dataset: {}, style: {} } };
 let n = 0, mal = 0; const t = (nombre, f) => { try { f(); n++; console.log('OK   ' + nombre); } catch (e) { mal++; console.log('FALLA ' + nombre + ' → ' + e.message); } };
-const B = require('../bitacora-oc.js'), M = require('../monitor-errores.js'), C = require('../tabla-columnas.js'), P = require('../primeros-pasos.js'), H = require('../correo-html.js'), R = require('../resumen-stock.js');
+const B = require('../bitacora-oc.js'), M = require('../monitor-errores.js'), C = require('../tabla-columnas.js'), P = require('../primeros-pasos.js'), H = require('../correo-html.js'), R = require('../resumen-stock.js'), K = require('../respaldo-diario.js');
 
 t('clave de OC se normaliza', () => assert.strictEqual(B.claveOC('1298355-936-cm26'), '1298355-936-CM26'));
 t('bitácora: sin correos ni orden = solo correo/sin gestión', () => { const c = B.calcularCaso(null, []); assert.ok(c.estado); });
@@ -27,4 +27,11 @@ t('resumen de stock: vencidos, urgentes y críticos', () => {
     const r = R.resumen(it, hoy); assert.strictEqual(r.vencidos.length, 1); assert.strictEqual(r.urgentes.length, 1); assert.strictEqual(r.criticos.length, 1); assert.ok(R.debeEnviar(r, hoy)); assert.strictEqual(R.aFilas(r).length, 3);
 });
 t('resumen de stock: sin urgencias solo manda los lunes', () => { const r = R.resumen([{ name: 'B', quantity: 100, criticalLimit: 10, expirationDate: '2030-01-01' }], new Date(2026, 10, 9)); assert.ok(!R.debeEnviar(r, new Date(2026, 10, 10))); assert.ok(R.debeEnviar(r, new Date(2026, 10, 9))); });
-console.log(`\n${n} ok, ${mal} con falla`); process.exit(mal ? 1 : 0);
+const tAsync = []; const ta = (nombre, f) => tAsync.push(f().then(() => { n++; console.log('OK   ' + nombre); }).catch(e => { mal++; console.log('FALLA ' + nombre + ' → ' + e.message); }));
+ta('respaldo: serializar, comprimir, trocear y restaurar sin pérdida', async () => {
+    const datos = { Insumos: Array.from({ length: 3000 }, (_, i) => ({ _id: 'i' + i, name: 'Producto ' + i, quantity: i, f: { toDate: () => new Date(0) } })), Bodegas: [{ _id: 'b', n: 'ñandú' }] };
+    const txt = K.serializar(datos), b64 = await K.comprimir(txt), partes = K.trocear(b64), vuelta = await K.descomprimir(partes.join(''));
+    assert.strictEqual(vuelta, txt); assert.strictEqual(K.suma(vuelta), K.suma(txt)); assert.deepStrictEqual(K.conteos(JSON.parse(vuelta)), { Insumos: 3000, Bodegas: 1 }); assert.ok(/__ts/.test(vuelta));
+});
+Promise.all(tAsync).then(() => {
+console.log(`\n${n} ok, ${mal} con falla`); process.exit(mal ? 1 : 0); });

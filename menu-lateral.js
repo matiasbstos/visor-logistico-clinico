@@ -20,7 +20,9 @@
     const BLOQUES = ['INVENTARIO', 'MOVIMIENTOS', 'COMPRAS', 'TURNO CLÍNICO', 'ADMINISTRACIÓN'];
     if (typeof module !== 'undefined') module.exports = { norm, coincide, ORDEN, SUBMENUS, BLOQUES };
     if (typeof document === 'undefined' || !document.querySelector) return;
-    if (typeof location !== 'undefined' && /[?&]seguro=1/.test(location.search || '')) return;   // modo seguro: abre el sitio sin este módulo
+    // Interruptor (v21.73): desactivado por defecto mientras se aísla un congelamiento. Activar con ?activar=menu (se recuerda) o ?desactivar=menu.
+    function modActivo() { try { const q = new URLSearchParams(location.search), k = 'menu'; if ((q.get('activar') || '').split(',').includes(k)) localStorage.setItem('sar_mod_' + k, '1'); if ((q.get('desactivar') || '').split(',').includes(k)) localStorage.removeItem('sar_mod_' + k); return localStorage.getItem('sar_mod_' + k) === '1'; } catch (e) { return false; } }
+    if (!modActivo() || /[?&]seguro=1/.test(location.search || '')) return;
 
     const LS = 'sar_menu_v1';
     let estado = {}; try { estado = JSON.parse(localStorage.getItem(LS) || '{}') || {}; } catch (e) { estado = {}; }

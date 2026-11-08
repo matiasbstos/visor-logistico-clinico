@@ -30,7 +30,9 @@
     }
     if (typeof module !== 'undefined') module.exports = { norm, construirIndice, buscar };
     if (typeof document === 'undefined' || !document.createElement || !document.addEventListener) return;
-    if (typeof location !== 'undefined' && /[?&]seguro=1/.test(location.search || '')) return;   // modo seguro: abre el sitio sin este módulo
+    // Interruptor (v21.73): desactivado por defecto mientras se aísla un congelamiento. Activar con ?activar=busqueda (se recuerda) o ?desactivar=busqueda.
+    function modActivo() { try { const q = new URLSearchParams(location.search), k = 'busqueda'; if ((q.get('activar') || '').split(',').includes(k)) localStorage.setItem('sar_mod_' + k, '1'); if ((q.get('desactivar') || '').split(',').includes(k)) localStorage.removeItem('sar_mod_' + k); return localStorage.getItem('sar_mod_' + k) === '1'; } catch (e) { return false; } }
+    if (!modActivo() || /[?&]seguro=1/.test(location.search || '')) return;
 
     const META = { producto: ['ph-package', 'Productos', 'view-inventario'], oc: ['ph-clipboard-text', 'Órdenes de compra', 'view-seguimiento-oc'], acta: ['ph-file-text', 'Actas de entrega', 'view-actas-entrega'], bodega: ['ph-buildings', 'Bodegas', 'view-bodegas'] };
     const esc = s => (window.escapeHTML ? window.escapeHTML(String(s == null ? '' : s)) : String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));

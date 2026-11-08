@@ -726,3 +726,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.126 Modo seguro (v21.72)
 - Ante el aviso «La página no responde»: abrir `https://sarinventario.web.app/?seguro=1` carga el sitio sin `menu-lateral.js`, `cargando-global.js` ni `buscador-global.js` (los módulos nuevos de la sesión). Sirve para aislar si alguno causa un congelamiento. Si el sitio abre bien con `?seguro=1` y mal sin él, el problema está en esos módulos; si falla igual, está en otra parte.
 - La pestaña ya congelada no se actualiza sola: hay que elegir «Salir de la página» y abrir el sitio de nuevo (Ctrl+Shift+R).
+
+### 4.127 Módulos nuevos apagados por defecto mientras se aísla el congelamiento (v21.73)
+- El sitio seguía mostrando «La página no responde» tras v21.68–v21.72. Como no se puede reproducir sin la sesión real, `menu-lateral.js`, `cargando-global.js` y `buscador-global.js` quedan **desactivados por defecto** (el menú vuelve a su diseño anterior). Se activan uno a uno con `?activar=menu`, `?activar=carga`, `?activar=busqueda` (se recuerda en el equipo) y se apagan con `?desactivar=…`. Así se identifica cuál causa el problema sin dejar el sitio inutilizable.
+- Siguen activos: esqueleto de carga (CSS + `progreso.js`), identidad visual (CSS), vista previa de agenda y Ver Excel.

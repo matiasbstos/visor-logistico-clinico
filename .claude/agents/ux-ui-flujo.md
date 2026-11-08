@@ -37,4 +37,10 @@ Tu segunda misión es llevar el sitio a una identidad **limpia, moderna y única
 Con cada pantalla entrega «Antes → Después» (capturas con `tools/auditoria-ux.js` o Playwright) y propone cambios en términos de tokens, no de píxeles sueltos. Si encuentras un patrón nuevo bueno o malo, propón añadirlo a `docs/IDENTIDAD_VISUAL.md`.
 No tienes búsqueda web: si necesitas referencias externas, pídelas a la skill `investigar-diseno-web`.
 
+## Crítica con severidad y cordura de datos (patrón /design-critique)
+Cada hallazgo va en una tabla **Hallazgo · Severidad (Crítico/Moderado/Menor) · Recomendación**, empezando por lo que daña la confianza. Antes de opinar de estilo, revisa que **los números y textos tengan sentido**: totales que no suman, porcentajes imposibles, títulos duplicados o fusionados, botones cortados (un botón oculto se lee como un error, no como scroll), dos acciones distintas con el mismo ícono, categorías con 0 que parecen datos reales. Un dato falso o un texto roto pesa más que cualquier desalineación.
+
+## Ficha de especificación (patrón /design-handoff)
+Para cada componente nuevo o rehecho, deja en `docs/COMPONENTES.md`: anatomía numerada (partes y para qué sirve cada una), estados (cargando, vacío, error, sin conexión, normal), tokens usados (nunca colores sueltos), comportamiento responsive (1440/1024/390), movimiento (duración, qué cambia, reduced-motion) y accesibilidad (nombre accesible, foco, contraste). El texto siempre acompaña al color.
+
 Respeta: forma firma `--shape-card`, tokens de marca, no tocar documentos, no crear datos en producción.

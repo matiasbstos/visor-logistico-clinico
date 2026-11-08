@@ -103,12 +103,19 @@
     // ---------------------------------------------------------------
     // Interfaz
     // ---------------------------------------------------------------
+    // Filtros por característica (no por estado): conformes enviadas, falta la conforme, compra compartida entre centros
+    const FILTROS = {
+        OTROS: (c) => c.otros > 0,
+        COMPARTIDA: (c) => !!c.dividida,
+        CONFORME: (c) => c.conformes > 0,
+        SINCONF: (c) => c.conformes === 0 && ((c.pedido > 0 && c.falta === 0) || (c.eventos || []).some(e => e.clase === 'guia' || e.clase === 'despacho'))
+    };
     function pintar() {
         const r = root(); if (!r) return;
         const conteo = (e) => casos.filter(c => c.estado === e).length;
         const q = texto.trim().toLowerCase();
-        const lista = casos.filter(c => (filtro === 'TODOS' || (filtro === 'OTROS' ? c.otros > 0 : c.estado === filtro)) && (!q || c.clave.toLowerCase().includes(q) || String((c.oc && c.oc.proveedor) || '').toLowerCase().includes(q)));
-        const chips = [['TODOS', 'Todas', casos.length], ['DISCREPANCIA', 'Discrepancia', conteo('DISCREPANCIA')], ['SIN_GESTION', 'Sin gestión', conteo('SIN_GESTION')], ['PARCIAL', 'Parciales', conteo('PARCIAL')], ['GESTION', 'En gestión', conteo('GESTION')], ['OTROS', 'Para otros centros', casos.filter(c => c.otros > 0).length], ['COMPLETA', 'Completas', conteo('COMPLETA')], ['SOLO_CORREO', 'Solo en correo', conteo('SOLO_CORREO')]];
+        const lista = casos.filter(c => (filtro === 'TODOS' || (FILTROS[filtro] ? FILTROS[filtro](c) : c.estado === filtro)) && (!q || c.clave.toLowerCase().includes(q) || String((c.oc && c.oc.proveedor) || '').toLowerCase().includes(q)));
+        const chips = [['TODOS', 'Todas', casos.length], ['DISCREPANCIA', 'Discrepancia', conteo('DISCREPANCIA')], ['SIN_GESTION', 'Sin gestión', conteo('SIN_GESTION')], ['PARCIAL', 'Parciales', conteo('PARCIAL')], ['GESTION', 'En gestión', conteo('GESTION')], ['OTROS', 'Para otros centros', casos.filter(FILTROS.OTROS).length], ['COMPARTIDA', 'Compra compartida', casos.filter(FILTROS.COMPARTIDA).length], ['CONFORME', 'Con conforme', casos.filter(FILTROS.CONFORME).length], ['SINCONF', 'Falta conforme', casos.filter(FILTROS.SINCONF).length], ['COMPLETA', 'Completas', conteo('COMPLETA')], ['SOLO_CORREO', 'Solo en correo', conteo('SOLO_CORREO')]];
         r.innerHTML = `
         <div class="page-header mb-24"><div class="page-title"><h2>Bitácora de órdenes</h2>
             <p>Cada orden como un caso: qué falta, qué se ha gestionado por correo y desde cuándo. ${correos && correos.ultima ? 'Última revisión del correo: <b>' + esc(fechaHora(correos.ultima)) + '</b> (07:00, 12:00 y 17:00).' : ''}</p></div>

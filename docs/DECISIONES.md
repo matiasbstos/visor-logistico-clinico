@@ -831,3 +831,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.147 Precintos de oxígeno ya creados se reimprimen con el diseño actual (v21.93)
 - Si un balón (por N° de serie) ya tiene precinto, al imprimir/descargar se **reutiliza su folio** y se regraba el registro con los datos vigentes (gas, capacidad, proveedor, fecha de carga). El tamaño y diseño siempre son los actuales porque la etiqueta se dibuja al momento. Casilla desmarcable para forzar un folio nuevo.
 - Pendiente: reimpresión de precintos de inventario (PI-) por folio.
+
+### 4.148 Horario de los correos de respaldo (v21.94)
+- Los correos de respaldo (acta de entrega: emisión, confirmación, firmada, anulación; movimientos de inventario; **recepción conforme**) se envían **solo de lunes a viernes, de 8:00 a 17:00 (hora de Chile), sin feriados** (los de Configuración de correo incluidos).
+- Fuera de ese horario el correo **no se pierde**: queda en cola (`Contadores/cola-correo-*`, estado `pendiente`) con sus adjuntos y se envía solo cuando un equipo con el Visor abierto detecta horario hábil (revisión cada 5 min). El aviso en pantalla dice «Correo programado» y en el historial del acta aparece «en cola (fuera de horario)».
+- Límite: si nadie abre el Visor en horario hábil, la cola espera (no hay servidor que la envíe). Los avisos de seguimiento de OC no cambian.

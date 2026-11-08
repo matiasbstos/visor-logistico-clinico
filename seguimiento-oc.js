@@ -199,7 +199,7 @@
         return configCorreo;
     }
     /** Envía el correo por el Apps Script; si no está configurado, abre un borrador. Nunca lanza. */
-    async function enviarCorreo(destinatarios, correo, extra) {
+    async function enviarCorreoAhora(destinatarios, correo, extra) {
         const to = (destinatarios || []).filter(emailValido);
         const cc = ((extra && extra.cc) || []).filter(emailValido), adj = (extra && extra.attachments) || [];
         if (!to.length) return { estado: 'sin_destinatarios', destinatarios: [] };
@@ -215,6 +215,59 @@
             return j && j.ok ? { estado: 'enviado', destinatarios: to, cc } : { estado: 'error', destinatarios: to, cc, detalle: String((j && j.error) || 'respuesta no válida') };
         } catch (e) { return { estado: 'error', destinatarios: to, cc, detalle: String((e && e.message) || e) }; }
     }
+
+    // ---------------------------------------------------------------
+    // Horario de los correos de respaldo (v21.94): lunes a viernes, 08:00 a 17:00 (hora de Chile),
+    // sin feriados. Fuera de ese horario quedan en cola (Contadores/cola-correo-*) y salen solos
+    // cuando un equipo con el Visor abierto detecta que ya es horario hábil.
+    // ---------------------------------------------------------------
+    const HORA_DESDE = 8, HORA_HASTA = 17;
+    function partesChile(d) {
+        try {
+            const p = {}; new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', weekday: 'short' }).formatToParts(d).forEach(x => { p[x.type] = x.value; });
+            return { iso: `${p.year}-${p.month}-${p.day}`, hora: Number(p.hour) % 24, sem: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday) };
+        } catch (e) { return { iso: aISO(d), hora: d.getHours(), sem: d.getDay() }; }
+    }
+    /** true si en ese instante se pueden enviar correos de respaldo. */
+    function enHorarioCorreo(d) {
+        const p = partesChile(d || new Date());
+        return p.sem >= 1 && p.sem <= 5 && !feriados.has(p.iso) && p.hora >= HORA_DESDE && p.hora < HORA_HASTA;
+    }
+    async function encolarCorreo(destinatarios, correo, extra) {
+        const carga = JSON.stringify({ destinatarios, correo, extra });
+        let guardar = carga, nota = '';
+        if (carga.length > 900000) { guardar = JSON.stringify({ destinatarios, correo, extra: Object.assign({}, extra, { attachments: [] }) }); nota = ' (sin adjuntos por tamaño)'; }
+        try {
+            const id = 'cola-correo-' + Date.now() + '-' + Math.floor(Math.random() * 1e4);
+            await fs().setDoc(fs().doc(fs().collection(db(), 'Contadores'), id), { tipo: 'cola-correo', estado: 'pendiente', asunto: String(correo.subject || ''), carga: guardar, creadoPor: (window.firebaseAuth && window.firebaseAuth.currentUser && window.firebaseAuth.currentUser.email) || '', updatedAt: fs().serverTimestamp() });
+            return { estado: 'programado', destinatarios: (destinatarios || []).filter(emailValido), cc: ((extra && extra.cc) || []).filter(emailValido), detalle: 'Fuera del horario de envío (lunes a viernes de 8:00 a 17:00, sin feriados). Quedó en cola y saldrá en el próximo horario hábil' + nota + '.' };
+        } catch (e) { return { estado: 'error', detalle: 'No se pudo dejar el correo en cola: ' + String((e && e.message) || e) }; }
+    }
+    let vaciando = false;
+    async function vaciarCola() {
+        if (vaciando || !enHorarioCorreo() || !configCorreo.webhookUrl || !configCorreo.token) return 0;
+        vaciando = true; let n = 0;
+        try {
+            const f = fs(), q = await f.getDocs(f.query(f.collection(db(), 'Contadores'), f.where('tipo', '==', 'cola-correo')));
+            const pend = []; q.forEach(x => { if (x.data().estado === 'pendiente') pend.push(x); });
+            for (const x of pend) {
+                const ref = f.doc(f.collection(db(), 'Contadores'), x.id);
+                const tomado = await f.runTransaction(db(), async (tx) => { const s = await tx.get(ref); if (!s.exists() || s.data().estado !== 'pendiente') return false; tx.update(ref, { estado: 'enviando', updatedAt: f.serverTimestamp() }); return true; });
+                if (!tomado) continue;
+                let r; try { const c = JSON.parse(x.data().carga); r = await enviarCorreoAhora(c.destinatarios, c.correo, c.extra); } catch (e) { r = { estado: 'error', detalle: String((e && e.message) || e) }; }
+                await f.updateDoc(ref, { estado: r.estado === 'enviado' || r.estado === 'sin_adjuntos' ? 'enviado' : 'pendiente', detalleEnvio: r.detalle || '', enviadoEn: r.estado === 'enviado' ? new Date().toISOString() : '', updatedAt: f.serverTimestamp() });
+                if (r.estado === 'enviado') n++;
+            }
+        } catch (e) { console.warn('[Correo] cola', e); }
+        vaciando = false; return n;
+    }
+    /** Envía ahora; si es un correo de respaldo (extra.respaldo) y no es horario hábil, lo deja en cola. */
+    async function enviarCorreo(destinatarios, correo, extra) {
+        if (extra && extra.respaldo && configCorreo.webhookUrl && configCorreo.token && !enHorarioCorreo()) return encolarCorreo(destinatarios, correo, extra);
+        return enviarCorreoAhora(destinatarios, correo, extra);
+    }
+    setInterval(() => { vaciarCola(); }, 300000);
+    setTimeout(() => { vaciarCola(); }, 20000);
 
     // ---------------------------------------------------------------
     // Interfaz
@@ -1561,5 +1614,5 @@ function fotoPorDescripcion(desc) {   // busca por descripcion en todas las tien
         ov.querySelector('#c-copiar').addEventListener('click', async () => { try { await navigator.clipboard.writeText(SCRIPT_GAS); toast('Copiado', 'Código copiado.', 'success'); } catch (e) { ov.querySelector('#c-script').select(); } });
     }
 
-    window.SAR_SeguimientoOC = { abrirCuando, anularRecepcion, eliminarArchivosCategoria, eliminarArchivosActa, formCatalogo, registrarCatalogo, guardarArchivo, abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, cargarConfig, configurado: () => !!(configCorreo.webhookUrl && configCorreo.token), _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
+    window.SAR_SeguimientoOC = { enHorarioCorreo, vaciarCola, abrirCuando, anularRecepcion, eliminarArchivosCategoria, eliminarArchivosActa, formCatalogo, registrarCatalogo, guardarArchivo, abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, cargarConfig, configurado: () => !!(configCorreo.webhookUrl && configCorreo.token), _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
 })(window, document);

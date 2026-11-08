@@ -163,10 +163,13 @@
         const cfg = (ctx.config && ctx.config.recepcionConforme) || {};
         const to = (cfg.to && cfg.to.length) ? cfg.to : DESTINATARIOS_BASE.to, cc = (cfg.cc && cfg.cc.length) ? cfg.cc : DESTINATARIOS_BASE.cc;
         const lin = lineasActa(oc, centro), pend = lin.reduce((t, l) => t + Math.max(0, l.pedido - l.recibido), 0);
+        const ultRec = (Array.isArray(oc.recepciones) ? oc.recepciones : []).filter(r => r && r.fecha).slice(-1)[0];
+        const fechaRec = (ultRec && /^\d{4}-\d{2}-\d{2}/.test(String(ultRec.fecha)) ? String(ultRec.fecha).slice(0, 10) : '') || hoyISO();
         const f = (id, et, v, tipo, extra) => `<label>${et}<input type="${tipo || 'text'}" id="${id}" value="${esc(v == null ? '' : v)}" ${extra || ''}></label>`;
         const ov = modal('Recepción conforme', `
             <p class="cierre-hint">Genera el acta de recepción conforme y envía el correo con el acta y la guía/factura. Revisa los destinatarios.</p>
-            <div class="soc-fila"><label>Documento del proveedor<select id="rc-tipo"><option value="GUIA">Guía de despacho</option><option value="FACTURA">Factura</option></select></label>${f('rc-num', 'N° del documento', oc.ultimaGuia || '')}${f('rc-fec', 'Fecha de recepción', hoyISO(), 'date')}</div>
+            <div class="soc-fila"><label>Documento del proveedor<select id="rc-tipo"><option value="GUIA">Guía de despacho</option><option value="FACTURA">Factura</option></select></label>${f('rc-num', 'N° del documento', oc.ultimaGuia || '')}${f('rc-fec', 'Fecha de recepción (la que dirá el acta)', fechaRec, 'date')}</div>
+            <p class="cierre-hint" id="rc-fec-ayuda">${fechaRec !== hoyISO() ? `Se propone el <b>${fechaCorta(fechaRec)}</b>, día en que se registró la recepción de los productos (hoy es ${fechaCorta(hoyISO())}). ` : ''}Si los productos llegaron otro día, cambia la fecha: el acta llevará la fecha que indiques. <a href="#" id="rc-fec-hoy">Usar hoy</a></p>
             <label>PDF de la guía o factura<input type="file" id="rc-file" accept="application/pdf"></label>
             <label>Tipo de recepción<select id="rc-parcial"><option value="0"${pend > 0 ? '' : ' selected'}>Total</option><option value="1"${pend > 0 ? ' selected' : ''}>Parcial${pend > 0 ? ` (faltan ${pend} unidades)` : ''}</option></select></label>
             ${f('rc-ct', 'Contraparte técnica (firma del acta)', CONTRAPARTE_BASE)}
@@ -204,6 +207,7 @@
             else if (correo.estado === 'programado') toast('Correo programado', correo.detalle, 'info');
             else if (correo.estado !== 'borrador' && enviar) toast('Revisa el correo', correo.detalle || 'El correo no se pudo enviar.', 'error');
         });
+        try { const h = ov && ov.querySelector('#rc-fec-hoy'); if (h) h.addEventListener('click', (ev) => { ev.preventDefault(); ov.querySelector('#rc-fec').value = hoyISO(); }); } catch (e) { /* sin atajo */ }
         return ov;
     }
 

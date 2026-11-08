@@ -745,3 +745,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.130 «Ingreso de Existencias» y registros de la jornada en fichas (v21.76)
 - La pantalla pasa a llamarse **Ingreso de Existencias** (menú, título y barra superior), que es lo que se hace en ella.
 - «Registros de la Jornada» deja la tabla de 10 columnas con scroll lateral (se cortaba y escondía datos) y muestra cada registro como ficha: nombre y código, cantidad de la toma y total a la derecha; debajo hora/toma, categoría, lote, vencimiento y ubicación; al pie estado de Google Sheets y acciones. Sin scroll horizontal, nada oculto.
+
+### 4.131 Ingreso por préstamo / traspaso desde otro centro (v21.77)
+- En Ingresos, «Tipo de compra» incluye **Préstamo / traspaso desde otro centro** para quiebres de stock sin solicitud de compra. Al elegirlo, «Proveedor» pasa a llamarse **Centro de origen** y el documento de respaldo deja de ser obligatorio (guía o memo opcional).
+- El historial guarda `origenTipo: 'prestamo_otro_centro'` y `origenCentro`, de modo que siempre se sepa de dónde provino. Sigue sumando stock y auditándose igual que cualquier ingreso.
+- Pendiente: registrar la devolución al centro de origen y mostrar el origen en el historial.

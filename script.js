@@ -4673,6 +4673,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             destination: data.destinationId || "Principal",
                             provider: data.providerId || "S/I",
                             purchaseType: data.purchaseType || "S/I",
+                            origenTipo: /pr[eé]stamo|traspaso/i.test(data.purchaseType || '') ? 'prestamo_otro_centro' : 'compra',
+                            origenCentro: /pr[eé]stamo|traspaso/i.test(data.purchaseType || '') ? (data.providerId || '') : '',
                             user: auth.currentUser ? auth.currentUser.email : 'Admin Local',
                             date: serverTimestamp(),
                             document: (data.supportDocument && data.supportDocument.name) ? data.supportDocument.name : 'S/N'
@@ -4694,6 +4696,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
         }
+
+        // Origen del ingreso: préstamo / traspaso desde otro centro (sin OC) (v21.77)
+        (function () {
+            const tc = document.getElementById('movimiento-tipoCompra');
+            if (!tc) return;
+            const aplicar = () => {
+                const esPrestamo = /pr[eé]stamo|traspaso/i.test(tc.value || '');
+                const lbl = document.getElementById('lbl-ingreso-proveedor');
+                const prov = document.getElementById('movimiento-proveedor');
+                const doc = document.getElementById('ingreso-archivo-respaldo');
+                const av = document.getElementById('ingreso-origen-aviso');
+                if (lbl) lbl.textContent = esPrestamo ? 'CENTRO DE ORIGEN' : 'PROVEEDOR';
+                if (prov) prov.placeholder = esPrestamo ? 'Ej: CESFAM, SAR u hospital que lo envía' : 'Escriba o seleccione...';
+                if (doc) doc.required = !esPrestamo;
+                if (av) av.style.display = esPrestamo ? 'block' : 'none';
+            };
+            tc.addEventListener('input', aplicar); tc.addEventListener('change', aplicar);
+            moveForm && moveForm.addEventListener('reset', () => setTimeout(aplicar, 0));
+        })();
 
         // Inicializar selectores y métricas
         populateInsumosSelect();

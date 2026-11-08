@@ -39,5 +39,6 @@ ta('respaldo: serializar, comprimir, trocear y restaurar sin pérdida', async ()
     const txt = K.serializar(datos), b64 = await K.comprimir(txt), partes = K.trocear(b64), vuelta = await K.descomprimir(partes.join(''));
     assert.strictEqual(vuelta, txt); assert.strictEqual(K.suma(vuelta), K.suma(txt)); assert.deepStrictEqual(K.conteos(JSON.parse(vuelta)), { Insumos: 3000, Bodegas: 1 }); assert.ok(/__ts/.test(vuelta));
 });
+t('vista previa de agenda: días y fecha pasada', () => { const V = require('../vista-previa-agenda.js'); const h = new Date(2026, 10, 7); assert.strictEqual(V.diasHasta('2026-11-09', h), 2); const r = V.resumen({ tipo: 'ENVIO', titulo: ' ', fecha: '2026-11-06' }, h); assert.ok(r.pasado); assert.strictEqual(r.cuando, 'ayer'); assert.strictEqual(r.titulo, 'Sin título aún'); });
 Promise.all(tAsync).then(() => {
 console.log(`\n${n} ok, ${mal} con falla`); process.exit(mal ? 1 : 0); });

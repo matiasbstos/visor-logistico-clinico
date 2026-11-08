@@ -679,3 +679,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Inspirado en los reels de alta de proveedor y calendario de muelles: tarjetas de resumen y primeras 10 filas de tablas entran de forma escalonada (≤0,6 s), botones responden al toque, avisos y hallazgos de la bitácora aparecen suavemente.
 - Solo CSS, sin librerías; se desactiva con `prefers-reduced-motion`. Las filas con animación solo cubren las 10 primeras para no afectar tablas grandes.
 - Instagram no es legible de forma automática (bloquea robots): se trabajó con los 2 reels adjuntos. Ideas futuras: formulario de alta con vista previa en vivo y línea «ahora» en calendarios.
+
+### 4.117 Vista previa en vivo en el formulario de agenda (v21.63)
+- Nuevo `vista-previa-agenda.js`: al crear un envío/recordatorio, una franja arriba del formulario resume tipo, título y fecha («en 3 días», «mañana»), y avisa si la fecha ya pasó. No cambia lo que se guarda.
+- La «línea de hoy» del calendario ya existía (`erp-cal-day--today`), por lo que no se duplicó. Queda pendiente la idea de chips de categoría (sin formulario de proveedores en el sistema).

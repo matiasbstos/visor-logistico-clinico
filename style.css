@@ -5774,3 +5774,6 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .toast { animation: mvIn .3s cubic-bezier(.22,1,.36,1) both; }
 .bit-sec, .bit-hg { animation: mvIn .4s cubic-bezier(.22,1,.36,1) both; }
 @media (prefers-reduced-motion: reduce) { .view-section.active .stat-card, .view-section.active .erp-kpi-card, .view-section table tbody tr, .toast, .bit-hg, .bit-sec, .btn { animation: none !important; transition: none !important; } }
+
+/* Vista previa de agenda (v21.63) */
+.vp-ag { display: flex; gap: 8px; align-items: center; background: #EFF6FF; border: 1px solid #BFDBFE; color: #1E3A8A; border-radius: 8px; padding: 9px 12px; font-size: 13px; animation: mvIn .3s ease both; } .vp-ag em { font-style: normal; font-weight: 700; } .vp-ag--past { background: #FFFBEB; border-color: #FCD34D; color: #92400E; }

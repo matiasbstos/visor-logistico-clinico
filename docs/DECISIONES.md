@@ -634,3 +634,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.106 Tablas a tu gusto: columnas, ancho, fijar y densidad (v21.53)
 - Nuevo `tabla-columnas.js`: barra «Columnas» en Existencias, Historial, Compras, Kardex, Usuarios, Bodegas, Informes, Stock crítico, Recepciones y Solicitudes críticas. Mostrar/ocultar columnas, arrastrar el borde del encabezado para el ancho (doble clic lo restablece), fijar la primera columna y filas compactas.
 - Es no destructivo (reglas CSS por posición de columna) y se guarda por tabla y por equipo en localStorage; «Restablecer» vuelve a lo original. No se reordenan columnas para no romper el código de cada pantalla.
+
+### 4.107 Primeros pasos con barra de avance en el Inicio (v21.54)
+- Nuevo `primeros-pasos.js`: tarjeta en el Inicio (solo personal) con 6 pasos que se marcan solos al detectar el dato: bodegas, inventario, orden de compra, correo de avisos configurado, acta emitida y acta firmada confirmada. Barra de avance, botón «Ir» a cada pantalla y paso siguiente resaltado.
+- Al completar todo se celebra una vez y luego desaparece; «Ocultar por ahora» la oculta en ese equipo. Solo lee datos; respeta prefers-reduced-motion.

@@ -5921,3 +5921,26 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 #bodega-explorador .bx-acc { display: flex; gap: 6px; } #bodega-explorador .bx-acc .btn { padding: 6px 10px; font-size: 12px; gap: 5px; }
 #bodega-explorador .bx-vacio { padding: 28px 12px; text-align: center; color: var(--text-muted); font-size: 13px; }
 @media (max-width: 767px) { #bodega-explorador .bx-acc { width: 100%; } #bodega-explorador .bx-acc .btn { flex: 1; justify-content: center; } }
+
+/* Precinto de inventario: pantalla y etiqueta térmica 100×60 mm, monocroma (v21.80) */
+.pr-modal { max-width: 560px; } .pr-form { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.pr-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 700; color: var(--text-muted); }
+.pr-form input, .pr-form select { height: 40px; font-size: 16px; padding: 0 10px; border: 1px solid var(--id-borde, #e2e8f0); border-radius: var(--id-r-sm, 10px); background: #fff; color: var(--text-main); }
+.pr-vista { margin-top: 14px; overflow-x: auto; } .pr-pie-m { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.precinto { box-sizing: border-box; width: 100mm; height: 60mm; padding: 2.5mm 3mm; border: 0.4mm solid #000; background: #fff; color: #000; font-family: Arial, Helvetica, sans-serif; font-weight: 700; display: flex; flex-direction: column; overflow: hidden; page-break-after: always; break-after: page; }
+.pr-cab { display: flex; align-items: center; gap: 2.5mm; border-bottom: 0.3mm solid #000; padding-bottom: 1.2mm; }
+.pr-logo { height: 7mm; width: auto; filter: grayscale(1) contrast(2); } .pr-tit { flex: 1; font-size: 9pt; } .pr-folio { font-size: 13pt; }
+.pr-cuerpo { flex: 1; display: flex; padding-top: 1.5mm; } .pr-izq { flex: 1 1 55%; font-size: 7.5pt; line-height: 5mm; } .pr-izq span { font-weight: 400; }
+.pr-der { flex: 1 1 45%; border-left: 0.3mm solid #000; padding-left: 2mm; display: flex; flex-direction: column; justify-content: space-around; font-size: 7pt; }
+.pr-chk { display: flex; align-items: center; gap: 2mm; } .pr-chk i { display: inline-block; width: 3mm; height: 3mm; border: 0.3mm solid #000; flex: 0 0 3mm; }
+.pr-linea { display: inline-block; width: 18mm; border-bottom: 0.3mm solid #000; height: 3mm; vertical-align: bottom; } .pr-linea.l2, .pr-linea.l3 { width: 60mm; }
+.pr-pie { border-top: 0.3mm solid #000; padding-top: 1mm; font-size: 7.5pt; line-height: 4.6mm; } .pr-pie span { font-weight: 400; }
+#precinto-print { display: none; }
+@media print {
+  body.imprimiendo-precinto > *:not(#precinto-print) { display: none !important; }
+  body.imprimiendo-precinto #precinto-print { display: block !important; }
+  body.imprimiendo-precinto { background: #fff !important; margin: 0 !important; }
+  @page { size: 100mm 60mm; margin: 0; }
+  body.imprimiendo-precinto .precinto { border: 0.4mm solid #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+@media (max-width: 767px) { .pr-form { grid-template-columns: 1fr; } }

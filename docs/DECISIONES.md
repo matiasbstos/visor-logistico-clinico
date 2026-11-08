@@ -760,3 +760,10 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Se revisaron dos videos de referencia: bibliotecas de componentes animados (React, no instalables aquí) y tres skills de diseño (crítica, traspaso de especificación, animación en Figma).
 - **Adoptado:** el agente UX/UI ahora entrega hallazgos con severidad y revisa primero que los datos y textos tengan sentido; y cada componente nuevo se documenta en `docs/COMPONENTES.md` (anatomía, estados, tokens, responsive, movimiento, accesibilidad).
 - **No adoptado:** instalar las bibliotecas o la skill de Figma (el proyecto no usa React ni Figma). Los patrones de movimiento (contador de cifras, indicador deslizante, entradas escalonadas) quedan como candidatos, a aplicar uno a la vez.
+
+### 4.134 Precinto de inventario con folio correlativo (v21.80)
+- Botón **Precinto de conteo** en Ingreso de Existencias: se elige bodega, ubicación/estante, categoría, N.° de conteo (1.°/2.°/3.°), responsable y cantidad de etiquetas (1–60).
+- Cada precinto recibe un folio correlativo anual **PI-AAAA-NNNN** (contador `Contadores/precinto-AAAA`, reservado en una transacción) y queda registrado en `Contadores/pin-<folio>` con todos sus datos.
+- Formato basado en el manual del precinto de oxígeno: **100×60 mm horizontal**, Arial Bold, monocromo, dos columnas (datos a la izquierda, estados a la derecha: Conteo completo, Reconteo requerido, Con diferencia, Caja abierta/dañada, Verificado 2.ª persona), «Contado ___ un.», «Reporta incid.» y «Motivo», logo SAR en escala de grises.
+- **Imprimir** usa `@page 100mm 60mm` sin márgenes (una etiqueta por hoja, Zebra ZD230); **Descargar PDF** genera el mismo tamaño con jsPDF.
+- Pendiente: código de barras/QR del folio y escaneo del precinto al ingresar el conteo (reutilizando el escáner inteligente).

@@ -506,6 +506,7 @@ function showToast(title, text, type = 'info') {
     `;
 
     toastContainer.appendChild(toast);
+    try { if (window.SAR_Sonidos) window.SAR_Sonidos.tipo(type); } catch (e) { /* sin sonido */ }
 
     setTimeout(() => {
         toast.style.animation = 'slideOut 0.3s ease-in forwards';
@@ -639,6 +640,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // 2. OBSERVADOR DE ESTADO (El Guardián Principal de la SPA)
     onAuthStateChanged(auth, async (user) => {
         if (user) {
+            try { if (!window.__sarSonoIngreso && window.SAR_Sonidos) { window.__sarSonoIngreso = true; window.SAR_Sonidos.tocar('ingreso'); } } catch (e) { /* sin sonido */ }
             // Usuario validado -> Forzar explícitamente el ocultamiento del login y mostrar Dashboard
             document.getElementById('login-view').style.display = 'none';
             document.getElementById('main-app').style.display = 'flex';

@@ -5977,3 +5977,20 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .pr-oxi .po-fol { margin-top: auto; font-size: 7pt; font-weight: 400; } .pr-oxi .po-fol b { font-size: 9pt; font-weight: 700; }
 .act-l input[hidden] { display: none; } .act-l select[data-nueva] + input { margin-top: 6px; }
 .oxi-quitar { margin-top: 6px; align-self: flex-start; border: 0; background: none; color: var(--sar-red); font-size: 12px; font-weight: 700; cursor: pointer; padding: 6px 0; min-height: 32px; } .oxi-quitar[hidden] { display: none; }
+
+/* Campana de avisos con protagonismo (v21.90) */
+#btn-notificaciones { width: auto; min-width: 40px; height: 40px; padding: 0 12px; gap: 6px; display: inline-flex; align-items: center; border-radius: var(--id-r-sm, 10px); font-weight: 700; }
+#btn-notificaciones .ph-bell { font-size: 22px; } #btn-notificaciones .noti-lbl { font-size: 13px; }
+#btn-notificaciones.noti-activa { background: #fdecec; color: var(--sar-red); border-color: #f5c2c4; }
+#btn-notificaciones .noti-n { top: -6px; right: -6px; min-width: 20px; height: 20px; font-size: 12px; box-shadow: 0 0 0 2px #fff; }
+#btn-sonido { height: 40px; width: 40px; } #btn-sonido i { font-size: 20px; }
+@keyframes noti-vibra { 0%, 100% { transform: rotate(0); } 15% { transform: rotate(-14deg); } 35% { transform: rotate(12deg); } 55% { transform: rotate(-8deg); } 75% { transform: rotate(5deg); } }
+#btn-notificaciones.noti-vibra .ph-bell { animation: noti-vibra .8s ease-in-out 2; transform-origin: 50% 10%; }
+@media (prefers-reduced-motion: reduce) { #btn-notificaciones.noti-vibra .ph-bell { animation: none; } }
+@media (max-width: 767px) { #btn-notificaciones .noti-lbl { display: none; } #btn-notificaciones { padding: 0 10px; } }
+.noti-panel { width: min(440px, calc(100vw - 24px)) !important; max-height: 78vh !important; }
+.noti-tit { display: flex; align-items: center; gap: 8px; font-size: 16px; margin-bottom: 6px; } .noti-tit i { color: var(--sar-red); font-size: 20px; }
+.noti-sec2 { padding: 10px 0; border-top: 1px solid var(--id-borde, #eef0f4); }
+.noti-h { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 13px; } .noti-h i { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 10px; } .noti-h span { margin-left: auto; background: #f1f5f9; border-radius: 999px; padding: 1px 8px; font-size: 12px; font-weight: 700; }
+.noti-sec2 .noti-it { border: 0; padding: 4px 0; font-size: 12px; } .noti-sec2 .noti-it small { display: inline; color: #5b6472; }
+.noti-mas { display: block; color: #5b6472; margin: 2px 0; } .noti-ver { margin-top: 4px; border: 0; background: none; color: var(--sar-blue); font-weight: 700; font-size: 12px; cursor: pointer; padding: 6px 0; min-height: 32px; }

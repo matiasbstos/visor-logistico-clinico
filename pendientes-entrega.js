@@ -223,10 +223,14 @@
     // ---------------- Campana de notificaciones ----------------
     function pintarCampana() {
         const b = document.getElementById('btn-notificaciones'); if (!b) return;
-        const n = grupos.reduce((s, g) => s + g.listos, 0) + porRecibir.filter(o => o.parcial).length;
+        const extra = window.SAR_Avisos ? window.SAR_Avisos.datosActuales() : { total: 0 };
+        const n = grupos.reduce((s, g) => s + g.listos, 0) + porRecibir.filter(o => o.parcial).length + extra.total;
         let ins = b.querySelector('.noti-n'); if (!ins) { ins = document.createElement('span'); ins.className = 'noti-n'; b.appendChild(ins); }
         ins.textContent = n > 9 ? '9+' : String(n); ins.style.display = n ? '' : 'none';
-        b.title = n ? `${n} aviso(s): entregas con stock disponible y/o órdenes con recepción parcial` : 'Notificaciones';
+        const antes = Number(b.dataset.n || 0); b.dataset.n = String(n); b.classList.toggle('noti-activa', n > 0);
+        if (n > antes && antes >= 0 && b.dataset.visto) { b.classList.remove('noti-vibra'); void b.offsetWidth; b.classList.add('noti-vibra'); try { if (window.SAR_Sonidos) window.SAR_Sonidos.tocar('notificacion'); } catch (e) { /* sin sonido */ } }
+        b.dataset.visto = '1';
+        b.title = n ? `${n} aviso(s) por revisar: entregas, recepciones, vencimientos, stock bajo y préstamos` : 'Notificaciones';
     }
     function abrirPanel() {
         let p = document.getElementById('noti-panel'); if (p) { p.remove(); return; }
@@ -234,11 +238,13 @@
         const con = grupos.filter(g => g.listos);
         const parc = porRecibir.filter(o => o.parcial);
         const bloqueRec = parc.length ? `<div class="noti-sec"><b>Por recibir (recepción parcial)</b>${parc.map(o => `<div class="noti-it"><b>OC ${esc(o.numeroOC)}</b> · ${esc(o.proveedor)}: faltan ${o.pendiente} un. (${o.lineas.length} producto(s))<small>${o.lineas.slice(0, 3).map(x => esc(String(x.producto).slice(0, 40)) + ' (' + x.pendiente + ')').join(' · ')}</small></div>`).join('')}</div>` : '';
-        p.innerHTML = `<strong>Notificaciones</strong>${bloqueRec}${con.length ? con.map(g => `<div class="noti-it"><b>${esc(g.centro)}</b>: hay stock para entregar ${g.listos} de ${g.items.length} producto(s) pendiente(s)
+        const ext = window.SAR_Avisos ? window.SAR_Avisos.html(window.SAR_Avisos.datosActuales()) : '';
+        p.innerHTML = `<strong class="noti-tit"><i class="ph-fill ph-bell-ringing"></i> Avisos</strong>${ext}${bloqueRec}${con.length ? con.map(g => `<div class="noti-it"><b>${esc(g.centro)}</b>: hay stock para entregar ${g.listos} de ${g.items.length} producto(s) pendiente(s)
             <small>${g.items.filter(x => x.entregable > 0).slice(0, 3).map(x => esc(x.nombre.slice(0, 40)) + ' (' + x.entregable + ')').join(' · ')}</small></div>`).join('') : (parc.length ? '' : '<p class="act-hint">Sin avisos por ahora.</p>')}
             <button type="button" class="btn btn-outline btn-sm" id="noti-ir">Ver pendientes por entregar</button>`;
         document.body.appendChild(p);
         p.querySelector('#noti-ir').addEventListener('click', () => { p.remove(); window.location.hash = 'view-pendientes-entrega'; });
+        p.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => { const v = b.dataset.ir; p.remove(); window.location.hash = v; }));
         setTimeout(() => document.addEventListener('click', function cerrar(e) { if (!p.contains(e.target) && !e.target.closest('#btn-notificaciones')) { p.remove(); document.removeEventListener('click', cerrar); } }), 0);
     }
     function iniciar() {
@@ -246,6 +252,7 @@
         const ok = () => ['admin', 'administrador', 'global', 'superadmin', 'operador'].includes(rol()) && window.firebaseDb && window.firebaseAuth && window.firebaseAuth.currentUser;
         const ciclo = () => { if (ok()) traer().catch(() => { /* sin aviso */ }); };
         setTimeout(ciclo, 8000); setInterval(ciclo, 10 * 60 * 1000);
+        setInterval(pintarCampana, 60 * 1000); setTimeout(pintarCampana, 6000);
     }
     if (typeof document !== 'undefined' && document.addEventListener) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar(); }
 

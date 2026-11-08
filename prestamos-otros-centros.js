@@ -66,7 +66,7 @@
   }
   function iniciar() { let n = 0; const t = setInterval(() => { n++; if (escuchar() || n > 40) clearInterval(t); }, 1500); }
   if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('DOMContentLoaded', iniciar);
-  const api = { aplicarDevolucion, descontarLotes, pendiente };
+  const api = { pendientesLista: () => lista.slice(), aplicarDevolucion, descontarLotes, pendiente };
   if (typeof window !== 'undefined') window.SAR_Prestamos = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : {}, typeof document !== 'undefined' ? document : {});

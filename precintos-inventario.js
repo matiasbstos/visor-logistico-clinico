@@ -129,18 +129,18 @@
     const logo = await cargarLogo(), d = new J({ orientation: 'landscape', unit: 'mm', format: [100, 60] });
     equipos.forEach((e, k) => {
       if (k) d.addPage([100, 60], 'landscape');
-      d.setDrawColor(0); d.setTextColor(0); d.setLineWidth(0.4); d.rect(1.5, 1.5, 97, 57);
-      if (logo) { const h = 9, w = Math.min(h * logo.r, 24); d.addImage(logo.d, 'PNG', 4, 3.5, w, w / logo.r); }
-      d.setFont('helvetica', 'bold'); d.setFontSize(9); d.text(tituloGas(e), 4, 17);
-      d.setFontSize(7); d.text('N° SERIE', 4, 22); d.setFontSize(13); d.text(String(e.serie).slice(0, 14), 17, 22.5);
-      d.setFontSize(7.5); d.text(gasTxt(e) + (e.capacidad ? ' · ' + e.capacidad : ''), 4, 26.5);
-      d.setFontSize(7.5);
-      [['Proveedor:', e.proveedor || '', 43], ['Fecha carga:', fechaCL(e.ultimaRecarga) || '__/__/20__', null], ['Revisado por:', '', 43], ['Reporta incid.:', '', 43]].forEach((c, i) => { const y = 32 + i * 6; d.setFont('helvetica', 'normal'); d.text(c[0], 4, y); const x0 = d.getTextWidth(c[0]) + 6; if (c[1]) { d.setFont('helvetica', 'bold'); d.text(String(c[1]).slice(0, 22), x0, y); } else if (c[2]) d.line(x0, y, c[2], y); });
-      d.setFontSize(7); d.setFont('helvetica', 'normal'); d.text('Folio', 4, 56); d.setFont('helvetica', 'bold'); d.setFontSize(8.5); d.text(e.folio || '—', 14, 56);
-      d.setLineWidth(0.3); d.line(50, 4, 50, 56);
-      OXI_ESTADOS.forEach((x, i) => { const y = 9 + i * 6; d.rect(53, y - 2.7, 3.2, 3.2); d.setFontSize(7.5); d.text(x, 58, y); });
-      d.setFontSize(7); d.text('Motivo F. Servicio:', 53, 36); d.line(53, 41, 96, 41); d.line(53, 46, 96, 46);
-      const a = barrasB(e.serie), tot = a.reduce((x, y) => x + y, 0), mod = Math.min(42 / tot, 0.5); let xx = 53; a.forEach((w, i) => { if (i % 2 === 0) d.rect(xx, 49.5, w * mod, 6, 'F'); xx += w * mod; });
+      d.setDrawColor(0); d.setTextColor(0);
+      if (logo) { const h = 12, w = Math.min(h * logo.r, 30); d.addImage(logo.d, 'PNG', 2.5, 2.5, w, w / logo.r); }
+      d.setFont('helvetica', 'bold'); d.setFontSize(11.5); d.text(tituloGas(e), 2.5, 19.5);
+      d.setFontSize(8.5); d.setFont('helvetica', 'normal'); d.text('N° SERIE', 2.5, 25); d.setFont('helvetica', 'bold'); d.setFontSize(17); d.text(String(e.serie).slice(0, 12), 18.5, 25.5);
+      d.setFontSize(8.5); d.text(gasTxt(e) + (e.capacidad ? ' · ' + e.capacidad : ''), 2.5, 30);
+      d.setFontSize(9.5);
+      [['Proveedor:', e.proveedor || '', 52], ['Fecha carga:', fechaCL(e.ultimaRecarga) || '__/__/20__', null], ['Revisado por:', '', 52], ['Reporta incid.:', '', 52]].forEach((c, i) => { const y = 35.5 + i * 5.2; d.setFont('helvetica', 'normal'); d.text(c[0], 2.5, y); const x0 = d.getTextWidth(c[0]) + 4.5; if (c[1]) { d.setFont('helvetica', 'bold'); d.text(String(c[1]).slice(0, 20), x0, y); } else if (c[2]) { d.setLineWidth(0.3); d.line(x0, y, c[2], y); } });
+      d.setFontSize(8.5); d.setFont('helvetica', 'normal'); d.text('Folio', 2.5, 57); d.setFont('helvetica', 'bold'); d.setFontSize(11); d.text(e.folio || '—', 13, 57);
+      d.setLineWidth(0.35); d.line(56, 3, 56, 57);
+      d.setFontSize(9); OXI_ESTADOS.forEach((x, i) => { const y = 8.5 + i * 7; d.setLineWidth(0.4); d.rect(58.5, y - 3.3, 4, 4); d.setFont('helvetica', 'bold'); d.text(x, 64.5, y); });
+      d.setFont('helvetica', 'normal'); d.setFontSize(9); d.text('Motivo F. Servicio:', 58.5, 38); d.setLineWidth(0.35); d.line(58.5, 43.5, 97.5, 43.5); d.line(58.5, 49, 97.5, 49);
+      const a = barrasB(e.serie), tot = a.reduce((x, y) => x + y, 0), mod = Math.min(39 / tot, 0.5); let xx = 58.5; a.forEach((w, i) => { if (i % 2 === 0) d.rect(xx, 50.8, w * mod, 6.5, 'F'); xx += w * mod; });
     });
     d.save('precintos-oxigeno-' + (equipos.length === 1 ? String(equipos[0].serie).replace(/[^\w-]+/g, '_') : equipos.length + '-balones') + '.pdf');
   }

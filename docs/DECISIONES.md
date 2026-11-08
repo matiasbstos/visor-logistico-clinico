@@ -674,3 +674,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.115 Ruta animada del ciclo y higiene SEO (v21.61)
 - Bitácora: sobre las 6 etapas se muestra una ruta con marcador que avanza (1,25 s) hasta la última etapa lograda; CSS puro, sin librerías (no se agrega GSAP), respeta `prefers-reduced-motion` y se oculta en celular.
 - SEO: se agregan título y descripción, `canonical`, Open Graph y `robots.txt`. **Decisión:** la app es interna y con login, por lo que se mantiene `noindex` y `Disallow: /` (contrario al consejo del video, pensado para sitios públicos). Sin `sitemap.xml` ni `llms.txt` por la misma razón. Ya cumplía: HTTPS, `lang="es"`, responsive, un `<h1>` por vista.
+
+### 4.116 Capa de movimiento (v21.62)
+- Inspirado en los reels de alta de proveedor y calendario de muelles: tarjetas de resumen y primeras 10 filas de tablas entran de forma escalonada (≤0,6 s), botones responden al toque, avisos y hallazgos de la bitácora aparecen suavemente.
+- Solo CSS, sin librerías; se desactiva con `prefers-reduced-motion`. Las filas con animación solo cubren las 10 primeras para no afectar tablas grandes.
+- Instagram no es legible de forma automática (bloquea robots): se trabajó con los 2 reels adjuntos. Ideas futuras: formulario de alta con vista previa en vivo y línea «ahora» en calendarios.

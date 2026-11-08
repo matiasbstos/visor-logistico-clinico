@@ -5758,3 +5758,19 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .bit-rb { position: absolute; left: 0; top: -17px; width: 34px; height: 34px; margin-left: -17px; border-radius: 50%; background: #1A3668; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 17px; box-shadow: 0 2px 8px rgba(26,54,104,.35); transition: left 1.25s cubic-bezier(.65,0,.35,1); }
 @media (prefers-reduced-motion: reduce) { .bit-rf, .bit-rb { transition: none; } }
 @media (max-width: 767px) { .bit-route { display: none; } }
+
+/* Capa de movimiento (v21.62): entradas escalonadas, respuesta al toque, sin librerías */
+@keyframes mvIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes mvChip { 0% { transform: scale(1); } 45% { transform: scale(.94); } 100% { transform: scale(1); } }
+.view-section.active .stat-card, .view-section.active .erp-kpi-card { animation: mvIn .42s cubic-bezier(.22,1,.36,1) both; }
+.view-section.active .stat-card:nth-child(2), .view-section.active .erp-kpi-card:nth-child(2) { animation-delay: .05s; }
+.view-section.active .stat-card:nth-child(3), .view-section.active .erp-kpi-card:nth-child(3) { animation-delay: .10s; }
+.view-section.active .stat-card:nth-child(4), .view-section.active .erp-kpi-card:nth-child(4) { animation-delay: .15s; }
+.view-section.active .stat-card:nth-child(n+5), .view-section.active .erp-kpi-card:nth-child(n+5) { animation-delay: .20s; }
+.view-section table tbody tr:nth-child(-n+10) { animation: mvIn .35s cubic-bezier(.22,1,.36,1) both; }
+.view-section table tbody tr:nth-child(2) { animation-delay: .03s; } .view-section table tbody tr:nth-child(3) { animation-delay: .06s; } .view-section table tbody tr:nth-child(4) { animation-delay: .09s; } .view-section table tbody tr:nth-child(5) { animation-delay: .12s; } .view-section table tbody tr:nth-child(n+6) { animation-delay: .15s; }
+.btn { transition: transform .12s ease, box-shadow .2s ease, background-color .2s ease; } .btn:active:not(:disabled) { transform: scale(.97); }
+.bit-seg button:active, .bit-evl a:active { animation: mvChip .25s ease; }
+.toast { animation: mvIn .3s cubic-bezier(.22,1,.36,1) both; }
+.bit-sec, .bit-hg { animation: mvIn .4s cubic-bezier(.22,1,.36,1) both; }
+@media (prefers-reduced-motion: reduce) { .view-section.active .stat-card, .view-section.active .erp-kpi-card, .view-section table tbody tr, .toast, .bit-hg, .bit-sec, .btn { animation: none !important; transition: none !important; } }

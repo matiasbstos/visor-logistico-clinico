@@ -643,3 +643,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Nuevo `acerca.js`: ventana «Licencias y términos» en el menú lateral (uso del sistema, datos y licencias de las bibliotecas de terceros). Accesible: foco, Esc y rol de diálogo.
 - Se fijan las versiones de Phosphor Icons (2.1.1), Chart.js (4.4.1) y html5-qrcode (2.3.8): antes se cargaba «la última» desde un CDN, lo que podía romper el sitio o inyectar código sin que nadie lo notara.
 - `tests/humo.js` (no se publica): pruebas de humo con Playwright (carga sin errores, barras de columnas, licencias). Se corre en local contra `python3 -m http.server`.
+
+### 4.109 Bitácora: filtros «Compra compartida», «Con conforme» y «Falta conforme» (v21.56)
+- Vista global de recepciones conformes: «Con conforme» (ya se envió al menos una) y «Falta conforme» (todo recibido o con guía/despacho, pero sin conforme enviada). «Compra compartida» reúne las órdenes con señales de reparto entre centros (varios memos, centros mencionados o frases de distribución).

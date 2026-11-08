@@ -220,6 +220,7 @@
         <div class="oxi-cards">${chip('TODOS', 'Total', rs.total, '#334155')}${Object.entries(ESTADOS).map(([k, v]) => chip(k, v.txt, rs[k], v.color)).join('')}</div>
         ${caps.length > 1 ? `<div class="oxi-caps" role="group" aria-label="Capacidad"><span>Capacidad:</span><button type="button" class="oxi-cap${capFiltro === 'TODAS' ? ' oxi-on' : ''}" data-cap="TODAS">Todas (${equipos.length})</button>${caps.map(([k, n]) => `<button type="button" class="oxi-cap${capFiltro === k ? ' oxi-on' : ''}" data-cap="${esc(k)}">${esc(k)} (${n})</button>`).join('')}</div>` : ''}
         <div class="oxi-barra"><input id="oxi-buscar" type="search" placeholder="Buscar serie, capacidad, lugar o centro…" value="${esc(busca)}" autocomplete="off">
+            <button type="button" class="btn btn-outline" id="oxi-prec-todos"${lista.length ? '' : ' disabled'}>Precintos (${lista.length})</button>
             <button type="button" class="btn btn-outline" id="oxi-alta">+ Agregar balones</button>
             <button type="button" class="btn btn-primary" id="oxi-entrega"${sel.size ? '' : ' disabled'}>Acta de entrega (${sel.size})</button></div>
         <div class="oxi-lista">${lista.length ? lista.map(e => {
@@ -229,6 +230,7 @@
                 <span class="oxi-est" style="background:${st.color}">${esc(st.txt)}</span>
                 <small>${esc(e.ubicacion || '')}${e.estado === 'PRESTADO' && e.ultimaEntregaActa ? ' · acta ' + esc(e.ultimaEntregaActa) : ''} · ${num(e.recargas)} recarga(s)${e.ultimaRecarga ? ' · última ' + esc(e.ultimaRecarga) : ''}</small></div>
               <select class="oxi-acc" data-id="${esc(e.id)}"><option value="">Acción…</option>${accionesPara(e.estado).map(a => `<option value="${a.k}">${esc(a.txt)}</option>`).join('')}</select>
+              <button type="button" class="btn btn-outline oxi-prec" data-id="${esc(e.id)}" title="Imprimir precinto con N° de serie">Precinto</button>
               <button type="button" class="btn btn-outline oxi-hist" data-id="${esc(e.id)}">Historial</button></div>
               <div class="oxi-ev" id="oxi-ev-${esc(e.id)}"${eventosAbiertos[e.id] ? '' : ' style="display:none"'}>${eventosAbiertos[e.id] ? eventosHTML(eventosAbiertos[e.id]) : ''}</div>`;
         }).join('') : '<p class="act-hint">Sin equipos con ese filtro. Usa "+ Agregar balones".</p>'}</div>`;
@@ -255,6 +257,9 @@
     function enlazar() {
         const r = root(), $$ = (s) => r.querySelectorAll(s);
         $$('.oxi-card').forEach(b => b.addEventListener('click', () => { filtro = b.dataset.f; pintar(); }));
+        const abrirPrec = (lst) => { if (window.SAR_Precintos && window.SAR_Precintos.abrirOxigeno) window.SAR_Precintos.abrirOxigeno(lst); else toast('Precinto', 'El módulo de precintos aún no carga.', 'error'); };
+        $$('.oxi-prec').forEach(b => b.addEventListener('click', () => abrirPrec(equipos.filter(e => e.id === b.dataset.id))));
+        const bt = r.querySelector('#oxi-prec-todos'); if (bt) bt.addEventListener('click', () => abrirPrec(filtrados()));
         $$('.oxi-cap').forEach(b => b.addEventListener('click', () => { capFiltro = b.dataset.cap; pintar(); }));
         r.querySelector('#oxi-buscar').addEventListener('input', (e) => { busca = e.target.value; const p = e.target.selectionStart; pintar(); const n = document.getElementById('oxi-buscar'); n.focus(); n.setSelectionRange(p, p); });
         $$('.oxi-sel').forEach(c => c.addEventListener('change', () => { c.checked ? sel.add(c.dataset.id) : sel.delete(c.dataset.id); pintar(); }));

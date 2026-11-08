@@ -23,8 +23,14 @@
     return cods.map(c => C128[c]).join('').split('').map(Number); /* [barra, espacio, barra, …] en módulos */
   }
   const digitos = (f) => String(f).replace(/\D/g, '');
-  function barrasSVG(texto, alto) {
-    const a = barras(digitos(texto)), total = a.reduce((x, y) => x + y, 0); let x = 0, r = '';
+  function barrasB(texto) {
+    const cods = [104]; let suma = 104, i = 0;
+    String(texto).split('').forEach((ch) => { const v = ch.charCodeAt(0) - 32; if (v < 0 || v > 95) return; i++; cods.push(v); suma += v * i; });
+    cods.push(suma % 103, 106);
+    return cods.map(c => C128[c]).join('').split('').map(Number);
+  }
+  function barrasSVG(texto, alto, juegoB) {
+    const a = juegoB ? barrasB(texto) : barras(digitos(texto)), total = a.reduce((x, y) => x + y, 0); let x = 0, r = '';
     a.forEach((w, i) => { if (i % 2 === 0) r += '<rect x="' + x + '" y="0" width="' + w + '" height="' + alto + '"/>'; x += w; });
     return '<svg class="pr-bar" viewBox="0 0 ' + total + ' ' + alto + '" preserveAspectRatio="none" aria-label="Código de barras ' + esc(texto) + '"><g fill="#000">' + r + '</g></svg>';
   }
@@ -57,11 +63,11 @@
     return out;
   }
 
-  function imprimir() {
-    if (!lote.length) return;
+  function imprimir() { if (lote.length) imprimirHtml(lote.map(etiquetaHTML)); }
+  function imprimirHtml(arr) {
     let zona = document.getElementById('precinto-print');
     if (!zona) { zona = document.createElement('div'); zona.id = 'precinto-print'; document.body.appendChild(zona); }
-    zona.innerHTML = lote.map(etiquetaHTML).join('');
+    zona.innerHTML = arr.join('');
     document.body.classList.add('imprimiendo-precinto');
     const fin = () => { document.body.classList.remove('imprimiendo-precinto'); window.removeEventListener('afterprint', fin); };
     window.addEventListener('afterprint', fin);
@@ -93,6 +99,43 @@
       d.text('Reporta incid.:', 3, 51); d.line(25, 51, 97, 51); d.text('Motivo:', 3, 56); d.line(17, 56, 97, 56);
     });
     d.save('precintos-' + lote[0].folio + (lote.length > 1 ? '_a_' + lote[lote.length - 1].folio : '') + '.pdf');
+  }
+
+  // ---- Precinto de control de oxígeno (modelo «Precinto Zebra Oxígeno 100×60»): el N° de serie sale solo ----
+  const OXI_ESTADOS = ['LLENO / NUEVO', 'EN USO', 'VACÍO', 'FUERA DE SERVICIO'];
+  function etiquetaOxiHTML(e) {
+    return '<section class="precinto pr-oxi"><div class="po-izq"><img src="assets/logo-sar.png" alt="SAR" class="po-logo"><div class="po-tit">CONTROL DE OXÍGENO</div>' +
+      '<div class="po-serie"><span>N° SERIE</span> ' + esc(e.serie) + '</div>' + (e.capacidad ? '<div class="po-cap">' + esc(e.capacidad) + '</div>' : '') +
+      '<div class="po-c">Proveedor: <i></i></div><div class="po-c">Fecha carga: <i class="s">__/__/20__</i></div><div class="po-c">Revisado por: <i></i></div><div class="po-c">Reporta incid.: <i></i></div></div>' +
+      '<div class="po-der">' + OXI_ESTADOS.map(x => '<div class="pr-chk"><i></i>' + x + '</div>').join('') + '<div class="po-mot">Motivo F. Servicio:<i></i><i></i></div>' + barrasSVG(e.serie, 10, true) + '</div></section>';
+  }
+  async function pdfOxigeno(equipos) {
+    const J = window.jspdf && window.jspdf.jsPDF; if (!J) { toast('PDF', 'La librería de PDF aún no carga; intenta de nuevo.', 'error'); return; }
+    const logo = await cargarLogo(), d = new J({ orientation: 'landscape', unit: 'mm', format: [100, 60] });
+    equipos.forEach((e, k) => {
+      if (k) d.addPage([100, 60], 'landscape');
+      d.setDrawColor(0); d.setTextColor(0); d.setLineWidth(0.4); d.rect(1.5, 1.5, 97, 57);
+      if (logo) { const h = 9, w = Math.min(h * logo.r, 24); d.addImage(logo.d, 'PNG', 4, 3.5, w, w / logo.r); }
+      d.setFont('helvetica', 'bold'); d.setFontSize(9); d.text('CONTROL DE OXÍGENO', 4, 17);
+      d.setFontSize(7); d.text('N° SERIE', 4, 22); d.setFontSize(13); d.text(String(e.serie).slice(0, 14), 17, 22.5);
+      if (e.capacidad) { d.setFontSize(7.5); d.text(String(e.capacidad), 4, 26.5); }
+      d.setFontSize(7.5);
+      [['Proveedor:', 43], ['Fecha carga: __/__/20__', null], ['Revisado por:', 43], ['Reporta incid.:', 43]].forEach((c, i) => { const y = 32 + i * 6; d.text(c[0], 4, y); if (c[1]) d.line(d.getTextWidth(c[0]) + 6, y, c[1], y); });
+      d.setLineWidth(0.3); d.line(50, 4, 50, 56);
+      OXI_ESTADOS.forEach((x, i) => { const y = 9 + i * 6; d.rect(53, y - 2.7, 3.2, 3.2); d.setFontSize(7.5); d.text(x, 58, y); });
+      d.setFontSize(7); d.text('Motivo F. Servicio:', 53, 36); d.line(53, 41, 96, 41); d.line(53, 46, 96, 46);
+      const a = barrasB(e.serie), tot = a.reduce((x, y) => x + y, 0), mod = Math.min(42 / tot, 0.5); let xx = 53; a.forEach((w, i) => { if (i % 2 === 0) d.rect(xx, 49.5, w * mod, 6, 'F'); xx += w * mod; });
+    });
+    d.save('precintos-oxigeno-' + (equipos.length === 1 ? String(equipos[0].serie).replace(/[^\w-]+/g, '_') : equipos.length + '-balones') + '.pdf');
+  }
+  function abrirOxigeno(equipos) {
+    if (!equipos || !equipos.length) { toast('Precinto', 'No hay balones para imprimir.', 'error'); return; }
+    let m = document.getElementById('modal-precinto'); if (!m) { m = document.createElement('div'); m.id = 'modal-precinto'; m.className = 'modal-overlay'; document.body.appendChild(m); }
+    m.innerHTML = '<div class="modal-content pr-modal"><div class="modal-header"><div><span class="text-primary font-bold text-sm">OXÍGENO PORTÁTIL</span><h2>Precinto de control</h2></div><button type="button" class="btn btn-icon close-modal-btn" data-pr="cerrar"><i class="ph ph-x"></i></button></div>' +
+      '<div class="modal-body"><p class="sub-text">' + equipos.length + ' precinto(s) con N° de serie automático' + (equipos.length > 1 ? ' (vista previa del primero)' : '') + '. Formato 100×60 mm para la Zebra.</p><div class="pr-vista">' + etiquetaOxiHTML(equipos[0]) + '</div></div>' +
+      '<div class="modal-footer pr-pie-m"><button type="button" class="btn btn-outline" data-pr="cerrar">Cerrar</button><button type="button" class="btn btn-outline" data-pr="pdf"><i class="ph-bold ph-file-pdf"></i> Descargar PDF</button><button type="button" class="btn btn-primary" data-pr="imprimir"><i class="ph-bold ph-printer"></i> Imprimir</button></div></div>';
+    m.classList.add('active');
+    m.onclick = (e) => { const b = e.target.closest('[data-pr]'); if (!b) return; if (b.dataset.pr === 'cerrar') m.classList.remove('active'); else if (b.dataset.pr === 'imprimir') imprimirHtml(equipos.map(etiquetaOxiHTML)); else if (b.dataset.pr === 'pdf') pdfOxigeno(equipos); };
   }
 
   async function bodegasNombres() {
@@ -141,7 +184,7 @@
     b.addEventListener('click', abrir); h.insertAdjacentElement('afterend', b);
   }
   if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('DOMContentLoaded', montarBoton);
-  const api = { barras, digitos, folio, etiquetaHTML, campos, abrir, imprimir, pdf, ESTADOS };
+  const api = { barrasB, etiquetaOxiHTML, abrirOxigeno, barras, digitos, folio, etiquetaHTML, campos, abrir, imprimir, pdf, ESTADOS };
   if (typeof window !== 'undefined') window.SAR_Precintos = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : {}, typeof document !== 'undefined' ? document : {});

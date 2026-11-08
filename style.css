@@ -5805,3 +5805,10 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 @keyframes mlGira { to { transform: rotate(360deg); } }
 .ml-busy { pointer-events: none; opacity: .85; } .ml-busy::before { content: ''; display: inline-block; width: 14px; height: 14px; margin-right: 8px; vertical-align: -2px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: mlGira .7s linear infinite; }
 @media (prefers-reduced-motion: reduce) { #sar-topbar span, .ml-busy::before { animation-duration: 3s; } }
+
+/* Búsqueda global (v21.67) */
+.bg-res { background: rgba(0,0,0,.18); border: 1px solid rgba(255,255,255,.14); border-radius: 10px; padding: 4px; display: flex; flex-direction: column; gap: 2px; max-height: 52vh; overflow-y: auto; animation: mvIn .2s ease both; } .bg-res[hidden] { display: none; }
+.bg-h { margin: 6px 8px 2px; font-size: 10px; letter-spacing: .8px; text-transform: uppercase; color: rgba(255,255,255,.55); }
+.bg-fila { display: flex; align-items: flex-start; gap: 10px; width: 100%; background: transparent; border: 0; color: #fff; font: inherit; text-align: left; padding: 8px 10px; border-radius: 8px; cursor: pointer; min-height: 44px; } .bg-fila:hover, .bg-fila:focus-visible { background: rgba(255,255,255,.12); outline: 0; } .bg-fila i { font-size: 18px; margin-top: 2px; color: var(--sar-yellow, #F3D015); } .bg-fila span { min-width: 0; display: flex; flex-direction: column; } .bg-fila b { font-size: 13px; overflow-wrap: anywhere; } .bg-fila small { font-size: 11.5px; color: rgba(255,255,255,.65); overflow-wrap: anywhere; }
+.bg-vacio { color: rgba(255,255,255,.7); font-size: 12.5px; text-align: center; padding: 10px 6px; margin: 0; } .bg-res .sar-cargando { padding: 14px 8px; color: #fff; } .bg-res .sar-cargando strong { font-size: 12.5px; }
+.sidebar.collapsed .bg-res { display: none; }

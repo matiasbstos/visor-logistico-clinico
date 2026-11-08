@@ -698,3 +698,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.120 Ajuste de pruebas de la carga global (v21.66)
 - `cargando-global.js` solo se inicia cuando existe un DOM real (corrige la prueba en Node). Sin cambios de comportamiento.
+
+### 4.121 Búsqueda global en el buscador del menú (v21.67)
+- Nuevo `buscador-global.js`: al escribir 2+ letras en el buscador del menú, además de las pantallas aparecen resultados agrupados de **Productos** (por código o nombre, con total y número de ubicaciones), **Órdenes de compra** (número, proveedor o producto), **Actas de entrega** (número, centro, producto o documento) y **Bodegas**. Al elegir uno lleva a la pantalla: producto → Existencias con el nombre ya filtrado; OC → abre su detalle; acta → abre el acta; bodega → Bodegas. Enter abre el primer resultado.
+- Costo: la primera búsqueda lee una vez Insumos, Seguimiento_OC, Actas_Entrega (últimas 300), Bodegas y deja un índice en memoria por 10 minutos (se precarga al enfocar el buscador). Solo lee lo que el rol ve en el menú. Si el índice se vuelve pesado, se puede limitar o pasar a Cloud Function.
+- Sin tildes ni mayúsculas; todas las palabras deben aparecer.

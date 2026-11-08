@@ -8,6 +8,7 @@
         const p = document.createElement('div'); p.className = 'r-prog sar-prog'; p.setAttribute('role', 'status'); p.setAttribute('aria-live', 'polite');
         p.innerHTML = `<div class="r-prog__c"><div class="sar-prog__marca" aria-hidden="true"><span class="sar-prog__anillo"></span><img src="assets/logo-sar.png" alt=""></div><strong class="r-prog__t"></strong><ul class="r-prog__l"></ul></div>`;
         (padre || document.body).appendChild(p);
+        try { if (window.SAR_Sonidos) window.SAR_Sonidos.tocar('carga'); } catch (e) { /* sin sonido */ }
         const t = p.querySelector('.r-prog__t'), l = p.querySelector('.r-prog__l');
         t.textContent = titulo || 'Procesando…';
         const paso = (txt) => { const ult = l.lastElementChild; if (ult) ult.classList.add('ok'); const li = document.createElement('li'); li.textContent = txt; l.appendChild(li); l.scrollTop = l.scrollHeight; t.textContent = txt; };
@@ -17,10 +18,11 @@
             listo(txt, opc) {
                 [...l.children].forEach(x => x.classList.add('ok')); p.classList.add('r-prog--ok'); t.textContent = txt;
                 if (opc && opc.informe) { const li = document.createElement('li'); li.className = 'ok'; li.textContent = 'Informes contable y disponible actualizados'; l.appendChild(li); }
+                if (opc && opc.aviso === false) { try { if (window.SAR_Sonidos) window.SAR_Sonidos.tocar('listo'); } catch (e) { /* sin sonido */ } }
                 if (!(opc && opc.aviso === false) && typeof window.showToast === 'function') try { window.showToast('Listo', txt, 'success'); } catch (e) { /* sin aviso */ }
                 setTimeout(() => p.remove(), (opc && opc.ms) || 1400);
             },
-            error() { p.remove(); },
+            error() { p.remove(); try { if (window.SAR_Sonidos) window.SAR_Sonidos.tocar('error'); } catch (e) { /* sin sonido */ } },
             cerrar() { p.remove(); }
         };
     }

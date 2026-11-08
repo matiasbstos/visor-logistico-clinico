@@ -812,3 +812,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.143 Quitar opciones propias de gas y capacidad (v21.89)
 - Cuando en la lista de «Capacidad» o «Tipo de gas» se elige una opción **agregada por el usuario**, aparece **Quitar esta opción de la lista**. Las opciones base (oxígeno medicinal, aire comprimido, 0,5/1/2/3/5 m³) no se pueden quitar.
 - Si algún balón usa esa opción, no se quita y se avisa cuántos la usan (hay que cambiarles el gas/capacidad primero). Quitar una opción no borra balones ni historial.
+
+### 4.144 Sonidos de la interfaz y campana de avisos con protagonismo (v21.90)
+- **Sonidos** (`sonidos.js`, tonos sintetizados, sin archivos; volumen bajo): *ingreso* = arpegio ascendente de 4 notas (los 4 colores del logo) al entrar; *carga* = toque corto al iniciar una acción; *listo* = dos notas que suben al terminar bien; *error* = dos notas graves que bajan; *aviso* = dos notas iguales; *notificación* = campanilla cuando aparece un aviso nuevo; *info* = una nota suave. Suenan con los mensajes emergentes y con la animación de logo (guardar/crear/subir).
+- **Control:** botón de altavoz junto a la campana (silenciar/activar, se recuerda en el equipo). Por política del navegador el audio parte después del primer clic o tecla.
+- **Campana:** ahora es un botón grande con la palabra «Avisos» (solo el ícono en celular), se tiñe de rojo con avisos pendientes, vibra al llegar uno nuevo (respeta «reducir movimiento») y el panel es más ancho.
+- **Contenido del panel:** además de entregas con stock y recepciones parciales, suma **vencidos con stock, por vencer (30 días), bajo el mínimo y préstamos por devolver**, cada uno con su acceso directo. El contador suma todos. Los vencimientos y el stock bajo se calculan con los datos de inventario ya cargados en el navegador.

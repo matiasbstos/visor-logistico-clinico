@@ -713,3 +713,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - **Cambio:** bloque final «Identidad visual unificada» con tokens (`--id-r`, `--id-sombra`…): tarjetas de 14 px conservando la esquina inferior izquierda recta del logo SAR, sombra suave, botones y campos de 10 px con foco azul, cabeceras de tabla uniformes, ventanas de 20 px y títulos como en el login.
 - **Carga:** corrección de v21.68: los «Cargando…» que vienen en el HTML inicial también pasan a esqueleto (revisión única al abrir). Esqueleto más compacto.
 - **Pendiente (siguientes pasos):** reemplazar colores escritos a mano por tokens, quitar botones duplicados de la hoja y revisar Existencias, Seguimiento de OC y modales con datos reales.
+
+### 4.124 Sin bordes de acento lateral y guía de identidad (v21.70)
+- **Pedido del usuario:** quitar el borde de color a un costado (Urgencias, tarjetas de Inicio, etc.), por ser huella típica de sitios hechos con IA.
+- **Cambio:** se neutralizan en tarjetas de resumen, tablas de Inicio, avisos, hallazgos de la bitácora, kanban, flujo, calendario, notificaciones y menú activo (incluye los estilos escritos en línea). El estado ahora se indica con **punto de color** junto al título, ícono/texto y fondo suave por tono.
+- **Entrenamiento del agente UX/UI:** nueva guía `docs/IDENTIDAD_VISUAL.md` (principios, prohibiciones, referencias estudiadas, estado de migración) y `ux-ui-flujo` actualizado para auditar identidad (huellas de IA, tokens, movimiento, densidad) con «antes → después».

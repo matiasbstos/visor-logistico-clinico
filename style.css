@@ -5953,3 +5953,8 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .pm-num { display: flex; flex-direction: column; text-align: right; line-height: 1.1; } .pm-num b { font-size: 20px; color: var(--sar-orange); } .pm-num small { font-size: 10px; color: var(--text-muted); }
 .pm-acc { display: flex; gap: 6px; align-items: center; } .pm-acc input { width: 76px; height: 38px; font-size: 16px; padding: 0 8px; border: 1px solid var(--id-borde, #e2e8f0); border-radius: var(--id-r-sm, 10px); }
 @media (max-width: 767px) { .pm-acc { width: 100%; } .pm-acc .btn { flex: 1; justify-content: center; } .pm-num { text-align: left; } }
+
+/* Precinto activo en el escaneo (v21.83) */
+.pr-activo { display: flex; align-items: center; gap: 8px; margin: 8px 0; padding: 8px 12px; border: 1px solid var(--id-borde, #e2e8f0); border-radius: var(--id-r-sm, 10px); background: #f8fafc; font-size: 12px; color: var(--text-main); }
+.pr-activo i { color: var(--sar-blue); font-size: 16px; } .pr-activo span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pr-activo button { border: 0; background: none; font-size: 20px; line-height: 1; cursor: pointer; color: var(--text-muted); min-width: 32px; min-height: 32px; }

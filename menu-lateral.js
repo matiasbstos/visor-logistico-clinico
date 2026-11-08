@@ -20,6 +20,7 @@
     const BLOQUES = ['INVENTARIO', 'MOVIMIENTOS', 'COMPRAS', 'TURNO CLÍNICO', 'ADMINISTRACIÓN'];
     if (typeof module !== 'undefined') module.exports = { norm, coincide, ORDEN, SUBMENUS, BLOQUES };
     if (typeof document === 'undefined' || !document.querySelector) return;
+    if (typeof location !== 'undefined' && /[?&]seguro=1/.test(location.search || '')) return;   // modo seguro: abre el sitio sin este módulo
 
     const LS = 'sar_menu_v1';
     let estado = {}; try { estado = JSON.parse(localStorage.getItem(LS) || '{}') || {}; } catch (e) { estado = {}; }

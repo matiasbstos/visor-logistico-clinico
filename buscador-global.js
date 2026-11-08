@@ -30,6 +30,7 @@
     }
     if (typeof module !== 'undefined') module.exports = { norm, construirIndice, buscar };
     if (typeof document === 'undefined' || !document.createElement || !document.addEventListener) return;
+    if (typeof location !== 'undefined' && /[?&]seguro=1/.test(location.search || '')) return;   // modo seguro: abre el sitio sin este módulo
 
     const META = { producto: ['ph-package', 'Productos', 'view-inventario'], oc: ['ph-clipboard-text', 'Órdenes de compra', 'view-seguimiento-oc'], acta: ['ph-file-text', 'Actas de entrega', 'view-actas-entrega'], bodega: ['ph-buildings', 'Bodegas', 'view-bodegas'] };
     const esc = s => (window.escapeHTML ? window.escapeHTML(String(s == null ? '' : s)) : String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));

@@ -624,3 +624,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Actas de entrega: correo al emitir (PDF adjunto), al confirmar la entrega (acta firmada adjunta, detalle y fecha), al subir la firmada y al eliminar. Cada envío queda registrado en `Contadores/aviso-<acta>-<evento>` y aparece en la bitácora del acta ("Correo de respaldo enviado").
 - Movimientos: un oyente de Historial_Movimientos avisa (una vez por operación, agrupando líneas) ajustes, traspasos entre bodegas, ingresos, cargas masivas, mermas, tomas/eliminaciones/reinicios de inventario, cierres de bodega y ediciones de acta. No avisa los consumos a paciente (salidas), ni lo que ya tiene correo propio (recepción de OC, entrega de acta, anulación de acta, cuadres).
 - Solo envía el navegador que hizo la operación; si el envío automático no está configurado no abre borradores y queda registrado "sin configurar".
+
+### 4.105 Revisión de seguridad: cuentas sin rol y errores técnicos (v21.52)
+- `firestore.rules`: las colecciones de datos (Insumos, Bodegas, Historial_Movimientos —escritura—, Metadata, Configuracion, Bandejas, Plantillas, Racks, Inventarios semanales, Respaldos de toma, Solicitudes de ajuste) exigen `hasRole()` en vez de solo estar autenticado: una cuenta creada sin perfil en /Usuarios ya no lee ni escribe nada. **Las reglas las despliega el usuario a mano** (la Action solo publica el sitio).
+- Los errores globales del navegador ya no muestran el texto técnico al usuario (queda en la consola); se muestra un mensaje simple.
+- Revisado sin cambios: la apiKey de Firebase en el cliente es pública por diseño (protege la regla, no la clave); los scripts de administración (reset-pwd, make-superadmin, etc.) están excluidos del hosting.
+- Pendiente sugerido: App Check (límite de peticiones), restringir la apiKey por dominio en Google Cloud, rotar la contraseña expuesta en el commit 9c54373, página de licencias/términos, pruebas automáticas con Playwright.

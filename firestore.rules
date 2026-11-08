@@ -85,7 +85,7 @@ service cloud.firestore {
     // GESTIÓN DE BODEGAS (Sucursales)
     // -----------------------------------------------------
     match /Bodegas/{bodegaId} {
-      allow read: if isAuthenticated();
+      allow read: if hasRole();
       allow write: if isAdmin();
     }
 
@@ -106,7 +106,7 @@ service cloud.firestore {
     // CIBERSEGURIDAD: Reglas de la Colección 'Insumos'
     // -----------------------------------------------------
     match /Insumos/{insumoId} {
-      allow read: if isAuthenticated();
+      allow read: if hasRole();
       allow create: if isOperadorOrAdmin();
       allow update: if isOperadorOrAdmin();
       allow delete: if isAdmin();
@@ -116,7 +116,7 @@ service cloud.firestore {
     // AUDITORÍA INMUTABLE: Log de cambios locales
     // -----------------------------------------------------
     match /Insumos/{insumoId}/audit_logs/{logId} {
-      allow create: if isAuthenticated() && request.resource.data.action == 'ACTUALIZACION';
+      allow create: if hasRole() && request.resource.data.action == 'ACTUALIZACION';
       allow read: if isAdmin(); // Solo admins pueden auditar inventario detallado
       allow update: if false; 
       allow delete: if isSuperAdmin();
@@ -127,7 +127,7 @@ service cloud.firestore {
     // -----------------------------------------------------
     match /Historial_Movimientos/{movId} {
       allow read: if hasRole(); // Solo usuarios con rol asignado (el historial antiguo puede contener RUT de pacientes)
-      allow create: if isAuthenticated();
+      allow create: if hasRole();
       // Solo el superadministrador, y solo para quitar datos de pacientes antiguos (anonimizar-pacientes.js)
       allow update: if isSuperAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rutPaciente', 'nombrePaciente', 'camaPaciente', 'document']);
@@ -151,7 +151,7 @@ service cloud.firestore {
     }
 
     match /Solicitudes_Ajuste/{id} {
-       allow read, write: if isAuthenticated();
+       allow read, write: if hasRole();
     }
     
     match /Auditoria/{id} {
@@ -159,13 +159,13 @@ service cloud.firestore {
     }
     
     match /Configuracion/global {
-      allow read: if isAuthenticated(); // Lectura de configuracion general
+      allow read: if hasRole(); // Lectura de configuracion general
       allow write: if isAdmin();
     }
 
     match /Metadata/{id} {
-       allow read: if isAuthenticated(); // Dashboard stats
-       allow update, create: if isAuthenticated(); // Utilizado por runTransaction
+       allow read: if hasRole(); // Dashboard stats
+       allow update, create: if hasRole(); // Utilizado por runTransaction
        allow write: if isAdmin();
     }
 
@@ -252,19 +252,19 @@ service cloud.firestore {
     // -----------------------------------------------------
     match /Bandejas_Turno/{bandejaId} {
       allow read: if hasRole(); // las bandejas antiguas pueden contener RUT de pacientes
-      allow create, update: if isAuthenticated();
+      allow create, update: if hasRole();
       allow delete: if isAdmin() || getUserRole() == 'operador';
     }
 
     match /Bandejas_Turno/{bandejaId}/Auditoria_Turno/{auditId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if hasRole();
     }
 
     // -----------------------------------------------------
     // GESTIÓN DE PLANTILLAS (PACKS)
     // -----------------------------------------------------
     match /Plantillas_Bandejas/{plantillaId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if hasRole();
     }
 
     // -----------------------------------------------------
@@ -278,15 +278,15 @@ service cloud.firestore {
     // INVENTARIO SEMANAL, RACKS Y RESPALDOS EN LA NUBE
     // -----------------------------------------------------
     match /Grupos_Racks/{rackId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if hasRole();
     }
 
     match /Inventarios_Semanales/{semanaId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if hasRole();
     }
 
     match /Respaldos_Toma_Inventario/{backupId} {
-      allow read, write: if isAuthenticated();
+      allow read, write: if hasRole();
     }
 
     // -----------------------------------------------------

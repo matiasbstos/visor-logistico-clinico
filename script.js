@@ -45,13 +45,13 @@ const onSnapshot = (ref, ...rest) => _onSnapshot(ref, ...rest.map(a => {
 window.addEventListener('error', function (event) {
     console.error("Error Global Interceptado:", event.error || event.message);
     if (window.showToast) {
-        window.showToast('Error Interno', 'Ha ocurrido un error en la aplicación: ' + (event.message || 'Desconocido'), 'error');
+        window.showToast('Error Interno', 'Ocurrió un problema inesperado. Si se repite, avisa a soporte indicando qué estabas haciendo.', 'error');
     }
 });
 window.addEventListener('unhandledrejection', function (event) {
     console.error("Promesa Rechazada No Manejada:", event.reason);
     if (window.showToast && event.reason && event.reason.message) {
-        window.showToast('Error Interno', 'Ha ocurrido un error asíncrono: ' + event.reason.message, 'error');
+        window.showToast('Error Interno', 'Una operación no se pudo completar. Revisa tu conexión y reintenta.', 'error');
     }
 });
 

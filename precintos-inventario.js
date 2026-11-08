@@ -52,7 +52,24 @@
     return f.runTransaction(db(), async (tx) => { const s = await tx.get(ref); const ult = s.exists() ? Number(s.data().ultimo) || 0 : 0; tx.set(ref, { ultimo: ult + n, tipo: 'contador-precinto', updatedAt: f.serverTimestamp() }, { merge: true }); return ult + 1; });
   }
   /** Folios PO-AAAA-NNNN para precintos de oxígeno; cada etiqueta física lleva su correlativo. */
-  async function reservarOxi(equipos) {
+  async function foliosOxiExistentes() {
+    const f = fs(), m = {};
+    try { const q = await f.getDocs(f.query(f.collection(db(), 'Contadores'), f.where('tipo', '==', 'precinto-oxigeno'))); q.forEach(x => { const v = x.data(); if (v.serie && v.folio && (!m[v.serie] || v.folio > m[v.serie])) m[v.serie] = v.folio; }); } catch (e) { console.warn('[Precintos] sin historial de folios', e); }
+    return m;
+  }
+  async function reservarOxi(equipos, reutilizar) {
+    const f0 = fs(), prev = reutilizar ? await foliosOxiExistentes() : {}, nuevos = equipos.filter(e => !prev[e.serie]);
+    const base = nuevos.length ? await reservarOxiNuevos(nuevos) : [];
+    const porSerie = {}; base.forEach(b => { porSerie[b.serie] = b; });
+    const out = [];
+    for (const e of equipos) {
+      if (porSerie[e.serie]) { out.push(porSerie[e.serie]); continue; }
+      const folioOxi = prev[e.serie]; out.push(Object.assign({}, e, { folio: folioOxi }));
+      await f0.setDoc(f0.doc(f0.collection(db(), 'Contadores'), 'pin-' + folioOxi), { tipo: 'precinto-oxigeno', folio: folioOxi, serie: e.serie || '', gas: e.gas || 'Oxígeno medicinal', capacidad: e.capacidad || '', proveedor: e.proveedor || '', fechaCarga: e.ultimaRecarga || '', creadoPor: usuario(), updatedAt: f0.serverTimestamp() });
+    }
+    return out;
+  }
+  async function reservarOxiNuevos(equipos) {
     const anio = new Date().getFullYear(), f = fs(), n = equipos.length, ref = f.doc(f.collection(db(), 'Contadores'), 'precinto-oxi-' + anio);
     const primero = await f.runTransaction(db(), async (tx) => { const s = await tx.get(ref); const ult = s.exists() ? Number(s.data().ultimo) || 0 : 0; tx.set(ref, { ultimo: ult + n, tipo: 'contador-precinto-oxigeno', updatedAt: f.serverTimestamp() }, { merge: true }); return ult + 1; });
     const out = [];
@@ -148,11 +165,11 @@
     if (!equipos || !equipos.length) { toast('Precinto', 'No hay balones para imprimir.', 'error'); return; }
     let m = document.getElementById('modal-precinto'); if (!m) { m = document.createElement('div'); m.id = 'modal-precinto'; m.className = 'modal-overlay'; document.body.appendChild(m); }
     m.innerHTML = '<div class="modal-content pr-modal"><div class="modal-header"><div><span class="text-primary font-bold text-sm">OXÍGENO PORTÁTIL</span><h2>Precinto de control</h2></div><button type="button" class="btn btn-icon close-modal-btn" data-pr="cerrar"><i class="ph ph-x"></i></button></div>' +
-      '<div class="modal-body"><p class="sub-text">' + equipos.length + ' precinto(s) con N° de serie automático' + (equipos.length > 1 ? ' (vista previa del primero)' : '') + '. El folio correlativo se asigna al imprimir o descargar. Formato 100×60 mm para la Zebra.</p><div class="pr-vista">' + etiquetaOxiHTML(equipos[0]) + '</div></div>' +
+      '<div class="modal-body"><p class="sub-text">' + equipos.length + ' precinto(s) con N° de serie automático' + (equipos.length > 1 ? ' (vista previa del primero)' : '') + '. El folio correlativo se asigna al imprimir o descargar. Formato 100×60 mm para la Zebra.</p><label class="pr-reuso"><input type="checkbox" id="pr-reuso" checked> Si el balón ya tiene precinto, reimprimirlo con su mismo folio y el diseño actual</label><div class="pr-vista">' + etiquetaOxiHTML(equipos[0]) + '</div></div>' +
       '<div class="modal-footer pr-pie-m"><button type="button" class="btn btn-outline" data-pr="cerrar">Cerrar</button><button type="button" class="btn btn-outline" data-pr="pdf"><i class="ph-bold ph-file-pdf"></i> Descargar PDF</button><button type="button" class="btn btn-primary" data-pr="imprimir"><i class="ph-bold ph-printer"></i> Imprimir</button></div></div>';
     m.classList.add('active');
     let asignados = null;
-    const asignar = async () => { if (!asignados) { asignados = await reservarOxi(equipos); const v = m.querySelector('.pr-vista'); if (v) v.innerHTML = etiquetaOxiHTML(asignados[0]); const t = m.querySelector('.sub-text'); if (t) t.textContent = asignados.length + ' precinto(s): ' + asignados[0].folio + (asignados.length > 1 ? ' a ' + asignados[asignados.length - 1].folio : '') + '. Formato 100×60 mm para la Zebra.'; } return asignados; };
+    const asignar = async () => { if (!asignados) { const ch = m.querySelector('#pr-reuso'); asignados = await reservarOxi(equipos, !ch || ch.checked); if (ch) ch.disabled = true; const v = m.querySelector('.pr-vista'); if (v) v.innerHTML = etiquetaOxiHTML(asignados[0]); const t = m.querySelector('.sub-text'); if (t) t.textContent = asignados.length + ' precinto(s): ' + asignados[0].folio + (asignados.length > 1 ? ' a ' + asignados[asignados.length - 1].folio : '') + '. Formato 100×60 mm para la Zebra.'; } return asignados; };
     m.onclick = async (e) => {
       const b = e.target.closest('[data-pr]'); if (!b) return; const a = b.dataset.pr;
       if (a === 'cerrar') { m.classList.remove('active'); return; }

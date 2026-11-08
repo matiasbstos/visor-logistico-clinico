@@ -5904,3 +5904,20 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .toma-lista .tf-lote::before, .toma-lista .tf-vto::before, .toma-lista .tf-ubi::before { content: attr(data-l) ": "; font-size: 11px; color: var(--text-muted); }
 .toma-lista .tf-sync { order: 9; } .toma-lista .tf-acc { order: 10; margin-left: auto; }
 .toma-lista tr:not(.toma-fila), .toma-lista tr:not(.toma-fila) td { display: block; }
+
+/* Explorador de bodega (v21.78) */
+#bodega-explorador .bx-barra { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+#bodega-explorador .bx-busca { flex: 1 1 200px; display: flex; align-items: center; gap: 8px; padding: 0 12px; border: 1px solid var(--id-borde, #e2e8f0); border-radius: var(--id-r-sm, 10px); background: #fff; }
+#bodega-explorador .bx-busca input { flex: 1; border: 0; outline: 0; height: 40px; font-size: 16px; background: none; min-width: 0; }
+#bodega-explorador #bx-cat { flex: 1 1 160px; min-width: 0; height: 42px; font-size: 14px; border: 1px solid var(--id-borde, #e2e8f0); border-radius: var(--id-r-sm, 10px); padding: 0 10px; background: #fff; }
+#bodega-explorador .bx-lista { display: flex; flex-direction: column; gap: 8px; max-height: 46vh; overflow-y: auto; padding-right: 2px; }
+#bodega-explorador .bx-fila { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--id-borde, #e2e8f0); border-radius: var(--id-r-sm, 10px); background: #fff; flex-wrap: wrap; }
+#bodega-explorador .bx-foto { width: 48px; height: 48px; flex: 0 0 48px; display: flex; align-items: center; justify-content: center; }
+#bodega-explorador .bx-dato { flex: 1 1 180px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+#bodega-explorador .bx-dato b { font-size: 13px; overflow-wrap: anywhere; } #bodega-explorador .bx-dato span { font-size: 11px; color: var(--text-muted); }
+#bodega-explorador .bx-stock { font-size: 20px; font-weight: 800; color: var(--sar-blue); text-align: right; min-width: 56px; display: flex; flex-direction: column; line-height: 1; }
+#bodega-explorador .bx-stock small { font-size: 10px; font-weight: 600; color: var(--text-muted); }
+#bodega-explorador .bx-mal { color: var(--sar-red) !important; } #bodega-explorador .bx-ojo { color: var(--sar-orange) !important; }
+#bodega-explorador .bx-acc { display: flex; gap: 6px; } #bodega-explorador .bx-acc .btn { padding: 6px 10px; font-size: 12px; gap: 5px; }
+#bodega-explorador .bx-vacio { padding: 28px 12px; text-align: center; color: var(--text-muted); font-size: 13px; }
+@media (max-width: 767px) { #bodega-explorador .bx-acc { width: 100%; } #bodega-explorador .bx-acc .btn { flex: 1; justify-content: center; } }

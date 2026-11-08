@@ -5212,6 +5212,8 @@ document.addEventListener('DOMContentLoaded', () => {
             modal.dataset.currentBodegaId = bodega.id;
             modal.dataset.currentBodegaName = bodega.name;
 
+            const rsp = document.getElementById('modal-bodega-resp'); if (rsp) rsp.textContent = bodega.managerName || bodega.managerId || '—';
+            if (window.SAR_BodegaExplorador) window.SAR_BodegaExplorador.render(bodega);
             if (window.SAR_Estantes) window.SAR_Estantes.renderSeccion(bodega);
         }
 

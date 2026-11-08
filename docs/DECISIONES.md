@@ -750,3 +750,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - En Ingresos, «Tipo de compra» incluye **Préstamo / traspaso desde otro centro** para quiebres de stock sin solicitud de compra. Al elegirlo, «Proveedor» pasa a llamarse **Centro de origen** y el documento de respaldo deja de ser obligatorio (guía o memo opcional).
 - El historial guarda `origenTipo: 'prestamo_otro_centro'` y `origenCentro`, de modo que siempre se sepa de dónde provino. Sigue sumando stock y auditándose igual que cualquier ingreso.
 - Pendiente: registrar la devolución al centro de origen y mostrar el origen en el historial.
+
+### 4.132 Explorador dentro del detalle de bodega (v21.78)
+- El detalle de bodega ya no muestra «últimos movimientos» de ejemplo ni responsable fijo (eran datos ficticios): ahora muestra **qué hay en la bodega**, con buscador, filtro por categoría, foto, stock, lote, código y vencimiento (por vencer en rojo/naranja).
+- Cada producto tiene **Ajuste** (lleva a Ajustes con el producto buscado) y **Mover** (abre la transferencia con el producto ya elegido). Las bodegas se siguen creando desde el formulario «Nueva Bodega».
+- Módulo `bodega-explorador.js` (`SAR_BodegaExplorador`). Lee `Insumos` por `location` = nombre de la bodega.

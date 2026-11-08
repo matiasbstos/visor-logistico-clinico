@@ -804,3 +804,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.141 Folio correlativo en el precinto de oxígeno (v21.87)
 - Cada etiqueta de oxígeno lleva un **folio correlativo anual PO-AAAA-NNNN** (contador `Contadores/precinto-oxi-AAAA`, reservado en una transacción), impreso abajo a la izquierda, además del N.° de serie. Cada folio queda registrado en `Contadores/pin-<folio>` con serie, gas, capacidad, proveedor y fecha de carga.
 - El folio se asigna al **primer** «Imprimir» o «Descargar PDF» del diálogo; volver a imprimir en el mismo diálogo usa los mismos folios (no consume números). Un precinto nuevo, aunque sea del mismo balón, recibe un folio nuevo.
+
+### 4.142 Oxígeno: agregar tipos de gas y capacidades propias (v21.88)
+- «Capacidad» y «Tipo de gas» (al agregar balones y al cambiarlos) son listas desplegables con la opción **＋ Agregar nueva…**: al elegirla aparece un campo para escribirla.
+- Lo que se agrega queda guardado (`Contadores/oxigeno-opciones`) y aparece en las listas para todos; también se suman las que ya usan los balones. Las capacidades se normalizan («3m3» → «3 m³»).

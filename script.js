@@ -42,16 +42,25 @@ const onSnapshot = (ref, ...rest) => _onSnapshot(ref, ...rest.map(a => {
     return a;
 }));
 
+// Aviso de error global con detalle técnico corto (archivo:línea y mensaje) y sin duplicados (v21.92)
+window.__sarDetalleError = function (msg, src, linea) {
+    const arch = String(src || '').split('/').pop().split('?')[0];
+    return [arch ? arch + (linea ? ':' + linea : '') : '', String(msg || '').replace(/^Uncaught\s*/i, '').slice(0, 90)].filter(Boolean).join(' · ');
+};
+window.__sarAvisarError = function (titulo, texto, detalle) {
+    if (/ResizeObserver loop|play\(\) request was interrupted|The operation was aborted/i.test(String(detalle || ''))) return;   // avisos del navegador sin efecto
+    const ahora = Date.now(); if (window.__sarUltAviso && ahora - window.__sarUltAviso < 1500) return; window.__sarUltAviso = ahora;
+    try { localStorage.setItem('sar_ult_error', JSON.stringify({ t: ahora, d: detalle || '', v: (location.hash || '').replace('#', '') })); } catch (e) { /* sin almacenamiento */ }
+    if (window.showToast) window.showToast(titulo, texto + (detalle ? ' [' + detalle + ']' : ''), 'error');
+};
 window.addEventListener('error', function (event) {
     console.error("Error Global Interceptado:", event.error || event.message);
-    if (window.showToast) {
-        window.showToast('Error Interno', 'Ocurrió un problema inesperado. Si se repite, avisa a soporte indicando qué estabas haciendo.', 'error');
-    }
+    window.__sarAvisarError('Error Interno', 'Ocurrió un problema inesperado. Si se repite, avisa a soporte indicando qué estabas haciendo.', window.__sarDetalleError(event.message, event.filename, event.lineno));
 });
 window.addEventListener('unhandledrejection', function (event) {
     console.error("Promesa Rechazada No Manejada:", event.reason);
     if (window.showToast && event.reason && event.reason.message) {
-        window.showToast('Error Interno', 'Una operación no se pudo completar. Revisa tu conexión y reintenta.', 'error');
+        window.__sarAvisarError('Error Interno', 'Una operación no se pudo completar. Revisa tu conexión y reintenta.', window.__sarDetalleError(event.reason.message, '', ''));
     }
 });
 
@@ -316,7 +325,7 @@ export const db = initializeFirestore(app, {
 // Global Error Guard for Production
 window.onerror = function (message, source, lineno, colno, error) {
     console.error("[Global Error]:", { message, source, lineno, error });
-    if (window.showToast) window.showToast('Error de Sistema', 'Se ha detectado una anomalía. Si persiste, contacte a soporte técnico.', 'error');
+    window.__sarAvisarError('Error de Sistema', 'Se ha detectado una anomalía. Si persiste, contacte a soporte técnico.', window.__sarDetalleError(message, source, lineno));
     return false;
 };
 

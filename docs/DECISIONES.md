@@ -823,3 +823,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Tras la primera impresión en la Zebra el precinto salía chico y con márgenes. Se rediseñó para ocupar toda la etiqueta de 100×60 mm, como el modelo original: **sin marco**, logo más grande (10,5 mm), título 11,5 pt, N.° de serie en 17 pt, campos en 9,5 pt, casillas de 4 mm y barra de código de 8 mm. El PDF usa las mismas medidas.
 - Al imprimir: escala 100 %, márgenes «Ninguno», sin encabezados ni pies de página, y el tamaño de papel de la Zebra en 100×60 mm.
 - El precinto de inventario (PI-) conserva por ahora el tamaño anterior; se ajusta igual si se ve chico al imprimirlo.
+
+### 4.146 Avisos de error con detalle técnico y sin duplicados (v21.92)
+- Un error inesperado de código mostraba **dos avisos casi iguales** («Error Interno» y «Error de Sistema») sin decir qué falló. Ahora sale **uno solo**, con el archivo, la línea y el mensaje entre corchetes (p. ej. `[oxigeno.js:123 · Cannot read …]`), y el último queda guardado en el equipo (`sar_ult_error`) con la vista donde ocurrió.
+- Se ignoran avisos del navegador sin efecto (ResizeObserver, reproducción de audio interrumpida, operación abortada).

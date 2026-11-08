@@ -836,3 +836,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Los correos de respaldo (acta de entrega: emisión, confirmación, firmada, anulación; movimientos de inventario; **recepción conforme**) se envían **solo de lunes a viernes, de 8:00 a 17:00 (hora de Chile), sin feriados** (los de Configuración de correo incluidos).
 - Fuera de ese horario el correo **no se pierde**: queda en cola (`Contadores/cola-correo-*`, estado `pendiente`) con sus adjuntos y se envía solo cuando un equipo con el Visor abierto detecta horario hábil (revisión cada 5 min). El aviso en pantalla dice «Correo programado» y en el historial del acta aparece «en cola (fuera de horario)».
 - Límite: si nadie abre el Visor en horario hábil, la cola espera (no hay servidor que la envíe). Los avisos de seguimiento de OC no cambian.
+
+### 4.149 Recepción conforme: empresa larga y firma con timbre en el Word (v21.95)
+- El nombre de la empresa del PDF de recepción conforme **salta de línea** cuando no cabe (antes se cortaba al borde de la hoja).
+- El Word de la recepción conforme (el que se genera al descargar o al **Editar**) ahora incluye la **firma con el timbre** de la contraparte técnica sobre «Firma contraparte técnica», igual que el PDF, respetando la casilla «Incluir firma».

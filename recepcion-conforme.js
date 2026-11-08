@@ -124,7 +124,7 @@
         centrar(titulo, 10, true, 100, ML + 90, MR + 20);
         let y = 150;
         T('DATOS DEL PROVEEDOR', 160, y, 10.5, true); y += 24;
-        T('Nombre de la empresa: ' + (oc.proveedor || ''), ML, y, 10.5, true); y += 22;
+        envolver('Nombre de la empresa: ' + (oc.proveedor || ''), 10.5, true, MR - ML + 8).forEach((t, i) => { T(t, ML, y, 10.5, true); y += i >= 0 ? 15 : 0; }); y += 7;
         T('RUT: ' + (oc.rutProveedor || ''), ML, y, 10.5, true); y += 22;
         T('Orden de Compra: ' + (oc.numeroOC || ''), ML, y, 10.5, true); y += 22;
         T(`Con fecha ${fechaCorta(d.fecha)}, en calidad de contraparte técnica, certifico lo siguiente:`, ML, y, 10.5, false); y += 22;

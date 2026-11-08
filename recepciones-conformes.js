@@ -56,7 +56,7 @@
             const blob = await new Promise(r => c.toBlob(r, 'image/png')); return { bytes: new Uint8Array(await blob.arrayBuffer()), w: c.width, h: c.height };
         } catch (e) { return null; }
     }
-    function cuerpoWord(oc, d, logo) {
+    function cuerpoWord(oc, d, logo, firma) {
         const A = AD(), { run, par } = A, fc = RC().fechaCorta, cont = [];
         if (logo) {
             const w = Math.round(1.1 * 914400 * 1.0), h = Math.round(w * logo.h / logo.w);
@@ -74,14 +74,22 @@
         const obs = d.observaciones ? celdaTxt('Observaciones: ' + d.observaciones, { sz: 17 }) : '';
         cont.push(`<w:tbl><w:tblPr><w:tblW w:w="8640" w:type="dxa"/><w:tblBorders>${A.borde}</w:tblBorders><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="8640"/></w:tblGrid><w:tr>${A.celda(8640, encab + items + obs)}</w:tr></w:tbl>`);
         cont.push(par('', { antes: 700, despues: 0 }));
-        cont.push(par(run('________________________________', { sz: 21 }), { jc: 'center', despues: 40 }));
+        if (firma) {
+            const w = Math.round(2.4 * 914400), h = Math.round(w * firma.h / firma.w);
+            cont.push(par(`<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${w}" cy="${h}"/><wp:docPr id="2" name="Firma y timbre"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="firma.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdFirma"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${w}" cy="${h}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`, { jc: 'center', despues: 0 }));
+        } else cont.push(par(run('________________________________', { sz: 21 }), { jc: 'center', despues: 40 }));
         cont.push(par(run('Firma contraparte técnica', { sz: 21 }), { jc: 'center', despues: 120 }));
         cont.push(par(run('Nombre Contraparte Técnica: ' + (d.contraparte || ''), { sz: 21 }), { jc: 'center', despues: 0 }));
         return cont;
     }
     async function docx(oc, rec, parcial) {
-        const logo = await logoPNG();
-        return AD().empaquetar(cuerpoWord(oc, datos(oc, rec, parcial), logo), logo ? logo.bytes : null);
+        const logo = await logoPNG(), d = datos(oc, rec, parcial);
+        let firma = null;
+        if (d.conFirma !== false && /quintanilla/i.test(d.contraparte || '')) {
+            try { const b = await RC().cargarFirma(); if (b && b.length > 24) firma = { bytes: b, w: ((b[16] << 24) | (b[17] << 16) | (b[18] << 8) | b[19]) >>> 0, h: ((b[20] << 24) | (b[21] << 16) | (b[22] << 8) | b[23]) >>> 0 }; } catch (e) { firma = null; }
+            if (firma && (!firma.w || !firma.h)) firma = null;
+        }
+        return AD().empaquetar(cuerpoWord(oc, d, logo, firma), logo ? logo.bytes : null, firma ? [{ id: 'rIdFirma', nombre: 'firma.png', bytes: firma.bytes }] : []);
     }
     function bajarArchivo(bytes, nombre, mime) {
         const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([bytes], { type: mime })); a.download = nombre; document.body.appendChild(a); a.click();

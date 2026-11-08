@@ -23,8 +23,11 @@
     }
     function navegando() { navHasta = Date.now() + 700; revisar(); }
 
+    const RE_RAPIDO = /cargando|recuperando|buscando|leyendo|actualizando/i;
     function mejorar(el) {
-        if (!el || el.nodeType !== 1 || el.closest('.sar-cargando, .sar-prog, button, option, select, textarea, input, script, style')) return;
+        if (!el || el.nodeType !== 1) return;
+        const t = el.textContent; if (!t || t.length > 600 || !RE_RAPIDO.test(t)) return;   // revisión barata: casi ningún nodo pasa
+        if (el.closest('.sar-cargando, .sar-prog, button, option, select, textarea, input, script, style')) return;
         if (!window.SAR_Progreso || !window.SAR_Progreso.cargando) return;
         const cand = el.matches('td,div,p,li,span,small') ? [el] : [];
         el.querySelectorAll('td,div,p,li,span').forEach(x => { if (x.children.length <= 1) cand.push(x); });
@@ -37,21 +40,26 @@
     }
     function botones(el) {
         if (!el || el.nodeType !== 1) return;
-        const lista = el.tagName === 'BUTTON' ? [el] : [...el.querySelectorAll('button')];
+        if (el.tagName !== 'BUTTON' && !el.querySelector('button[disabled], button[aria-busy="true"], button.ml-busy')) return;
+        const lista = el.tagName === 'BUTTON' ? [el] : [...el.querySelectorAll('button[disabled], button[aria-busy="true"], button.ml-busy')];
         lista.forEach(b => { const ocupado = (b.disabled || b.getAttribute('aria-busy') === 'true') && boton(b.textContent); b.classList.toggle('ml-busy', !!ocupado); });
     }
     function iniciar() {
         elBarra(); mejorar(document.body);
-        new MutationObserver(ms => {
-            let toca = false;
-            ms.forEach(m => {
-                if (m.type === 'attributes') { botones(m.target); toca = true; return; }
-                m.addedNodes.forEach(n => { if (n.nodeType === 1) { mejorar(n); botones(n); } });
+        let llamadas = 0, ventana = Date.now(), obs = null;
+        obs = new MutationObserver(ms => {
+            // freno de seguridad: si algo dispara el observador sin parar, se apaga en vez de congelar la página
+            const ahora = Date.now(); if (ahora - ventana > 1000) { ventana = ahora; llamadas = 0; } if (++llamadas > 150) { obs.disconnect(); console.warn('[cargando-global] desactivado por exceso de cambios'); return; }
+            const t0 = performance.now(); let toca = false, n = 0;
+            for (const m of ms) {
+                if (m.type === 'attributes') { botones(m.target); toca = true; continue; }
+                for (const x of m.addedNodes) { if (x.nodeType === 1 && ++n <= 300 && performance.now() - t0 < 10) { mejorar(x); botones(x); } }
                 if (m.target && m.target.tagName === 'BUTTON') botones(m.target);
                 toca = true;
-            });
+            }
             if (toca) revisar();
-        }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'aria-busy'] });
+        });
+        obs.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['disabled', 'aria-busy'] });
         document.addEventListener('click', e => { if (e.target.closest && e.target.closest('.menu-item[data-target], .menu-item[data-erp-panel]')) navegando(); }, true);
         window.addEventListener('hashchange', navegando);
     }

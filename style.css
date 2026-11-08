@@ -5888,3 +5888,19 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
   #view-toma-inventario #toma-guardian-bot-badge, #view-toma-inventario #toma-sheets-badge { display: none; }
   .toma-table-panel table { min-width: 720px; }
 }
+
+/* Registros de la jornada: cada registro es una ficha compacta, sin scroll lateral (v21.76) */
+.toma-lista { overflow-x: hidden !important; }
+.toma-table-panel .toma-lista table { min-width: 0 !important; width: 100%; display: block; }
+.toma-lista thead { display: none; }
+.toma-lista tbody { display: flex; flex-direction: column; gap: 10px; padding: 12px; }
+.toma-lista tr.toma-fila { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 12px 14px; border: 1px solid var(--id-borde, #e2e8f0); border-radius: var(--id-r-sm, 10px); background: #fff; }
+.toma-lista tr.toma-fila > td { display: block; border: 0 !important; padding: 0 !important; background: none !important; min-width: 0; }
+.toma-lista .tf-med { order: 1; flex: 1 1 200px; overflow-wrap: anywhere; }
+.toma-lista .tf-cant { order: 2; } .toma-lista .tf-tot { order: 3; }
+.toma-lista .tf-cant, .toma-lista .tf-tot { text-align: right !important; white-space: nowrap; }
+.toma-lista .tf-cant::before, .toma-lista .tf-tot::before { content: attr(data-l); display: block; font-size: 10px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); }
+.toma-lista .tf-hora { order: 4; } .toma-lista .tf-cat { order: 5; } .toma-lista .tf-lote { order: 6; } .toma-lista .tf-vto { order: 7; } .toma-lista .tf-ubi { order: 8; }
+.toma-lista .tf-lote::before, .toma-lista .tf-vto::before, .toma-lista .tf-ubi::before { content: attr(data-l) ": "; font-size: 11px; color: var(--text-muted); }
+.toma-lista .tf-sync { order: 9; } .toma-lista .tf-acc { order: 10; margin-left: auto; }
+.toma-lista tr:not(.toma-fila), .toma-lista tr:not(.toma-fila) td { display: block; }

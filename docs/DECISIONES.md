@@ -741,3 +741,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - **¿Dónde está?:** el estado inicial muestra búsquedas recientes (se recuerdan en el equipo, máx. 6), bodegas con su total y productos críticos con foto, stock y bodega principal; un clic busca. Estados con esqueleto de carga y mensaje de error con código de referencia (DE-01). Campo de búsqueda de 16 px (evita el zoom en iPhone).
 - **Toma de inventario:** corregido el desborde de la tabla en pantallas medianas (columna `minmax(0,1fr)`, tabla con scroll propio) y la barra «Todas las categorías» ya no se corta (cabecera que baja de línea). En celular el formulario de Ingreso de existencias va primero, los indicadores pasan a 2 columnas compactas debajo y se ocultan los distintivos de estado.
 - Propuesta del agente UX/UI aún pendiente: agrupar campos opcionales (código, dosis, lote) en «Más datos» y un solo menú de exportación en celular.
+
+### 4.130 «Ingreso de Existencias» y registros de la jornada en fichas (v21.76)
+- La pantalla pasa a llamarse **Ingreso de Existencias** (menú, título y barra superior), que es lo que se hace en ella.
+- «Registros de la Jornada» deja la tabla de 10 columnas con scroll lateral (se cortaba y escondía datos) y muestra cada registro como ficha: nombre y código, cantidad de la toma y total a la derecha; debajo hora/toma, categoría, lote, vencimiento y ubicación; al pie estado de Google Sheets y acciones. Sin scroll horizontal, nada oculto.

@@ -2010,7 +2010,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const viewTitles = {
             'view-panel': 'Inicio',
             'view-inventario': 'Existencias',
-            'view-toma-inventario': 'Toma de Inventario',
+            'view-toma-inventario': 'Ingreso de Existencias',
             'view-inventario-semanal': 'Inventario Semanal por Racks',
             'view-compras': 'Gestión de Abastecimiento',
             'view-movimientos': 'Ingresos',
@@ -12622,33 +12622,33 @@ function doGet(e) {
                 faseTag = `<span style="background:#ede9fe; color:#6d28d9; padding:2px 6px; border-radius:4px; font-size:10px; font-weight:700; display:inline-flex; align-items:center; gap:3px; margin-top:2px;"><i class="ph-bold ph-arrows-clockwise"></i> Reconteo</span>`;
             }
 
-            let cantCell = `<td style="font-weight:700; font-size:14px; color:var(--primary); text-align:center;">+${Number(item.quantity) || 0}</td>`;
+            let cantCell = `<td class="tf-cant" data-l="Toma" style="font-weight:700; font-size:14px; color:var(--primary); text-align:center;">+${Number(item.quantity) || 0}</td>`;
             if (Number(item.quantity) === 0) {
-                cantCell = `<td style="text-align:center;"><span style="background:#fee2e2; color:#b91c1c; padding:2px 8px; border-radius:4px; font-weight:800; font-size:11px; display:inline-flex; align-items:center; gap:3px;"><i class="ph-bold ph-warning-octagon"></i> 0 un. (Quiebre)</span></td>`;
+                cantCell = `<td class="tf-cant" data-l="Toma" style="text-align:center;"><span style="background:#fee2e2; color:#b91c1c; padding:2px 8px; border-radius:4px; font-weight:800; font-size:11px; display:inline-flex; align-items:center; gap:3px;"><i class="ph-bold ph-warning-octagon"></i> 0 un. (Quiebre)</span></td>`;
             }
 
-            let totalCell = `<td style="font-weight:800; font-size:14px; color:#059669; text-align:center; background:rgba(16,185,129,0.05);">${Number(item.totalAcumulado) || Number(item.quantity) || 0} un.</td>`;
+            let totalCell = `<td class="tf-tot" data-l="Total" style="font-weight:800; font-size:14px; color:#059669; text-align:center; background:rgba(16,185,129,0.05);">${Number(item.totalAcumulado) || Number(item.quantity) || 0} un.</td>`;
             if (Number(item.totalAcumulado) === 0 && Number(item.quantity) === 0) {
-                totalCell = `<td style="font-weight:800; font-size:12px; color:#dc2626; text-align:center; background:rgba(239,68,68,0.05);">0 un. (Sin Stock)</td>`;
+                totalCell = `<td class="tf-tot" data-l="Total" style="font-weight:800; font-size:12px; color:#dc2626; text-align:center; background:rgba(239,68,68,0.05);">0 un. (Sin Stock)</td>`;
             }
 
             return `
-                <tr>
-                    <td style="font-size:12px; color:var(--text-muted); white-space:nowrap;">
+                <tr class="toma-fila">
+                    <td class="tf-hora" style="font-size:12px; color:var(--text-muted);">
                         ${item.hora || 'Reciente'}<br>${faseTag}
                     </td>
-                    <td>
+                    <td class="tf-med">
                         <div class="font-bold" style="color:var(--text-main); font-size:13px;">${window.escapeHTML(item.name)}</div>
                         <div style="font-size:11px; color:var(--text-muted);">Cód: ${window.escapeHTML(item.code || 'S/I')} ${item.observations ? `| ${window.escapeHTML(item.observations)}` : ''}</div>
                     </td>
-                    <td><span class="badge-category-tag" style="font-weight:700;">${window.escapeHTML(item.category || 'General')}</span></td>
+                    <td class="tf-cat"><span class="badge-category-tag" style="font-weight:700;">${window.escapeHTML(item.category || 'General')}</span></td>
                     ${cantCell}
                     ${totalCell}
-                    <td><code style="font-size:11px; font-weight:700; background:#f1f5f9; padding:2px 6px; border-radius:4px;">${window.escapeHTML(item.batch || 'N/A')}</code></td>
-                    <td>${vtoBadge}</td>
-                    <td style="font-size:12px;">${window.escapeHTML(item.location || 'Bodega Central')}</td>
-                    <td>${syncBadge}</td>
-                    <td style="text-align:center; white-space:nowrap;">
+                    <td class="tf-lote" data-l="Lote"><code style="font-size:11px; font-weight:700; background:#f1f5f9; padding:2px 6px; border-radius:4px;">${window.escapeHTML(item.batch || 'N/A')}</code></td>
+                    <td class="tf-vto" data-l="Vence">${vtoBadge}</td>
+                    <td class="tf-ubi" data-l="Ubicación" style="font-size:12px;">${window.escapeHTML(item.location || 'Bodega Central')}</td>
+                    <td class="tf-sync">${syncBadge}</td>
+                    <td class="tf-acc" style="text-align:center; white-space:nowrap;">
                         <button type="button" class="btn btn-icon btn-edit-toma" data-id="${item.id}" title="Editar registro / Mover categoría" style="color:var(--primary);">
                             <i class="ph ph-pencil-simple"></i>
                         </button>

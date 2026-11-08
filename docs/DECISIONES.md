@@ -818,3 +818,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - **Control:** botón de altavoz junto a la campana (silenciar/activar, se recuerda en el equipo). Por política del navegador el audio parte después del primer clic o tecla.
 - **Campana:** ahora es un botón grande con la palabra «Avisos» (solo el ícono en celular), se tiñe de rojo con avisos pendientes, vibra al llegar uno nuevo (respeta «reducir movimiento») y el panel es más ancho.
 - **Contenido del panel:** además de entregas con stock y recepciones parciales, suma **vencidos con stock, por vencer (30 días), bajo el mínimo y préstamos por devolver**, cada uno con su acceso directo. El contador suma todos. Los vencimientos y el stock bajo se calculan con los datos de inventario ya cargados en el navegador.
+
+### 4.145 Precinto de oxígeno a tamaño real de etiqueta (v21.91)
+- Tras la primera impresión en la Zebra el precinto salía chico y con márgenes. Se rediseñó para ocupar toda la etiqueta de 100×60 mm, como el modelo original: **sin marco**, logo más grande (10,5 mm), título 11,5 pt, N.° de serie en 17 pt, campos en 9,5 pt, casillas de 4 mm y barra de código de 8 mm. El PDF usa las mismas medidas.
+- Al imprimir: escala 100 %, márgenes «Ninguno», sin encabezados ni pies de página, y el tamaño de papel de la Zebra en 100×60 mm.
+- El precinto de inventario (PI-) conserva por ahora el tamaño anterior; se ajusta igual si se ve chico al imprimirlo.

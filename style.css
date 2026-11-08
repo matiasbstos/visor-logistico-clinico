@@ -5851,3 +5851,13 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .bit-hg-bad { background: #FEF7F7; border-color: #FBD5D5; } .bit-hg-warn { background: #FFFBF3; border-color: #FCE7B5; } .bit-hg-info { background: #F5F9FF; border-color: #D3E3FB; } .bit-hg-ok { background: #F4FBF6; border-color: #CDEBD6; } .bit-alertas { border-color: #FED7AA; }
 #view-panel .data-table-header.danger .table-header-title::before, #view-panel .data-table-header.warning .table-header-title::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; background: var(--sar-red); } #view-panel .data-table-header.warning .table-header-title::before { background: var(--sar-orange); }
 .view-section .table-toolbar, #view-inventario .inv-toolbar { gap: 8px; } #view-inventario .btn-columnas, #view-inventario [data-tc-btn] { margin: 8px 12px; }
+
+/* Inicio reorganizado (v21.74): lo urgente arriba, sin necesidad de bajar */
+.home-prio { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 14px; margin-bottom: 14px; align-items: stretch; }
+.home-prio > .erp-card { display: flex; flex-direction: column; min-height: 0; margin: 0; } .home-prio #dash-acciones-list { overflow-y: auto; max-height: 250px; }
+.home-prio__kpis #global-cards-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; height: 100%; align-content: stretch; }
+.home-prio__kpis .erp-kpi-card { min-height: 0; }
+.home-mas .home-mas__grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; padding: 8px 0 4px; }
+.home-flujo { margin-bottom: 14px; } .home-flujo .erp-card { margin: 0; }
+.home-ubic > #dashboard-locations-grid { margin-top: 12px; }
+@media (max-width: 1100px) { .home-prio { grid-template-columns: 1fr; } }

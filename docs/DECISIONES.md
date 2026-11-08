@@ -718,3 +718,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - **Pedido del usuario:** quitar el borde de color a un costado (Urgencias, tarjetas de Inicio, etc.), por ser huella típica de sitios hechos con IA.
 - **Cambio:** se neutralizan en tarjetas de resumen, tablas de Inicio, avisos, hallazgos de la bitácora, kanban, flujo, calendario, notificaciones y menú activo (incluye los estilos escritos en línea). El estado ahora se indica con **punto de color** junto al título, ícono/texto y fondo suave por tono.
 - **Entrenamiento del agente UX/UI:** nueva guía `docs/IDENTIDAD_VISUAL.md` (principios, prohibiciones, referencias estudiadas, estado de migración) y `ux-ui-flujo` actualizado para auditar identidad (huellas de IA, tokens, movimiento, densidad) con «antes → después».
+
+### 4.125 Colores de marca como tokens en toda la hoja de estilos (v21.71)
+- 286 colores escritos a mano (`#1A3668`, `#E2E8F0`, `#64748B`, `#0F172A`, verde, rojo, naranja, amarillo, azul oscuro y azul claro) pasan a variables (`--sar-*`, `--id-borde`, `--text-*`). Comparación de capturas antes/después de Inicio y Existencias: sin diferencias visibles. Ahora cambiar la paleta es editar un solo lugar.
+- Pendiente: grises intermedios, estilos de botón duplicados y revisión con datos reales de Seguimiento de OC.

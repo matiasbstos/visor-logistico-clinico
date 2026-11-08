@@ -2,7 +2,7 @@
 const assert = require('assert'); globalThis.window = globalThis; globalThis.SAR_SeguimientoOC = {};
 globalThis.document = { getElementById: () => null, addEventListener() {}, querySelector: () => null, readyState: 'complete', scripts: [], body: { dataset: {}, style: {} } };
 let n = 0, mal = 0; const t = (nombre, f) => { try { f(); n++; console.log('OK   ' + nombre); } catch (e) { mal++; console.log('FALLA ' + nombre + ' → ' + e.message); } };
-const B = require('../bitacora-oc.js'), M = require('../monitor-errores.js'), C = require('../tabla-columnas.js'), P = require('../primeros-pasos.js'), H = require('../correo-html.js'), R = require('../resumen-stock.js'), K = require('../respaldo-diario.js');
+const B = require('../bitacora-oc.js'), M = require('../monitor-errores.js'), C = require('../tabla-columnas.js'), P = require('../primeros-pasos.js'), H = require('../correo-html.js'), R = require('../resumen-stock.js'), K = require('../respaldo-diario.js'), Z = require('../cierre-mensual.js');
 
 t('clave de OC se normaliza', () => assert.strictEqual(B.claveOC('1298355-936-cm26'), '1298355-936-CM26'));
 t('bitácora: sin correos ni orden = solo correo/sin gestión', () => { const c = B.calcularCaso(null, []); assert.ok(c.estado); });
@@ -27,6 +27,12 @@ t('resumen de stock: vencidos, urgentes y críticos', () => {
     const r = R.resumen(it, hoy); assert.strictEqual(r.vencidos.length, 1); assert.strictEqual(r.urgentes.length, 1); assert.strictEqual(r.criticos.length, 1); assert.ok(R.debeEnviar(r, hoy)); assert.strictEqual(R.aFilas(r).length, 3);
 });
 t('resumen de stock: sin urgencias solo manda los lunes', () => { const r = R.resumen([{ name: 'B', quantity: 100, criticalLimit: 10, expirationDate: '2030-01-01' }], new Date(2026, 10, 9)); assert.ok(!R.debeEnviar(r, new Date(2026, 10, 10))); assert.ok(R.debeEnviar(r, new Date(2026, 10, 9))); });
+t('cierre mensual: categorías y hojas', () => {
+    assert.strictEqual(Z.categoria({ type: 'INGRESO_OC' }), 'Entradas'); assert.strictEqual(Z.categoria({ type: 'traspaso' }), 'Traspasos'); assert.strictEqual(Z.categoria({ type: 'merma_inventario' }), 'Ajustes y mermas'); assert.strictEqual(Z.categoria({ type: 'ENTREGA_ACTA' }), 'Salidas');
+    const d = { movs: [{ type: 'INGRESO_OC', quantity: 10, insumoName: 'A', date: new Date(2026, 9, 5) }, { type: 'salida', quantity: 3, insumoName: 'A', date: new Date(2026, 9, 6) }, { type: 'salida', quantity: 9, insumoName: 'B', date: new Date(2026, 10, 2) }],
+        insumos: [{ name: 'A', quantity: 7, unitPrice: 100, location: 'Central' }], actas: [{ numero: 'AE-1', fecha: '2026-10-07', estado: 'EMITIDA', confirmacion: { estado: 'PENDIENTE' }, items: [{ cantidad: 3 }] }], ocs: [{ numeroOC: 'X', cerrada: false, lineas: [{ dist: { SAR: 5 }, recibido: { SAR: 2 } }] }] };
+    const r = Z.armarHojas(d, '2026-10'); assert.strictEqual(r.nMovs, 2); const res = r.hojas[0][1]; assert.ok(res.some(f => f[0] === 'Entradas' && f[1] === 1 && f[2] === 10)); assert.ok(r.hojas.find(h => h[0] === 'Órdenes abiertas')[1][1][5] === 3); assert.ok(res.some(f => /por confirmar/.test(f[0]) && f[1] === 1)); assert.strictEqual(r.hojas.length, 9);
+});
 const tAsync = []; const ta = (nombre, f) => tAsync.push(f().then(() => { n++; console.log('OK   ' + nombre); }).catch(e => { mal++; console.log('FALLA ' + nombre + ' → ' + e.message); }));
 ta('respaldo: serializar, comprimir, trocear y restaurar sin pérdida', async () => {
     const datos = { Insumos: Array.from({ length: 3000 }, (_, i) => ({ _id: 'i' + i, name: 'Producto ' + i, quantity: i, f: { toDate: () => new Date(0) } })), Bodegas: [{ _id: 'b', n: 'ñandú' }] };

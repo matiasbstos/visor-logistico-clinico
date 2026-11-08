@@ -5958,3 +5958,8 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .pr-activo { display: flex; align-items: center; gap: 8px; margin: 8px 0; padding: 8px 12px; border: 1px solid var(--id-borde, #e2e8f0); border-radius: var(--id-r-sm, 10px); background: #f8fafc; font-size: 12px; color: var(--text-main); }
 .pr-activo i { color: var(--sar-blue); font-size: 16px; } .pr-activo span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .pr-activo button { border: 0; background: none; font-size: 20px; line-height: 1; cursor: pointer; color: var(--text-muted); min-width: 32px; min-height: 32px; }
+
+/* Oxígeno: filtro por capacidad (v21.84) */
+.oxi-caps { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 10px; font-size: 12px; color: var(--text-muted); }
+.oxi-cap { border: 1px solid var(--id-borde, #e2e8f0); background: #fff; color: var(--text-main); border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 700; cursor: pointer; min-height: 32px; }
+.oxi-cap.oxi-on { background: var(--sar-blue); border-color: var(--sar-blue); color: #fff; }

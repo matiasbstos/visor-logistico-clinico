@@ -39,6 +39,7 @@
         DEVOLUCION: { txt: 'Devuelto al SAR', estado: null, desde: ['PRESTADO'], pide: 'estadoDevuelto' },
         INCIDENCIA: { txt: 'Registrar incidencia (sin cambiar estado)', estado: null, desde: null, nota: true },
         FUERA_SERVICIO: { txt: 'Fuera de servicio', estado: 'FUERA_SERVICIO', desde: null, nota: true },
+        CAPACIDAD: { txt: 'Cambiar capacidad', estado: null, desde: null, pide: 'capacidad' },
         REPUESTO: { txt: 'Volver a servicio (vacío)', estado: 'VACIO', desde: ['FUERA_SERVICIO'] }
     };
 
@@ -59,6 +60,7 @@
         if (!a) throw new Error('Acción desconocida.');
         if (a.desde && !a.desde.includes(equipo.estado)) throw new Error(`No se puede "${a.txt}" un equipo ${ESTADOS[equipo.estado] ? ESTADOS[equipo.estado].txt.toLowerCase() : equipo.estado}.`);
         if (a.nota && !String(datos.detalle || '').trim()) throw new Error('Escribe qué pasó.');
+        if (a.pide === 'capacidad' && !normCap(datos.capacidad)) throw new Error('Indica la capacidad (ej. 1 m³).');
         if (a.pide === 'estadoDevuelto' && !['LLENO', 'VACIO'].includes(datos.estadoDevuelto)) throw new Error('Indica si vuelve lleno o vacío.');
         const cambios = {};
         if (clave === 'DEVOLUCION') { cambios.estado = datos.estadoDevuelto; cambios.ubicacion = SEDE; cambios.prestadoA = ''; }
@@ -66,7 +68,14 @@
         if (clave === 'ENVIO_RECARGA') { cambios.ubicacion = (datos.proveedor || 'Proveedor').trim() || 'Proveedor'; cambios.prestadoA = ''; }
         if (clave === 'RECARGA_OK') { cambios.ubicacion = SEDE; cambios.ultimaRecarga = datos.fecha || hoy(); cambios.recargas = num(equipo.recargas) + 1; }
         if (clave === 'REPUESTO') cambios.ubicacion = SEDE;
+        if (clave === 'CAPACIDAD') cambios.capacidad = normCap(datos.capacidad);
         return cambios;
+    }
+    /** «1m3», «1 M3», «1» → «1 m³»; «0,5» → «0,5 m³». Así los mismos balones no se separan por escribir distinto. */
+    function normCap(t) {
+        const x = String(t || '').trim().toLowerCase().replace(/\s+/g, ' ').replace('.', ',');
+        const m = x.match(/^(\d+(?:,\d+)?)\s*(?:m3|m³|m\^3|mt3|metros? c[uú]bicos?)?$/);
+        return m ? m[1] + ' m³' : String(t || '').trim();
     }
     function parsearSeries(texto) {
         const vistos = new Set(), out = [];
@@ -85,7 +94,7 @@
     // ---------------------------------------------------------------
     // Estado y datos
     // ---------------------------------------------------------------
-    let equipos = [], filtro = 'TODOS', busca = '', sel = new Set(), eventosAbiertos = {};
+    let equipos = [], filtro = 'TODOS', capFiltro = 'TODAS', busca = '', sel = new Set(), eventosAbiertos = {};
     let firma = { nombre: 'Matias Bustos Huerta', cargo: 'Encargado de insumos' };
 
     async function cargar() {
@@ -121,6 +130,7 @@
             if (!s.exists()) throw new Error('El equipo ya no existe.');
             const e = s.data();
             const cambios = aplicarAccion(e, clave, datos);
+            if (clave === 'CAPACIDAD' && !String(datos.detalle || '').trim()) datos = Object.assign({}, datos, { detalle: 'De ' + (e.capacidad || '—') + ' a ' + cambios.capacidad });
             if (Object.keys(cambios).length) tx.update(ref, { ...cambios, updatedAt: f.serverTimestamp() });
             tx.set(evRef, {
                 tipo: clave, fecha: datos.fecha || hoy(), detalle: String(datos.detalle || '').trim(), proveedor: String(datos.proveedor || '').trim(), documento: String(datos.documento || '').trim(),
@@ -195,16 +205,21 @@
     const root = () => document.getElementById('oxi-root');
     function filtrados() {
         const q = busca.trim().toLowerCase();
-        return equipos.filter(e => (filtro === 'TODOS' || e.estado === filtro) && (!q || `${e.serie} ${e.ubicacion} ${e.prestadoA}`.toLowerCase().includes(q)));
+        return equipos.filter(e => (capFiltro === 'TODAS' || (e.capacidad || 'Sin capacidad') === capFiltro) && (filtro === 'TODOS' || e.estado === filtro) && (!q || `${e.serie} ${e.capacidad || ''} ${e.ubicacion} ${e.prestadoA}`.toLowerCase().includes(q)));
+    }
+    function capacidades() {
+        const c = {}; equipos.forEach(e => { const k = e.capacidad || 'Sin capacidad'; c[k] = (c[k] || 0) + 1; });
+        return Object.entries(c).sort((a, b) => parseFloat(String(a[0]).replace(',', '.')) - parseFloat(String(b[0]).replace(',', '.')) || a[0].localeCompare(b[0], 'es'));
     }
     function pintar() {
         const r = root(); if (!r) return;
-        const rs = resumen(equipos), lista = filtrados();
+        const caps = capacidades(), rs = resumen(capFiltro === 'TODAS' ? equipos : equipos.filter(e => (e.capacidad || 'Sin capacidad') === capFiltro)), lista = filtrados();
         const chip = (k, t, n, c) => `<button type="button" class="oxi-card${filtro === k ? ' oxi-on' : ''}" data-f="${k}" style="--c:${c}"><b>${n}</b><span>${t}</span></button>`;
         r.innerHTML = `
         <div class="page-header mb-24"><div class="page-title"><h2>Oxígeno portátil</h2><p>Balones con N° de serie: estado, recargas, entregas a centros e incidencias.</p></div></div>
         <div class="oxi-cards">${chip('TODOS', 'Total', rs.total, '#334155')}${Object.entries(ESTADOS).map(([k, v]) => chip(k, v.txt, rs[k], v.color)).join('')}</div>
-        <div class="oxi-barra"><input id="oxi-buscar" type="search" placeholder="Buscar serie, lugar o centro…" value="${esc(busca)}" autocomplete="off">
+        ${caps.length > 1 ? `<div class="oxi-caps" role="group" aria-label="Capacidad"><span>Capacidad:</span><button type="button" class="oxi-cap${capFiltro === 'TODAS' ? ' oxi-on' : ''}" data-cap="TODAS">Todas (${equipos.length})</button>${caps.map(([k, n]) => `<button type="button" class="oxi-cap${capFiltro === k ? ' oxi-on' : ''}" data-cap="${esc(k)}">${esc(k)} (${n})</button>`).join('')}</div>` : ''}
+        <div class="oxi-barra"><input id="oxi-buscar" type="search" placeholder="Buscar serie, capacidad, lugar o centro…" value="${esc(busca)}" autocomplete="off">
             <button type="button" class="btn btn-outline" id="oxi-alta">+ Agregar balones</button>
             <button type="button" class="btn btn-primary" id="oxi-entrega"${sel.size ? '' : ' disabled'}>Acta de entrega (${sel.size})</button></div>
         <div class="oxi-lista">${lista.length ? lista.map(e => {
@@ -240,6 +255,7 @@
     function enlazar() {
         const r = root(), $$ = (s) => r.querySelectorAll(s);
         $$('.oxi-card').forEach(b => b.addEventListener('click', () => { filtro = b.dataset.f; pintar(); }));
+        $$('.oxi-cap').forEach(b => b.addEventListener('click', () => { capFiltro = b.dataset.cap; pintar(); }));
         r.querySelector('#oxi-buscar').addEventListener('input', (e) => { busca = e.target.value; const p = e.target.selectionStart; pintar(); const n = document.getElementById('oxi-buscar'); n.focus(); n.setSelectionRange(p, p); });
         $$('.oxi-sel').forEach(c => c.addEventListener('change', () => { c.checked ? sel.add(c.dataset.id) : sel.delete(c.dataset.id); pintar(); }));
         $$('.oxi-hist').forEach(b => b.addEventListener('click', async () => {
@@ -259,13 +275,13 @@
 
     function dialogoAlta() {
         modal('Agregar balones portátiles', `
-            <label class="act-l">N° de serie (uno por línea o separados por coma)<textarea id="oxi-series" rows="4" style="width:100%" placeholder="Ej: 12345&#10;12346"></textarea></label>
-            <label class="act-l">Capacidad<input id="oxi-cap" value="1 m³"></label>
+            <label class="act-l">N° de serie (se guarda tal cual, como texto; uno por línea o separados por coma)<textarea id="oxi-series" rows="4" style="width:100%" placeholder="Ej: 12345&#10;12346"></textarea></label>
+            <label class="act-l">Capacidad<input id="oxi-cap" value="1 m³" list="oxi-caps" autocomplete="off"><datalist id="oxi-caps">${[...new Set(['0,5 m³', '1 m³', '2 m³', '3 m³', '5 m³'].concat(capacidades().map(c => c[0]).filter(c => c !== 'Sin capacidad')))].map(c => `<option value="${esc(c)}">`).join('')}</datalist></label>
             <label class="act-l">Estado actual<select id="oxi-est"><option value="LLENO">Lleno</option><option value="VACIO">Vacío</option></select></label>
             <label class="act-l">Observación (opcional)<input id="oxi-obs"></label>`, async (q) => {
             const series = parsearSeries(q('#oxi-series').value);
             if (!series.length) throw new Error('Escribe al menos un N° de serie.');
-            const res = await crearEquipos(series, { capacidad: q('#oxi-cap').value.trim() || '1 m³', estado: q('#oxi-est').value, observacion: q('#oxi-obs').value.trim() });
+            const res = await crearEquipos(series, { capacidad: normCap(q('#oxi-cap').value) || '1 m³', estado: q('#oxi-est').value, observacion: q('#oxi-obs').value.trim() });
             toast('Balones', `${res.creados.length} agregado(s)${res.existentes.length ? '; ya existían: ' + res.existentes.join(', ') : ''}.`, res.existentes.length ? 'warning' : 'success');
             await cargar(); pintar();
         });
@@ -275,10 +291,11 @@
         modal(`${a.txt} · N° ${e.serie}`, `
             <label class="act-l">Fecha<input id="oxi-f" type="date" value="${hoy()}"></label>
             ${a.pide === 'proveedor' ? '<label class="act-l">Proveedor / lugar de recarga<input id="oxi-p" placeholder="Ej: proveedor, centro de recarga"></label><label class="act-l">N° guía / factura (opcional)<input id="oxi-d"></label>' : ''}
+            ${a.pide === 'capacidad' ? `<label class="act-l">Nueva capacidad<input id="oxi-c" value="${esc(e.capacidad || '')}" list="oxi-caps2" autocomplete="off"><datalist id="oxi-caps2">${['0,5 m³', '1 m³', '2 m³', '3 m³', '5 m³'].map(c => `<option value="${c}">`).join('')}</datalist></label>` : ''}
             ${a.pide === 'estadoDevuelto' ? `<label class="act-l">Vuelve<select id="oxi-dev"><option value="VACIO">Vacío</option><option value="LLENO">Lleno</option></select></label>` : ''}
             <label class="act-l">${a.nota ? 'Qué pasó (obligatorio)' : 'Detalle (opcional)'}<input id="oxi-t"></label>`, async (q) => {
             const g = (s) => { const n = q(s); return n ? n.value : ''; };
-            await window.SAR_Progreso.correr('Registrando la acción del equipo…', () => registrarAccion(id, clave, { fecha: g('#oxi-f'), proveedor: g('#oxi-p'), documento: g('#oxi-d'), estadoDevuelto: g('#oxi-dev'), detalle: g('#oxi-t') }), 'Acción registrada');
+            await window.SAR_Progreso.correr('Registrando la acción del equipo…', () => registrarAccion(id, clave, { fecha: g('#oxi-f'), proveedor: g('#oxi-p'), documento: g('#oxi-d'), estadoDevuelto: g('#oxi-dev'), capacidad: g('#oxi-c'), detalle: g('#oxi-t') }), 'Acción registrada');
             toast('Registrado', `${a.txt}: N° ${e.serie}.`, 'success'); delete eventosAbiertos[id]; await cargar(); pintar();
         });
     }
@@ -309,6 +326,6 @@
         pintar();
     }
 
-    window.SAR_Oxigeno = { editarActa, listarLlenos, abrir, resumen, accionesPara, aplicarAccion, parsearSeries, validarEntrega, nombreEnActa, registrarAccion, crearEquipos, entregar, ESTADOS, ACCIONES };
+    window.SAR_Oxigeno = { normCap, capacidades, editarActa, listarLlenos, abrir, resumen, accionesPara, aplicarAccion, parsearSeries, validarEntrega, nombreEnActa, registrarAccion, crearEquipos, entregar, ESTADOS, ACCIONES };
     if (typeof module !== 'undefined') module.exports = window.SAR_Oxigeno;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: { dataset: {} } });

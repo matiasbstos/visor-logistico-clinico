@@ -783,3 +783,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Mientras haya precinto activo, **cada registro guardado lleva `[Precinto PI-…]` en Observaciones** y suma al contador `registros` del precinto, que pasa a estado EN_CONTEO. Así se sabe qué productos se contaron dentro de qué caja/estante.
 - Los códigos de producto no se ven afectados (solo se interceptan los que tienen formato de folio). Si el folio no existe, avisa y no cambia nada.
 - Pendiente: marcar el precinto como CERRADO (con total contado y diferencia) y un listado de precintos abiertos.
+
+### 4.138 Oxígeno portátil: capacidad normalizada, filtro y cambio de capacidad (v21.84)
+- **N.° de serie:** siempre se guarda como texto tal cual se escribe (ceros a la izquierda incluidos); es el identificador de seguimiento del balón y no se puede duplicar.
+- **Estados:** se cambian después de crear el balón con el selector «Acción» de cada fila (recarga, vacío, entrega, devolución, fuera de servicio, volver a servicio). Fuera de servicio exige explicar el motivo; todo queda en el historial del balón.
+- **Capacidad:** se normaliza al guardar («1m3», «1 M3» → «1 m³»; «0.5» → «0,5 m³») para que no se separen balones iguales; en el alta se sugieren 0,5/1/2/3/5 m³ y las ya usadas. Nueva acción **Cambiar capacidad** (queda en el historial con «De X a Y»).
+- **Visualización:** fila de filtros por capacidad con conteo; los indicadores (Lleno/Vacío/…) se recalculan para la capacidad elegida; el buscador también busca por capacidad.

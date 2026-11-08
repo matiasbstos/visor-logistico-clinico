@@ -5861,3 +5861,30 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .home-flujo { margin-bottom: 14px; } .home-flujo .erp-card { margin: 0; }
 .home-ubic > #dashboard-locations-grid { margin-top: 12px; }
 @media (max-width: 1100px) { .home-prio { grid-template-columns: 1fr; } }
+
+/* ¿Dónde está? estado inicial (v21.75) */
+.donde__inicio { display: flex; flex-direction: column; gap: 22px; margin-top: 8px; } .donde__sec { margin: 0 0 8px; font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-muted); font-weight: 800; }
+.donde__chips { display: flex; flex-wrap: wrap; gap: 8px; } .donde__chip { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px; border: 1px solid var(--id-borde); background: #fff; border-radius: var(--id-r-sm); font: inherit; font-size: 13.5px; font-weight: 600; color: var(--sar-blue); cursor: pointer; text-decoration: none; box-shadow: var(--id-sombra); } .donde__chip:hover { border-color: var(--sar-blue); } .donde__chip b { color: var(--text-main); }
+.donde__crit { display: flex; flex-direction: column; gap: 8px; } .donde__fila { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; background: #fff; border: 1px solid var(--id-borde); border-radius: var(--shape-card); padding: 10px 14px; min-height: 56px; font: inherit; cursor: pointer; box-shadow: var(--id-sombra); } .donde__fila:hover { border-color: var(--sar-blue); }
+.donde__fila-t { flex: 1; min-width: 0; display: flex; flex-direction: column; } .donde__fila-t b { color: var(--text-main); font-size: 14px; overflow-wrap: anywhere; } .donde__fila-t small { color: var(--text-muted); font-size: 12px; } .donde__fila-n { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: #991B1B; white-space: nowrap; } .donde__dot { width: 8px; height: 8px; border-radius: 50%; background: var(--sar-red); }
+.donde__nada { color: var(--text-muted); font-size: 14px; margin: 0; }
+#donde-buscar { font-size: 16px; }
+
+/* Toma de inventario: sin desborde y con el ingreso primero en celular (v21.75) */
+.toma-layout-grid { grid-template-columns: minmax(340px, 410px) minmax(0, 1fr); } .toma-layout-grid > * { min-width: 0; }
+.toma-table-panel { min-width: 0; } .toma-table-panel .table-wrapper { overflow: auto !important; } .toma-table-panel table { min-width: 880px; }
+.toma-table-panel .data-table-header { flex-wrap: wrap; gap: 10px; }
+#toma-filter-cat { flex: 1 1 180px; min-width: 0; max-width: 100%; text-overflow: ellipsis; height: 40px !important; padding: 0 12px !important; font-size: 13px !important; }
+.toma-table-panel .search-input-wrapper { flex: 1 1 200px; width: auto !important; min-width: 0; }
+@media (max-width: 767px) {
+  #view-toma-inventario .dashboard-container { display: flex; flex-direction: column; }
+  #view-toma-inventario .dashboard-container > * { order: 5; }
+  #view-toma-inventario .page-tabs { order: 0; overflow-x: auto; } #view-toma-inventario .page-header { order: 1; }
+  #view-toma-inventario .toma-layout-grid { order: 2; display: flex; flex-direction: column; }
+  #view-toma-inventario .toma-form-panel { order: 0; } #view-toma-inventario .toma-table-panel { order: 2; }
+  #view-toma-inventario .dashboard-container > .cards-grid { order: 4; grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px; }
+  #view-toma-inventario .dashboard-container > .cards-grid .card { padding: 10px 12px !important; }
+  #view-toma-inventario .page-header { margin-bottom: 8px; } #view-toma-inventario .page-title p { display: none; }
+  #view-toma-inventario #toma-guardian-bot-badge, #view-toma-inventario #toma-sheets-badge { display: none; }
+  .toma-table-panel table { min-width: 720px; }
+}

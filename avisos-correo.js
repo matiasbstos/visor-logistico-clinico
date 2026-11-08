@@ -52,7 +52,7 @@
                 const html = H.armar({ titulo: o.titulo, texto, autor: usuario() + ' · ' + cuando, orden: { numeroOC: '', proveedor: '' }, sujeto: o.sujeto });
                 const adj = (o.adjuntos || []).map(a => ({ name: a.name, mime: a.mime || 'application/pdf', base64: aB64(a.bytes) }));
                 const plano = `${o.titulo}\n${o.sujeto || ''}\n${cuando} · ${usuario()}\n\n${texto}\n\nCorreo de respaldo generado automáticamente por el sistema Visor Logístico SAR.`;
-                res = await so.enviarCorreo(DESTINOS, { subject: o.asunto, text: plano, html }, { attachments: adj });
+                res = await so.enviarCorreo(DESTINOS, { subject: o.asunto, text: plano, html }, { attachments: adj, respaldo: true });
             }
         } catch (e) { res = { estado: 'error', detalle: String((e && e.message) || e) }; }
         if (o.id) {

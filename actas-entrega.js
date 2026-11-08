@@ -800,7 +800,7 @@
             else if (ent) ev.push({ d: fEnt, t: 'Stock descontado', x: `${ent} movimiento${ent > 1 ? 's' : ''} de stock registrados al emitir.` });
             otros.forEach(o => ev.push(o));
         } catch (e) { ev.push({ d: null, t: 'No se pudo leer el historial de movimientos', x: String(e.message || e) }); }
-        if (window.SAR_Avisos) { try { (await window.SAR_Avisos.avisosDeActa(a.numero)).forEach(v => ev.push({ d: tsDe(v.fecha), t: v.estado === 'enviado' ? 'Correo de respaldo enviado' : (v.estado === 'sin_configurar' ? 'Correo no enviado (envío automático sin configurar)' : 'Correo de respaldo NO enviado'), x: `${v.titulo || ''} · a ${(v.destinatarios || []).join(', ')}${(v.adjuntos || []).length ? ' · adjunto: ' + v.adjuntos.join(', ') : ''}${v.estado === 'error' && v.detalle ? ' · ' + v.detalle : ''}` })); } catch (e) { /* sin permiso */ } }
+        if (window.SAR_Avisos) { try { (await window.SAR_Avisos.avisosDeActa(a.numero)).forEach(v => ev.push({ d: tsDe(v.fecha), t: v.estado === 'enviado' ? 'Correo de respaldo enviado' : (v.estado === 'programado' ? 'Correo de respaldo en cola (fuera de horario)' : v.estado === 'sin_configurar' ? 'Correo no enviado (envío automático sin configurar)' : 'Correo de respaldo NO enviado'), x: `${v.titulo || ''} · a ${(v.destinatarios || []).join(', ')}${(v.adjuntos || []).length ? ' · adjunto: ' + v.adjuntos.join(', ') : ''}${v.estado === 'error' && v.detalle ? ' · ' + v.detalle : ''}` })); } catch (e) { /* sin permiso */ } }
         if (a.respaldo) ev.push({ d: tsDe(a.respaldo.fecha), t: 'Acta firmada subida', x: `${a.respaldo.nombre || ''} · por ${a.respaldo.subidoPor || '—'}` });
         if (a.estado === 'ANULADA') ev.push({ d: tsDe(a.anuladaEn), t: 'Acta eliminada (anulada)', x: `Por ${a.anuladaPor || '—'}. Motivo: ${a.anulacionMotivo || '—'}` });
         return ev.sort((x, y) => (x.d ? x.d.getTime() : Infinity) - (y.d ? y.d.getTime() : Infinity));
@@ -891,7 +891,7 @@
             pintar();
             try {
                 const r = await descargar(actaParaDoc(acta), 'pdf');
-                if (r && window.SAR_Avisos) window.SAR_Avisos.avisarActa('emision', acta, { pdf: r }).then(av => { if (av.estado === 'enviado') toast('Correo enviado', 'Aviso del acta enviado a los 3 correos con el PDF adjunto.', 'success'); else if (av.estado !== 'sin_configurar') toast('Correo no enviado', av.detalle || 'No se pudo enviar el aviso del acta.', 'warning'); });
+                if (r && window.SAR_Avisos) window.SAR_Avisos.avisarActa('emision', acta, { pdf: r }).then(av => { if (av.estado === 'enviado') toast('Correo enviado', 'Aviso del acta enviado a los 3 correos con el PDF adjunto.', 'success'); else if (av.estado === 'programado') toast('Correo programado', av.detalle, 'info'); else if (av.estado !== 'sin_configurar') toast('Correo no enviado', av.detalle || 'No se pudo enviar el aviso del acta.', 'warning'); });
                 if (r && acta.oc && acta.oc.id && window.SAR_SeguimientoOC && window.SAR_SeguimientoOC.guardarArchivo) {   // queda adosada a la orden
                     try { await window.SAR_SeguimientoOC.guardarArchivo(acta.oc.id, { nombre: r.nombre, categoria: 'Acta de entrega ' + acta.numero, bytes: r.bytes }); toast('Acta guardada en la orden', `Quedó en los archivos de la OC ${acta.oc.numeroOC || ''}.`, 'success'); }
                     catch (e2) { toast('Acta no guardada en la orden', e2.message || String(e2), 'warning'); }

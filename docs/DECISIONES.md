@@ -646,3 +646,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.109 Bitácora: filtros «Compra compartida», «Con conforme» y «Falta conforme» (v21.56)
 - Vista global de recepciones conformes: «Con conforme» (ya se envió al menos una) y «Falta conforme» (todo recibido o con guía/despacho, pero sin conforme enviada). «Compra compartida» reúne las órdenes con señales de reparto entre centros (varios memos, centros mencionados o frases de distribución).
+
+### 4.110 Monitoreo de errores del sistema con aviso por correo (v21.57)
+- Nuevo `monitor-errores.js`: los errores de JavaScript y promesas rechazadas que vive el personal (admin/operador) se guardan en `Contadores/err-<día>-<huella>` (mensaje, archivo, línea, pantalla, versión, quién, cuántas veces) y, la primera vez del día, se avisa por correo a los tres destinatarios (máx. 3 por equipo y día).
+- Sin datos de pacientes (RUT enmascarados, mensaje a 300 caracteres) y sin ruido (extensiones, red intermitente, ResizeObserver). Nunca lanza errores propios.
+- Se ve en «Directorio de errores» → «Errores registrados en el sistema» (solo administración). Los errores de enfermería no se registran (las reglas de Contadores son solo para personal).

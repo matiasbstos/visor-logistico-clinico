@@ -5998,3 +5998,4 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .pr-oxi .pr-bar { height: 8mm; margin-top: 0; }
 .pr-oxi .po-fol { margin-top: auto; font-size: 8.5pt; font-weight: 400; } .pr-oxi .po-fol b { font-size: 11pt; font-weight: 700; }
 
+.pr-reuso { display:flex; gap:8px; align-items:center; margin-top:10px; font-size:.85rem; color:var(--text-muted); }

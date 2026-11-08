@@ -827,3 +827,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.146 Avisos de error con detalle técnico y sin duplicados (v21.92)
 - Un error inesperado de código mostraba **dos avisos casi iguales** («Error Interno» y «Error de Sistema») sin decir qué falló. Ahora sale **uno solo**, con el archivo, la línea y el mensaje entre corchetes (p. ej. `[oxigeno.js:123 · Cannot read …]`), y el último queda guardado en el equipo (`sar_ult_error`) con la vista donde ocurrió.
 - Se ignoran avisos del navegador sin efecto (ResizeObserver, reproducción de audio interrumpida, operación abortada).
+
+### 4.147 Precintos de oxígeno ya creados se reimprimen con el diseño actual (v21.93)
+- Si un balón (por N° de serie) ya tiene precinto, al imprimir/descargar se **reutiliza su folio** y se regraba el registro con los datos vigentes (gas, capacidad, proveedor, fecha de carga). El tamaño y diseño siempre son los actuales porque la etiqueta se dibuja al momento. Casilla desmarcable para forzar un folio nuevo.
+- Pendiente: reimpresión de precintos de inventario (PI-) por folio.

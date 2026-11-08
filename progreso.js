@@ -30,7 +30,9 @@
     }
     /** Bloque de carga para dentro de una pantalla (no tapa nada): logo con anillo girando + texto. */
     function cargando(texto) {
-        return `<div class="sar-cargando" role="status" aria-live="polite"><div class="sar-prog__marca" aria-hidden="true"><span class="sar-prog__anillo"></span><img src="assets/logo-sar.png" alt=""></div><strong>${esc(texto || 'Cargando…')}</strong></div>`;
+        // Carga de pantalla (v21.68): esqueleto con barrido de luz. El logo con anillo queda para guardar, crear y subir (iniciar/correr).
+        const t = esc(texto || 'Cargando…');
+        return `<div class="sar-cargando sar-esq" role="status" aria-live="polite" aria-label="${t}"><span class="sar-esq__t">${t}</span><div class="sar-esq__fila"><i></i><i></i><i></i></div><div class="sar-esq__lin"></div><div class="sar-esq__lin"></div><div class="sar-esq__lin sar-esq__lin--c"></div></div>`;
     }
     window.SAR_Progreso = { iniciar, correr, cargando };
 })(window, document);

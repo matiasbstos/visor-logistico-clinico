@@ -102,11 +102,14 @@
   }
 
   // ---- Precinto de control de oxígeno (modelo «Precinto Zebra Oxígeno 100×60»): el N° de serie sale solo ----
+  const fechaCL = (iso) => { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; };
+  const tituloGas = (e) => /^aire/i.test(String(e.gas || '')) ? 'CONTROL DE AIRE COMPRIMIDO' : 'CONTROL DE OXÍGENO';
+  const gasTxt = (e) => String(e.gas || 'Oxígeno medicinal');
   const OXI_ESTADOS = ['LLENO / NUEVO', 'EN USO', 'VACÍO', 'FUERA DE SERVICIO'];
   function etiquetaOxiHTML(e) {
-    return '<section class="precinto pr-oxi"><div class="po-izq"><img src="assets/logo-sar.png" alt="SAR" class="po-logo"><div class="po-tit">CONTROL DE OXÍGENO</div>' +
-      '<div class="po-serie"><span>N° SERIE</span> ' + esc(e.serie) + '</div>' + (e.capacidad ? '<div class="po-cap">' + esc(e.capacidad) + '</div>' : '') +
-      '<div class="po-c">Proveedor: <i></i></div><div class="po-c">Fecha carga: <i class="s">__/__/20__</i></div><div class="po-c">Revisado por: <i></i></div><div class="po-c">Reporta incid.: <i></i></div></div>' +
+    return '<section class="precinto pr-oxi"><div class="po-izq"><img src="assets/logo-sar.png" alt="SAR" class="po-logo"><div class="po-tit">' + esc(tituloGas(e)) + '</div>' +
+      '<div class="po-serie"><span>N° SERIE</span> ' + esc(e.serie) + '</div>' + '<div class="po-cap">' + esc(gasTxt(e)) + (e.capacidad ? ' · ' + esc(e.capacidad) : '') + '</div>' +
+      '<div class="po-c">Proveedor: ' + (e.proveedor ? '<b>' + esc(e.proveedor) + '</b>' : '<i></i>') + '</div><div class="po-c">Fecha carga: ' + (fechaCL(e.ultimaRecarga) ? '<b>' + fechaCL(e.ultimaRecarga) + '</b>' : '<i class="s">__/__/20__</i>') + '</div><div class="po-c">Revisado por: <i></i></div><div class="po-c">Reporta incid.: <i></i></div></div>' +
       '<div class="po-der">' + OXI_ESTADOS.map(x => '<div class="pr-chk"><i></i>' + x + '</div>').join('') + '<div class="po-mot">Motivo F. Servicio:<i></i><i></i></div>' + barrasSVG(e.serie, 10, true) + '</div></section>';
   }
   async function pdfOxigeno(equipos) {
@@ -116,11 +119,11 @@
       if (k) d.addPage([100, 60], 'landscape');
       d.setDrawColor(0); d.setTextColor(0); d.setLineWidth(0.4); d.rect(1.5, 1.5, 97, 57);
       if (logo) { const h = 9, w = Math.min(h * logo.r, 24); d.addImage(logo.d, 'PNG', 4, 3.5, w, w / logo.r); }
-      d.setFont('helvetica', 'bold'); d.setFontSize(9); d.text('CONTROL DE OXÍGENO', 4, 17);
+      d.setFont('helvetica', 'bold'); d.setFontSize(9); d.text(tituloGas(e), 4, 17);
       d.setFontSize(7); d.text('N° SERIE', 4, 22); d.setFontSize(13); d.text(String(e.serie).slice(0, 14), 17, 22.5);
-      if (e.capacidad) { d.setFontSize(7.5); d.text(String(e.capacidad), 4, 26.5); }
+      d.setFontSize(7.5); d.text(gasTxt(e) + (e.capacidad ? ' · ' + e.capacidad : ''), 4, 26.5);
       d.setFontSize(7.5);
-      [['Proveedor:', 43], ['Fecha carga: __/__/20__', null], ['Revisado por:', 43], ['Reporta incid.:', 43]].forEach((c, i) => { const y = 32 + i * 6; d.text(c[0], 4, y); if (c[1]) d.line(d.getTextWidth(c[0]) + 6, y, c[1], y); });
+      [['Proveedor:', e.proveedor || '', 43], ['Fecha carga:', fechaCL(e.ultimaRecarga) || '__/__/20__', null], ['Revisado por:', '', 43], ['Reporta incid.:', '', 43]].forEach((c, i) => { const y = 32 + i * 6; d.setFont('helvetica', 'normal'); d.text(c[0], 4, y); const x0 = d.getTextWidth(c[0]) + 6; if (c[1]) { d.setFont('helvetica', 'bold'); d.text(String(c[1]).slice(0, 22), x0, y); } else if (c[2]) d.line(x0, y, c[2], y); });
       d.setLineWidth(0.3); d.line(50, 4, 50, 56);
       OXI_ESTADOS.forEach((x, i) => { const y = 9 + i * 6; d.rect(53, y - 2.7, 3.2, 3.2); d.setFontSize(7.5); d.text(x, 58, y); });
       d.setFontSize(7); d.text('Motivo F. Servicio:', 53, 36); d.line(53, 41, 96, 41); d.line(53, 46, 96, 46);

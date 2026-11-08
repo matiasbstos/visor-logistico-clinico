@@ -5973,3 +5973,4 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .pr-oxi .po-c i { flex: 1; border-bottom: 0.3mm solid #000; height: 3mm; } .pr-oxi .po-c i.s { border: 0; font-style: normal; flex: none; }
 .pr-oxi .po-der { flex: 1; border-left: 0.3mm solid #000; padding-left: 2.5mm; display: flex; flex-direction: column; justify-content: space-between; font-size: 7.5pt; }
 .pr-oxi .po-mot { font-weight: 400; font-size: 7pt; } .pr-oxi .po-mot i { display: block; border-bottom: 0.3mm solid #000; height: 4.2mm; }
+.pr-oxi .po-c b { font-weight: 700; font-size: 7.5pt; overflow: hidden; text-overflow: ellipsis; }

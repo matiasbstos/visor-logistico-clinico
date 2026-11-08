@@ -794,3 +794,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Cada balón tiene el botón **Precinto**, y la barra tiene **Precintos (N)** que imprime los balones visibles (respeta filtros de estado y capacidad). El modelo es el «Precinto Zebra Oxígeno 100×60» entregado: logo SAR, «CONTROL DE OXÍGENO», Proveedor, Fecha carga, Revisado por, Reporta incid., casillas LLENO/NUEVO · EN USO · VACÍO · FUERA DE SERVICIO y Motivo F. Servicio (2 líneas).
 - **Agregado automático:** N° de serie (grande), capacidad y un código de barras Code 128 del serie, para leerlo con pistola. El resto queda en blanco para llenar a mano.
 - Imprimir directo (`@page 100×60`, una etiqueta por hoja, monocromo) o descargar PDF del mismo tamaño. Comparte módulo con el precinto de inventario.
+
+### 4.140 Oxígeno: tipo de gas, proveedor y fecha de carga (v21.86)
+- Al agregar balones se pregunta el **tipo de gas** (Oxígeno medicinal, Aire comprimido medicinal o texto libre), el **proveedor** y la **fecha de carga** (si queda lleno). Los equipos antiguos sin gas se tratan como oxígeno medicinal.
+- El proveedor y la fecha de carga se actualizan solos con cada «Enviado a recarga» / «Recarga recibida», y el **precinto los imprime ya llenos** junto al N.° de serie, el tipo de gas y la capacidad (título «CONTROL DE AIRE COMPRIMIDO» cuando corresponde). Revisado por, Reporta incid. y Motivo quedan en blanco para llenar a mano.
+- Nueva acción **Cambiar tipo de gas** (con historial «De X a Y»), filtro por gas junto al de capacidad, y el acta de entrega nombra «BALÓN DE AIRE COMPRIMIDO» cuando corresponde.
+- **Pendiente del usuario:** entregar la lista de proveedores para dejarla como sugerencias (hoy se sugieren los ya usados) y confirmar si hay otros tipos de gas además de oxígeno y aire comprimido.

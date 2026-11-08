@@ -5945,3 +5945,11 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
   body.imprimiendo-precinto .precinto { border: 0.4mm solid #000; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
 @media (max-width: 767px) { .pr-form { grid-template-columns: 1fr; } }
+
+/* Préstamos por devolver (v21.82) */
+.pm-lista { display: flex; flex-direction: column; gap: 8px; }
+.pm-fila { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 10px 12px; border: 1px solid var(--id-borde, #e2e8f0); border-radius: var(--id-r-sm, 10px); background: #fff; }
+.pm-dato { flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; gap: 2px; } .pm-dato b { font-size: 13px; overflow-wrap: anywhere; } .pm-dato span { font-size: 11px; color: var(--text-muted); }
+.pm-num { display: flex; flex-direction: column; text-align: right; line-height: 1.1; } .pm-num b { font-size: 20px; color: var(--sar-orange); } .pm-num small { font-size: 10px; color: var(--text-muted); }
+.pm-acc { display: flex; gap: 6px; align-items: center; } .pm-acc input { width: 76px; height: 38px; font-size: 16px; padding: 0 8px; border: 1px solid var(--id-borde, #e2e8f0); border-radius: var(--id-r-sm, 10px); }
+@media (max-width: 767px) { .pm-acc { width: 100%; } .pm-acc .btn { flex: 1; justify-content: center; } .pm-num { text-align: left; } }

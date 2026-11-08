@@ -4679,6 +4679,15 @@ document.addEventListener('DOMContentLoaded', () => {
                             date: serverTimestamp(),
                             document: (data.supportDocument && data.supportDocument.name) ? data.supportDocument.name : 'S/N'
                         });
+                        // Préstamo / traspaso desde otro centro: queda pendiente de devolver (v21.82)
+                        if (/pr[eé]stamo|traspaso/i.test(data.purchaseType || '')) {
+                            transaction.set(doc(db, 'Contadores', 'prestamo-' + auditRef.id), {
+                                tipo: 'prestamo-recibido', estado: 'PENDIENTE', centro: (data.providerId || 'S/I'), insumoId: insumoId,
+                                insumoName: insumoSnap.exists() ? insumoSnap.data().name : nombreInput.trim(), batch: cleanBatch,
+                                cantidad: quantity, devuelto: 0, creadoPor: auth.currentUser ? auth.currentUser.email : 'Admin Local',
+                                fecha: serverTimestamp(), updatedAt: serverTimestamp()
+                            });
+                        }
                     });
 
                     showToast('Éxito', 'Movimiento registrado y auditado correctamente.', 'success');

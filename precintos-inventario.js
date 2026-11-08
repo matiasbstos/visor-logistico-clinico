@@ -13,6 +13,22 @@
   const ESTADOS = ['Conteo completo', 'Reconteo requerido', 'Con diferencia', 'Caja abierta / dañada', 'Verificado 2.ª persona'];
   let lote = [];
 
+  // Código de barras Code 128 (juego B) del folio: barras y espacios alternados, empezando por barra
+  const C128 = ["212222","222122","222221","121223","121322","131222","122213","122312","132212","221213","221312","231212","112232","122132","122231","113222","123122","123221","223211","221132","221231","213212","223112","312131","311222","321122","321221","312212","322112","322211","212123","212321","232121","111323","131123","131321","112313","132113","132311","211313","231113","231311","112133","112331","132131","113123","113321","133121","313121","211331","231131","213113","213311","213131","311123","311321","331121","312113","312311","332111","314111","221411","431111","111224","111422","121124","121421","141122","141221","112214","112412","122114","122411","142112","142211","241211","221114","413111","241112","134111","111242","121142","121241","114212","124112","124211","411212","421112","421211","212141","214121","412121","111143","111341","131141","114113","114311","411113","411311","113141","114131","311141","411131","211412","211214","211232","2331112"];
+  function barras(num) {
+    // Juego C (pares de dígitos): el folio PI-2026-0001 se codifica como 20260001 (79 módulos, legible a 203 dpi)
+    const d = String(num).replace(/\D/g, ''); const cods = [105]; let suma = 105;
+    for (let i = 0; i + 1 < d.length; i += 2) { const v = Number(d.slice(i, i + 2)); cods.push(v); suma += v * (i / 2 + 1); }
+    cods.push(suma % 103, 106);
+    return cods.map(c => C128[c]).join('').split('').map(Number); /* [barra, espacio, barra, …] en módulos */
+  }
+  const digitos = (f) => String(f).replace(/\D/g, '');
+  function barrasSVG(texto, alto) {
+    const a = barras(digitos(texto)), total = a.reduce((x, y) => x + y, 0); let x = 0, r = '';
+    a.forEach((w, i) => { if (i % 2 === 0) r += '<rect x="' + x + '" y="0" width="' + w + '" height="' + alto + '"/>'; x += w; });
+    return '<svg class="pr-bar" viewBox="0 0 ' + total + ' ' + alto + '" preserveAspectRatio="none" aria-label="Código de barras ' + esc(texto) + '"><g fill="#000">' + r + '</g></svg>';
+  }
+
   /** Texto de cada precinto (un solo lugar para pantalla, impresión y PDF). */
   function campos(p) {
     return [['Bodega', p.bodega], ['Ubicación', p.ubicacion], ['Categoría', p.categoria], ['Conteo N°', p.conteo], ['Fecha', p.fecha], ['Responsable', p.responsable]];
@@ -21,7 +37,7 @@
     return '<section class="precinto"><header class="pr-cab"><img src="assets/logo-sar.png" alt="SAR" class="pr-logo"><div class="pr-tit">PRECINTO DE INVENTARIO</div><div class="pr-folio">' + esc(p.folio) + '</div></header>' +
       '<div class="pr-cuerpo"><div class="pr-izq">' + campos(p).map(c => '<div class="pr-campo"><span>' + esc(c[0]) + ':</span> <b>' + esc(c[1] || '—') + '</b></div>').join('') +
       '<div class="pr-campo"><span>Contado:</span> <i class="pr-linea"></i> un.</div></div>' +
-      '<div class="pr-der">' + ESTADOS.map(e => '<div class="pr-chk"><i></i>' + esc(e) + '</div>').join('') + '</div></div>' +
+      '<div class="pr-der">' + ESTADOS.map(e => '<div class="pr-chk"><i></i>' + esc(e) + '</div>').join('') + barrasSVG(p.folio, 10) + '</div></div>' +
       '<footer class="pr-pie"><div><span>Reporta incid.:</span> <i class="pr-linea l2"></i></div><div><span>Motivo:</span> <i class="pr-linea l3"></i></div></footer></section>';
   }
 
@@ -67,11 +83,12 @@
       d.setFont('helvetica', 'bold'); d.setFontSize(9); d.text('PRECINTO DE INVENTARIO', 27, 7);
       d.setFontSize(13); d.text(p.folio, 97, 8, { align: 'right' });
       d.setLineWidth(0.3); d.line(3, 11.5, 97, 11.5);
-      d.setFontSize(7.5); let y = 16;
-      campos(p).forEach(c => { d.setFont('helvetica', 'normal'); d.text(c[0] + ':', 3, y); d.setFont('helvetica', 'bold'); d.text(String(c[1] || '—').slice(0, 26), 22, y); y += 5; });
+      d.setFontSize(7.5); let y = 15.5;
+      campos(p).forEach(c => { d.setFont('helvetica', 'normal'); d.text(c[0] + ':', 3, y); d.setFont('helvetica', 'bold'); d.text(String(c[1] || '—').slice(0, 26), 22, y); y += 4.3; });
       d.setFont('helvetica', 'normal'); d.text('Contado:', 3, y); d.line(18, y, 38, y); d.text('un.', 39, y);
-      d.setLineWidth(0.3); d.line(56, 13, 56, 44);
-      ESTADOS.forEach((e, i) => { const yy = 17 + i * 6; d.rect(58, yy - 2.6, 3, 3); d.setFont('helvetica', 'bold'); d.setFontSize(7); d.text(e, 63, yy); });
+      d.setLineWidth(0.3); d.line(56, 13, 56, 45);
+      ESTADOS.forEach((e, i) => { const yy = 16 + i * 4.6; d.rect(58, yy - 2.6, 3, 3); d.setFont('helvetica', 'bold'); d.setFontSize(7); d.text(e, 63, yy); });
+      { const a = barras(digitos(p.folio)), tot = a.reduce((x, y) => x + y, 0), mod = 38 / tot; let xx = 58; a.forEach((w, i) => { if (i % 2 === 0) d.rect(xx, 40, w * mod, 5, 'F'); xx += w * mod; }); }
       d.line(3, 46, 97, 46); d.setFont('helvetica', 'normal'); d.setFontSize(7.5);
       d.text('Reporta incid.:', 3, 51); d.line(25, 51, 97, 51); d.text('Motivo:', 3, 56); d.line(17, 56, 97, 56);
     });
@@ -124,7 +141,7 @@
     b.addEventListener('click', abrir); h.insertAdjacentElement('afterend', b);
   }
   if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('DOMContentLoaded', montarBoton);
-  const api = { folio, etiquetaHTML, campos, abrir, imprimir, pdf, ESTADOS };
+  const api = { barras, digitos, folio, etiquetaHTML, campos, abrir, imprimir, pdf, ESTADOS };
   if (typeof window !== 'undefined') window.SAR_Precintos = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : {}, typeof document !== 'undefined' ? document : {});

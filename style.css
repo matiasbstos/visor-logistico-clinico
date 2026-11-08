@@ -5934,6 +5934,7 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .pr-der { flex: 1 1 45%; border-left: 0.3mm solid #000; padding-left: 2mm; display: flex; flex-direction: column; justify-content: space-around; font-size: 7pt; }
 .pr-chk { display: flex; align-items: center; gap: 2mm; } .pr-chk i { display: inline-block; width: 3mm; height: 3mm; border: 0.3mm solid #000; flex: 0 0 3mm; }
 .pr-linea { display: inline-block; width: 18mm; border-bottom: 0.3mm solid #000; height: 3mm; vertical-align: bottom; } .pr-linea.l2, .pr-linea.l3 { width: 60mm; }
+.pr-bar { display: block; width: 100%; height: 5.5mm; margin-top: 1mm; }
 .pr-pie { border-top: 0.3mm solid #000; padding-top: 1mm; font-size: 7.5pt; line-height: 4.6mm; } .pr-pie span { font-weight: 400; }
 #precinto-print { display: none; }
 @media print {

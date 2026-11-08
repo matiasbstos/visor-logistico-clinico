@@ -767,3 +767,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Formato basado en el manual del precinto de oxígeno: **100×60 mm horizontal**, Arial Bold, monocromo, dos columnas (datos a la izquierda, estados a la derecha: Conteo completo, Reconteo requerido, Con diferencia, Caja abierta/dañada, Verificado 2.ª persona), «Contado ___ un.», «Reporta incid.» y «Motivo», logo SAR en escala de grises.
 - **Imprimir** usa `@page 100mm 60mm` sin márgenes (una etiqueta por hoja, Zebra ZD230); **Descargar PDF** genera el mismo tamaño con jsPDF.
 - Pendiente: código de barras/QR del folio y escaneo del precinto al ingresar el conteo (reutilizando el escáner inteligente).
+
+### 4.135 Código de barras en el precinto y origen del ingreso en la lista (v21.81)
+- El precinto lleva un **código de barras Code 128 (juego C)** con los dígitos del folio: `PI-2026-0001` se lee como `20260001` (79 módulos, legible a 203 dpi de la Zebra). Se dibuja igual en pantalla/impresión (SVG) y en el PDF. Verificado: la secuencia de símbolos coincide con la de la biblioteca de referencia (reportlab).
+- La lista «últimos ingresos» muestra **«Préstamo desde: <centro>»** cuando el ingreso vino de otro centro, en vez de «Proveedor».
+- Pendiente: escanear el precinto al registrar el conteo; devolución al centro que prestó.

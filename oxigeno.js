@@ -107,8 +107,27 @@
     let equipos = [], filtro = 'TODOS', capFiltro = 'TODAS', gasFiltro = 'TODOS', busca = '', sel = new Set(), eventosAbiertos = {};
     let firma = { nombre: 'Matias Bustos Huerta', cargo: 'Encargado de insumos' };
 
+    // Opciones propias (gases y capacidades que el usuario agrega): Contadores/oxigeno-opciones
+    let opciones = { gases: [], capacidades: [] };
+    const CAPS_BASE = ['0,5 m³', '1 m³', '2 m³', '3 m³', '5 m³'];
+    const unicos = (a) => [...new Set(a.filter(Boolean))];
+    const listaGas = () => unicos(GASES.concat(opciones.gases, equipos.map(e => normGas(e.gas))));
+    const listaCap = () => unicos(CAPS_BASE.concat(opciones.capacidades, equipos.map(e => e.capacidad).filter(Boolean))).sort((a, b) => parseFloat(a.replace(',', '.')) - parseFloat(b.replace(',', '.')) || a.localeCompare(b, 'es'));
+    async function guardarOpciones(gas, cap) {
+        const nuevoG = gas && !listaGas().includes(gas), nuevoC = cap && !listaCap().includes(cap); if (!nuevoG && !nuevoC) return;
+        if (nuevoG) opciones.gases = unicos(opciones.gases.concat(gas)); if (nuevoC) opciones.capacidades = unicos(opciones.capacidades.concat(cap));
+        try { const f = fs(); await f.setDoc(f.doc(f.collection(db(), 'Contadores'), 'oxigeno-opciones'), { tipo: 'oxigeno-opciones', gases: opciones.gases, capacidades: opciones.capacidades, updatedAt: f.serverTimestamp() }, { merge: true }); } catch (e) { console.warn('[Oxígeno] opciones', e && e.code); }
+    }
+    /** Lista desplegable con «＋ Agregar nueva…»; al elegirla aparece un campo para escribirla. */
+    function campoLista(id, etiqueta, opts, actual) {
+        const todas = opts.includes(actual) || !actual ? opts : opts.concat(actual);
+        return `<label class="act-l">${etiqueta}<select id="${id}" data-nueva="1">${todas.map(x => `<option value="${esc(x)}"${x === actual ? ' selected' : ''}>${esc(x)}</option>`).join('')}<option value="__nuevo">＋ Agregar nueva…</option></select><input id="${id}-n" hidden placeholder="Escribe la nueva opción y se guarda para la próxima" autocomplete="off"></label>`;
+    }
+    const valLista = (q, id) => { const s = q('#' + id); if (!s) return ''; return s.value === '__nuevo' ? (q('#' + id + '-n').value || '').trim() : s.value; };
+    if (typeof document !== 'undefined' && document.addEventListener) document.addEventListener('change', (e) => { const s = e.target; if (s && s.matches && s.matches('select[data-nueva]')) { const n = document.getElementById(s.id + '-n'); if (n) { n.hidden = s.value !== '__nuevo'; if (!n.hidden) n.focus(); } } });
     async function cargar() {
         const f = fs();
+        try { const os = await f.getDoc(f.doc(f.collection(db(), 'Contadores'), 'oxigeno-opciones')); if (os.exists()) { const d = os.data(); opciones = { gases: d.gases || [], capacidades: d.capacidades || [] }; } } catch (e) {}
         const snap = await f.getDocs(f.collection(db(), 'Equipos_Oxigeno'));
         equipos = []; snap.forEach(d => equipos.push({ id: d.id, ...d.data() }));
         equipos.sort((a, b) => String(a.serie).localeCompare(String(b.serie), 'es', { numeric: true }));
@@ -294,15 +313,16 @@
     function dialogoAlta() {
         modal('Agregar balones portátiles', `
             <label class="act-l">N° de serie (se guarda tal cual, como texto; uno por línea o separados por coma)<textarea id="oxi-series" rows="4" style="width:100%" placeholder="Ej: 12345&#10;12346"></textarea></label>
-            <label class="act-l">Capacidad<input id="oxi-cap" value="1 m³" list="oxi-caps" autocomplete="off"><datalist id="oxi-caps">${[...new Set(['0,5 m³', '1 m³', '2 m³', '3 m³', '5 m³'].concat(capacidades().map(c => c[0]).filter(c => c !== 'Sin capacidad')))].map(c => `<option value="${esc(c)}">`).join('')}</datalist></label>
-            <label class="act-l">Tipo de gas<input id="oxi-gas" value="${GASES[0]}" list="oxi-gases" autocomplete="off"><datalist id="oxi-gases">${GASES.map(g => `<option value="${g}">`).join('')}</datalist></label>
+            ${campoLista('oxi-cap', 'Capacidad', listaCap(), '1 m³')}
+            ${campoLista('oxi-gas', 'Tipo de gas', listaGas(), GASES[0])}
             <label class="act-l">Proveedor (quien lo cargó)<input id="oxi-prov" list="oxi-provs" autocomplete="off" placeholder="Opcional"><datalist id="oxi-provs">${[...new Set(equipos.map(e => e.proveedor).filter(Boolean))].map(p => `<option value="${esc(p)}">`).join('')}</datalist></label>
             <label class="act-l">Estado actual<select id="oxi-est"><option value="LLENO">Lleno</option><option value="VACIO">Vacío</option></select></label>
             <label class="act-l">Fecha de carga (si está lleno)<input id="oxi-fc" type="date" value="${hoy()}"></label>
             <label class="act-l">Observación (opcional)<input id="oxi-obs"></label>`, async (q) => {
             const series = parsearSeries(q('#oxi-series').value);
             if (!series.length) throw new Error('Escribe al menos un N° de serie.');
-            const res = await crearEquipos(series, { capacidad: normCap(q('#oxi-cap').value) || '1 m³', gas: q('#oxi-gas').value, proveedor: q('#oxi-prov').value, fechaCarga: q('#oxi-fc').value || hoy(), estado: q('#oxi-est').value, observacion: q('#oxi-obs').value.trim() });
+            const res = await crearEquipos(series, { capacidad: normCap(valLista(q, 'oxi-cap')) || '1 m³', gas: normGas(valLista(q, 'oxi-gas')), proveedor: q('#oxi-prov').value, fechaCarga: q('#oxi-fc').value || hoy(), estado: q('#oxi-est').value, observacion: q('#oxi-obs').value.trim() });
+            await guardarOpciones(normGas(valLista(q, 'oxi-gas')), normCap(valLista(q, 'oxi-cap')));
             toast('Balones', `${res.creados.length} agregado(s)${res.existentes.length ? '; ya existían: ' + res.existentes.join(', ') : ''}.`, res.existentes.length ? 'warning' : 'success');
             await cargar(); pintar();
         });
@@ -312,12 +332,13 @@
         modal(`${a.txt} · N° ${e.serie}`, `
             <label class="act-l">Fecha<input id="oxi-f" type="date" value="${hoy()}"></label>
             ${a.pide === 'proveedor' ? '<label class="act-l">Proveedor / lugar de recarga<input id="oxi-p" placeholder="Ej: proveedor, centro de recarga"></label><label class="act-l">N° guía / factura (opcional)<input id="oxi-d"></label>' : ''}
-            ${a.pide === 'capacidad' ? `<label class="act-l">Nueva capacidad<input id="oxi-c" value="${esc(e.capacidad || '')}" list="oxi-caps2" autocomplete="off"><datalist id="oxi-caps2">${['0,5 m³', '1 m³', '2 m³', '3 m³', '5 m³'].map(c => `<option value="${c}">`).join('')}</datalist></label>` : ''}
-            ${a.pide === 'gas' ? `<label class="act-l">Tipo de gas<input id="oxi-g" value="${esc(normGas(e.gas))}" list="oxi-gases2" autocomplete="off"><datalist id="oxi-gases2">${GASES.map(g => `<option value="${g}">`).join('')}</datalist></label>` : ''}
+            ${a.pide === 'capacidad' ? campoLista('oxi-c', 'Nueva capacidad', listaCap(), e.capacidad || '1 m³') : ''}
+            ${a.pide === 'gas' ? campoLista('oxi-g', 'Tipo de gas', listaGas(), normGas(e.gas)) : ''}
             ${a.pide === 'estadoDevuelto' ? `<label class="act-l">Vuelve<select id="oxi-dev"><option value="VACIO">Vacío</option><option value="LLENO">Lleno</option></select></label>` : ''}
             <label class="act-l">${a.nota ? 'Qué pasó (obligatorio)' : 'Detalle (opcional)'}<input id="oxi-t"></label>`, async (q) => {
             const g = (s) => { const n = q(s); return n ? n.value : ''; };
-            await window.SAR_Progreso.correr('Registrando la acción del equipo…', () => registrarAccion(id, clave, { fecha: g('#oxi-f'), proveedor: g('#oxi-p'), documento: g('#oxi-d'), estadoDevuelto: g('#oxi-dev'), capacidad: g('#oxi-c'), gas: g('#oxi-g'), detalle: g('#oxi-t') }), 'Acción registrada');
+            await window.SAR_Progreso.correr('Registrando la acción del equipo…', () => registrarAccion(id, clave, { fecha: g('#oxi-f'), proveedor: g('#oxi-p'), documento: g('#oxi-d'), estadoDevuelto: g('#oxi-dev'), capacidad: valLista(q, 'oxi-c'), gas: valLista(q, 'oxi-g'), detalle: g('#oxi-t') }), 'Acción registrada');
+            if (clave === 'CAPACIDAD' || clave === 'TIPO_GAS') await guardarOpciones(clave === 'TIPO_GAS' ? normGas(valLista(q, 'oxi-g')) : '', clave === 'CAPACIDAD' ? normCap(valLista(q, 'oxi-c')) : '');
             toast('Registrado', `${a.txt}: N° ${e.serie}.`, 'success'); delete eventosAbiertos[id]; await cargar(); pintar();
         });
     }

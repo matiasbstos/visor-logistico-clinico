@@ -40,5 +40,7 @@ ta('respaldo: serializar, comprimir, trocear y restaurar sin pérdida', async ()
     assert.strictEqual(vuelta, txt); assert.strictEqual(K.suma(vuelta), K.suma(txt)); assert.deepStrictEqual(K.conteos(JSON.parse(vuelta)), { Insumos: 3000, Bodegas: 1 }); assert.ok(/__ts/.test(vuelta));
 });
 t('vista previa de agenda: días y fecha pasada', () => { const V = require('../vista-previa-agenda.js'); const h = new Date(2026, 10, 7); assert.strictEqual(V.diasHasta('2026-11-09', h), 2); const r = V.resumen({ tipo: 'ENVIO', titulo: ' ', fecha: '2026-11-06' }, h); assert.ok(r.pasado); assert.strictEqual(r.cuando, 'ayer'); assert.strictEqual(r.titulo, 'Sin título aún'); });
+t('menú: búsqueda sin tildes y todas las palabras', () => { const M = require('../menu-lateral.js'); assert.ok(M.coincide('Bitácora de órdenes', 'bitacora ord')); assert.ok(!M.coincide('Existencias', 'compras')); assert.ok(!M.coincide('x', '  ')); });
+t('carga global: reconoce textos sueltos y botones ocupados', () => { const C = require('../cargando-global.js'); assert.ok(C.esCarga(' Cargando historial...')); assert.ok(!C.esCarga('Sin datos')); assert.ok(C.boton('Guardando…') && !C.boton('Guardar')); assert.strictEqual(C.etiqueta('Cargando x...'), 'Cargando x…'); });
 Promise.all(tAsync).then(() => {
 console.log(`\n${n} ok, ${mal} con falla`); process.exit(mal ? 1 : 0); });

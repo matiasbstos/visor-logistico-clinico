@@ -687,3 +687,11 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.118 Ver Excel dentro del sitio (v21.64)
 - En Seguimiento de OC, «Ver» sobre un .xlsx/.xls/.csv abre una ventana de solo lectura con una pestaña por hoja (máx. 12 hojas, 500 filas, 40 columnas) y botón «Descargar»; ya no se descarga solo. Usa la librería SheetJS ya cargada; si falla, se descarga como antes.
 - Los valores se muestran como texto (se escapan); no se ejecutan fórmulas ni macros. Los PDF siguen abriéndose en pestaña nueva.
+
+### 4.119 Menú lateral ordenado y buscador; carga visible en todo el sitio (v21.65)
+- Nuevo `menu-lateral.js` (reordena el menú existente sin tocar enlaces ni eventos): cada bloque se pliega con animación (estado recordado por dispositivo; se abre solo el del ítem activo). Orden de prioridad: Inicio → Inventario → Movimientos → Compras → Turno clínico → Administración; dentro de cada uno, lo de uso diario primero.
+- Submenús: Movimientos → «Revisión y control» (cuadre de sustituciones, productos parecidos, oxígeno, auditoría); Compras → «Flujo y plazos» (SLA, tablero, recepción dinámica, catálogo, despachos).
+- Buscador arriba del menú (sin tildes ni mayúsculas; atajo `/` o Ctrl+K; Enter abre la primera coincidencia; Esc limpia). Busca por nombre de pantalla o de bloque y solo muestra lo que el rol puede ver.
+- Pie: «Licencias y términos», «Directorio de errores» y «Configuración» quedan en «Más opciones» (desplegable); «Salir» siempre visible. Con la barra contraída, todo sigue accesible por íconos.
+- Nuevo `cargando-global.js`: barra superior con los colores de la marca al navegar y mientras haya algo cargando; cualquier texto suelto «Cargando…» (con o sin ruedita) se convierte al bloque con logo y anillo (`SAR_Progreso.cargando`); los botones en «Guardando…/Creando…/Generando…/Enviando…» muestran ruedita. Seguridad: la barra se apaga sola a los 30 s.
+- No se tocó el flujo de guardado con pantalla de avance (`SAR_Progreso.correr`), que ya existía.

@@ -5749,3 +5749,12 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .bk-panel { margin: 24px 0; padding: 16px 18px; background: #fff; border: 1px solid #E2E8F0; border-radius: 8px 8px 8px 0; } .bk-panel h3 { margin: 0 0 6px; color: var(--sar-blue, #1A3668); }
 .bk-fila { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid #EEF2F7; flex-wrap: wrap; } .bk-fila small { display: block; color: #64748B; font-size: 12.5px; } .bk-acc { display: flex; gap: 8px; }
 .bk-res { font-weight: 700; } .bk-ok { color: #15803D !important; } .bk-mal { color: #B91C1C !important; } .bk-pie { margin-top: 12px; }
+
+/* Ruta animada del ciclo (v21.61) */
+.bit-route { margin: 4px 6px 14px; padding: 14px 4px 6px; } .bit-rl { position: relative; height: 6px; background: #E2E8F0; border-radius: 999px; }
+.bit-rf { position: absolute; left: 0; top: 0; height: 100%; width: 0; background: linear-gradient(90deg, #1A3668, #22A04B); border-radius: 999px; transition: width 1.25s cubic-bezier(.65,0,.35,1); }
+.bit-rp { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: #fff; border: 3px solid #CBD5E1; box-sizing: border-box; }
+.bit-rp-hecho { border-color: #22A04B; } .bit-rp-curso { border-color: #F59E0B; } .bit-rp-alerta { border-color: #DC2626; }
+.bit-rb { position: absolute; left: 0; top: -17px; width: 34px; height: 34px; margin-left: -17px; border-radius: 50%; background: #1A3668; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 17px; box-shadow: 0 2px 8px rgba(26,54,104,.35); transition: left 1.25s cubic-bezier(.65,0,.35,1); }
+@media (prefers-reduced-motion: reduce) { .bit-rf, .bit-rb { transition: none; } }
+@media (max-width: 767px) { .bit-route { display: none; } }

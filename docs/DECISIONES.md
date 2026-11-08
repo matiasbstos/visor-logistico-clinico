@@ -727,6 +727,11 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Ante el aviso «La página no responde»: abrir `https://sarinventario.web.app/?seguro=1` carga el sitio sin `menu-lateral.js`, `cargando-global.js` ni `buscador-global.js` (los módulos nuevos de la sesión). Sirve para aislar si alguno causa un congelamiento. Si el sitio abre bien con `?seguro=1` y mal sin él, el problema está en esos módulos; si falla igual, está en otra parte.
 - La pestaña ya congelada no se actualiza sola: hay que elegir «Salir de la página» y abrir el sitio de nuevo (Ctrl+Shift+R).
 
-### 4.127 Módulos nuevos apagados por defecto mientras se aísla el congelamiento (v21.73)
+### 4.127 Módulos nuevos apagados por defecto mientras se aísla el congelamiento (v21.74)
 - El sitio seguía mostrando «La página no responde» tras v21.68–v21.72. Como no se puede reproducir sin la sesión real, `menu-lateral.js`, `cargando-global.js` y `buscador-global.js` quedan **desactivados por defecto** (el menú vuelve a su diseño anterior). Se activan uno a uno con `?activar=menu`, `?activar=carga`, `?activar=busqueda` (se recuerda en el equipo) y se apagan con `?desactivar=…`. Así se identifica cuál causa el problema sin dejar el sitio inutilizable.
 - Siguen activos: esqueleto de carga (CSS + `progreso.js`), identidad visual (CSS), vista previa de agenda y Ver Excel.
+
+### 4.128 Inicio reorganizado: lo urgente a la vista sin hacer scroll (v21.74)
+- **Orden nuevo:** accesos rápidos → **Acción inmediata** (izquierda) junto a **6 indicadores** compactos (stock crítico, vencimientos, solicitudes de compra, recepciones, despachos fuera de fecha, bandejas) → franja de estado → «Más indicadores» (plegado: movimientos de hoy y conteo de inventario) → Urgencias y Precaución → Flujo logístico semanal → «Estado por ubicación» (plegado, antes ocupaba mucho espacio) → Agenda.
+- Los bloques «Compras y órdenes en curso», «Ingresos» y «Primeros pasos» se siguen insertando justo bajo el panel de prioridades mediante el ancla `#home-anchor` (antes era la rejilla central). No se cambió ningún id usado por el código.
+- En pantallas de menos de 1100 px las prioridades se apilan.

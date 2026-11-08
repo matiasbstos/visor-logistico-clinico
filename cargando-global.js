@@ -9,7 +9,7 @@
     function etiqueta(t) { t = String(t).replace(/\s+/g, ' ').trim().replace(/\.{2,}$|…$/, ''); return t + '…'; }
     function boton(t) { return RE_BOTON.test(String(t || '')) && String(t).trim().length < 60; }
     if (typeof module !== 'undefined') module.exports = { esCarga, etiqueta, boton };
-    if (typeof document === 'undefined' || !document.body && !document.addEventListener) return;
+    if (typeof document === 'undefined' || !document.createElement || !document.addEventListener) return;
 
     let barra = null, navHasta = 0, temporizador = null, seguro = null;
     function elBarra() { if (!barra) { barra = document.createElement('div'); barra.id = 'sar-topbar'; barra.setAttribute('role', 'progressbar'); barra.setAttribute('aria-label', 'Cargando'); barra.innerHTML = '<span></span>'; document.body.appendChild(barra); } return barra; }

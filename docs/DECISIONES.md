@@ -695,3 +695,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Pie: «Licencias y términos», «Directorio de errores» y «Configuración» quedan en «Más opciones» (desplegable); «Salir» siempre visible. Con la barra contraída, todo sigue accesible por íconos.
 - Nuevo `cargando-global.js`: barra superior con los colores de la marca al navegar y mientras haya algo cargando; cualquier texto suelto «Cargando…» (con o sin ruedita) se convierte al bloque con logo y anillo (`SAR_Progreso.cargando`); los botones en «Guardando…/Creando…/Generando…/Enviando…» muestran ruedita. Seguridad: la barra se apaga sola a los 30 s.
 - No se tocó el flujo de guardado con pantalla de avance (`SAR_Progreso.correr`), que ya existía.
+
+### 4.120 Ajuste de pruebas de la carga global (v21.66)
+- `cargando-global.js` solo se inicia cuando existe un DOM real (corrige la prueba en Node). Sin cambios de comportamiento.

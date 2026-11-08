@@ -5721,3 +5721,11 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .bit-tabla td:nth-child(n+3) { text-align: right; }
 @media (max-width: 767px) { .bit-fnav a { padding: 10px; font-size: 13px; } .bit-evl a { min-height: 40px; } .bit-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } .bit-fh { position: static; } }
 @media (prefers-reduced-motion: reduce) { .bit-fb { scroll-behavior: auto; } .bit-flash { animation: none; background: #FEF9C3; } }
+
+/* Tablas a tu gusto (v21.53) */
+.tc-bar { position: relative; display: flex; justify-content: flex-end; margin: 4px 0 6px; }
+.tc-menu { position: absolute; right: 0; top: 100%; z-index: 60; background: #fff; border: 1px solid #CBD5E1; border-radius: 8px 8px 8px 0; box-shadow: 0 8px 24px rgba(15,23,42,.18); padding: 10px 12px; min-width: 240px; max-width: min(92vw, 320px); display: flex; flex-direction: column; gap: 4px; }
+.tc-menu[hidden] { display: none; }
+.tc-menu label { display: flex; align-items: center; gap: 8px; min-height: 32px; font-size: 13.5px; cursor: pointer; }
+.tc-lista { max-height: 260px; overflow-y: auto; } .tc-sep { border-top: 1px solid #E2E8F0; margin: 4px 0; } .tc-hint { color: #64748B; font-size: 12px; }
+.tc-grip { position: absolute; top: 0; right: -3px; width: 8px; height: 100%; cursor: col-resize; touch-action: none; z-index: 4; } .tc-grip:hover { background: rgba(26,54,104,.25); }

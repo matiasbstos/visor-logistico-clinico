@@ -665,3 +665,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - En Configuración (administración): lista de copias, «Verificar» (descomprime, compara suma y conteos; no toca datos), «Descargar» (JSON) y «Crear copia ahora».
 - La restauración es deliberadamente manual (con el JSON descargado y revisión previa): una restauración automática sobre producción es más riesgosa que útil. Una copia en el mismo proyecto protege de errores humanos, no de perder el proyecto: conviene además una exportación programada de Firestore a Cloud Storage (plan Blaze) o la descarga semanal del JSON.
 - Costo: ~5.000 lecturas de Firestore por día (la cuota gratuita es de 50.000).
+
+### 4.114 Informe de cierre mensual en Excel (v21.60)
+- Nuevo `cierre-mensual.js`: en Informes (administración), selector de mes y botón «Generar Excel» con 9 hojas: Resumen, Entradas, Salidas, Traspasos, Ajustes y mermas, Actas del mes, Órdenes abiertas, Vencimientos y bajo stock, Saldos actuales. Solo lee; no modifica datos.
+- Los movimientos se clasifican por tipo (ingresos/entradas/carga masiva; salida y entrega de acta; traspaso; ajustes, mermas, tomas, cuadres). Los movimientos antiguos con fecha en texto (no Timestamp) no entran en la consulta por mes.
+- Los saldos son los de hoy: el sistema no guarda foto del stock a fin de mes; para un cierre exacto se genera el último día del mes o el primero del siguiente.

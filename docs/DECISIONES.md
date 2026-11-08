@@ -654,3 +654,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.111 Pruebas de unidad de la lógica pura (v21.57)
 - `tests/unidad.js` (no se publica; `node tests/unidad.js`): 8 pruebas sin navegador ni Firebase sobre la bitácora (estado, análisis), el monitor de errores, las columnas, Primeros pasos y el correo HTML. Los flujos con sesión (emitir acta, confirmar, recibir OC) no se automatizan porque exigirían contraseñas de prueba en el repositorio; quedan para una prueba con el emulador de Firebase.
+
+### 4.112 Resumen diario de vencimientos y bajo stock por correo (v21.58)
+- Nuevo `resumen-stock.js`: la primera vez que el personal abre el Visor cada día (después de las 07:00) se revisa Insumos; si hay lotes vencidos, por vencer en ≤30 días o productos bajo el mínimo, sale un correo a los tres destinatarios (hasta 30 filas por sección, con el resto indicado). Sin urgencias, solo se manda el resumen los lunes. Los lotes que vencen entre 31 y 90 días se mencionan como nota.
+- `Contadores/resumen-stock-<día>` evita duplicados aunque abran el Visor varias personas. No es un proceso programado en servidor: si nadie abre el Visor ese día, no sale (para un envío garantizado haría falta una Cloud Function programada, que exige el plan Blaze y despliegue manual).
+- Mínimo y fechas con la misma lógica del panel de Inicio (criticalLimit/stock_minimo, 50 por defecto; lotes en `batches[]`).

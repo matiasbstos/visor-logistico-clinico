@@ -2,7 +2,7 @@
 const assert = require('assert'); globalThis.window = globalThis; globalThis.SAR_SeguimientoOC = {};
 globalThis.document = { getElementById: () => null, addEventListener() {}, querySelector: () => null, readyState: 'complete', scripts: [], body: { dataset: {}, style: {} } };
 let n = 0, mal = 0; const t = (nombre, f) => { try { f(); n++; console.log('OK   ' + nombre); } catch (e) { mal++; console.log('FALLA ' + nombre + ' → ' + e.message); } };
-const B = require('../bitacora-oc.js'), M = require('../monitor-errores.js'), C = require('../tabla-columnas.js'), P = require('../primeros-pasos.js'), H = require('../correo-html.js');
+const B = require('../bitacora-oc.js'), M = require('../monitor-errores.js'), C = require('../tabla-columnas.js'), P = require('../primeros-pasos.js'), H = require('../correo-html.js'), R = require('../resumen-stock.js');
 
 t('clave de OC se normaliza', () => assert.strictEqual(B.claveOC('1298355-936-cm26'), '1298355-936-CM26'));
 t('bitácora: sin correos ni orden = solo correo/sin gestión', () => { const c = B.calcularCaso(null, []); assert.ok(c.estado); });
@@ -20,4 +20,11 @@ t('monitor: enmascara RUT y huella estable', () => { assert.ok(!/12\.345/.test(M
 t('columnas: reglas CSS', () => { const r = C.reglas('x', { ocultas: [2], anchos: { 1: 100 }, fijar: true, compacta: true }); assert.ok(/nth-child\(2\)/.test(r) && /100px/.test(r) && /sticky/.test(r)); });
 t('primeros pasos: porcentaje y siguiente', () => { const a = P.avance({ bodegas: true, inventario: true }); assert.strictEqual(a.pct, 33); assert.strictEqual(a.siguiente.id, 'orden'); });
 t('correo HTML escapa y trae el sujeto', () => { const h = H.armar({ titulo: 'Acta', texto: 'x\n- <b>P</b>: 3 un.', sujeto: 'Acta A-1', orden: {} }); assert.ok(h.includes('Acta A-1') && !h.includes('<b>P</b>') && h.includes('&lt;b&gt;')); });
+t('resumen de stock: vencidos, urgentes y críticos', () => {
+    const hoy = new Date(2026, 10, 9); const it = [
+        { name: 'A', quantity: 5, criticalLimit: 10, batches: [{ batch: 'L1', expirationDate: '2026-11-01', quantity: 3 }, { batch: 'L2', expirationDate: '2026-11-20', quantity: 2 }] },
+        { name: 'B', quantity: 100, criticalLimit: 10, expirationDate: '2027-12-31' }, { name: 'C', quantity: 80, expirationDate: '2027-01-05', batch: 'x' }];
+    const r = R.resumen(it, hoy); assert.strictEqual(r.vencidos.length, 1); assert.strictEqual(r.urgentes.length, 1); assert.strictEqual(r.criticos.length, 1); assert.ok(R.debeEnviar(r, hoy)); assert.strictEqual(R.aFilas(r).length, 3);
+});
+t('resumen de stock: sin urgencias solo manda los lunes', () => { const r = R.resumen([{ name: 'B', quantity: 100, criticalLimit: 10, expirationDate: '2030-01-01' }], new Date(2026, 10, 9)); assert.ok(!R.debeEnviar(r, new Date(2026, 10, 10))); assert.ok(R.debeEnviar(r, new Date(2026, 10, 9))); });
 console.log(`\n${n} ok, ${mal} con falla`); process.exit(mal ? 1 : 0);

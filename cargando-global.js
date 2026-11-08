@@ -10,7 +10,9 @@
     function boton(t) { return RE_BOTON.test(String(t || '')) && String(t).trim().length < 60; }
     if (typeof module !== 'undefined') module.exports = { esCarga, etiqueta, boton };
     if (typeof document === 'undefined' || !document.createElement || !document.addEventListener) return;
-    if (typeof location !== 'undefined' && /[?&]seguro=1/.test(location.search || '')) return;   // modo seguro: abre el sitio sin este módulo
+    // Interruptor (v21.73): desactivado por defecto mientras se aísla un congelamiento. Activar con ?activar=carga (se recuerda) o ?desactivar=carga.
+    function modActivo() { try { const q = new URLSearchParams(location.search), k = 'carga'; if ((q.get('activar') || '').split(',').includes(k)) localStorage.setItem('sar_mod_' + k, '1'); if ((q.get('desactivar') || '').split(',').includes(k)) localStorage.removeItem('sar_mod_' + k); return localStorage.getItem('sar_mod_' + k) === '1'; } catch (e) { return false; } }
+    if (!modActivo() || /[?&]seguro=1/.test(location.search || '')) return;
 
     let barra = null, navHasta = 0, temporizador = null, seguro = null;
     function elBarra() { if (!barra) { barra = document.createElement('div'); barra.id = 'sar-topbar'; barra.setAttribute('role', 'progressbar'); barra.setAttribute('aria-label', 'Cargando'); barra.innerHTML = '<span></span>'; document.body.appendChild(barra); } return barra; }

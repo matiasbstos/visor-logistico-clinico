@@ -5744,3 +5744,8 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 /* Licencias y términos (v21.55) */
 .ac-c { background: #fff; border-radius: 12px 12px 12px 0; width: min(720px, 94vw); max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; } .ac-h { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid #E2E8F0; } .ac-h h3 { margin: 0; font-size: 18px; color: var(--sar-blue, #1A3668); }
 .ac-b { padding: 8px 20px 20px; overflow-y: auto; font-size: 14px; line-height: 1.5; } .ac-b h4 { margin: 14px 0 4px; color: var(--sar-blue, #1A3668); } .ac-b ul { margin: 0; padding-left: 18px; } .ac-b li { margin-bottom: 4px; }
+
+/* Respaldo diario (v21.59) */
+.bk-panel { margin: 24px 0; padding: 16px 18px; background: #fff; border: 1px solid #E2E8F0; border-radius: 8px 8px 8px 0; } .bk-panel h3 { margin: 0 0 6px; color: var(--sar-blue, #1A3668); }
+.bk-fila { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid #EEF2F7; flex-wrap: wrap; } .bk-fila small { display: block; color: #64748B; font-size: 12.5px; } .bk-acc { display: flex; gap: 8px; }
+.bk-res { font-weight: 700; } .bk-ok { color: #15803D !important; } .bk-mal { color: #B91C1C !important; } .bk-pie { margin-top: 12px; }

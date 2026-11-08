@@ -777,3 +777,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Cada ingreso por «Préstamo / traspaso desde otro centro» crea, en la misma transacción, un registro `Contadores/prestamo-<id>` con centro, producto, lote y cantidad, en estado PENDIENTE.
 - En Ingresos aparece el panel **Préstamos de otros centros por devolver** (solo si hay pendientes): por cada uno, cantidad pendiente y botón **Devolver** (parcial o total). Devolver descuenta el stock (primero el lote prestado, luego los más próximos a vencer), valida que haya stock suficiente, actualiza lo devuelto y registra en el historial un movimiento `DEVOLUCION_PRESTAMO` hacia el centro.
 - Al devolver todo, el préstamo pasa a DEVUELTO y desaparece del panel. Los préstamos anteriores a esta versión no tienen registro pendiente.
+
+### 4.137 Escaneo del precinto en el ingreso de existencias (v21.83)
+- Al escanear (o teclear + Enter) el código del precinto en «Escaneo rápido» —`PI-AAAA-NNNN` o sus 8 dígitos— el sistema lo busca en `Contadores/pin-<folio>` y **rellena bodega, conteo/toma y categoría**; aparece un recuadro «precinto activo» con el folio y una × para quitarlo.
+- Mientras haya precinto activo, **cada registro guardado lleva `[Precinto PI-…]` en Observaciones** y suma al contador `registros` del precinto, que pasa a estado EN_CONTEO. Así se sabe qué productos se contaron dentro de qué caja/estante.
+- Los códigos de producto no se ven afectados (solo se interceptan los que tienen formato de folio). Si el folio no existe, avisa y no cambia nada.
+- Pendiente: marcar el precinto como CERRADO (con total contado y diferencia) y un listado de precintos abiertos.

@@ -840,3 +840,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.149 Recepción conforme: empresa larga y firma con timbre en el Word (v21.95)
 - El nombre de la empresa del PDF de recepción conforme **salta de línea** cuando no cabe (antes se cortaba al borde de la hoja).
 - El Word de la recepción conforme (el que se genera al descargar o al **Editar**) ahora incluye la **firma con el timbre** de la contraparte técnica sobre «Firma contraparte técnica», igual que el PDF, respetando la casilla «Incluir firma».
+
+### 4.150 Fecha de la recepción conforme: la de la recepción física (v21.96)
+- Al hacer la recepción conforme, la fecha ya **no se propone como «hoy»**: se propone el día en que se registró la última recepción de productos de la orden. Un aviso bajo el campo explica la diferencia con hoy y ofrece «Usar hoy». El acta lleva la fecha que quede en el campo (editable también después con «Editar»).

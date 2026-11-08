@@ -800,3 +800,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - El proveedor y la fecha de carga se actualizan solos con cada «Enviado a recarga» / «Recarga recibida», y el **precinto los imprime ya llenos** junto al N.° de serie, el tipo de gas y la capacidad (título «CONTROL DE AIRE COMPRIMIDO» cuando corresponde). Revisado por, Reporta incid. y Motivo quedan en blanco para llenar a mano.
 - Nueva acción **Cambiar tipo de gas** (con historial «De X a Y»), filtro por gas junto al de capacidad, y el acta de entrega nombra «BALÓN DE AIRE COMPRIMIDO» cuando corresponde.
 - **Pendiente del usuario:** entregar la lista de proveedores para dejarla como sugerencias (hoy se sugieren los ya usados) y confirmar si hay otros tipos de gas además de oxígeno y aire comprimido.
+
+### 4.141 Folio correlativo en el precinto de oxígeno (v21.87)
+- Cada etiqueta de oxígeno lleva un **folio correlativo anual PO-AAAA-NNNN** (contador `Contadores/precinto-oxi-AAAA`, reservado en una transacción), impreso abajo a la izquierda, además del N.° de serie. Cada folio queda registrado en `Contadores/pin-<folio>` con serie, gas, capacidad, proveedor y fecha de carga.
+- El folio se asigna al **primer** «Imprimir» o «Descargar PDF» del diálogo; volver a imprimir en el mismo diálogo usa los mismos folios (no consume números). Un precinto nuevo, aunque sea del mismo balón, recibe un folio nuevo.

@@ -51,6 +51,18 @@
     const f = fs(), ref = f.doc(f.collection(db(), 'Contadores'), 'precinto-' + anio);
     return f.runTransaction(db(), async (tx) => { const s = await tx.get(ref); const ult = s.exists() ? Number(s.data().ultimo) || 0 : 0; tx.set(ref, { ultimo: ult + n, tipo: 'contador-precinto', updatedAt: f.serverTimestamp() }, { merge: true }); return ult + 1; });
   }
+  /** Folios PO-AAAA-NNNN para precintos de oxígeno; cada etiqueta física lleva su correlativo. */
+  async function reservarOxi(equipos) {
+    const anio = new Date().getFullYear(), f = fs(), n = equipos.length, ref = f.doc(f.collection(db(), 'Contadores'), 'precinto-oxi-' + anio);
+    const primero = await f.runTransaction(db(), async (tx) => { const s = await tx.get(ref); const ult = s.exists() ? Number(s.data().ultimo) || 0 : 0; tx.set(ref, { ultimo: ult + n, tipo: 'contador-precinto-oxigeno', updatedAt: f.serverTimestamp() }, { merge: true }); return ult + 1; });
+    const out = [];
+    for (let i = 0; i < n; i++) {
+      const e = equipos[i], folioOxi = 'PO-' + anio + '-' + String(primero + i).padStart(4, '0');
+      out.push(Object.assign({}, e, { folio: folioOxi }));
+      await f.setDoc(f.doc(f.collection(db(), 'Contadores'), 'pin-' + folioOxi), { tipo: 'precinto-oxigeno', folio: folioOxi, serie: e.serie || '', gas: e.gas || 'Oxígeno medicinal', capacidad: e.capacidad || '', proveedor: e.proveedor || '', fechaCarga: e.ultimaRecarga || '', creadoPor: usuario(), updatedAt: f.serverTimestamp() });
+    }
+    return out;
+  }
   async function generar(datos, copias) {
     const anio = new Date().getFullYear(), f = fs();
     const primero = await reservar(copias, anio);
@@ -109,7 +121,7 @@
   function etiquetaOxiHTML(e) {
     return '<section class="precinto pr-oxi"><div class="po-izq"><img src="assets/logo-sar.png" alt="SAR" class="po-logo"><div class="po-tit">' + esc(tituloGas(e)) + '</div>' +
       '<div class="po-serie"><span>N° SERIE</span> ' + esc(e.serie) + '</div>' + '<div class="po-cap">' + esc(gasTxt(e)) + (e.capacidad ? ' · ' + esc(e.capacidad) : '') + '</div>' +
-      '<div class="po-c">Proveedor: ' + (e.proveedor ? '<b>' + esc(e.proveedor) + '</b>' : '<i></i>') + '</div><div class="po-c">Fecha carga: ' + (fechaCL(e.ultimaRecarga) ? '<b>' + fechaCL(e.ultimaRecarga) + '</b>' : '<i class="s">__/__/20__</i>') + '</div><div class="po-c">Revisado por: <i></i></div><div class="po-c">Reporta incid.: <i></i></div></div>' +
+      '<div class="po-c">Proveedor: ' + (e.proveedor ? '<b>' + esc(e.proveedor) + '</b>' : '<i></i>') + '</div><div class="po-c">Fecha carga: ' + (fechaCL(e.ultimaRecarga) ? '<b>' + fechaCL(e.ultimaRecarga) + '</b>' : '<i class="s">__/__/20__</i>') + '</div><div class="po-c">Revisado por: <i></i></div><div class="po-c">Reporta incid.: <i></i></div><div class="po-fol">' + (e.folio ? 'Folio <b>' + esc(e.folio) + '</b>' : 'Folio: se asigna al imprimir') + '</div></div>' +
       '<div class="po-der">' + OXI_ESTADOS.map(x => '<div class="pr-chk"><i></i>' + x + '</div>').join('') + '<div class="po-mot">Motivo F. Servicio:<i></i><i></i></div>' + barrasSVG(e.serie, 10, true) + '</div></section>';
   }
   async function pdfOxigeno(equipos) {
@@ -124,6 +136,7 @@
       d.setFontSize(7.5); d.text(gasTxt(e) + (e.capacidad ? ' · ' + e.capacidad : ''), 4, 26.5);
       d.setFontSize(7.5);
       [['Proveedor:', e.proveedor || '', 43], ['Fecha carga:', fechaCL(e.ultimaRecarga) || '__/__/20__', null], ['Revisado por:', '', 43], ['Reporta incid.:', '', 43]].forEach((c, i) => { const y = 32 + i * 6; d.setFont('helvetica', 'normal'); d.text(c[0], 4, y); const x0 = d.getTextWidth(c[0]) + 6; if (c[1]) { d.setFont('helvetica', 'bold'); d.text(String(c[1]).slice(0, 22), x0, y); } else if (c[2]) d.line(x0, y, c[2], y); });
+      d.setFontSize(7); d.setFont('helvetica', 'normal'); d.text('Folio', 4, 56); d.setFont('helvetica', 'bold'); d.setFontSize(8.5); d.text(e.folio || '—', 14, 56);
       d.setLineWidth(0.3); d.line(50, 4, 50, 56);
       OXI_ESTADOS.forEach((x, i) => { const y = 9 + i * 6; d.rect(53, y - 2.7, 3.2, 3.2); d.setFontSize(7.5); d.text(x, 58, y); });
       d.setFontSize(7); d.text('Motivo F. Servicio:', 53, 36); d.line(53, 41, 96, 41); d.line(53, 46, 96, 46);
@@ -135,10 +148,19 @@
     if (!equipos || !equipos.length) { toast('Precinto', 'No hay balones para imprimir.', 'error'); return; }
     let m = document.getElementById('modal-precinto'); if (!m) { m = document.createElement('div'); m.id = 'modal-precinto'; m.className = 'modal-overlay'; document.body.appendChild(m); }
     m.innerHTML = '<div class="modal-content pr-modal"><div class="modal-header"><div><span class="text-primary font-bold text-sm">OXÍGENO PORTÁTIL</span><h2>Precinto de control</h2></div><button type="button" class="btn btn-icon close-modal-btn" data-pr="cerrar"><i class="ph ph-x"></i></button></div>' +
-      '<div class="modal-body"><p class="sub-text">' + equipos.length + ' precinto(s) con N° de serie automático' + (equipos.length > 1 ? ' (vista previa del primero)' : '') + '. Formato 100×60 mm para la Zebra.</p><div class="pr-vista">' + etiquetaOxiHTML(equipos[0]) + '</div></div>' +
+      '<div class="modal-body"><p class="sub-text">' + equipos.length + ' precinto(s) con N° de serie automático' + (equipos.length > 1 ? ' (vista previa del primero)' : '') + '. El folio correlativo se asigna al imprimir o descargar. Formato 100×60 mm para la Zebra.</p><div class="pr-vista">' + etiquetaOxiHTML(equipos[0]) + '</div></div>' +
       '<div class="modal-footer pr-pie-m"><button type="button" class="btn btn-outline" data-pr="cerrar">Cerrar</button><button type="button" class="btn btn-outline" data-pr="pdf"><i class="ph-bold ph-file-pdf"></i> Descargar PDF</button><button type="button" class="btn btn-primary" data-pr="imprimir"><i class="ph-bold ph-printer"></i> Imprimir</button></div></div>';
     m.classList.add('active');
-    m.onclick = (e) => { const b = e.target.closest('[data-pr]'); if (!b) return; if (b.dataset.pr === 'cerrar') m.classList.remove('active'); else if (b.dataset.pr === 'imprimir') imprimirHtml(equipos.map(etiquetaOxiHTML)); else if (b.dataset.pr === 'pdf') pdfOxigeno(equipos); };
+    let asignados = null;
+    const asignar = async () => { if (!asignados) { asignados = await reservarOxi(equipos); const v = m.querySelector('.pr-vista'); if (v) v.innerHTML = etiquetaOxiHTML(asignados[0]); const t = m.querySelector('.sub-text'); if (t) t.textContent = asignados.length + ' precinto(s): ' + asignados[0].folio + (asignados.length > 1 ? ' a ' + asignados[asignados.length - 1].folio : '') + '. Formato 100×60 mm para la Zebra.'; } return asignados; };
+    m.onclick = async (e) => {
+      const b = e.target.closest('[data-pr]'); if (!b) return; const a = b.dataset.pr;
+      if (a === 'cerrar') { m.classList.remove('active'); return; }
+      b.disabled = true;
+      try { const L = await asignar(); if (a === 'imprimir') imprimirHtml(L.map(etiquetaOxiHTML)); else if (a === 'pdf') await pdfOxigeno(L); }
+      catch (err) { console.error('[Precintos]', err); toast('Precinto', 'No se pudo reservar el folio (código PI-02). Revisa la conexión.', 'error'); }
+      b.disabled = false;
+    };
   }
 
   async function bodegasNombres() {

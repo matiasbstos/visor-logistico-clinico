@@ -45,7 +45,9 @@
         lista.forEach(b => { const ocupado = (b.disabled || b.getAttribute('aria-busy') === 'true') && boton(b.textContent); b.classList.toggle('ml-busy', !!ocupado); });
     }
     function iniciar() {
-        elBarra(); mejorar(document.body);
+        elBarra();
+        // revisión inicial (una vez): textos «Cargando…» que ya vienen en el HTML
+        if (window.SAR_Progreso) document.querySelectorAll('td,div,p,li,span').forEach(x => { if (x.children.length <= 1 && x.textContent.length < 90 && esCarga(x.textContent) && ![...x.children].some(h => !h.matches('i.ph-spin, i[class*="ph-spinner"]')) && !x.closest('.sar-cargando, .sar-prog, button, option')) x.innerHTML = window.SAR_Progreso.cargando(etiqueta(x.textContent)); });
         let llamadas = 0, ventana = Date.now(), obs = null;
         obs = new MutationObserver(ms => {
             // freno de seguridad: si algo dispara el observador sin parar, se apaga en vez de congelar la página

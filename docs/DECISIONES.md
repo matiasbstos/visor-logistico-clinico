@@ -707,3 +707,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.122 Corrección de congelamiento y carga tipo esqueleto (v21.68)
 - **Falla:** tras v21.65 Chrome mostró «La página no responde». Causa probable: `cargando-global.js` recorría cada fila de las tablas grandes en cada actualización en tiempo real. Ahora revisa solo nodos cuyo texto contiene «cargando…» (prueba barata), con tope de 300 nodos y 10 ms por ciclo, y un freno: si el observador se dispara más de 150 veces por segundo se apaga solo.
 - **Criterio de carga (pedido del usuario):** al entrar a una pantalla o listar datos se muestra un **esqueleto con barrido de luz** (`SAR_Progreso.cargando`); el **logo con anillo** queda solo para acciones: guardar, crear actas, recepción conforme y subir archivos (`SAR_Progreso.iniciar/correr`). La barra superior se mantiene.
+
+### 4.123 Primer paso de identidad visual unificada con el login (v21.69)
+- **Auditoría (login vs pantallas internas):** el login usa radios grandes (24 px), campos de 10 px, sombras suaves y título de 1,7 rem en 800; el interior mezclaba radios de 4/6/8/10/12 px, bordes y grises distintos (más de 20 tonos de gris), botones definidos 4+ veces en la hoja y tarjetas con borde plano sin sombra. Hay tokens de marca, pero muchos colores están escritos a mano.
+- **Cambio:** bloque final «Identidad visual unificada» con tokens (`--id-r`, `--id-sombra`…): tarjetas de 14 px conservando la esquina inferior izquierda recta del logo SAR, sombra suave, botones y campos de 10 px con foco azul, cabeceras de tabla uniformes, ventanas de 20 px y títulos como en el login.
+- **Carga:** corrección de v21.68: los «Cargando…» que vienen en el HTML inicial también pasan a esqueleto (revisión única al abrir). Esqueleto más compacto.
+- **Pendiente (siguientes pasos):** reemplazar colores escritos a mano por tokens, quitar botones duplicados de la hoja y revisar Existencias, Seguimiento de OC y modales con datos reales.

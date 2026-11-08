@@ -5814,9 +5814,9 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .sidebar.collapsed .bg-res { display: none; }
 
 /* Carga de pantalla: esqueleto con barrido (v21.68) */
-.sar-esq { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 12px; padding: 18px 16px; text-align: left; width: 100%; box-sizing: border-box; }
+.sar-esq { display: flex; flex-direction: column; align-items: stretch; justify-content: flex-start; gap: 10px; padding: 14px 16px; text-align: left; width: 100%; box-sizing: border-box; }
 .sar-esq__t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-.sar-esq__fila { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; } .sar-esq__fila i { display: block; height: 64px; border-radius: 8px 8px 8px 0; }
+.sar-esq__fila { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; } .sar-esq__fila i { display: block; height: 44px; border-radius: 8px 8px 8px 0; }
 .sar-esq__lin { height: 16px; border-radius: 6px; } .sar-esq__lin--c { width: 62%; }
 .sar-esq__fila i, .sar-esq__lin { position: relative; overflow: hidden; background: #E8EDF5; }
 .sar-esq__fila i::after, .sar-esq__lin::after { content: ''; position: absolute; inset: 0; transform: translateX(-100%); background: linear-gradient(90deg, transparent, rgba(255,255,255,.75), transparent); animation: esqBarrido 1.3s cubic-bezier(.4,0,.2,1) infinite; }
@@ -5824,3 +5824,16 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .bg-res .sar-esq { padding: 10px 6px; } .bg-res .sar-esq__fila { display: none; } .bg-res .sar-esq__fila i, .bg-res .sar-esq__lin { background: rgba(255,255,255,.14); }
 @media (prefers-reduced-motion: reduce) { .sar-esq__fila i::after, .sar-esq__lin::after { animation: none; } }
 @media (max-width: 767px) { .sar-esq__fila { grid-template-columns: 1fr; } }
+
+/* Identidad visual unificada con el login (v21.69): mismos radios, sombras suaves, títulos y campos en todas las pantallas */
+:root { --shape-card: 14px 14px 14px 0; --id-r: 14px; --id-r-sm: 10px; --id-borde: #E2E8F0; --id-sombra: 0 1px 2px rgba(15,23,42,.04), 0 8px 24px -12px rgba(26,54,104,.14); --id-sombra-alta: 0 2px 4px rgba(15,23,42,.05), 0 16px 32px -14px rgba(26,54,104,.22); }
+.view-section h1, .view-section .page-title h1 { font-size: 1.6rem; font-weight: 800; letter-spacing: -.01em; color: var(--sar-blue); }
+.erp-card, .stat-card, .erp-kpi-card, .home-fold, .soc-card, .bit-grp, .act-card { border-radius: var(--shape-card); border-color: var(--id-borde); box-shadow: var(--id-sombra); background: #fff; }
+.erp-kpi-card:hover, .stat-card:hover { box-shadow: var(--id-sombra-alta); transform: translateY(-1px); transition: box-shadow .2s ease, transform .2s ease; }
+.btn { border-radius: var(--id-r-sm); }
+.view-section input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), .view-section select, .view-section textarea { border-radius: var(--id-r-sm); border-color: #D6DDE8; background: #F8FAFC; transition: border-color .15s, box-shadow .15s, background-color .15s; }
+.view-section input:focus, .view-section select:focus, .view-section textarea:focus { background: #fff; border-color: var(--sar-blue); box-shadow: var(--ux-ring, 0 0 0 3px rgba(26,54,104,.25)); outline: 0; }
+.view-section table thead th { background: #F1F5F9; color: #475569; font-size: 11.5px; letter-spacing: .05em; text-transform: uppercase; font-weight: 800; }
+.modal-content, .modal-card { border-radius: 20px; box-shadow: var(--id-sombra-alta); }
+.sidebar-box { border-radius: 14px; }
+@media (prefers-reduced-motion: reduce) { .erp-kpi-card:hover, .stat-card:hover { transform: none; } }

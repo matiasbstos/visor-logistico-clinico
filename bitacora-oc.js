@@ -216,6 +216,18 @@
     }
 
     const NIVEL = { bad: ['ph-x-circle', 'Discrepancia'], warn: ['ph-warning', 'Revisar'], info: ['ph-info', 'Información'], ok: ['ph-check-circle', 'Concordancia'] };
+        // Ruta animada del ciclo (v21.61): barra con marcador que avanza hasta la última etapa lograda (CSS puro, respeta reduced-motion)
+    function rutaHTML(et) {
+        let ult = -1; et.forEach((x, i) => { if (x.estado === 'hecho' || x.estado === 'curso' || x.estado === 'alerta') ult = i; });
+        const n = et.length, pct = ult < 0 ? 0 : Math.round((ult / (n - 1)) * 100);
+        const mk = et.map((x, i) => `<i class="bit-rp bit-rp-${x.estado}" style="left:${Math.round(i / (n - 1) * 100)}%"></i>`).join('');
+        return `<div class="bit-route" role="img" aria-label="Avance del ciclo: etapa ${ult + 1} de ${n}"><div class="bit-rl"><span class="bit-rf" data-pct="${pct}"></span>${mk}<b class="bit-rb" data-pct="${pct}"><i class="ph-bold ph-package"></i></b></div></div>`;
+    }
+    function animarRuta(root) {
+        const f = root.querySelector('.bit-rf'), b = root.querySelector('.bit-rb'); if (!f) return;
+        const go = () => { f.style.width = f.dataset.pct + '%'; b.style.left = b.dataset.pct + '%'; };
+        (window.requestAnimationFrame || setTimeout)(() => (window.requestAnimationFrame || setTimeout)(go));
+    }
     function evHTML(ev, etapaTxt) {
         const cl = CLASES[ev.clase] || CLASES.otro, r = ev.refs || {}, ch = [];
         (r.memo || []).forEach(x => ch.push('memo ' + x)); (r.sdc || []).forEach(x => ch.push('SDC ' + x)); (r.cdp || []).forEach(x => ch.push('CDP ' + x));
@@ -243,7 +255,7 @@
             ${c.oc ? '<button type="button" class="btn btn-outline" id="bit-ir"><i class="ph-bold ph-arrow-square-out"></i> Abrir en Seguimiento de OC</button>' : ''}</header>
           <nav class="bit-fnav" aria-label="Secciones"><a href="#bit-s-ciclo">Ciclo de vida</a><a href="#bit-s-hall">Hallazgos (${c.hallazgos.length})</a><a href="#bit-s-bit">Bitácora (${ev.length})</a><a href="#bit-s-prod">Productos y centros</a></nav>
           <div class="bit-fb">
-            <section id="bit-s-ciclo" aria-label="Ciclo de vida"><h4 class="bit-h">Ciclo de vida</h4><ol class="bit-steps">${c.etapas.map((x, i) => `<li class="bit-st bit-st-${x.estado}"><span class="bit-sti"><i class="ph-bold ${EST[x.estado][0]}"></i></span><b>${i + 1}. ${esc(x.t)}</b><small class="bit-stv">${EST[x.estado][1]}${x.fecha ? ' · ' + esc(fecha(x.fecha)) : ''}</small><small>${esc(x.det)}</small></li>`).join('')}</ol>
+            <section id="bit-s-ciclo" aria-label="Ciclo de vida"><h4 class="bit-h">Ciclo de vida</h4>${rutaHTML(c.etapas)}<ol class="bit-steps">${c.etapas.map((x, i) => `<li class="bit-st bit-st-${x.estado}"><span class="bit-sti"><i class="ph-bold ${EST[x.estado][0]}"></i></span><b>${i + 1}. ${esc(x.t)}</b><small class="bit-stv">${EST[x.estado][1]}${x.fecha ? ' · ' + esc(fecha(x.fecha)) : ''}</small><small>${esc(x.det)}</small></li>`).join('')}</ol>
               <div class="bit-kpis bit-kpis4"><div><b>${c.pedido || '—'}</b><small>pedido (SAR)</small></div><div><b>${c.pedido ? c.recibido : '—'}</b><small>recibido</small></div><div class="${c.falta ? 'bit-falta' : ''}"><b>${c.pedido ? c.falta : '—'}</b><small>faltan</small></div><div class="${c.otros ? 'bit-falta' : ''}"><b>${c.oc ? c.otros : '—'}</b><small>en bodega para otros centros</small></div></div></section>
             <section id="bit-s-hall" aria-label="Hallazgos"><h4 class="bit-h">Hallazgos del análisis</h4>${hall.length ? hall.map(g => `<div class="bit-hg bit-hg-${g.n}"><h5><i class="ph-bold ${NIVEL[g.n][0]}"></i> ${NIVEL[g.n][1]} (${g.items.length})</h5>${g.items.map(h => `<div class="bit-hi"><b>${esc(h.titulo)}</b>${h.detalle ? `<p>${esc(h.detalle)}</p>` : ''}${h.evid.length ? `<div class="bit-evl">${h.evid.map(x => `<a href="#ev-${esc(x.id)}" data-ev="${esc(x.id)}">${esc(fecha(x.fecha))} · ${esc((CLASES[x.clase] || CLASES.otro)[1])}</a>`).join('')}</div>` : ''}</div>`).join('')}</div>`).join('') : '<p class="act-hint">Sin hallazgos todavía.</p>'}</section>
             <section id="bit-s-bit" aria-label="Bitácora"><div class="bit-bh"><h4 class="bit-h">Bitácora (${ev.length} correos)</h4><div class="bit-seg" role="group" aria-label="Vista"><button type="button" aria-pressed="${!vistaCron}" class="${vistaCron ? '' : 'on'}" data-v="etapa">Por etapa</button><button type="button" aria-pressed="${vistaCron}" class="${vistaCron ? 'on' : ''}" data-v="cron">Cronológica</button></div></div>
@@ -253,6 +265,7 @@
               ${c.centros.length ? `<div class="bit-sc" tabindex="0" role="region" aria-label="Tabla de detalle"><table class="bit-tabla"><thead><tr><th scope="col">Centro</th><th scope="col">Memo</th><th scope="col">Pedido</th><th scope="col">Recibido</th><th scope="col">En bodega</th><th scope="col">Entregado</th><th scope="col">Estado</th></tr></thead><tbody>${c.centros.map(x => `<tr${x.centro !== 'SAR' && x.entregable > 0 ? ' class="bit-otro"' : ''}><td>${esc(x.centro)}</td><td>${esc(x.memo || '—')}</td><td>${x.pedido}</td><td>${x.recibido}</td><td>${x.entregable}</td><td>${x.entregado}</td><td>${esc(ETIQ_ENT[x.estado] || x.estado)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="act-hint">Esta orden no está en el Visor: no hay cuadro de distribución para comparar.</p>'}
               ${c.productos.length ? `<h5 class="bit-h5">Qué falta recibir al SAR (${c.productos.length})</h5><div class="bit-sc" tabindex="0" role="region" aria-label="Tabla de detalle"><table class="bit-tabla"><thead><tr><th scope="col">Producto</th><th scope="col">Pedido</th><th scope="col">Recibido</th><th scope="col">Falta</th></tr></thead><tbody>${c.productos.map(x => `<tr><td>${esc(x.producto)}</td><td>${x.pedido}</td><td>${x.recibido}</td><td><b>${x.pendiente}</b></td></tr>`).join('')}</tbody></table></div>` : ''}</section>
           </div></div>`;
+        animarRuta(p);
         const dr = p.querySelector('.bit-full'), origen = window.__bitOrigen || null; document.body.style.overflow = 'hidden';
         const cerrar = () => { document.removeEventListener('keydown', teclas); document.body.style.overflow = ''; abierto = null; p.innerHTML = ''; if (origen && document.contains(origen)) origen.focus(); };
         const teclas = (k) => {

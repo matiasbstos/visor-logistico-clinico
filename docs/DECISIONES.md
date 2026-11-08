@@ -670,3 +670,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Nuevo `cierre-mensual.js`: en Informes (administración), selector de mes y botón «Generar Excel» con 9 hojas: Resumen, Entradas, Salidas, Traspasos, Ajustes y mermas, Actas del mes, Órdenes abiertas, Vencimientos y bajo stock, Saldos actuales. Solo lee; no modifica datos.
 - Los movimientos se clasifican por tipo (ingresos/entradas/carga masiva; salida y entrega de acta; traspaso; ajustes, mermas, tomas, cuadres). Los movimientos antiguos con fecha en texto (no Timestamp) no entran en la consulta por mes.
 - Los saldos son los de hoy: el sistema no guarda foto del stock a fin de mes; para un cierre exacto se genera el último día del mes o el primero del siguiente.
+
+### 4.115 Ruta animada del ciclo y higiene SEO (v21.61)
+- Bitácora: sobre las 6 etapas se muestra una ruta con marcador que avanza (1,25 s) hasta la última etapa lograda; CSS puro, sin librerías (no se agrega GSAP), respeta `prefers-reduced-motion` y se oculta en celular.
+- SEO: se agregan título y descripción, `canonical`, Open Graph y `robots.txt`. **Decisión:** la app es interna y con login, por lo que se mantiene `noindex` y `Disallow: /` (contrario al consejo del video, pensado para sitios públicos). Sin `sitemap.xml` ni `llms.txt` por la misma razón. Ya cumplía: HTTPS, `lang="es"`, responsive, un `<h1>` por vista.

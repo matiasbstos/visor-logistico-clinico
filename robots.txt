@@ -1,0 +1,3 @@
+# Aplicación interna con inicio de sesión: no se indexa.
+User-agent: *
+Disallow: /

@@ -630,3 +630,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Los errores globales del navegador ya no muestran el texto técnico al usuario (queda en la consola); se muestra un mensaje simple.
 - Revisado sin cambios: la apiKey de Firebase en el cliente es pública por diseño (protege la regla, no la clave); los scripts de administración (reset-pwd, make-superadmin, etc.) están excluidos del hosting.
 - Pendiente sugerido: App Check (límite de peticiones), restringir la apiKey por dominio en Google Cloud, rotar la contraseña expuesta en el commit 9c54373, página de licencias/términos, pruebas automáticas con Playwright.
+
+### 4.106 Tablas a tu gusto: columnas, ancho, fijar y densidad (v21.53)
+- Nuevo `tabla-columnas.js`: barra «Columnas» en Existencias, Historial, Compras, Kardex, Usuarios, Bodegas, Informes, Stock crítico, Recepciones y Solicitudes críticas. Mostrar/ocultar columnas, arrastrar el borde del encabezado para el ancho (doble clic lo restablece), fijar la primera columna y filas compactas.
+- Es no destructivo (reglas CSS por posición de columna) y se guarda por tabla y por equipo en localStorage; «Restablecer» vuelve a lo original. No se reordenan columnas para no romper el código de cada pantalla.

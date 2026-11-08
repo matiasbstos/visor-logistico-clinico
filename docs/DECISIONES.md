@@ -651,3 +651,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Nuevo `monitor-errores.js`: los errores de JavaScript y promesas rechazadas que vive el personal (admin/operador) se guardan en `Contadores/err-<día>-<huella>` (mensaje, archivo, línea, pantalla, versión, quién, cuántas veces) y, la primera vez del día, se avisa por correo a los tres destinatarios (máx. 3 por equipo y día).
 - Sin datos de pacientes (RUT enmascarados, mensaje a 300 caracteres) y sin ruido (extensiones, red intermitente, ResizeObserver). Nunca lanza errores propios.
 - Se ve en «Directorio de errores» → «Errores registrados en el sistema» (solo administración). Los errores de enfermería no se registran (las reglas de Contadores son solo para personal).
+
+### 4.111 Pruebas de unidad de la lógica pura (v21.57)
+- `tests/unidad.js` (no se publica; `node tests/unidad.js`): 8 pruebas sin navegador ni Firebase sobre la bitácora (estado, análisis), el monitor de errores, las columnas, Primeros pasos y el correo HTML. Los flujos con sesión (emitir acta, confirmar, recibir OC) no se automatizan porque exigirían contraseñas de prueba en el repositorio; quedan para una prueba con el emulador de Firebase.

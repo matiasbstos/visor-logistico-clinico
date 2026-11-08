@@ -446,11 +446,27 @@
         try { return await guardarArchivo(ocId, { nombre: file.name, categoria, bytes: new Uint8Array(await file.arrayBuffer()), mime: file.type || 'application/octet-stream', nota }); }
         catch (e) { toast('Archivo no guardado', `${file.name}: ${e.message || e}`, 'warning'); return false; }
     }
+    /** Muestra un Excel dentro del sitio (solo lectura), una pestaña por hoja; con botón para descargar. */
+    function verExcel(a, u) {
+        const wb = window.XLSX.read(u, { type: 'array' }), hojas = wb.SheetNames.slice(0, 12);
+        const tabla = n => { const f = window.XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '', raw: false }).slice(0, 500).filter(r => r.some(c => String(c).trim() !== '')); const w = Math.min(40, Math.max(0, ...f.map(r => r.length)));
+            return f.length ? '<table class="vx-t"><tbody>' + f.map((r, i) => '<tr>' + Array.from({ length: w }, (_, j) => (i === 0 ? '<th>' : '<td>') + esc(r[j] == null ? '' : r[j]) + (i === 0 ? '</th>' : '</td>')).join('') + '</tr>').join('') + '</tbody></table>' + (f.length >= 500 ? '<p class="cierre-hint">Se muestran las primeras 500 filas; descarga el archivo para ver todo.</p>' : '') : '<p class="cierre-hint">Hoja vacía.</p>'; };
+        const o = document.createElement('div'); o.className = 'vx-ov'; o.setAttribute('role', 'dialog'); o.setAttribute('aria-modal', 'true');
+        o.innerHTML = `<div class="vx-box"><header><strong>${esc(a.nombre)}</strong><span>Solo lectura</span><button type="button" class="btn btn-outline btn-sm" data-dl>Descargar</button><button type="button" class="btn btn-primary btn-sm" data-x>Cerrar</button></header><nav>${hojas.map((n, i) => `<button type="button" data-h="${i}" class="${i ? '' : 'on'}">${esc(n)}</button>`).join('')}</nav><div class="vx-body">${tabla(hojas[0])}</div></div>`;
+        document.body.appendChild(o);
+        const cerrar = () => { o.remove(); document.removeEventListener('keydown', k); }, k = e => { if (e.key === 'Escape') cerrar(); };
+        document.addEventListener('keydown', k);
+        o.querySelector('[data-x]').addEventListener('click', cerrar); o.addEventListener('click', e => { if (e.target === o) cerrar(); });
+        o.querySelectorAll('nav [data-h]').forEach(b => b.addEventListener('click', () => { o.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b)); o.querySelector('.vx-body').innerHTML = tabla(hojas[+b.dataset.h]); }));
+        o.querySelector('[data-dl]').addEventListener('click', () => { const url = URL.createObjectURL(new Blob([u])); const l = document.createElement('a'); l.href = url; l.download = a.nombre; document.body.appendChild(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000); });
+        o.querySelector('[data-x]').focus();
+    }
     async function verArchivo(a) {
         const f = fs(); const snap = await f.getDocs(f.query(f.collection(db(), 'Seguimiento_OC', ocActual.id, 'Archivos', a.id, 'Partes'), f.orderBy('n')));
         let b64 = ''; snap.forEach(d => { b64 += d.data().b64; });
         if (!b64) throw new Error('El archivo no tiene contenido.');
         const bin = atob(b64), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+        if (/\.(xlsx|xls|csv)$/i.test(a.nombre || '') && window.XLSX) { try { return verExcel(a, u); } catch (e) { console.warn('Vista Excel falló, se descarga', e); } }
         const url = URL.createObjectURL(new Blob([u], { type: a.mime || 'application/pdf' }));
         const w = window.open(url, '_blank');
         if (!w) { const l = document.createElement('a'); l.href = url; l.download = a.nombre; document.body.appendChild(l); l.click(); l.remove(); }
@@ -475,7 +491,7 @@
     function pintarArchivos() {
         const host = root() && root().querySelector('#soc-archivos'); if (!host) return;
         const kb = (n) => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
-        host.innerHTML = archivos.length ? '<ul class="soc-arch">' + archivos.map(a => `<li><i class="ph-bold ph-file-pdf"></i><div><strong>${esc(a.nombre)}</strong><small>${esc(a.categoria)} · ${kb(a.tamano || 0)} · ${a.fecha && a.fecha.toDate ? fmtFecha(a.fecha.toDate().toISOString().slice(0, 10)) : ''} · ${esc(a.subidoPor || '')}</small></div><button type="button" class="btn btn-outline btn-sm" data-arch="${esc(a.id)}">Ver</button></li>`).join('') + '</ul>'
+        host.innerHTML = archivos.length ? '<ul class="soc-arch">' + archivos.map(a => `<li><i class="ph-bold ${/\.(xlsx|xls|csv)$/i.test(a.nombre || '') ? 'ph-file-xls' : 'ph-file-pdf'}"></i><div><strong>${esc(a.nombre)}</strong><small>${esc(a.categoria)} · ${kb(a.tamano || 0)} · ${a.fecha && a.fecha.toDate ? fmtFecha(a.fecha.toDate().toISOString().slice(0, 10)) : ''} · ${esc(a.subidoPor || '')}</small></div><button type="button" class="btn btn-outline btn-sm" data-arch="${esc(a.id)}">Ver</button></li>`).join('') + '</ul>'
             : '<p class="bodega-estantes__hint">Aún no hay archivos. Los PDF que cargues en esta orden (orden, distribución, guía, acta) quedarán aquí.</p>';
         host.querySelectorAll('[data-arch]').forEach(b => b.addEventListener('click', () => { const a = archivos.find(x => x.id === b.dataset.arch); if (a) verArchivo(a).catch(e => toast('No se pudo abrir', e.message || String(e), 'error')); }));
     }

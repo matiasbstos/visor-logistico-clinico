@@ -33,3 +33,7 @@ Guía viva para quien diseñe o revise pantallas (personas y el agente `ux-ui-fl
 - v21.69: radios, sombras, campos, títulos y tablas unificados.
 - v21.70: sin acentos laterales; estado con punto de color.
 - Siguiente: tokens en lugar de colores escritos a mano, eliminar estilos de botón duplicados, revisar Existencias, Seguimiento de OC y ventanas con datos reales.
+
+## Referencias de movimiento y método (revisadas v21.79)
+- **Bibliotecas de componentes animados** (Vengeance UI, Animate UI, UI Lora): son React/Tailwind y no se instalan en este sitio (JS puro). Se toman como **referencia de patrón**: números que cuentan hasta su valor, indicador deslizante en pestañas/segmentos, entradas escalonadas de listas, tarjetas que reaccionan al puntero. Reglas: ≤0,4 s, solo si explican un cambio, respetan `prefers-reduced-motion`.
+- **Skills de diseño** (/design-critique, /design-handoff, /figma-use-motion): el sitio no usa Figma, por lo que se adoptan los **métodos**, no las herramientas: crítica con severidad y cordura de datos, y ficha de especificación por componente (`docs/COMPONENTES.md`).

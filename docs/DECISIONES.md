@@ -755,3 +755,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - El detalle de bodega ya no muestra «últimos movimientos» de ejemplo ni responsable fijo (eran datos ficticios): ahora muestra **qué hay en la bodega**, con buscador, filtro por categoría, foto, stock, lote, código y vencimiento (por vencer en rojo/naranja).
 - Cada producto tiene **Ajuste** (lleva a Ajustes con el producto buscado) y **Mover** (abre la transferencia con el producto ya elegido). Las bodegas se siguen creando desde el formulario «Nueva Bodega».
 - Módulo `bodega-explorador.js` (`SAR_BodegaExplorador`). Lee `Insumos` por `location` = nombre de la bodega.
+
+### 4.133 Método de crítica y fichas de componentes (v21.79)
+- Se revisaron dos videos de referencia: bibliotecas de componentes animados (React, no instalables aquí) y tres skills de diseño (crítica, traspaso de especificación, animación en Figma).
+- **Adoptado:** el agente UX/UI ahora entrega hallazgos con severidad y revisa primero que los datos y textos tengan sentido; y cada componente nuevo se documenta en `docs/COMPONENTES.md` (anatomía, estados, tokens, responsive, movimiento, accesibilidad).
+- **No adoptado:** instalar las bibliotecas o la skill de Figma (el proyecto no usa React ni Figma). Los patrones de movimiento (contador de cifras, indicador deslizante, entradas escalonadas) quedan como candidatos, a aplicar uno a la vez.

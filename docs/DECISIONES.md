@@ -683,3 +683,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.117 Vista previa en vivo en el formulario de agenda (v21.63)
 - Nuevo `vista-previa-agenda.js`: al crear un envío/recordatorio, una franja arriba del formulario resume tipo, título y fecha («en 3 días», «mañana»), y avisa si la fecha ya pasó. No cambia lo que se guarda.
 - La «línea de hoy» del calendario ya existía (`erp-cal-day--today`), por lo que no se duplicó. Queda pendiente la idea de chips de categoría (sin formulario de proveedores en el sistema).
+
+### 4.118 Ver Excel dentro del sitio (v21.64)
+- En Seguimiento de OC, «Ver» sobre un .xlsx/.xls/.csv abre una ventana de solo lectura con una pestaña por hoja (máx. 12 hojas, 500 filas, 40 columnas) y botón «Descargar»; ya no se descarga solo. Usa la librería SheetJS ya cargada; si falla, se descarga como antes.
+- Los valores se muestran como texto (se escapan); no se ejecutan fórmulas ni macros. Los PDF siguen abriéndose en pestaña nueva.

@@ -5777,3 +5777,10 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 
 /* Vista previa de agenda (v21.63) */
 .vp-ag { display: flex; gap: 8px; align-items: center; background: #EFF6FF; border: 1px solid #BFDBFE; color: #1E3A8A; border-radius: 8px; padding: 9px 12px; font-size: 13px; animation: mvIn .3s ease both; } .vp-ag em { font-style: normal; font-weight: 700; } .vp-ag--past { background: #FFFBEB; border-color: #FCD34D; color: #92400E; }
+
+/* Vista de Excel dentro del sitio (v21.64) */
+.vx-ov { position: fixed; inset: 0; background: rgba(15,23,42,.6); z-index: 2000; display: flex; align-items: center; justify-content: center; padding: 16px; animation: uxFade .2s ease both; }
+.vx-box { background: #fff; border-radius: 12px; width: min(1200px, 100%); height: min(88vh, 100%); display: flex; flex-direction: column; overflow: hidden; animation: uxModal .25s ease both; }
+.vx-box header { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #E2E8F0; } .vx-box header strong { flex: 1; min-width: 0; overflow-wrap: anywhere; color: var(--sar-blue, #1A3668); } .vx-box header span { font-size: 12px; color: #64748B; }
+.vx-box nav { display: flex; gap: 4px; padding: 8px 12px 0; overflow-x: auto; border-bottom: 1px solid #E2E8F0; } .vx-box nav button { border: 0; background: #F1F5F9; padding: 8px 14px; border-radius: 8px 8px 0 0; font: inherit; font-size: 13px; cursor: pointer; white-space: nowrap; min-height: 40px; } .vx-box nav button.on { background: var(--sar-blue, #1A3668); color: #fff; }
+.vx-body { flex: 1; overflow: auto; padding: 0; } .vx-t { border-collapse: collapse; font-size: 12.5px; width: max-content; min-width: 100%; } .vx-t th, .vx-t td { border: 1px solid #E2E8F0; padding: 5px 9px; text-align: left; vertical-align: top; max-width: 320px; overflow-wrap: anywhere; } .vx-t tr:first-child th { position: sticky; top: 0; background: #EEF2F7; z-index: 1; } .vx-t tr:nth-child(even) td { background: #F8FAFC; }

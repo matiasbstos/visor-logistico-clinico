@@ -735,3 +735,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - **Orden nuevo:** accesos rápidos → **Acción inmediata** (izquierda) junto a **6 indicadores** compactos (stock crítico, vencimientos, solicitudes de compra, recepciones, despachos fuera de fecha, bandejas) → franja de estado → «Más indicadores» (plegado: movimientos de hoy y conteo de inventario) → Urgencias y Precaución → Flujo logístico semanal → «Estado por ubicación» (plegado, antes ocupaba mucho espacio) → Agenda.
 - Los bloques «Compras y órdenes en curso», «Ingresos» y «Primeros pasos» se siguen insertando justo bajo el panel de prioridades mediante el ancla `#home-anchor` (antes era la rejilla central). No se cambió ningún id usado por el código.
 - En pantallas de menos de 1100 px las prioridades se apilan.
+
+### 4.129 ¿Dónde está? con atajos, Toma de inventario sin desborde y carga de Seguimiento de OC (v21.75)
+- **Seguimiento de OC:** la animación de carga aparecía solo después de leer la configuración; ahora se muestra al instante al entrar (antes se veía el fondo gris vacío).
+- **¿Dónde está?:** el estado inicial muestra búsquedas recientes (se recuerdan en el equipo, máx. 6), bodegas con su total y productos críticos con foto, stock y bodega principal; un clic busca. Estados con esqueleto de carga y mensaje de error con código de referencia (DE-01). Campo de búsqueda de 16 px (evita el zoom en iPhone).
+- **Toma de inventario:** corregido el desborde de la tabla en pantallas medianas (columna `minmax(0,1fr)`, tabla con scroll propio) y la barra «Todas las categorías» ya no se corta (cabecera que baja de línea). En celular el formulario de Ingreso de existencias va primero, los indicadores pasan a 2 columnas compactas debajo y se ocultan los distintivos de estado.
+- Propuesta del agente UX/UI aún pendiente: agrupar campos opcionales (código, dosis, lote) en «Más datos» y un solo menú de exportación en celular.

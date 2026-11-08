@@ -694,6 +694,28 @@
                 </div>`).join('');
         }
 
+        // Estado inicial (v21.75): búsquedas recientes, bodegas y productos críticos en vez de una pantalla vacía
+        const LS_REC = 'sar_donde_recientes';
+        const recientes = () => { try { return JSON.parse(localStorage.getItem(LS_REC) || '[]').slice(0, 6); } catch (e) { return []; } };
+        function recordar(q) { try { const l = [q, ...recientes().filter(x => x.toLowerCase() !== q.toLowerCase())].slice(0, 6); localStorage.setItem(LS_REC, JSON.stringify(l)); } catch (e) { /* sin almacenamiento */ } }
+        function buscarTexto(t) { const inp = document.getElementById('donde-buscar'); if (!inp) return; inp.value = t; inp.dispatchEvent(new Event('input')); inp.focus(); }
+        async function inicio() {
+            const cont = document.getElementById('donde-resultados'); if (!cont) return;
+            const rec = recientes();
+            cont.innerHTML = `<div class="donde__inicio">${rec.length ? `<section><h4 class="donde__sec">Búsquedas recientes</h4><div class="donde__chips">${rec.map(r => `<button type="button" class="donde__chip" data-q="${esc(r)}"><i class="ph-bold ph-clock-counter-clockwise" aria-hidden="true"></i>${esc(r)}</button>`).join('')}</div></section>` : ''}<div id="donde-ini-datos">${window.SAR_Progreso ? window.SAR_Progreso.cargando('Preparando atajos…') : ''}</div></div>`;
+            const alClic = () => cont.querySelectorAll('[data-q]').forEach(b => b.addEventListener('click', () => buscarTexto(b.dataset.q)));
+            alClic();
+            try {
+                const c = await cargar(); const host = document.getElementById('donde-ini-datos'); if (!host) return;
+                const tot = new Map(); c.insumos.forEach(i => { const k = String(i.location || ''); if (k) tot.set(k, (tot.get(k) || 0) + (Number(i.quantity) || 0)); });
+                const bods = c.bodegas.filter(b => b.name && b.isActive !== false).map(b => ({ b, n: tot.get(b.name) || 0 })).sort((x, y) => y.n - x.n);
+                const crit = new Map(); c.insumos.forEach(i => { if (i.isCritical === true && i.name) { const m = crit.get(i.name) || { n: 0, loc: new Map(), cod: i.codigoMP }; m.n += Number(i.quantity) || 0; m.loc.set(String(i.location || ''), (m.loc.get(String(i.location || '')) || 0) + (Number(i.quantity) || 0)); crit.set(i.name, m); } });
+                const filas = Array.from(crit.entries()).sort((a, b) => a[1].n - b[1].n).slice(0, 6);
+                host.innerHTML = `${bods.length ? `<section><h4 class="donde__sec">Bodegas</h4><div class="donde__chips">${bods.map(x => `<a class="donde__chip" href="#b/${encodeURIComponent(x.b.id)}"><i class="ph-bold ph-buildings" aria-hidden="true"></i>${esc(x.b.name)} <b>${x.n}</b></a>`).join('')}</div></section>` : ''}${filas.length ? `<section><h4 class="donde__sec">Críticos ahora</h4><div class="donde__crit">${filas.map(([nombre, m]) => { const top = Array.from(m.loc.entries()).sort((a, b) => b[1] - a[1])[0]; return `<button type="button" class="donde__fila" data-q="${esc(nombre)}">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(nombre, { codigo: m.cod }) : ''}<span class="donde__fila-t"><b>${esc(nombre)}</b><small>${top && top[0] ? esc(top[0]) : 'Sin bodega'}</small></span><span class="donde__fila-n"><i class="donde__dot" aria-hidden="true"></i>${m.n} u. · Crítico</span></button>`; }).join('')}</div></section>` : '<p class="donde__nada">Sin productos críticos por ahora.</p>'}`;
+                alClic();
+            } catch (e) { const host = document.getElementById('donde-ini-datos'); if (host) host.innerHTML = '<p class="donde__nada">Escribe el nombre del producto para empezar.</p>'; }
+        }
+
         async function abrir() {
             const inp = document.getElementById('donde-buscar'); if (!inp) return;
             if (!iniciado) {
@@ -704,15 +726,16 @@
                     tmr = setTimeout(async () => {
                         const q = inp.value.trim();
                         const cont = document.getElementById('donde-resultados');
-                        if (q.length < 3) { cont.innerHTML = '<div class="home-empty">Escribe al menos 3 letras.</div>'; return; }
-                        cont.innerHTML = '<div class="home-empty">Buscando…</div>';
-                        try { pintar(resultados(q, await cargar())); }
-                        catch (e) { cont.innerHTML = `<div class="home-empty">No se pudo buscar (${esc(e.message)}).</div>`; }
+                        if (q.length < 3) { inicio(); return; }
+                        cont.innerHTML = window.SAR_Progreso ? window.SAR_Progreso.cargando('Buscando…') : '<div class="home-empty">Buscando…</div>';
+                        try { const rs = resultados(q, await cargar()); pintar(rs); if (rs.length) recordar(q); }
+                        catch (e) { cont.innerHTML = `<div class="home-empty">No se pudo buscar. Intenta de nuevo (ref. DE-01).</div>`; }
                     }, 250);
                 });
             }
             cache = null; // al entrar a la vista se refresca la próxima búsqueda
             inp.focus();
+            if (inp.value.trim().length < 3) inicio();
         }
 
         return { abrir, resultados };

@@ -46,6 +46,11 @@ service cloud.firestore {
       ];
     }
 
+    // Rol limitado «transitoria»: solo ve la Bodega transitoria y asigna estantes (ubicacionEstante)
+    function isTransitoria() {
+      return getUserRole() in ['transitoria', 'TRANSITORIA'];
+    }
+
     function isOwner(userId) {
       // Comparación relajada para asegurar lectura propia
       return isAuthenticated() && (request.auth.uid == userId || request.auth.token.email == userId);
@@ -108,7 +113,8 @@ service cloud.firestore {
     match /Insumos/{insumoId} {
       allow read: if hasRole();
       allow create: if isOperadorOrAdmin();
-      allow update: if isOperadorOrAdmin();
+      allow update: if isOperadorOrAdmin()
+        || (isTransitoria() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ubicacionEstante', 'updatedAt']));
       allow delete: if isAdmin();
     }
     
@@ -235,7 +241,8 @@ service cloud.firestore {
       }
     }
     match /Contadores/{id} {
-      allow read, create, update: if isStaff();
+      allow read: if isStaff() || (isTransitoria() && id.matches('transitoria-.*'));
+      allow create, update: if isStaff();
       allow delete: if false;
     }
     match /Config_Correo/{id} {

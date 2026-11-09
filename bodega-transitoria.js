@@ -19,6 +19,7 @@
   const usuario = () => { const a = window.firebaseAuth; return (a && a.currentUser && a.currentUser.email) || 'Usuario'; };
   const toast = (t, m, tipo) => { if (typeof window.showToast === 'function') window.showToast(t, m, tipo || 'info'); };
   const CENTRAL = 'Bodega Central';
+  const soloConteo = () => document.body && document.body.getAttribute && document.body.getAttribute('data-user-role') === 'transitoria';
   const slug = (t) => norm(t).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 80);
   const claveDe = (nombre, codigo) => soloDig(codigo) || slug(nombre);
 
@@ -212,6 +213,11 @@
         <div class="tra-acc"><button type="button" class="btn btn-outline" id="tra-xls-bajar"><i class="ph-bold ph-download-simple"></i> Descargar planilla</button><button type="button" class="btn btn-outline" id="tra-xls-subir"><i class="ph-bold ph-upload-simple"></i> Subir planilla</button><input type="file" id="tra-xls-file" accept=".xlsx,.xls" style="display:none" aria-label="Subir planilla de la bodega"></div></div>
       <div class="data-table-card mt-24"><h3>Agregar producto a la disposición</h3><input type="search" id="tra-bus" class="form-control" placeholder="ID o nombre del producto…" value="${esc(buscaProd)}" autocomplete="off">
         <div class="tra-sug">${sug.map((s, i) => `<button type="button" class="vp-op tra-add" data-i="${i}"><b>${esc(s.nombre)}</b>${s.codigo ? ' <small>ID ' + esc(s.codigo) + '</small>' : ''}</button>`).join('')}</div></div>`}`;
+    if (soloConteo()) {
+      r.querySelectorAll('.tra-quitar, #tra-cerrar, #tra-reponer, .tra-acc:has(#tra-cerrar)').forEach(e => e.remove());
+      r.querySelectorAll('.tra-obj').forEach(e => { e.disabled = true; });
+      const ag = [...r.querySelectorAll('.data-table-card')].find(c => c.querySelector('#tra-bus')); if (ag) ag.remove();
+    }
     enlazar(sug);
   }
   function sugerir(q) {

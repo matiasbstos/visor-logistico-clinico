@@ -6044,3 +6044,11 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .tra-faltante td { background: #fdecec; } .tra-sobrante td { background: #fff7e0; } .tra-ok td { background: transparent; }
 p.tra-ok { color: #1b7a3a; font-weight: 600; margin: 8px 0; }
 .tra-acc { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; } .tra-sug { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+
+/* Rol «transitoria» (v21.109): solo ve la Bodega transitoria */
+body[data-user-role="transitoria"] .menu-item:not([data-target="view-transitoria"]),
+body[data-user-role="transitoria"] .sidebar-box:not(:has(.menu-item[data-target="view-transitoria"])),
+body[data-user-role="transitoria"] .sidebar-group-title,
+body[data-user-role="transitoria"] .admin-only,
+body[data-user-role="transitoria"] .superadmin-only { display: none !important; }
+body[data-user-role="transitoria"] .tra-solo-admin { display: none !important; }

@@ -867,3 +867,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.156 Hoja de picking del acta con sección de pendientes (v21.102)
 - Bajo la tabla de productos a retirar, la hoja del acta muestra **«Quedan pendientes de entregar a <centro>»**: los pendientes registrados en el acta más lo que falta de lo solicitado (solicitado − entregado), con foto, ID y cantidad pendiente. Si no hay pendientes, la sección no aparece.
+
+### 4.157 Actas emitidas: indicadores, filtros y botón de pendientes (v21.103)
+- Sobre la lista hay cuatro indicadores que también filtran (se combinan con el buscador): **Pendientes por firmar** (destacado en rojo), **Firmadas**, **Con productos pendientes** y **Todas**. Un segundo clic en el activo vuelve a «Todas».
+- Cada fila tiene un botón **Pendientes (N)** que abre una hoja grande solo con lo que queda pendiente de entregar al centro (foto, ID, cantidad). Solo se activa si esa acta tiene pendientes; en las demás aparece apagado. No aplica a oxígeno ni a actas anuladas.
+- «Por firmar» = acta emitida sin acta firmada subida (no oxígeno, no anulada).

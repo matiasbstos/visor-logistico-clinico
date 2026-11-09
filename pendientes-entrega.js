@@ -217,6 +217,17 @@
             <p class="pie">${filas.length} producto(s) · ${total} unidad(es) en total.</p>${bloquePend}</section>`;
         ventana('Hoja de picking ' + (a.numero || ''), cuerpo);
     }
+    /** Hoja solo con lo que queda pendiente de entregar de un acta (para el centro). */
+    function pendientesActa(a) {
+        const pend = []; (a.pendientes || []).forEach(x => { if (x && x.nombre && num(x.cantidad) > 0) pend.push({ nombre: x.nombre, cantidad: num(x.cantidad), codigoMP: x.codigoMP }); });
+        (a.items || []).forEach(i => { const falta = num(i.solicitado) - num(i.cantidad); if (i.solicitado != null && falta > 0 && !pend.some(x => norm(x.nombre) === norm(i.nombre))) pend.push({ nombre: i.nombre, cantidad: falta, codigoMP: i.codigoMP, id: i.id }); });
+        if (!pend.length) { toast('Pendientes', 'Esta acta no tiene productos pendientes.', 'info'); return; }
+        const logo = new URL('assets/logo/horizontal.svg', window.location.href).href, cache = window.insumosDataCache || [];
+        const fotoP = (x) => { const ins = cache.find(c => c && ((x.id && c.id === x.id) || (c.name && norm(c.name) === norm(x.nombre)))); return fotoMulti([x.nombre, ins && ins.name], [x.codigoMP, ins && (ins.codigoMP || ins.code)]); };
+        ventana('Pendientes ' + (a.numero || ''), `<section class="pk"><header><img class="lg" src="${esc(logo)}" alt=""><div><h1>Productos pendientes de entrega</h1><h2>${esc(a.centro || '')}</h2><p>Acta ${esc(a.numero || '')} · ${esc(a.fecha || '')} · desde ${esc(a.bodegaOrigen || 'bodega')}</p></div></header>
+            <table><thead><tr><th>Foto</th><th>Producto</th><th class="n">Pendiente</th></tr></thead><tbody>${pend.map(x => `<tr><td class="f">${fotoP(x)}</td><td>${esc(x.nombre)}${x.codigoMP ? '<br><small>ID ' + esc(x.codigoMP) + '</small>' : ''}</td><td class="n big">${x.cantidad}</td></tr>`).join('')}</tbody></table>
+            <p class="pie">${pend.length} producto(s) pendiente(s) · ${pend.reduce((t, x) => t + x.cantidad, 0)} unidad(es).</p></section>`);
+    }
     /** Busca las fotos de los productos pendientes que aún no tienen (por ID o por descripción) y las deja "por confirmar". */
     async function buscarFotos() {
         const IM = window.SAR_Imagenes, f = fs(); if (!IM) return;
@@ -288,6 +299,6 @@
     }
     if (typeof document !== 'undefined' && document.addEventListener) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar(); }
 
-    window.SAR_Pendientes = { pickingActa, abrir, calcularPendientes, calcularPorRecibir, cruzarStock, datos: async () => { await traer(); return { grupos, porRecibir }; }, refrescar: () => traer().catch(() => {}) };
+    window.SAR_Pendientes = { pendientesActa, pickingActa, abrir, calcularPendientes, calcularPorRecibir, cruzarStock, datos: async () => { await traer(); return { grupos, porRecibir }; }, refrescar: () => traer().catch(() => {}) };
     if (typeof module !== 'undefined') module.exports = window.SAR_Pendientes;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: { dataset: {} } });

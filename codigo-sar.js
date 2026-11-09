@@ -27,6 +27,39 @@
             cache.set(clave, codigo); return codigo;
         } catch (e) { return ''; }
     }
-    window.SAR_CodigoSAR = { asignar, slug, formato };
-    if (typeof module !== 'undefined') module.exports = { slug, formato };
+
+    /** Clave estable de un lote: LOTE|AAAA-MM-DD (el vencimiento se normaliza para que 05/01/2030 y 2030-01-05 sean el mismo). */
+    function claveLote(lote, vence) {
+        const L = String(lote || 'S/L').trim().toUpperCase() || 'S/L';
+        let v = String(vence || '').trim();
+        const m1 = v.match(/^(\d{4})-(\d{2})-(\d{2})/), m2 = v.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
+        if (m1) v = m1[1] + '-' + m1[2] + '-' + m1[3]; else if (m2) v = m2[3] + '-' + m2[2].padStart(2, '0') + '-' + m2[1].padStart(2, '0'); else v = '';
+        return L + '|' + v;
+    }
+    const formatoLote = (codigo, n) => codigo + '-L' + String(Math.max(1, Math.floor(Number(n) || 1))).padStart(2, '0');
+    /** Código del lote «SAR-000013-L02»: correlativo por producto; mismo lote y vencimiento = mismo código en cualquier bodega. Nunca lanza. */
+    async function asignarLote(nombre, lote, vence) {
+        const clave = slug(nombre); if (!clave) return '';
+        const f = window.firebaseFirestore, db = window.firebaseDb; if (!f || !db) return '';
+        try {
+            const base = await asignar(nombre); if (!base) return '';
+            const k = claveLote(lote, vence), kd = k.replace(/[^A-Za-z0-9|-]+/g, '_');
+            const ref = f.doc(f.collection(db, 'Contadores'), 'codigo-lote-' + clave);
+            return await f.runTransaction(db, async (tx) => {
+                const s = await tx.get(ref), d = s.exists() ? s.data() : { n: 0, lotes: {} }, lotes = d.lotes || {};
+                if (lotes[kd]) return lotes[kd];
+                const n = (Number(d.n) || 0) + 1, cod = formatoLote(base, n);
+                lotes[kd] = cod; tx.set(ref, { tipo: 'codigo-lote', producto: String(nombre).trim(), n, lotes, updatedAt: f.serverTimestamp() });
+                return cod;
+            });
+        } catch (e) { return ''; }
+    }
+    /** Pone código a los lotes que no lo tienen (devuelve true si cambió algo). */
+    async function codificarLotes(nombre, batches) {
+        let cambio = false;
+        for (const b of batches || []) { if (!b.codigoLote) { const c = await asignarLote(nombre, b.batch, b.expirationDate); if (c) { b.codigoLote = c; cambio = true; } } }
+        return cambio;
+    }
+    window.SAR_CodigoSAR = { asignar, slug, formato, claveLote, formatoLote, asignarLote, codificarLotes };
+    if (typeof module !== 'undefined') module.exports = { slug, formato, claveLote, formatoLote };
 })(typeof window !== 'undefined' ? window : globalThis);

@@ -26,7 +26,7 @@
         const bruto = Array.isArray(item.batches) && item.batches.length ? item.batches : [{ batch: item.batch, quantity: total, expirationDate: item.expirationDate }];
         const lotes = bruto.map(b => {
             const d = parseFecha(b.expirationDate), dias = d ? Math.ceil((d - hoy) / 86400000) : null;
-            return { batch: b.batch || 'S/L', quantity: num(b.quantity), expirationDate: b.expirationDate || '', provider: b.provider || '', dias, nivel: dias === null ? 'sin_fecha' : nivelDe(dias) };
+            return { batch: b.batch || 'S/L', quantity: num(b.quantity), expirationDate: b.expirationDate || '', provider: b.provider || '', codigoLote: b.codigoLote || '', dias, nivel: dias === null ? 'sin_fecha' : nivelDe(dias) };
         }).filter(l => l.quantity > 0 || bruto.length === 1);
         const suma = (n) => lotes.filter(l => l.nivel === n).reduce((t, l) => t + l.quantity, 0);
         const vencido = suma('vencido'), urgente = suma('urgente'), util = Math.max(0, lotes.reduce((t, l) => t + l.quantity, 0) - vencido - urgente);

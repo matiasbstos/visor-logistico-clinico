@@ -3391,6 +3391,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Desglose por lote (v21.127): fila desplegable bajo el producto con la cantidad, % del total, vencimiento y proveedor de cada lote
         window.__desgloseAbiertos = window.__desgloseAbiertos || new Set();
+        // Códigos de lote faltantes + mismo producto en otras bodegas (v21.135)
+        window.__desgloseExtra = async function (fila, id, d, a) {
+            const caja = fila.querySelector('td'); if (!caja) return;
+            try {
+                const esc = window.escapeHTML, A = window.SAR_LotesAlertas;
+                // 1) lotes sin código: se codifican y se guardan (idempotente)
+                if (window.SAR_CodigoSAR && (d.batches || []).some(b => !b.codigoLote) && ['superadmin', 'admin', 'operador'].includes(userRole)) {
+                    const copia = (d.batches || []).map(b => ({ ...b })), cod = await window.SAR_CodigoSAR.codificarLotes(d.name, copia);
+                    if (cod) {
+                        await runTransaction(db, async (tx) => {
+                            const r = doc(db, 'Insumos', id), sn = await tx.get(r); if (!sn.exists()) return;
+                            const act = (sn.data().batches || []).map(b => { const m = copia.find(c => window.SAR_CodigoSAR.claveLote(c.batch, c.expirationDate) === window.SAR_CodigoSAR.claveLote(b.batch, b.expirationDate)); return b.codigoLote || !m ? b : { ...b, codigoLote: m.codigoLote }; });
+                            tx.update(r, { batches: act });
+                        });
+                        d.batches = copia; window.__desgloseDatos[id] = d;
+                        if (fila.isConnected) { const trp = fila.previousElementSibling; if (trp) { window.__desglosePintar(trp, true); return; } }
+                    }
+                }
+                // 2) mismo producto en otras bodegas
+                const sn = await getDocs(query(collection(db, 'Insumos'), where('name', '==', d.name)));
+                const otros = []; sn.forEach(x => { if (x.id !== id) otros.push(x.data()); });
+                if (!otros.length) return;
+                const fecha = (v) => { const f = A && A.parseFecha(v); return f ? f.toLocaleDateString('es-CL') : '—'; };
+                const tot = otros.reduce((t, o) => t + (Number(o.quantity) || 0), 0) + a.total;
+                const lin = []; otros.forEach(o => (A ? A.analizar(o).lotes : []).forEach(l => lin.push(`<tr><td>${esc(o.location || '')}</td><td><strong>${esc(l.batch)}</strong>${l.codigoLote ? ' · <small>' + esc(l.codigoLote) + '</small>' : ''}</td><td style="text-align:right;">${l.quantity.toLocaleString('es-CL')}</td><td>${fecha(l.expirationDate)}</td><td style="color:${{ vencido: '#dc2626', urgente: '#ea580c', precaucion: '#b45309' }[l.nivel] || 'inherit'}">${l.nivel === 'sin_fecha' ? 'Sin fecha' : (A.etiqueta(l) || 'Vigente · ' + l.dias + ' d')}</td></tr>`)));
+                caja.insertAdjacentHTML('beforeend', `<div style="margin-top:10px;font-weight:700;">Mismo producto en otras bodegas · total en todas: ${tot.toLocaleString('es-CL')}</div><table class="table" style="width:100%;font-size:12px;"><thead><tr><th>Bodega</th><th>Lote</th><th style="text-align:right;">Cantidad</th><th>Vencimiento</th><th>Estado</th></tr></thead><tbody>${lin.join('')}</tbody></table>`);
+            } catch (e) { /* el desglose principal ya se mostró */ }
+        };
         window.__desglosePintar = function (tr, abrir) {
             const id = tr.dataset.id, ya = tr.nextElementSibling && tr.nextElementSibling.classList.contains('desglose-row') ? tr.nextElementSibling : null;
             const btn = tr.querySelector('.btn-desglose');
@@ -3400,12 +3428,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const orden = a.lotes.slice().sort((x, y) => (x.dias === null ? 1e9 : x.dias) - (y.dias === null ? 1e9 : y.dias));
             const col = { vencido: 'var(--danger, #dc2626)', urgente: '#ea580c', precaucion: '#b45309' };
             const fecha = (v) => { const f = A.parseFecha(v); return f ? f.toLocaleDateString('es-CL') : '—'; };
-            const filas = orden.map((l, i) => `<tr><td><strong>${esc(l.batch)}</strong>${i === 0 && a.lotes.length > 1 ? ' <small>(sale primero · FEFO)</small>' : ''}</td><td style="text-align:right;"><strong>${l.quantity.toLocaleString('es-CL')}</strong></td><td style="text-align:right;">${Math.round(l.quantity * 100 / total)}%</td><td>${fecha(l.expirationDate)}</td><td style="color:${col[l.nivel] || 'inherit'}; font-weight:${col[l.nivel] ? 700 : 400};">${l.nivel === 'sin_fecha' ? 'Sin fecha' : (A.etiqueta(l) || 'Vigente · ' + l.dias + ' d')}</td><td>${esc(String(l.provider || '—').trim())}</td></tr>`).join('');
+            const filas = orden.map((l, i) => `<tr><td><strong>${esc(l.batch)}</strong>${l.codigoLote ? `<br><small>${esc(l.codigoLote)}</small>` : ''}${i === 0 && a.lotes.length > 1 ? ' <small>(sale primero · FEFO)</small>' : ''}</td><td style="text-align:right;"><strong>${l.quantity.toLocaleString('es-CL')}</strong></td><td style="text-align:right;">${Math.round(l.quantity * 100 / total)}%</td><td>${fecha(l.expirationDate)}</td><td style="color:${col[l.nivel] || 'inherit'}; font-weight:${col[l.nivel] ? 700 : 400};">${l.nivel === 'sin_fecha' ? 'Sin fecha' : (A.etiqueta(l) || 'Vigente · ' + l.dias + ' d')}</td><td>${esc(String(l.provider || '—').trim())}</td></tr>`).join('');
             const nueva = document.createElement('tr'); nueva.className = 'desglose-row';
             nueva.innerHTML = `<td colspan="8" style="background:var(--surface-2, #f8fafc); padding:10px 16px;"><div style="font-weight:700; margin-bottom:6px;">Desglose de ${esc(d.name || '')} · ${esc(d.location || '')}</div>
                 <table class="table" style="width:100%; font-size:12px;"><thead><tr><th>Lote</th><th style="text-align:right;">Cantidad</th><th style="text-align:right;">% del total</th><th>Vencimiento</th><th>Estado</th><th>Proveedor</th></tr></thead><tbody>${filas}</tbody>
                 <tfoot><tr><td><strong>Total</strong></td><td style="text-align:right;"><strong>${a.total.toLocaleString('es-CL')}</strong></td><td></td><td colspan="3">Vigente (sin vencidos ni por vencer en 30 d): <strong>${a.util.toLocaleString('es-CL')}</strong> · mínimo ${a.minimo}</td></tr></tfoot></table></td>`;
             if (ya) ya.remove(); tr.after(nueva); window.__desgloseAbiertos.add(id);
+            window.__desgloseExtra(nueva, id, d, a);
             if (btn) { btn.setAttribute('aria-expanded', 'true'); btn.innerHTML = '<i class="ph ph-caret-up"></i> Ocultar desglose'; }
         };
         document.addEventListener('click', (e) => {
@@ -4303,7 +4332,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             document.getElementById('edit-criticalLimit').value = data.criticalLimit || 50;
                             document.getElementById('edit-batch').value = data.batch || '';
                             window.__editLotes = (Array.isArray(data.batches) && data.batches.length ? data.batches : [{ batch: data.batch || '', quantity: Number(data.quantity) || 0, expirationDate: data.expirationDate || '' }])
-                                .map(b => { const d = SAR_Utils.parseDate(b.expirationDate); return { batch: b.batch || '', quantity: Number(b.quantity) || 0, expirationDate: (d && !isNaN(d.getTime())) ? d.toISOString().split('T')[0] : '', ...(b.provider ? { provider: b.provider } : {}) }; });
+                                .map(b => { const d = SAR_Utils.parseDate(b.expirationDate); return { batch: b.batch || '', quantity: Number(b.quantity) || 0, expirationDate: (d && !isNaN(d.getTime())) ? d.toISOString().split('T')[0] : '', ...(b.provider ? { provider: b.provider } : {}), ...(b.codigoLote ? { codigoLote: b.codigoLote } : {}) }; });
                             window.__pintarEditLotes();
                             document.getElementById('edit-status').value = data.status || 'ACTIVO';
 
@@ -4362,7 +4391,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.__lotesEditados = function () {
             const L = (window.__editLotes || []).filter(b => (b.batch || '').trim() || Number(b.quantity) > 0);
             if (!L.length) return {};
-            const batches = L.map(b => ({ batch: (b.batch || '').trim().toUpperCase() || 'S/L', quantity: Math.max(0, Math.floor(Number(b.quantity) || 0)), expirationDate: b.expirationDate || '', ...(b.provider ? { provider: b.provider } : {}) }));
+            const batches = L.map(b => ({ batch: (b.batch || '').trim().toUpperCase() || 'S/L', quantity: Math.max(0, Math.floor(Number(b.quantity) || 0)), expirationDate: b.expirationDate || '', ...(b.provider ? { provider: b.provider } : {}), ...(b.codigoLote ? { codigoLote: b.codigoLote } : {}) }));
             const orden = batches.slice().sort(window.fefoCompare), p = orden[0];
             return { batches, quantity: batches.reduce((t, b) => t + b.quantity, 0), cantidad: batches.reduce((t, b) => t + b.quantity, 0), batch: p.batch, lote: p.batch, expirationDate: p.expirationDate, vencimiento: p.expirationDate, fechaVencimiento: p.expirationDate };
         };
@@ -4419,6 +4448,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     status: rawData.status || "ACTIVO"
                 };
                 { const so = document.getElementById('edit-location'), op = so && so.selectedOptions[0]; if (op && op.dataset.id) updatedData.bodegaId = op.dataset.id; }
+                if (window.SAR_CodigoSAR && Array.isArray(updatedData.batches)) await window.SAR_CodigoSAR.codificarLotes(updatedData.name, updatedData.batches);
 
                 // Gobernanza: cambios de cantidad, lote, vencimiento o bodega exigen motivo y dejan código de seguimiento
                 let gob = null;
@@ -4773,6 +4803,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const codigoMP = String((document.getElementById('movimiento-codigoMP') || {}).value || '').replace(/\D/g, '');
 
                     // EJECUCIÓN ATÓMICA DE INGRESO (Transaction Recovery)
+                    const codigoLote = window.SAR_CodigoSAR ? await window.SAR_CodigoSAR.asignarLote(nombreInput.trim(), cleanBatch, formattedDate === 'N/A' ? '' : formattedDate) : '';
                     const codigoIngreso = window.SAR_Gobernanza ? await window.SAR_Gobernanza.codigo('ING').catch(() => '') : '';
                     await runTransaction(db, async (transaction) => {
                         const insumoRef = doc(db, 'Insumos', insumoId);
@@ -4786,7 +4817,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                     batch: cleanBatch,
                                     quantity: quantity,
                                     expirationDate: formattedDate,
-                                    provider: data.providerId || 'S/I'
+                                    provider: data.providerId || 'S/I',
+                                    ...(codigoLote ? { codigoLote } : {})
                                 }],
                                 batch: cleanBatch, // Mantenemos por retrocompatibilidad UI temporal
                                 expirationDate: formattedDate,
@@ -4820,6 +4852,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const batchIndex = currentBatches.findIndex(b => b.batch === cleanBatch);
                             if (batchIndex !== -1) {
                                 currentBatches[batchIndex].quantity += quantity;
+                                if (!currentBatches[batchIndex].codigoLote && codigoLote) currentBatches[batchIndex].codigoLote = codigoLote;
                                 // Actualizar fecha de exp si la mandaron de nuevo
                                 if (formattedDate) {
                                     currentBatches[batchIndex].expirationDate = formattedDate;
@@ -4829,7 +4862,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                     batch: cleanBatch,
                                     quantity: quantity,
                                     expirationDate: formattedDate,
-                                    provider: data.providerId || 'S/I'
+                                    provider: data.providerId || 'S/I',
+                                    ...(codigoLote ? { codigoLote } : {})
                                 });
                             }
 
@@ -4858,6 +4892,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             quantity: quantity,
                             type: 'INGRESO_PROVEEDOR',
                             ...(codigoIngreso ? { codigoIngreso } : {}),
+                            ...(codigoLote ? { codigoLote } : {}),
                             batch: cleanBatch,
                             destination: data.destinationId || "Principal",
                             provider: data.providerId || "S/I",
@@ -5611,7 +5646,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                 lotesMovidos.push({
                                     batch: currentBatches[i].batch || 'S/L',
                                     used: usedQty,
-                                    expirationDate: currentBatches[i].expirationDate || ''
+                                    expirationDate: currentBatches[i].expirationDate || '',
+                                    ...(currentBatches[i].codigoLote ? { codigoLote: currentBatches[i].codigoLote } : {}),
+                                    ...(currentBatches[i].provider ? { provider: currentBatches[i].provider } : {})
                                 });
                             }
                         }
@@ -5630,7 +5667,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         // 2. Destino (solo traspaso a bodega): conserva el código y vencimiento reales de cada lote
                         if (docRefDest) {
-                            const moved = lotesMovidos.map(l => ({ batch: l.batch, quantity: l.used, expirationDate: l.expirationDate }));
+                            const moved = lotesMovidos.map(l => ({ batch: l.batch, quantity: l.used, expirationDate: l.expirationDate, ...(l.codigoLote ? { codigoLote: l.codigoLote } : {}), ...(l.provider ? { provider: l.provider } : {}) }));
                             const mergeInto = (arr) => {
                                 for (const m of moved) {
                                     const ex = arr.find(b => b.batch === m.batch && (b.expirationDate || '') === (m.expirationDate || ''));

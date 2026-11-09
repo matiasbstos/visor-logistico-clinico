@@ -71,6 +71,13 @@ t('gobernanza: ventana de corrección directa', () => {
     assert.ok(G.evaluarVentana([{ type: 'INGRESO_OC', date: new Date('2026-11-09T10:00:00Z') }, { type: 'ACTA_PRUEBA' }, { type: 'UNIFICACION_STOCK' }], ahora).ok);
 });
 
+t('código de lote: clave estable y formato', () => {
+    const S = require('../codigo-sar.js');
+    assert.strictEqual(S.claveLote('4600002149', '05/01/2030'), S.claveLote(' 4600002149 ', '2030-01-05'));
+    assert.notStrictEqual(S.claveLote('A', '2030-01-05'), S.claveLote('A', '2031-01-05'));
+    assert.strictEqual(S.formatoLote('SAR-000013', 2), 'SAR-000013-L02');
+});
+
 console.log(`\n${n} ok, ${mal} con falla`); process.exit(mal ? 1 : 0); });
 
 // ---- Bodega transitoria (v21.107)

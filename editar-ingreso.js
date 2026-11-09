@@ -17,7 +17,7 @@
   // ---------------- lógica pura ----------------
   /** Lotes del insumo (usa `batches`; si no hay, arma uno con los campos antiguos). */
   function lotesDe(d) {
-    if (Array.isArray(d.batches) && d.batches.length) return d.batches.map(b => ({ batch: String(b.batch || 'S/L'), quantity: num(b.quantity), expirationDate: b.expirationDate || '', ...(b.provider ? { provider: b.provider } : {}) }));
+    if (Array.isArray(d.batches) && d.batches.length) return d.batches.map(b => ({ batch: String(b.batch || 'S/L'), quantity: num(b.quantity), expirationDate: b.expirationDate || '', ...(b.provider ? { provider: b.provider } : {}), ...(b.codigoLote ? { codigoLote: b.codigoLote } : {}) }));
     return num(d.quantity) > 0 || d.batch ? [{ batch: String(d.batch || 'S/L'), quantity: num(d.quantity), expirationDate: d.expirationDate || '' }] : [];
   }
   const claveVence = (b) => (/^\d{4}-\d{2}-\d{2}/.test(b.expirationDate || '') ? b.expirationDate : '9999-99-99');

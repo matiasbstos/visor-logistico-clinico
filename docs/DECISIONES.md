@@ -1022,3 +1022,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.187 N° de OC o documento en el formulario de Ingresos (v21.133)
 - Nuevo campo de texto "N° de OC o documento" (opcional) en Ingresos; se guarda como `document` del movimiento (si está vacío, se usa el nombre del archivo adjunto, o S/N). Se puede asociar o cambiar después desde el lápiz del ingreso, sin límite de tiempo y sin motivo (solo cantidad/lote/vencimiento tienen ventana de 12 h).
 - Se borraron definitivamente (sin respaldo, por instrucción del usuario) los 78 productos antiguos del 2-sep-2026 que no provenían de ingresos con OC.
+
+## 4.188 Editar insumo: categoría/clase, ID y foto separados (v21.134)
+- Categoría (familia clínica, ampliable) y **Clase** (médico/aseo/oficina, antes "Tipo de insumo") quedan rotuladas para no confundirse; se mantienen ambas.
+- "ID Mercado Público" pasa a **"ID del producto"** y se separa de la **foto**: botón para cargar una imagen propia que se guarda en Catalogo_Productos (`imagen`) y tiene prioridad sobre la foto automática.

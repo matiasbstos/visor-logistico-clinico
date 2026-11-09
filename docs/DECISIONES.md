@@ -996,3 +996,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Convive con el **ID de Mercado Público** (`codigoMP`), que es el que usa el buscador de fotos del catálogo. Ingresos y Editar insumo tienen un campo opcional «ID Mercado Público»; al ingresar con ID, el producto entra a `Catalogo_Productos` (mismo id que usa el buscador de fotos) para que se le busque y confirme la foto.
 - Los productos ya existentes y visibles recibieron su código SAR en una pasada única (09-11-2026).
 - Usos previstos: buscar por código, etiquetas, unir productos de nombre parecido.
+
+## 4.183 Categorías desplegables y ampliables (v21.129)
+- La **Categoría** de un producto pasa de texto libre a una **lista desplegable compartida** (`categorias.js`) con la opción «➕ Crear categoría nueva…». La lista (base: General, Insumo Médico, Medicamento, Aseo, Oficina + las creadas + las que ya tienen los productos) se guarda en `Contadores/categorias-producto`.
+- Aparece en **Editar insumo**, en **Registro de Ingresos** (nuevo campo; se guarda en el producto nuevo y completa la de un producto que estaba en «General») y en el **filtro de Existencias**, que ahora filtra por cualquier categoría. Una categoría creada en un lado queda disponible en todos.
+- La categoría es distinta del **Tipo de insumo** (médico / aseo / oficina), que sigue siendo el grupo grande.

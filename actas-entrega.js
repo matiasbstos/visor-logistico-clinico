@@ -816,7 +816,7 @@
         const o = document.createElement('div'); o.className = 'bit-modal act-vmodal'; o.setAttribute('role', 'dialog'); o.setAttribute('aria-modal', 'true'); o.setAttribute('aria-labelledby', 'act-vt');
         o.innerHTML = `<div class="act-vc" tabindex="-1">
           <div class="act-vh"><div><h3 id="act-vt">${n} · ${esc(a.centro)}</h3><small>${esc(a.fecha)} · ${esc(a.bodegaOrigen)} · ${(a.items || []).length} ${ox ? 'balones' : 'productos'}</small> ${estado}</div>
-            <div class="act-vb"><details class="act-mas"><summary class="btn btn-outline" aria-haspopup="menu"><i class="ph-bold ph-download-simple"></i> Descargar ▾</summary><div class="act-mas-m"><button type="button" class="act-dl" data-n="${n}" data-f="pdf">PDF</button><button type="button" class="act-dl" data-n="${n}" data-f="docx">Word</button></div></details>${prim}${verf}${mas}<button type="button" class="btn btn-outline" id="act-vx" aria-label="Cerrar">✕</button></div></div>
+            <div class="act-vb">${ox ? '' : `<button type="button" class="btn btn-outline act-pick" data-n="${n}"><i class="ph-bold ph-list-checks"></i> Hoja de picking</button>`}<details class="act-mas"><summary class="btn btn-outline" aria-haspopup="menu"><i class="ph-bold ph-download-simple"></i> Descargar ▾</summary><div class="act-mas-m"><button type="button" class="act-dl" data-n="${n}" data-f="pdf">PDF</button><button type="button" class="act-dl" data-n="${n}" data-f="docx">Word</button></div></details>${prim}${verf}${mas}<button type="button" class="btn btn-outline" id="act-vx" aria-label="Cerrar">✕</button></div></div>
           <div class="act-vcuerpo"><div class="act-vdoc"><p class="act-hint" id="act-vcarga">Preparando el acta…</p></div>
             <aside class="act-vbit"><h4>Bitácora del acta</h4><ol class="act-vtl" id="act-vtl"><li class="act-hint">Cargando…</li></ol></aside></div></div>`;
         document.body.appendChild(o); document.body.style.overflow = 'hidden';
@@ -824,6 +824,7 @@
         const cerrar = () => { document.removeEventListener('keydown', tec); document.body.style.overflow = ''; if (urlPdf) URL.revokeObjectURL(urlPdf); o.remove(); modalCierre = null; };
         const tec = (k) => { if (k.key === 'Escape') cerrar(); };
         document.addEventListener('keydown', tec); modalCierre = cerrar;
+        const bpk = o.querySelector('.act-pick'); if (bpk) bpk.addEventListener('click', () => { if (window.SAR_Pendientes && window.SAR_Pendientes.pickingActa) window.SAR_Pendientes.pickingActa(a); });
         o.querySelector('#act-vx').addEventListener('click', cerrar); o.addEventListener('mousedown', (e) => { if (e.target === o) cerrar(); });
         o.addEventListener('click', (e) => { o.querySelectorAll('.act-mas[open]').forEach(d => { if (!d.contains(e.target) || e.target.closest('.act-mas-m button')) d.open = false; }); });
         accionesActa((sel) => o.querySelectorAll(sel));

@@ -843,3 +843,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.150 Fecha de la recepción conforme: la de la recepción física (v21.96)
 - Al hacer la recepción conforme, la fecha ya **no se propone como «hoy»**: se propone el día en que se registró la última recepción de productos de la orden. Un aviso bajo el campo explica la diferencia con hoy y ofrece «Usar hoy». El acta lleva la fecha que quede en el campo (editable también después con «Editar»).
+
+### 4.151 Hoja de picking desde un acta emitida (v21.97)
+- En «Ver acta» (Actas ya emitidas) hay un botón **Hoja de picking**: abre para imprimir la misma hoja que usa Pendientes por entregar, con los productos de esa acta (foto, producto/ID, lote y vencimiento usados, cantidad a retirar, casilla para marcar) y la bodega de origen en el encabezado. No se muestra en actas de oxígeno.
+- La ubicación exacta dentro de la bodega no se incluye (el acta no la guarda); pendiente si se necesita.

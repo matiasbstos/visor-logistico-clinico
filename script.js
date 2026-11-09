@@ -4858,7 +4858,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             origenCentro: /pr[eé]stamo|traspaso/i.test(data.purchaseType || '') ? (data.providerId || '') : '',
                             user: auth.currentUser ? auth.currentUser.email : 'Admin Local',
                             date: serverTimestamp(),
-                            document: (data.supportDocument && data.supportDocument.name) ? data.supportDocument.name : 'S/N'
+                            document: String(data.ordenDocumento || '').trim().toUpperCase() || ((data.supportDocument && data.supportDocument.name) ? data.supportDocument.name : 'S/N')
                         });
                         // Préstamo / traspaso desde otro centro: queda pendiente de devolver (v21.82)
                         if (/pr[eé]stamo|traspaso/i.test(data.purchaseType || '')) {

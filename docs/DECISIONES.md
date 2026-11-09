@@ -964,3 +964,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - **Cola → aviso:** `enviarCorreo` pasa `avisoId` a la cola; al salir el correo, `vaciarCola` marca `Contadores/aviso-<acta>-<evento>` como `enviado` con `enviadoEn` (hora real). Las colas antiguas (sin `avisoId`) se resuelven por el asunto.
 - **Fallos:** si el envío en horario hábil falla, se reintenta una vez y luego queda en cola (se reintenta cada 5 min) con el motivo en el detalle.
 - **Bitácora del acta:** «Correo pendiente de envío … saldrá en el próximo horario hábil» (marcado como pendiente); «Correo de respaldo enviado» con la hora real de salida; «Correo de respaldo NO enviado» con el error; y «Correo de emisión: sin registro» cuando no consta ni envío ni cola.
+
+## 4.177 Poner nombre a una bodega nueva ya no arrastra el stock de Bodega Central (v21.123)
+- **Qué pasó:** el 09-11-2026 16:10 se creó una bodega nueva sin nombre; al ponerle «Bodega CAM» en la ficha de la bodega, el sistema la trató como «Bodega Central» (nombre por defecto) y cambió `location` de **los 30 productos** de Central a «Bodega CAM», sin historial ni `updatedAt`. Existencias los mostró en CAM.
+- **Corrección de datos:** los 30 documentos (todos con id `…__bodega-central`) se devolvieron a `location: "Bodega Central"`.
+- **Corrección de código (`bodegas-estantes.js`):** una bodega sin nombre ya no equivale a «Bodega Central» salvo que no exista otra con ese nombre; y si el cambio de nombre va a mover productos, pide confirmación indicando cuántos.

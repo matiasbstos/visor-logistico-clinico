@@ -148,7 +148,7 @@
     /** Listado imprimible (con fotos) de lo que falta por entregar: una hoja por centro. */
     function imprimir(lista) {
         const IM = window.SAR_Imagenes, hoy = new Date().toLocaleDateString('es-CL');
-        const logo = new URL('assets/logo-sar.png', window.location.href).href;
+        const logo = new URL('assets/logo/horizontal.svg', window.location.href).href;
         const foto = (p) => fotoMulti([p.nombre, p.insumoName], [p.codigo]);
         const hojas = (lista || []).filter(Boolean).map(g => `<section><header><img class="lg" src="${esc(logo)}" alt=""><div><h1>Productos pendientes de entrega</h1><h2>${esc(g.centro)}</h2><p>SAR Elsa Romo Arpillerista · ${esc(hoy)}</p></div></header>
             <table><thead><tr><th>Foto</th><th>Producto</th><th>ID</th><th class="n">Pendiente</th><th class="n">Disponible</th></tr></thead><tbody>
@@ -173,7 +173,7 @@
     /** Hoja de picking: qué retirar de la bodega para cada centro, con foto, dónde está, lote y cantidad. */
     function picking(lista) {
         const IM = window.SAR_Imagenes, hoy = new Date().toLocaleDateString('es-CL');
-        const logo = new URL('assets/logo-sar.png', window.location.href).href;
+        const logo = new URL('assets/logo/horizontal.svg', window.location.href).href;
         const foto = (p) => fotoMulti([p.nombre, p.insumoName], [p.codigo]);
         const dondeTxt = (p) => (p.donde || []).map(d => `${esc(d.bodega)}${d.ubicaciones && d.ubicaciones.length ? ' · <b>' + esc(d.ubicaciones.join(', ')) + '</b>' : ''} <small>(${d.cantidad})</small>`).join('<br>') || '—';
         const venceTxt = (p) => p.lote ? `${esc(p.lote.batch || 's/lote')}${p.lote.vence ? '<br><small>vence ' + esc(p.lote.vence) + '</small>' : ''}` : '—';
@@ -200,7 +200,7 @@
     /** Hoja de picking de un acta ya emitida: qué se retiró (o se retira) de la bodega, con foto, lote(s) y cantidad. */
     function pickingActa(a) {
         if (!a || !(a.items || []).length) { toast('Hoja de picking', 'El acta no tiene productos.', 'warning'); return; }
-        const IM = window.SAR_Imagenes, logo = new URL('assets/logo-sar.png', window.location.href).href;
+        const IM = window.SAR_Imagenes, logo = new URL('assets/logo/horizontal.svg', window.location.href).href;
         const cache = window.insumosDataCache || [];
         const foto = (i) => { const ins = cache.find(x => x && x.id && x.id === i.id) || cache.find(x => x && x.name && norm(x.name) === norm(i.nombre)); return fotoMulti([i.nombre, ins && ins.name, i.fisico], [i.codigoMP, ins && (ins.codigoMP || ins.code)]); };
         const lotes = (i) => (i.lotes || []).length ? i.lotes.map(l => `${esc(l.batch || 's/lote')}${l.expirationDate ? ' <small>vence ' + esc(l.expirationDate) + '</small>' : ''} <small>(${num(l.quantity)})</small>`).join('<br>') : '—';

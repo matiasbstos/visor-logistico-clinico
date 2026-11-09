@@ -149,7 +149,7 @@
     // ---------------------------------------------------------------
     // Estado
     // ---------------------------------------------------------------
-    const vacio = () => ({ origen: null, centro: '', items: [], pendientes: [], documentos: [], recibe: { nombre: '', cargo: '' } });
+    const vacio = () => ({ origen: null, centro: '', historica: null, items: [], pendientes: [], documentos: [], recibe: { nombre: '', cargo: '' } });
     let borrador = vacio();
     let stock = [];           // docs de la bodega elegida
     let bodegas = [];
@@ -332,7 +332,9 @@
         if (soloPend.length) b = { ...b, items: b.items.filter(i => num(i.cantidad) > 0), pendientes: [...(b.pendientes || []), ...soloPend.map(i => ({ nombre: i.nombre, cantidad: num(i.solicitado), ...(i.codigo ? { codigoMP: String(i.codigo) } : {}) }))] };
         const anio = new Date().getFullYear();
         const ctrRef = f.doc(f.collection(db(), 'Contadores'), `acta-${anio}`);
-        const fecha = new Date().toISOString().slice(0, 10);
+        const fecha = opc.historica ? opc.historica.fecha : new Date().toISOString().slice(0, 10);
+        const numHist = opc.historica ? 'HIS-' + String(opc.historica.folio || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '') : '';
+        if (opc.historica && (numHist === 'HIS-' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha))) throw new Error('Indica el N° de tu acta anterior y su fecha original.');
         // Productos manuales: si ya existe uno con ese nombre en la bodega se usa; si no, se crea como PROVISIONAL.
         const items = b.items.map(i => ({ ...i }));
         for (const i of items) {
@@ -344,9 +346,10 @@
         }
         const refs = items.map(i => ({ i, ref: i.nuevo ? f.doc(f.collection(db(), 'Insumos')) : f.doc(f.collection(db(), 'Insumos'), i.id), hist: f.doc(f.collection(db(), 'Historial_Movimientos')), histC: f.doc(f.collection(db(), 'Historial_Movimientos')) }));
         const resultado = await f.runTransaction(db(), async (tx) => {
-            let n = 0, numero = opc.numero;
+            let n = 0, numero = opc.numero || numHist;
             if (!numero) { const cs = await tx.get(ctrRef); n = (cs.exists() ? num(cs.data().ultimo) : 0) + 1; numero = numeroActa(anio, n); }
             const actaRef = f.doc(f.collection(db(), 'Actas_Entrega'), numero);
+            if (opc.historica) { const h0 = await tx.get(actaRef); if (h0.exists()) throw new Error(`Ya existe el acta histórica ${numero}. Usa otro N°.`); }
             if (opc.numero) { const as0 = await tx.get(actaRef); const c0 = as0.exists() && as0.data().confirmacion; if (!c0 || c0.estado !== 'PENDIENTE' || as0.data().estado !== 'EMITIDA') throw new Error('Esta acta ya no está pendiente de confirmar.'); }
             const snaps = [];
             for (const r of refs) snaps.push(r.i.nuevo ? null : await tx.get(r.ref));
@@ -392,19 +395,20 @@
                 c.cubiertas.forEach(cu => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name, quantity: cu.qty, type: 'CUADRE_SOBREGIRO', user: usuario, date: f.serverTimestamp(), document: numero, batch: 'MULTI-LOTE', origin: b.origen, idInsumoOrigen: r.ref.id, observacion: `Cuadre automático al ${opc.numero ? 'confirmar' : 'emitir'} ${numero}: ${cu.qty} u. del acta ${cu.acta} ya estaban entregadas sin respaldo`, actaId: cu.acta, cuadradoPor: numero }));
                 tx.set(r.hist, {
                     insumoName: d.name, quantity: num(r.i.cantidad), type: 'ENTREGA_ACTA', user: usuario, date: f.serverTimestamp(), document: numero,
-                    batch: c.usados.length === 1 ? c.usados[0].batch : (c.usados.length ? 'MULTI-LOTE' : 'SIN-RESPALDO'), origin: b.origen, dest: b.centro, lotes: c.usados,
+                    batch: c.usados.length === 1 ? c.usados[0].batch : (c.usados.length ? 'MULTI-LOTE' : 'SIN-RESPALDO'), origin: b.origen, dest: b.centro, lotes: c.usados, ...(opc.historica ? { fechaDocumento: fecha, historica: true } : {}),
                     idInsumoOrigen: r.ref.id, sinRespaldo: c.faltante,
-                    observacion: `Acta de entrega ${numero}${c.faltante > 0 ? ` · ${c.faltante} u. sin respaldo en sistema (sobregiro)` : ''}${r.i.nuevo ? ' · insumo provisional' : ''}`, actaId: numero
+                    observacion: `${opc.historica ? 'Acta histórica (anterior al sistema, del ' + fecha + ') ' : 'Acta de entrega '}${numero}${c.faltante > 0 ? ` · ${c.faltante} u. sin respaldo en sistema (sobregiro)` : ''}${r.i.nuevo ? ' · insumo provisional' : ''}`, actaId: numero
                 });
             });
-            if (!opc.numero) tx.set(ctrRef, { ultimo: n, anio, updatedAt: f.serverTimestamp() });
+            if (!opc.numero && !opc.historica) tx.set(ctrRef, { ultimo: n, anio, updatedAt: f.serverTimestamp() });
             const acta = {
                 numero, fecha, centro: b.centro.trim(), bodegaOrigen: b.origen, estado: 'EMITIDA', stockDescontado: true,
                 conSobregiro: itemsActa.some(i => i.sinRespaldo > 0),
                 items: itemsActa, pendientes: [...b.pendientes.map(p => ({ nombre: p.nombre, cantidad: num(p.cantidad), ...(p.codigoMP ? { codigoMP: String(p.codigoMP) } : {}) })), ...autoPend],
                 documentos: b.documentos.map(d => ({ tipo: d.tipo, numero: d.numero, detalle: d.detalle || '' })),
                 entrega: { nombre: firma.nombre, cargo: firma.cargo }, recibe: { nombre: (b.recibe && b.recibe.nombre) || '', cargo: (b.recibe && b.recibe.cargo) || '' },
-                creadoPor: usuario, creadoEn: f.serverTimestamp()
+                creadoPor: usuario, creadoEn: f.serverTimestamp(),
+                ...(opc.historica ? { historica: true, folioOriginal: String(opc.historica.folio).trim(), confirmacion: { estado: 'CONFIRMADA', fecha, por: usuario, historica: true }, confirmadaEn: f.serverTimestamp() } : {})
             };
             if (b.oc) acta.oc = { id: b.oc.id, numeroOC: b.oc.numeroOC || '', columna: b.oc.key, memo: b.oc.memo || '', cdp: b.oc.cdp || '' };
             if (opc.numero) tx.update(actaRef, { items: itemsActa, stockDescontado: true, conSobregiro: acta.conSobregiro, confirmacion: { estado: 'CONFIRMADA', fecha: fecha, por: usuario, ...(opc.respaldo ? { respaldo: opc.respaldo } : {}) }, respaldo: opc.respaldo || null, confirmadaEn: f.serverTimestamp() });
@@ -589,12 +593,15 @@
             <details class="act-det"${borrador.documentos.length ? ' open' : ''}><summary>Documentos asociados: SDC, OC, factura… (opcional)</summary>
               ${borrador.documentos.map((d, k) => `<div class="act-fila"><div class="act-fn">${esc(d.tipo)} N° ${esc(d.numero)}${d.detalle ? ' — ' + esc(d.detalle) : ''}</div><button type="button" class="btn btn-outline act-ddel" data-k="${k}">✕</button></div>`).join('')}
               <div class="act-fila act-docs"><select id="act-dt">${TIPOS_DOC.map(t => `<option>${esc(t)}</option>`).join('')}</select><input id="act-dn" placeholder="Número"><input id="act-dd" placeholder="Detalle (opcional)"><button type="button" class="btn btn-outline" id="act-dadd">Añadir</button></div></details>
+            <details class="act-det"${borrador.historica && borrador.historica.on ? ' open' : ''}><summary>Acta anterior al sistema (histórica)</summary>
+              <label class="soc-toggle"><input type="checkbox" id="act-hist-on"${borrador.historica && borrador.historica.on ? ' checked' : ''}> Esta acta ya se entregó antes de usar el sistema: registrarla y descontar el stock</label>
+              ${borrador.historica && borrador.historica.on ? `<div class="act-fila act-docs"><input id="act-hist-folio" value="${esc(borrador.historica.folio || '')}" placeholder="N° de tu acta anterior (ej. 45)" aria-label="N° del acta anterior"><input type="date" id="act-hist-fecha" value="${esc(borrador.historica.fecha || '')}" aria-label="Fecha original del acta"></div><p class="act-hint">Queda como <b>HIS-N°</b>, con la fecha original, y el stock se descuenta de inmediato (por lote que vence primero). Después puedes subirle el acta firmada desde «Actas emitidas».</p>` : ''}</details>
             <details class="act-det"><summary>Firmas</summary>
               <div class="act-fila act-docs"><input id="act-en" value="${esc(firma.nombre)}" placeholder="Entrega: nombre"><input id="act-ec" value="${esc(firma.cargo)}" placeholder="Entrega: cargo"></div>
               <div class="act-fila act-docs"><input id="act-rn" value="${esc(borrador.recibe.nombre)}" placeholder="Recibe: nombre (opcional)"><input id="act-rc" value="${esc(borrador.recibe.cargo)}" placeholder="Recibe: cargo (opcional)"></div></details>
             ${errores.length && (borrador.items.length || borrador.centro) ? `<ul class="act-err">${errores.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
             <div class="act-acc"><button type="button" class="btn btn-outline" id="act-limpiar">Vaciar borrador</button>
-              <button type="button" class="btn btn-primary" id="act-emitir"${errores.length ? ' disabled' : ''}>Emitir acta y descontar stock</button></div>
+              <button type="button" class="btn btn-primary" id="act-emitir"${errores.length ? ' disabled' : ''}>${borrador.historica && borrador.historica.on ? 'Registrar acta histórica y descontar stock' : 'Emitir acta y descontar stock'}</button></div>
             <div class="act-prueba"><b>Probar el formato</b><span>Genera el acta con los productos elegidos para comparar con el modelo. <u>No descuenta stock</u> ni se numera; queda registrada como "ACTA_PRUEBA" en el historial (informes contable y disponible).</span>
               <div class="act-acc"><button type="button" class="btn btn-outline" id="act-prueba-pdf"${borrador.items.length ? '' : ' disabled'}>Acta de prueba · PDF</button><button type="button" class="btn btn-outline" id="act-prueba-docx"${borrador.items.length ? '' : ' disabled'}>Acta de prueba · Word</button></div></div>
           </div>
@@ -648,6 +655,7 @@
         const g = (id) => { const e = document.getElementById(id); return e ? e.value : null; };
         const c = g('act-centro'); if (c !== null) borrador.centro = c;
         if (g('act-rn') !== null) borrador.recibe = { nombre: g('act-rn'), cargo: g('act-rc') };
+        if (borrador.historica && borrador.historica.on) { const hf = g('act-hist-folio'), hd = g('act-hist-fecha'); if (hf !== null) borrador.historica.folio = hf; if (hd !== null) borrador.historica.fecha = hd; }
         if (g('act-en') !== null) { firma = { nombre: g('act-en'), cargo: g('act-ec') }; guardarFirma(firma); }
     }
 
@@ -666,7 +674,8 @@
             leerCampos(); const n = normC(borrador.centro); if (!n) { toast('Falta el centro', 'Escribe el nombre del centro y luego guárdalo.', 'warning'); return; }
             try { const nuevo = await guardarCentro(n); toast(nuevo ? 'Centro guardado' : 'Ya estaba en la lista', n, nuevo ? 'success' : 'info'); pintar(); } catch (e) { toast('No se guardó el centro', e.message || String(e), 'error'); }
         });
-        ['act-centro', 'act-rn', 'act-rc', 'act-en', 'act-ec'].forEach(id => { const e = document.getElementById(id); if (e) e.addEventListener('change', () => { leerCampos(); guardarBorrador(); if (id === 'act-centro') pintar(); }); });
+        const hon = document.getElementById('act-hist-on'); if (hon) hon.addEventListener('change', () => { leerCampos(); borrador.historica = hon.checked ? { on: true, folio: '', fecha: '' } : null; guardarBorrador(); pintar(); });
+        ['act-centro', 'act-rn', 'act-rc', 'act-en', 'act-ec', 'act-hist-folio', 'act-hist-fecha'].forEach(id => { const e = document.getElementById(id); if (e) e.addEventListener('change', () => { leerCampos(); guardarBorrador(); if (id === 'act-centro') pintar(); }); });
         $$('.act-addcat').forEach(b => b.addEventListener('click', () => {
             const c0 = catalogo[+b.dataset.ci]; if (!c0) return;
             const c = Math.floor(num((r.querySelector(`.act-qty[data-cqid="${b.dataset.ci}"]`) || {}).value)), solC = Math.floor(num((r.querySelector(`.act-qty[data-csid="${b.dataset.ci}"]`) || {}).value));
@@ -877,11 +886,35 @@
     }
 
     let emitiendo = false;
+    /** Acta de antes del sistema: queda como HIS-N°, con su fecha original, y descuenta el stock de inmediato. */
+    async function emitirHistorica() {
+        const h = borrador.historica || {};
+        if (!String(h.folio || '').trim()) { toast('Falta el N° del acta', 'Escribe el número de tu acta anterior.', 'warning'); return; }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(h.fecha || '')) { toast('Falta la fecha', 'Indica la fecha original del acta.', 'warning'); return; }
+        if (h.fecha > new Date().toISOString().slice(0, 10)) { toast('Fecha futura', 'La fecha original no puede ser posterior a hoy.', 'warning'); return; }
+        const total = borrador.items.reduce((s, i) => s + num(i.cantidad), 0);
+        if (!confirm(`Acta histórica ${h.folio} del ${h.fecha} para ${borrador.centro.trim()}: ${borrador.items.length} productos (${total} unidades).\n\nEl stock de ${borrador.origen} SE DESCUENTA AHORA (por lote que vence primero), porque esa entrega ya ocurrió.\n\n¿Registrar?`)) return;
+        emitiendo = true; const btn = document.getElementById('act-emitir'); if (btn) btn.disabled = true;
+        const prog = window.SAR_Progreso.iniciar('Registrando el acta histórica…', ['Descontando el stock…']);
+        try {
+            const centroNuevo = borrador.centro;
+            const acta = await emitir(borrador, usuarioEmail(), { historica: { folio: String(h.folio).trim(), fecha: h.fecha } });
+            guardarCentro(centroNuevo).catch(() => {});
+            borrador = { ...vacio(), origen: borrador.origen, centro: '' }; guardarBorrador();
+            await Promise.all([cargarStock(), cargarHistorial()]);
+            pintar();
+            toast('Acta histórica registrada', `${acta.numero} · stock descontado. Puedes subirle el acta firmada desde «Actas emitidas».`, 'success');
+            prog.listo(`Acta histórica ${acta.numero} registrada y stock descontado`, { informe: true });
+        } catch (e) { prog.error(); toast('No se registró', e.message, 'error'); if (btn) btn.disabled = false; }
+        finally { emitiendo = false; }
+    }
+
     async function onEmitir() {
         if (emitiendo) return;
         leerCampos();
         const errores = validarBorrador(borrador);
         if (errores.length) { toast('Revisa el acta', errores[0], 'warning'); return; }
+        if (borrador.historica && borrador.historica.on) return emitirHistorica();
         const total = borrador.items.reduce((s, i) => s + num(i.cantidad), 0);
         const sin = borrador.items.map(i => ({ n: i.nombre, f: Math.max(0, num(i.cantidad) - num(i.stock)) })).filter(x => x.f > 0);
         const avisoSin = sin.length ? `\n\nSIN RESPALDO EN SISTEMA (quedan como sobregiro, saldo contable negativo hasta cuadrar con la OC/SDC):\n${sin.map(x => `• ${x.n}: ${x.f} u.`).join('\n')}` : '';

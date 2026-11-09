@@ -1026,3 +1026,10 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.188 Editar insumo: categoría/clase, ID y foto separados (v21.134)
 - Categoría (familia clínica, ampliable) y **Clase** (médico/aseo/oficina, antes "Tipo de insumo") quedan rotuladas para no confundirse; se mantienen ambas.
 - "ID Mercado Público" pasa a **"ID del producto"** y se separa de la **foto**: botón para cargar una imagen propia que se guarda en Catalogo_Productos (`imagen`) y tiene prioridad sobre la foto automática.
+
+## 4.189 Código por lote y vista multi-bodega (v21.135)
+- Cada lote recibe un código `SAR-000013-L01…` (producto + correlativo por producto). Clave = lote + vencimiento normalizado, así el mismo lote tiene el mismo código en cualquier bodega. Contador en `Contadores/codigo-lote-<producto>` (`SAR_CodigoSAR.asignarLote/codificarLotes`).
+- Se asigna al ingresar (se guarda en `batches[].codigoLote` y en el movimiento), al editar un insumo con lotes nuevos, y **retroactivamente** al abrir el desglose de un producto con lotes sin código (idempotente, solo roles superadmin/admin/operador).
+- El traspaso entre bodegas ahora conserva `codigoLote` y `provider` del lote.
+- El desglose muestra el código de cada lote y, debajo, "Mismo producto en otras bodegas": bodega, lote, código, cantidad, vencimiento y estado, con el total en todas las bodegas.
+- Sin cambios de reglas Firestore.

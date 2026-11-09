@@ -950,3 +950,11 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.174 · Las sugerencias de nombre recuerdan lo ya ingresado (v21.120)
 - La lista de sugerencias de Ingresos suma, además de Existencias y Catálogo, los nombres de ingresos anteriores del Historial (aunque el producto no haya quedado en Existencias) y los nombres escritos en este equipo (localStorage `sar_nombres_ingreso`, máx. 300). El nombre se recuerda al enviar el formulario, se guarde o no el ingreso.
+
+## 4.175 · Editar ingresos desde el Historial con ajuste de stock (v21.121)
+- En Historial, los movimientos `INGRESO_PROVEEDOR` tienen un botón lápiz (solo administradores). Permite corregir cantidad, lote, vencimiento, fecha, proveedor, tipo de compra, documento, tipo de insumo y observaciones.
+- Una sola transacción: deshace el efecto anterior sobre el lote del insumo y aplica el nuevo (`aplicarEdicion`, con pruebas), actualiza el movimiento (`editado`, `editadoPor`, `editadoEn`, `ediciones[]` con los valores anteriores) y escribe `Insumos/{id}/audit_logs`. Existencias, saldo contable y disponible salen de `Insumos`, por lo que se ajustan solos.
+- Reglas: no se puede dejar un lote por debajo de lo ya entregado; si el lote editado no existe se pide corregirlo desde «Editar». Si el producto no está en Existencias (caso de los ingresos perdidos del 09-11), el guardado lo recrea con los datos del formulario.
+- Los ingresos nuevos guardan `insumoId`, `expirationDate` y `observations` en el movimiento para enlazarlos sin buscar por nombre.
+- No se edita el nombre ni la bodega de destino (usar «Editar» en Existencias y Transferencias). Solo ingresos de proveedor: entregas, traspasos y ajustes afectan actas y otras bodegas.
+- **Requiere publicar `firestore.rules`**: nueva regla de actualización de `Historial_Movimientos` (solo admin, solo `INGRESO_PROVEEDOR`, solo esos campos). Sin ella el guardado falla con permiso denegado.

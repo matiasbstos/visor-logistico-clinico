@@ -137,6 +137,9 @@ service cloud.firestore {
       // Solo el superadministrador, y solo para quitar datos de pacientes antiguos (anonimizar-pacientes.js)
       allow update: if isSuperAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rutPaciente', 'nombrePaciente', 'camaPaciente', 'document']);
+      // Corrección de un ingreso de proveedor por un administrador (v21.121): solo estos campos y solo ese tipo
+      allow update: if isAdmin() && resource.data.type == 'INGRESO_PROVEEDOR'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['quantity', 'batch', 'expirationDate', 'provider', 'purchaseType', 'document', 'observations', 'tipoInsumo', 'date', 'insumoId', 'editado', 'editadoPor', 'editadoEn', 'ediciones']);
       allow delete: if isSuperAdmin();
     }
 

@@ -4744,6 +4744,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             provider: data.providerId || "S/I",
                             purchaseType: data.purchaseType || "S/I",
                             tipoInsumo: ['medico', 'aseo', 'oficina'].includes(data.tipoInsumo) ? data.tipoInsumo : 'medico',
+                            insumoId: insumoId,
+                            expirationDate: formattedDate === 'N/A' ? '' : formattedDate,
+                            observations: (data.observations || '').trim(),
                             origenTipo: /pr[eé]stamo|traspaso/i.test(data.purchaseType || '') ? 'prestamo_otro_centro' : 'compra',
                             origenCentro: /pr[eé]stamo|traspaso/i.test(data.purchaseType || '') ? (data.providerId || '') : '',
                             user: auth.currentUser ? auth.currentUser.email : 'Admin Local',
@@ -5133,7 +5136,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td><div class="item-name">L: ${window.escapeHTML(m.batch || m.lote || 'S/L')}</div><div class="${qtyClass} font-bold">${qtySign} ${m.quantity || 0} uds</div></td>
                 <td><div class="item-category">Doc: ${window.escapeHTML(m.document || m.supportDocument || 'S/N')}</div></td>
                 <td><span class="doc-badge">${window.escapeHTML(m.document || m.supportDocument || 'FACT-000')}</span></td>
-                <td><button class="btn btn-icon" onclick="window.showAlertCenter('Mensaje del Sistema', 'Detalle:\\nProducto: ${window.escapeHTML(m.insumoName || m.articleName || 'Insumo').replace(/'/g, "\\'")}\\nFecha: ${dateFmt} ${timeFmt}\\nUsuario: ${window.escapeHTML(m.user || m.operatorUid || m.usuario || 'S/I').replace(/'/g, "\\'")}')"><i class="ph ph-eye"></i></button></td>
+                <td><button class="btn btn-icon" onclick="window.showAlertCenter('Mensaje del Sistema', 'Detalle:\\nProducto: ${window.escapeHTML(m.insumoName || m.articleName || 'Insumo').replace(/'/g, "\\'")}\\nFecha: ${dateFmt} ${timeFmt}\\nUsuario: ${window.escapeHTML(m.user || m.operatorUid || m.usuario || 'S/I').replace(/'/g, "\\'")}')"><i class="ph ph-eye"></i></button>${m.type === 'INGRESO_PROVEEDOR' ? `<button type="button" class="btn btn-icon btn-edit-mov admin-only" data-id="${window.escapeHTML(m.id || '')}" title="Editar ingreso" aria-label="Editar ingreso"><i class="ph ph-pencil-simple"></i></button>` : ''}${m.editado ? '<div class="item-category" title="Este ingreso fue corregido">editado</div>' : ''}</td>
             `;
                 tbody.appendChild(tr);
             });

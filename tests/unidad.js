@@ -79,3 +79,27 @@ console.log(`\n${n} ok, ${mal} con falla`); process.exit(mal ? 1 : 0); });
   console.log('ok bodega transitoria');
 })();
 (function () { const T = require('../bodega-transitoria.js'); require('assert').strictEqual(T.normEstante(' b-3 '), 'B3'); console.log('ok estante'); })();
+
+// ---- Editar ingreso (v21.121)
+(function () {
+  const E = require('../editar-ingreso.js'), assert = require('assert');
+  const ins = { quantity: 130, batches: [{ batch: 'L1', quantity: 100, expirationDate: '2027-01-01' }, { batch: 'L2', quantity: 30, expirationDate: '2026-12-01' }] };
+  // subir el ingreso de L1 de 100 a 120 y cambiar su vencimiento
+  let r = E.aplicarEdicion(ins, { batch: 'L1', quantity: 100 }, { batch: 'L1', quantity: 120, expirationDate: '2027-03-01' });
+  assert.strictEqual(r.quantity, 150); assert.strictEqual(r.batches.find(b => b.batch === 'L1').quantity, 120); assert.strictEqual(r.batches.find(b => b.batch === 'L1').expirationDate, '2027-03-01');
+  assert.strictEqual(r.batch, 'L2'); // el que vence primero
+  // cambiar el nombre del lote: L1 -> L9 con la misma cantidad
+  r = E.aplicarEdicion(ins, { batch: 'L1', quantity: 100 }, { batch: 'l9', quantity: 100, expirationDate: '2027-01-01' });
+  assert.deepStrictEqual(r.batches.map(b => b.batch).sort(), ['L2', 'L9']); assert.strictEqual(r.quantity, 130);
+  // no se puede bajar de lo ya entregado
+  const consumido = { quantity: 40, batches: [{ batch: 'L1', quantity: 40, expirationDate: '' }] };
+  assert.throws(() => E.aplicarEdicion(consumido, { batch: 'L1', quantity: 100 }, { batch: 'L1', quantity: 50 }), /ya se entreg/);
+  // lote inexistente
+  assert.throws(() => E.aplicarEdicion(ins, { batch: 'XX', quantity: 5 }, { batch: 'XX', quantity: 6 }), /No se encontr/);
+  // cantidad inválida
+  assert.throws(() => E.aplicarEdicion(ins, { batch: 'L1', quantity: 1 }, { batch: 'L1', quantity: 1.5 }), /entero/);
+  // insumo antiguo sin arreglo batches
+  r = E.aplicarEdicion({ quantity: 10, batch: 'A', expirationDate: '2027-01-01' }, { batch: 'A', quantity: 10 }, { batch: 'A', quantity: 12, expirationDate: '2027-01-01' });
+  assert.strictEqual(r.quantity, 12);
+  console.log('ok editar ingreso');
+})();

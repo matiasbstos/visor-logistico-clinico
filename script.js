@@ -4682,6 +4682,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 provider: data.providerId || "S/I",
                                 purchaseType: data.purchaseType || "S/I",
                                 tipoInsumo: ['medico', 'aseo', 'oficina'].includes(data.tipoInsumo) ? data.tipoInsumo : 'medico',
+                                origenOC: true,   // v21.124: sin esta marca la fase «solo OC» lo ocultaba de Existencias
                                 name_lowercase: nombreInput.trim().toLowerCase(),
                                 category: 'General',
                                 location: destinoNombre,

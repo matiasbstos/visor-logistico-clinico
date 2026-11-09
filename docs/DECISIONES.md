@@ -969,3 +969,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - **Qué pasó:** el 09-11-2026 16:10 se creó una bodega nueva sin nombre; al ponerle «Bodega CAM» en la ficha de la bodega, el sistema la trató como «Bodega Central» (nombre por defecto) y cambió `location` de **los 30 productos** de Central a «Bodega CAM», sin historial ni `updatedAt`. Existencias los mostró en CAM.
 - **Corrección de datos:** los 30 documentos (todos con id `…__bodega-central`) se devolvieron a `location: "Bodega Central"`.
 - **Corrección de código (`bodegas-estantes.js`):** una bodega sin nombre ya no equivale a «Bodega Central» salvo que no exista otra con ese nombre; y si el cambio de nombre va a mover productos, pide confirmación indicando cuántos.
+
+## 4.178 Ingresos por proveedor invisibles en Existencias: faltaba `origenOC` (v21.124)
+- **Causa real (corrige el diagnóstico de 4.173):** la «fase solo OC» (`FASE_SOLO_OC`, v20.73) oculta en todo el sistema los Insumos sin `origenOC: true`. El formulario de Ingresos creaba los productos sin esa marca; existían en Firestore (con stock) pero la vista los filtraba. No se borraba nada. Los 13 productos de los ingresos del 09-11 (3 «Principal» y 10 de Bodega CAM) se marcaron `origenOC: true` y los que no tenían `tipoInsumo` quedaron como `medico`.
+- **Código:** los productos nuevos creados desde Ingresos y los recreados al editar un ingreso se guardan con `origenOC: true`.
+- **Traslado a «Bodega CAM» de 4.177:** al renombrar la bodega solo se movieron los 30 productos visibles (los demás Central estaban ocultos por la fase y quedaron intactos).
+- **Nota:** los 140 productos antiguos de Central con stock 0 siguen ocultos por la fase (no se tocaron).

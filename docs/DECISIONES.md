@@ -1001,3 +1001,11 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - La **Categoría** de un producto pasa de texto libre a una **lista desplegable compartida** (`categorias.js`) con la opción «➕ Crear categoría nueva…». La lista (base: General, Insumo Médico, Medicamento, Aseo, Oficina + las creadas + las que ya tienen los productos) se guarda en `Contadores/categorias-producto`.
 - Aparece en **Editar insumo**, en **Registro de Ingresos** (nuevo campo; se guarda en el producto nuevo y completa la de un producto que estaba en «General») y en el **filtro de Existencias**, que ahora filtra por cualquier categoría. Una categoría creada en un lado queda disponible en todos.
 - La categoría es distinta del **Tipo de insumo** (médico / aseo / oficina), que sigue siendo el grupo grande.
+
+## 4.184 Gobernanza de cambios: motivo, código de seguimiento y ventana de corrección (v21.130)
+- Nuevo `gobernanza.js` (`SAR_Gobernanza`). Todo cambio de **cantidad, lote, vencimiento, bodega o ingreso** pide un **motivo** (lista: error de digitación, producto no está, merma, conteo físico, devolución, corrección de lote/vencimiento, proveedor/documento, cambio de bodega, otro) y genera un **código de seguimiento** correlativo (`CAM-AAAA-NNNNNN` en ediciones, `AJU-AAAA-NNNNNN` en Ajustes; contador `codigo-cambio-AAAA` en Contadores).
+- Cada cambio queda en Historial_Movimientos como `CAMBIO_CONTROLADO` (código, motivo, detalle, antes/después, usuario) y se lista en Auditoría → "Cambios con código de seguimiento", junto a los saldos contable/disponible.
+- **Ventana de corrección directa** (Editar insumo y Editar ingreso): cantidad, lote y vencimiento solo se corrigen mientras no haya salido nada de ese insumo (entregas, traspasos, mermas, ajustes, cuadres) y hayan pasado ≤ 72 h del último ingreso. Después, solo por Ajustes/Desajustes.
+- Cambios de nombre, categoría, tipo e ID Mercado Público: sin motivo (quedan en la bitácora de edición).
+- Ajustes: el motivo se antepone a la justificación y el código ADJ aleatorio se reemplaza por el correlativo AJU.
+- Reglas Firestore: sin cambios (usa Contadores e Historial_Movimientos ya permitidos).

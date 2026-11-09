@@ -63,6 +63,14 @@ t('vida del producto: junta orden, recepción, acta y salida en orden cronológi
   assert.strictEqual(r.resumen.pedido, 60); assert.strictEqual(r.resumen.recibido, 60); assert.strictEqual(r.resumen.entregado, 50); assert.strictEqual(r.resumen.reservado, 3);
   assert.strictEqual(r.eventos[0].clase, 'oc'); assert.ok(r.eventos[0].detalle.includes('memo 77')); assert.ok(r.eventos.some(e => e.titulo.startsWith('Recepción REC-1'))); assert.ok(r.eventos.some(e => /firmada, stock descontado/.test(e.detalle))); assert.strictEqual(r.stock[0].cant, 10); assert.ok(r.eventos.findIndex(e => e.clase === 'oc') < r.eventos.findIndex(e => e.clase === 'sal')); });
 Promise.all(tAsync).then(() => {
+t('gobernanza: ventana de corrección directa', () => {
+    const G = require('../gobernanza.js'), ahora = new Date('2026-11-09T12:00:00Z');
+    assert.ok(G.evaluarVentana([{ type: 'INGRESO_PROVEEDOR', date: new Date('2026-11-08T12:00:00Z') }], ahora).ok);
+    assert.ok(!G.evaluarVentana([{ type: 'INGRESO_PROVEEDOR', date: new Date('2026-11-05T12:00:00Z') }], ahora).ok);
+    assert.ok(!G.evaluarVentana([{ type: 'INGRESO_PROVEEDOR', date: new Date('2026-11-08T12:00:00Z') }, { type: 'ENTREGA_ACTA' }], ahora).ok);
+    assert.ok(G.evaluarVentana([{ type: 'INGRESO_OC', date: new Date('2026-11-09T10:00:00Z') }, { type: 'ACTA_PRUEBA' }, { type: 'UNIFICACION_STOCK' }], ahora).ok);
+});
+
 console.log(`\n${n} ok, ${mal} con falla`); process.exit(mal ? 1 : 0); });
 
 // ---- Bodega transitoria (v21.107)

@@ -990,3 +990,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.181 Desglose desplegable por lote en Existencias (v21.127)
 - Cada producto con lotes tiene el botón **Ver desglose**: abre bajo la fila una tabla con, por lote, la **cantidad**, el **% del total**, el **vencimiento**, el **estado** (vencido / vence en N d / vigente) y el **proveedor**, ordenada por lo que vence primero (FEFO), con el total, el stock vigente y el mínimo. Se mantiene abierto aunque la lista se actualice.
+
+## 4.182 Código SAR automático + ID de Mercado Público para la foto (v21.128)
+- Cada producto (por nombre, común a todas las bodegas y lotes) recibe un **código SAR** correlativo `SAR-000123` (`codigo-sar.js`; contador y mapa en `Contadores/codigo-sar-*`). Se asigna al ingresar el producto o al guardar su edición, se guarda en `codigoSAR` y se muestra en la columna **Código** de Existencias (antes «#N/A»).
+- Convive con el **ID de Mercado Público** (`codigoMP`), que es el que usa el buscador de fotos del catálogo. Ingresos y Editar insumo tienen un campo opcional «ID Mercado Público»; al ingresar con ID, el producto entra a `Catalogo_Productos` (mismo id que usa el buscador de fotos) para que se le busque y confirme la foto.
+- Los productos ya existentes y visibles recibieron su código SAR en una pasada única (09-11-2026).
+- Usos previstos: buscar por código, etiquetas, unir productos de nombre parecido.

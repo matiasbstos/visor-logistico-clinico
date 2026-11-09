@@ -3264,7 +3264,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     expirationDate: _data.vencimiento || _data.fechaVencimiento || _data.expirationDate || 'N/A',
                     batch: _data.lote || _data.batch || 'N/A',
                     category: _data.categoria || _data.category || 'General',
-                    code: _data.code || _data.codigo || '#N/A',
+                    code: _data.codigoSAR || _data.code || _data.codigo || '#N/A',
                     criticalLimit: _data.stock_minimo !== undefined ? Number(_data.stock_minimo) : Number(_data.criticalLimit || 50)
                 };
                 const tr = document.createElement('tr');
@@ -4268,7 +4268,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             const data = docSnap.data();
                             // Poblar formulario
                             document.getElementById('edit-doc-id').value = docId;
-                            document.getElementById('edit-code').value = data.code || '';
+                            document.getElementById('edit-code').value = data.codigoSAR || '';
+                            { const mp = document.getElementById('edit-codigoMP'); if (mp) mp.value = data.codigoMP || ''; }
                             document.getElementById('edit-name').value = data.name || '';
                             document.getElementById('edit-category').value = data.category || '';
                             document.getElementById('edit-quantity').value = data.quantity || 0;
@@ -4365,8 +4366,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Transformación y Limpieza de datos (Senior Standards)
                 const updatedData = {
-                    code: (rawData.code || '').trim(),
-                    codigo: (rawData.code || '').trim(),
+                    codigoSAR: (rawData.code || '').trim() || (window.SAR_CodigoSAR ? await window.SAR_CodigoSAR.asignar(rawData.name) : ''),
+                    ...(String(rawData.codigoMP || '').replace(/\D/g, '') ? { codigoMP: String(rawData.codigoMP).replace(/\D/g, '') } : {}),
                     name: rawData.name.trim(),
                     nombre: rawData.name.trim(),
                     descripcion: rawData.name.trim(),
@@ -4708,6 +4709,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         insumoId = nuevoDocRef.id;
                     }
 
+                    // v21.128: código SAR del producto (y ID de Mercado Público opcional para la foto del catálogo)
+                    const codigoSAR = window.SAR_CodigoSAR ? await window.SAR_CodigoSAR.asignar(nombreInput.trim()) : '';
+                    const codigoMP = String((document.getElementById('movimiento-codigoMP') || {}).value || '').replace(/\D/g, '');
+
                     // EJECUCIÓN ATÓMICA DE INGRESO (Transaction Recovery)
                     await runTransaction(db, async (transaction) => {
                         const insumoRef = doc(db, 'Insumos', insumoId);
@@ -4728,6 +4733,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 provider: data.providerId || "S/I",
                                 purchaseType: data.purchaseType || "S/I",
                                 tipoInsumo: ['medico', 'aseo', 'oficina'].includes(data.tipoInsumo) ? data.tipoInsumo : 'medico',
+                                ...(codigoSAR ? { codigoSAR } : {}),
+                                ...(codigoMP ? { codigoMP } : {}),
                                 origenOC: true,   // v21.124: sin esta marca la fase «solo OC» lo ocultaba de Existencias
                                 name_lowercase: nombreInput.trim().toLowerCase(),
                                 category: 'General',
@@ -4774,6 +4781,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 batches: currentBatches,
                                 provider: data.providerId || insumoSnap.data().provider,
                                 purchaseType: data.purchaseType || insumoSnap.data().purchaseType,
+                                ...(!dataAnterior.codigoSAR && codigoSAR ? { codigoSAR } : {}),
+                                ...(!dataAnterior.codigoMP && codigoMP ? { codigoMP } : {}),
                                 // El tipo de un insumo ya clasificado no se cambia desde un ingreso
                                 tipoInsumo: dataAnterior.tipoInsumo || (['medico', 'aseo', 'oficina'].includes(data.tipoInsumo) ? data.tipoInsumo : 'medico'),
                                 updatedAt: serverTimestamp()
@@ -4811,6 +4820,14 @@ document.addEventListener('DOMContentLoaded', () => {
                             });
                         }
                     });
+
+                    // Con ID de Mercado Público el producto entra al catálogo para que se le busque la foto
+                    if (codigoMP) {
+                        try {
+                            const idCat = String(codigoMP);
+                            await setDoc(doc(db, 'Catalogo_Productos', idCat), { descripcion: nombreInput.trim(), descripcion_lower: nombreInput.trim().toLowerCase(), codigoMP, insumoName: nombreInput.trim(), ...(codigoSAR ? { codigoSAR } : {}), actualizado: serverTimestamp() }, { merge: true });
+                        } catch (eCat) { console.warn('Catálogo:', eCat); }
+                    }
 
                     // Verificación (v21.119): confirma que el producto quedó realmente en Existencias
                     try {

@@ -864,3 +864,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.155 Logo de las hojas de picking = marca del Visor Logístico (v21.101)
 - Las hojas de picking y de pendientes llevan el **logotipo horizontal «Visor Logístico»** (`assets/logo/horizontal.svg`), no el del SAR ni el de la Corporación.
+
+### 4.156 Hoja de picking del acta con sección de pendientes (v21.102)
+- Bajo la tabla de productos a retirar, la hoja del acta muestra **«Quedan pendientes de entregar a <centro>»**: los pendientes registrados en el acta más lo que falta de lo solicitado (solicitado − entregado), con foto, ID y cantidad pendiente. Si no hay pendientes, la sección no aparece.

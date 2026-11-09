@@ -987,3 +987,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - **Stock vigente crítico:** si el total supera el mínimo pero lo que queda **vigente** (sin lotes vencidos ni por vencer en 30 días) está en el mínimo o bajo él, el producto también se marca crítico y se avisa «Stock vigente bajo el mínimo: X u.».
 - **Resumen diario (correo):** incluye esos productos como críticos por stock vigente (además de los vencidos, por vencer y bajo mínimo que ya traía).
 - Pendiente de decidir con el usuario: si además quiere un mínimo propio por lote (hoy el mínimo es del producto).
+
+## 4.181 Desglose desplegable por lote en Existencias (v21.127)
+- Cada producto con lotes tiene el botón **Ver desglose**: abre bajo la fila una tabla con, por lote, la **cantidad**, el **% del total**, el **vencimiento**, el **estado** (vencido / vence en N d / vigente) y el **proveedor**, ordenada por lo que vence primero (FEFO), con el total, el stock vigente y el mínimo. Se mantiene abierto aunque la lista se actualice.

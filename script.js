@@ -4761,6 +4761,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const codigoMP = String((document.getElementById('movimiento-codigoMP') || {}).value || '').replace(/\D/g, '');
 
                     // EJECUCIÓN ATÓMICA DE INGRESO (Transaction Recovery)
+                    const codigoIngreso = window.SAR_Gobernanza ? await window.SAR_Gobernanza.codigo('ING').catch(() => '') : '';
                     await runTransaction(db, async (transaction) => {
                         const insumoRef = doc(db, 'Insumos', insumoId);
                         const insumoSnap = await transaction.get(insumoRef);
@@ -4844,6 +4845,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             item: insumoSnap.exists() ? insumoSnap.data().name : nombreInput.trim(),
                             quantity: quantity,
                             type: 'INGRESO_PROVEEDOR',
+                            ...(codigoIngreso ? { codigoIngreso } : {}),
                             batch: cleanBatch,
                             destination: data.destinationId || "Principal",
                             provider: data.providerId || "S/I",
@@ -5247,7 +5249,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </td>
                 <td><div class="item-name">L: ${window.escapeHTML(m.batch || m.lote || 'S/L')}</div><div class="${qtyClass} font-bold">${qtySign} ${m.quantity || 0} uds</div></td>
-                <td><div class="item-category">Doc: ${window.escapeHTML(m.document || m.supportDocument || 'S/N')}</div></td>
+                <td><div class="item-category">Doc: ${window.escapeHTML(m.document || m.supportDocument || 'S/N')}</div>${m.codigoIngreso ? `<div class="item-category"><b>${window.escapeHTML(m.codigoIngreso)}</b></div>` : ''}</td>
                 <td><span class="doc-badge">${window.escapeHTML(m.document || m.supportDocument || 'FACT-000')}</span></td>
                 <td><button class="btn btn-icon" onclick="window.showAlertCenter('Mensaje del Sistema', 'Detalle:\\nProducto: ${window.escapeHTML(m.insumoName || m.articleName || 'Insumo').replace(/'/g, "\\'")}\\nFecha: ${dateFmt} ${timeFmt}\\nUsuario: ${window.escapeHTML(m.user || m.operatorUid || m.usuario || 'S/I').replace(/'/g, "\\'")}')"><i class="ph ph-eye"></i></button>${m.type === 'INGRESO_PROVEEDOR' ? `<button type="button" class="btn btn-icon btn-edit-mov admin-only" data-id="${window.escapeHTML(m.id || '')}" title="Editar ingreso" aria-label="Editar ingreso"><i class="ph ph-pencil-simple"></i></button>` : ''}${m.editado ? '<div class="item-category" title="Este ingreso fue corregido">editado</div>' : ''}</td>
             `;

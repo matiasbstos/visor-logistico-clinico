@@ -1013,3 +1013,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.185 Todo ingreso entra al catálogo (v21.131)
 - Antes solo entraban al catálogo los ingresos con ID de Mercado Público. Ahora todo producto ingresado (compra directa, convenio marco o Mercado Público) queda en Catalogo_Productos; sin ID se crea con id por nombre (`sinOrden: true`, `origen: INGRESO`) y el ID se puede asociar después (Editar insumo, Existencias, Auditoría "Asignar ID").
 - La corrección directa de cantidad/lote/vencimiento se mantiene acotada al período del ingreso (sin salidas y ≤ 72 h); después solo Ajustes/Desajustes. Nombre, categoría, tipo e ID siguen editables.
+
+## 4.186 Correlativo de ingreso y ventana de 12 h (v21.132)
+- Cada ingreso genera un **correlativo** `ING-AAAA-NNNNNN` (contador `codigo-cambio-AAAA`), guardado en el movimiento (`codigoIngreso`) y visible en el Historial y al editar el ingreso. Sirve para dar seguimiento a productos que ya existían en el SAR y se cargan sin orden de compra vigente.
+- El N° de OC / documento se puede asociar después editando el ingreso (mientras esté dentro de la ventana) o desde el seguimiento de la OC.
+- La ventana de corrección directa baja de 72 h a **12 h** desde el ingreso (y sin salidas del insumo). Después, solo Ajustes/Desajustes (con motivo y código AJU). Reemplaza el plazo de 4.184.

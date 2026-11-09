@@ -1,6 +1,6 @@
 /* Gobernanza de cambios: motivo obligatorio + código de seguimiento + ventana de corrección directa.
    - Todo cambio de cantidad, lote, vencimiento, bodega o ingreso exige un motivo y deja un código (CAM-AAAA-NNNNNN / AJU-AAAA-NNNNNN).
-   - La cantidad/lote/vencimiento solo se corrigen directo mientras NADA haya salido de ese insumo y hayan pasado <= 72 h del ingreso;
+   - La cantidad/lote/vencimiento solo se corrigen directo mientras NADA haya salido de ese insumo y hayan pasado <= 12 h del ingreso;
      después, solo por Ajustes/desajustes. */
 (function (window, document) {
   'use strict';
@@ -8,7 +8,7 @@
     'Error de digitación', 'Producto no está / no se encontró', 'Merma o daño', 'Conteo físico (toma de inventario)',
     'Devolución', 'Corrección de lote o vencimiento', 'Corrección de proveedor o documento', 'Cambio de bodega', 'Otro'
   ];
-  const HORAS = 72;
+  const HORAS = 12;
   const SALIDA = /ENTREGA|TRASPASO|TRANSFER|MERMA|SALIDA|CONSUMO|BAJA|AJUSTE_CRITICO|CUADRE/i;
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const fs = () => window.firebaseFirestore, db = () => window.firebaseDb;

@@ -943,3 +943,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.172 · Autocompletado de nombres en Ingresos (v21.118)
 - La lista de sugerencias se cargaba con una búsqueda por prefijo en minúsculas contra nombres guardados en mayúsculas (casi nunca coincidía). Ahora se cargan una vez todos los nombres de Existencias y del Catálogo de productos; el navegador sugiere por coincidencia dentro del nombre, sin distinguir mayúsculas. Se recarga tras cada ingreso.
 - Los listeners de simulación de stock se enlazan una sola vez (antes se duplicaban en cada ingreso).
+
+## 4.173 · Verificación del ingreso (v21.119)
+- Al revisar producción (09-11 ~16:30) se encontraron 3 movimientos `INGRESO_PROVEEDOR` en el historial (bata quirúrgica, catéter 1 1/4, mascarilla 2R) sin su documento en `Insumos`, aunque el guardado escribe ambos en una sola transacción. Causa no determinada (el código revisado es correcto; no hay eliminaciones registradas en el historial). Pendiente confirmar con el usuario si se borraron a mano.
+- Tras guardar, el ingreso relee el insumo y avisa con un mensaje de error si no existe, para detectar el problema en el momento.

@@ -4747,6 +4747,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     });
 
+                    // Verificación (v21.119): confirma que el producto quedó realmente en Existencias
+                    try {
+                        const chk = await getDoc(doc(db, 'Insumos', insumoId));
+                        if (!chk.exists()) throw new Error('El producto no quedó guardado en Existencias.');
+                    } catch (eChk) {
+                        console.error('Verificación de ingreso:', eChk);
+                        showToast('Revisar ingreso', 'El movimiento quedó en el historial pero el producto no aparece en Existencias. Avise antes de seguir ingresando.', 'error');
+                        throw eChk;
+                    }
                     showToast('Éxito', 'Movimiento registrado y auditado correctamente.', 'success');
                     moveForm.reset();
                     populateInsumosSelect(); // Refrescar lista con nuevos stocks

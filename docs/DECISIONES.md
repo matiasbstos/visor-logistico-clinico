@@ -935,3 +935,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - **Destino real del stock:** un insumo se identifica por nombre **y** bodega de destino. Antes todo ingreso se sumaba al producto existente sin importar el destino, y los productos nuevos no guardaban bodega (aparecían en Central). Ahora los productos nuevos guardan `location`, `bodegaNombre`, `bodegaId`, `name_lowercase`, `category` y `tipoInsumo`.
 - **Edición posterior:** el modal «Editar» muestra una tabla de lotes (lote, vencimiento, cantidad) con agregar/quitar. Guarda `batches` completo, recalcula `quantity` (suma) y deja `batch/expirationDate` con el lote que vence primero. `updateInventoryWithAudit` ya no sobrescribe `batches` cuando vienen explícitos (antes la edición de lote se ignoraba si el insumo tenía varios lotes).
 - Todo cambio de edición sigue pasando por la auditoría existente (movimiento `ajuste` / EDICION-MANUAL).
+
+## 4.171 · Mismo producto en varios lotes y tallas (v21.117)
+- Confirmado: ingresar el mismo producto (mismo nombre y bodega) con otro lote o vencimiento **suma al total** y deja cada lote con su cantidad y vencimiento en `batches`; el mismo lote se acumula. El historial conserva proveedor y documento de cada ingreso.
+- Campo opcional **Talla** (XS–XXL) en Ingresos: se agrega al nombre («… TALLA S») salvo que ya la traiga, de modo que cada talla es un insumo distinto y sus lotes se agrupan entre sí.

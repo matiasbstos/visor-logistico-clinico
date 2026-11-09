@@ -912,3 +912,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.165 · Alta de usuario: el campo «Usuario» acepta el correo completo (v21.111)
 - Si se escribía el correo entero, el usuario quedaba como `nombre.cormumel.cl@cormumel.cl`. Ahora se toma solo lo anterior a la arroba y se quita un sufijo `.cormumel.cl`.
+
+## 4.166 · Planilla descargable aunque aún no exista la bodega transitoria (v21.112)
+- Si no hay bodega de tipo transitoria, la pantalla abre con Bodega Central (con aviso) y deja descargar la planilla Excel para subirla a Drive y compartirla; antes solo mostraba un aviso sin botones.

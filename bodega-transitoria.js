@@ -62,7 +62,7 @@
     const sn = await fs().getDocs(fs().collection(db(), 'Bodegas')); bodegas = [];
     sn.forEach(d => { const x = d.data(); bodegas.push({ id: d.id, name: x.name, type: x.type }); });
     bodegas = bodegas.filter(b => b.name).sort((a, b) => a.name.localeCompare(b.name, 'es'));
-    if (!bodegaSel || !bodegas.some(b => b.id === bodegaSel)) { const t = bodegas.find(b => b.type === 'transitoria'); bodegaSel = t ? t.id : null; }
+    if (!bodegaSel || !bodegas.some(b => b.id === bodegaSel)) { const t = bodegas.find(b => b.type === 'transitoria') || bodegas.find(b => b.name === CENTRAL) || bodegas[0]; bodegaSel = t ? t.id : null; }
   }
   async function cargarBodega() {
     conteo = {}; cerrado = null; objetivos = {}; insumosBod = []; insumosCentral = [];
@@ -201,6 +201,7 @@
       <div class="tra-bar"><label class="act-l">Bodega transitoria<select id="tra-bod">${bodegas.length ? bodegas.map(x => `<option value="${esc(x.id)}"${x.id === bodegaSel ? ' selected' : ''}>${esc(x.name)}${x.type === 'transitoria' ? '' : ' (no es transitoria)'}</option>`).join('') : '<option value="">Sin bodegas</option>'}</select></label></div>
       ${!b ? '<p class="act-hint">No hay una bodega de tipo «Transitoria». Créala en Bodegas (tipo: Bodega Transitoria) y vuelve aquí.</p>' : `
       <div class="tra-ks"><div class="vp-k" style="--c:var(--sar-blue)"><b>${lista.length}</b><span>Productos con disposición</span></div><div class="vp-k" style="--c:var(--sar-yellow)"><b>${nSin}</b><span>Sin contar hoy</span></div><div class="vp-k" style="--c:var(--sar-red)"><b>${tFalt}</b><span>Faltante (se descuenta)</span></div><div class="vp-k" style="--c:var(--sar-green)"><b>${tRep}</b><span>A reponer desde Central</span></div></div>
+      ${b.type !== 'transitoria' ? '<p class="act-hint"><b>Aún no hay una bodega transitoria</b> (créala en Bodegas, tipo «Bodega Transitoria»). Mientras tanto puedes descargar la planilla de esta bodega para compartirla.</p>' : ''}
       ${cerrado ? `<p class="tra-ok"><i class="ph-bold ph-seal-check"></i> El conteo de hoy ya se cerró (${esc(cerrado.por || '')}). Puedes reponer lo que falte; el conteo de mañana empieza limpio.</p>` : ''}
       <div class="data-table-card"><h3>Conteo de hoy (${esc(hoy().split('-').reverse().join('/'))})</h3>
         ${lista.length ? `<div class="tra-tabla"><table><thead><tr><th>Estante</th><th>Producto</th><th class="n">Disposición</th><th class="n">Sistema</th><th class="n">Contado</th><th class="n">Faltante</th><th class="n">Reponer</th><th class="n">En Central</th><th></th></tr></thead><tbody>${lista.map(x => `<tr class="tra-${x.calc.estado}"><td><b>${esc(estanteDe(x.o) || '—')}</b></td><td>${esc(x.o.nombre)}${x.o.codigo ? '<br><small>ID ' + esc(x.o.codigo) + '</small>' : ''}</td>

@@ -4511,48 +4511,25 @@ document.addEventListener('DOMContentLoaded', () => {
             const datalist = document.getElementById('lista-insumos');
             if (!input || !datalist) return;
             
-            // Caché inicial ligera o vacía para no ahogar la DB
-            window.insumosDataCache = []; 
-
-            input.addEventListener('input', (e) => {
-                const term = e.target.value.trim().toLowerCase();
-                if (term.length < 2) return; // Solo buscar si hay 2 o más caracteres
-                
-                clearTimeout(datalistSearchTimeout);
-                datalistSearchTimeout = setTimeout(async () => {
+            // Autocompletado (v21.118): carga una vez los nombres de Existencias y del catálogo; el navegador
+            // sugiere por coincidencia dentro del nombre (no solo al inicio) y sin distinguir mayúsculas.
+            const cargarNombres = async () => {
+                try {
+                    const snap = await getDocs(query(collection(db, 'Insumos'), orderBy('name', 'asc')));
+                    window.insumosDataCache = []; const nombres = new Set();
+                    snap.forEach(d => { const x = d.data(); if (x.name) { window.insumosDataCache.push({ id: d.id, ...x }); nombres.add(String(x.name).trim()); } });
                     try {
-                        // Búsqueda en Firebase: Insumos que comiencen con el término o coincidan
-                        // Nota: Firestore nativo requiere indices o un diseño específico para 'contains',
-                        // pero para limitar descargas, usamos paginación con query inicial.
-                        const q = query(
-                            collection(db, 'Insumos'), 
-                            where('name', '>=', term),
-                            where('name', '<=', term + '\uf8ff'),
-                            limit(10)
-                        );
-                        
-                        const snapshot = await getDocs(q);
-                        datalist.innerHTML = '';
-                        
-                        snapshot.forEach(docSnap => {
-                            const data = docSnap.data();
-                            const option = document.createElement('option');
-                            option.value = data.name;
-                            datalist.appendChild(option);
-                            
-                            // Guardar en cache temporal para la simulacion de stock
-                            if(!window.insumosDataCache.find(i => i.id === docSnap.id)){
-                                window.insumosDataCache.push({ id: docSnap.id, ...data });
-                            }
-                        });
-                        
-                        simularStock();
-                        
-                    } catch (err) {
-                        console.error("Datalist Populating Error:", err);
-                    }
-                }, 300); // 300ms de Debounce
-            });
+                        const cs = await getDocs(collection(db, 'Catalogo_Productos'));
+                        cs.forEach(d => { const n = String(d.data().descripcion || '').trim(); if (n) nombres.add(n.toUpperCase()); });
+                    } catch (_) { /* el catálogo es opcional */ }
+                    const vistos = new Set(), frag = document.createDocumentFragment();
+                    [...nombres].sort((x, y) => x.localeCompare(y, 'es')).forEach(n => { const k = n.toLowerCase(); if (vistos.has(k)) return; vistos.add(k); const o = document.createElement('option'); o.value = n; frag.appendChild(o); });
+                    datalist.innerHTML = ''; datalist.appendChild(frag);
+                } catch (err) { console.error("Datalist Populating Error:", err); }
+            };
+            window.__recargarNombresIngreso = cargarNombres;
+            if (!window.__nombresIngresoListos) { window.__nombresIngresoListos = true; }
+            await cargarNombres();
 
             const simularStock = () => {
                 const text = input.value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
@@ -4580,7 +4557,11 @@ document.addEventListener('DOMContentLoaded', () => {
             };
 
             const inputQty = document.getElementById('movimiento-cantidad');
-            if (inputQty) inputQty.addEventListener('input', simularStock);
+            if (!window.__simStockEnlazado) {
+                window.__simStockEnlazado = true;
+                if (inputQty) inputQty.addEventListener('input', simularStock);
+                input.addEventListener('input', simularStock); input.addEventListener('change', simularStock);
+            }
         }
 
         // B. POBLAR SELECTOR DE DESTINOS (Nuevas Sedes Anexas)

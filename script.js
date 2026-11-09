@@ -4869,11 +4869,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                     });
 
-                    // Con ID de Mercado Público el producto entra al catálogo para que se le busque la foto
-                    if (codigoMP) {
+                    // Todo producto ingresado entra al catálogo (compra directa, convenio marco o Mercado Público); con ID se le busca la foto
+                    if (true) {
                         try {
-                            const idCat = String(codigoMP);
-                            await setDoc(doc(db, 'Catalogo_Productos', idCat), { descripcion: nombreInput.trim(), descripcion_lower: nombreInput.trim().toLowerCase(), codigoMP, insumoName: nombreInput.trim(), ...(codigoSAR ? { codigoSAR } : {}), actualizado: serverTimestamp() }, { merge: true });
+                            const idCat = codigoMP ? String(codigoMP) : (nombreInput.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, '-').toLowerCase().replace(/^-|-$/g, '').slice(0, 60) || 'manual');
+                            await setDoc(doc(db, 'Catalogo_Productos', idCat), { descripcion: nombreInput.trim(), descripcion_lower: nombreInput.trim().toLowerCase(), codigoMP: codigoMP || '', insumoName: nombreInput.trim(), ...(codigoMP ? {} : { sinOrden: true, origen: 'INGRESO' }), ...(codigoSAR ? { codigoSAR } : {}), actualizado: serverTimestamp() }, { merge: true });
                         } catch (eCat) { console.warn('Catálogo:', eCat); }
                     }
 

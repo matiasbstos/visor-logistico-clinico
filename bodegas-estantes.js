@@ -163,17 +163,22 @@
         if (gn) gn.addEventListener('click', async () => {
             const nuevo = sec.querySelector('#be-nombre').value.trim().replace(/\s+/g, ' ');
             if (!nuevo) { toast('Falta el nombre', 'Escribe el nombre de la bodega.', 'warning'); return; }
-            const antes = String(bodega.name || '').trim() || 'Bodega Central';
+            let antes = String(bodega.name || '').trim();   // v21.123: una bodega nueva sin nombre NO hereda el stock de «Bodega Central»
             gn.disabled = true; gn.textContent = 'Guardando…';
             const prog = window.SAR_Progreso.iniciar('Guardando el nombre de la bodega…', ['Comprobando que el nombre no esté repetido…']);
             try {
                 const todas = await fs().getDocs(fs().collection(db(), 'Bodegas'));
                 let repetido = false; todas.forEach(d => { if (d.id !== bodega.id && String(d.data().name || '').trim().toLowerCase() === nuevo.toLowerCase()) repetido = true; });
                 if (repetido) throw new Error('Ya existe otra bodega con ese nombre.');
+                if (!antes) { let hayCentral = false; todas.forEach(d => { if (d.id !== bodega.id && /^bodega central$/i.test(String(d.data().name || '').trim())) hayCentral = true; }); if (!hayCentral) antes = 'Bodega Central'; }   // solo la bodega original, sin nombre, equivale a «Bodega Central»
+                if (antes && antes.toLowerCase() !== nuevo.toLowerCase()) {
+                    const n0 = await fs().getDocs(fs().query(fs().collection(db(), 'Insumos'), fs().where('location', '==', antes), fs().limit(1500)));
+                    if (n0.size && !confirm(`Al cambiar el nombre de «${antes}» a «${nuevo}», ${n0.size} producto(s) con stock pasarán a llamarse «${nuevo}».\n\n¿Es lo que quieres?`)) throw new Error('Cancelado: el nombre no se cambió.');
+                }
                 const ref = fs().doc(fs().collection(db(), 'Bodegas'), bodega.id);
                 await fs().setDoc(ref, { name: nuevo, ...(bodega.type ? {} : { type: 'principal' }) }, { merge: true });
                 let movidos = 0;
-                if (antes.toLowerCase() !== nuevo.toLowerCase()) {      // el stock que estaba en la bodega sigue con ella
+                if (antes && antes.toLowerCase() !== nuevo.toLowerCase()) {      // el stock que estaba en la bodega sigue con ella
                     const ins = await fs().getDocs(fs().query(fs().collection(db(), 'Insumos'), fs().where('location', '==', antes), fs().limit(1500)));
                     for (const d of ins.docs) { await fs().updateDoc(d.ref, { location: nuevo }); movidos++; }
                 }

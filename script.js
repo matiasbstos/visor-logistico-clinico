@@ -4641,6 +4641,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 expirationDate: formattedDate,
                                 provider: data.providerId || "S/I",
                                 purchaseType: data.purchaseType || "S/I",
+                                tipoInsumo: ['medico', 'aseo', 'oficina'].includes(data.tipoInsumo) ? data.tipoInsumo : 'medico',
                                 updatedAt: serverTimestamp()
                             });
                         } else {
@@ -4679,6 +4680,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 batches: currentBatches,
                                 provider: data.providerId || insumoSnap.data().provider,
                                 purchaseType: data.purchaseType || insumoSnap.data().purchaseType,
+                                // El tipo de un insumo ya clasificado no se cambia desde un ingreso
+                                tipoInsumo: dataAnterior.tipoInsumo || (['medico', 'aseo', 'oficina'].includes(data.tipoInsumo) ? data.tipoInsumo : 'medico'),
                                 updatedAt: serverTimestamp()
                             });
                         }
@@ -4694,6 +4697,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             destination: data.destinationId || "Principal",
                             provider: data.providerId || "S/I",
                             purchaseType: data.purchaseType || "S/I",
+                            tipoInsumo: ['medico', 'aseo', 'oficina'].includes(data.tipoInsumo) ? data.tipoInsumo : 'medico',
                             origenTipo: /pr[eé]stamo|traspaso/i.test(data.purchaseType || '') ? 'prestamo_otro_centro' : 'compra',
                             origenCentro: /pr[eé]stamo|traspaso/i.test(data.purchaseType || '') ? (data.providerId || '') : '',
                             user: auth.currentUser ? auth.currentUser.email : 'Admin Local',

@@ -1018,3 +1018,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Cada ingreso genera un **correlativo** `ING-AAAA-NNNNNN` (contador `codigo-cambio-AAAA`), guardado en el movimiento (`codigoIngreso`) y visible en el Historial y al editar el ingreso. Sirve para dar seguimiento a productos que ya existían en el SAR y se cargan sin orden de compra vigente.
 - El N° de OC / documento se puede asociar después editando el ingreso (mientras esté dentro de la ventana) o desde el seguimiento de la OC.
 - La ventana de corrección directa baja de 72 h a **12 h** desde el ingreso (y sin salidas del insumo). Después, solo Ajustes/Desajustes (con motivo y código AJU). Reemplaza el plazo de 4.184.
+
+## 4.187 N° de OC o documento en el formulario de Ingresos (v21.133)
+- Nuevo campo de texto "N° de OC o documento" (opcional) en Ingresos; se guarda como `document` del movimiento (si está vacío, se usa el nombre del archivo adjunto, o S/N). Se puede asociar o cambiar después desde el lápiz del ingreso, sin límite de tiempo y sin motivo (solo cantidad/lote/vencimiento tienen ventana de 12 h).
+- Se borraron definitivamente (sin respaldo, por instrucción del usuario) los 78 productos antiguos del 2-sep-2026 que no provenían de ingresos con OC.

@@ -850,3 +850,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.152 Hojas de picking en tamaño grande (v21.98)
 - Las hojas de picking (de Pendientes por entregar y la del acta) usan letra de 19 px, fotos de 120 px, casillas de 34 px y cantidad a retirar de 46 px, para identificar el producto de un vistazo al pickear.
+
+### 4.153 Campana reparada, errores en la campana y correo de errores solo a Matías (v21.99)
+- **Causa del «Error Interno»** (detalle gracias a la v21.92): el módulo de la campana (`avisos-campana.js`) y el de correos (`avisos-correo.js`) usaban el mismo nombre `window.SAR_Avisos`; el segundo pisaba al primero y la campana fallaba con «datosActuales is not a function». Ahora la campana es `SAR_AvisosCampana`.
+- Los errores de programa quedan **registrados internamente** (Directorio de errores) y **la campana de avisos los muestra** (últimos 3 días, con veces y usuario) para administración.
+- El correo por error sale **solo a matias.bustos@cormumel.cl** y como máximo **1 por día por equipo** (antes 3, a los tres destinatarios).
+- **Hoja de picking** también en la lista de actas emitidas, junto a «Ver acta» (además de dentro del acta).

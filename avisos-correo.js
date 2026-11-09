@@ -52,12 +52,12 @@
                 const html = H.armar({ titulo: o.titulo, texto, autor: usuario() + ' · ' + cuando, orden: { numeroOC: '', proveedor: '' }, sujeto: o.sujeto });
                 const adj = (o.adjuntos || []).map(a => ({ name: a.name, mime: a.mime || 'application/pdf', base64: aB64(a.bytes) }));
                 const plano = `${o.titulo}\n${o.sujeto || ''}\n${cuando} · ${usuario()}\n\n${texto}\n\nCorreo de respaldo generado automáticamente por el sistema Visor Logístico SAR.`;
-                res = await so.enviarCorreo(DESTINOS, { subject: o.asunto, text: plano, html }, { attachments: adj, respaldo: true });
+                res = await so.enviarCorreo(o.destinos && o.destinos.length ? o.destinos : DESTINOS, { subject: o.asunto, text: plano, html }, { attachments: adj, respaldo: true });
             }
         } catch (e) { res = { estado: 'error', detalle: String((e && e.message) || e) }; }
         if (o.id) {
             try {
-                await fs().setDoc(fs().doc(fs().collection(db(), 'Contadores'), o.id), { tipo: 'aviso-correo', actaId: o.actaId || '', evento: o.evento || '', titulo: o.titulo, asunto: o.asunto, estado: res.estado, detalle: res.detalle || '', destinatarios: res.destinatarios || DESTINOS, adjuntos: (o.adjuntos || []).map(a => a.name), por: usuario(), fecha: new Date().toISOString(), updatedAt: fs().serverTimestamp() });
+                await fs().setDoc(fs().doc(fs().collection(db(), 'Contadores'), o.id), { tipo: 'aviso-correo', actaId: o.actaId || '', evento: o.evento || '', titulo: o.titulo, asunto: o.asunto, estado: res.estado, detalle: res.detalle || '', destinatarios: res.destinatarios || (o.destinos && o.destinos.length ? o.destinos : DESTINOS), adjuntos: (o.adjuntos || []).map(a => a.name), por: usuario(), fecha: new Date().toISOString(), updatedAt: fs().serverTimestamp() });
             } catch (e) { /* el registro es secundario */ }
         }
         return res;

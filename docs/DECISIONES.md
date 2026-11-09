@@ -958,3 +958,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Los ingresos nuevos guardan `insumoId`, `expirationDate` y `observations` en el movimiento para enlazarlos sin buscar por nombre.
 - No se edita el nombre ni la bodega de destino (usar «Editar» en Existencias y Transferencias). Solo ingresos de proveedor: entregas, traspasos y ajustes afectan actas y otras bodegas.
 - **Requiere publicar `firestore.rules`**: nueva regla de actualización de `Historial_Movimientos` (solo admin, solo `INGRESO_PROVEEDOR`, solo esos campos). Sin ella el guardado falla con permiso denegado.
+
+## 4.176 Correos de respaldo: la bitácora del acta refleja pendiente → enviado, y los fallos de red no se pierden (v21.122)
+- **Problema:** un correo dejado en cola (fuera de lunes a viernes 8:00–17:00) salía después, pero el aviso del acta seguía diciendo «en cola». Además un fallo de red («Failed to fetch», AE-2026-0021) quedaba como error sin reintento, y el acta AE-2026-0020 no tenía ningún registro de correo.
+- **Cola → aviso:** `enviarCorreo` pasa `avisoId` a la cola; al salir el correo, `vaciarCola` marca `Contadores/aviso-<acta>-<evento>` como `enviado` con `enviadoEn` (hora real). Las colas antiguas (sin `avisoId`) se resuelven por el asunto.
+- **Fallos:** si el envío en horario hábil falla, se reintenta una vez y luego queda en cola (se reintenta cada 5 min) con el motivo en el detalle.
+- **Bitácora del acta:** «Correo pendiente de envío … saldrá en el próximo horario hábil» (marcado como pendiente); «Correo de respaldo enviado» con la hora real de salida; «Correo de respaldo NO enviado» con el error; y «Correo de emisión: sin registro» cuando no consta ni envío ni cola.

@@ -816,7 +816,18 @@
             else if (ent) ev.push({ d: fEnt, t: 'Stock descontado', x: `${ent} movimiento${ent > 1 ? 's' : ''} de stock registrados al emitir.` });
             otros.forEach(o => ev.push(o));
         } catch (e) { ev.push({ d: null, t: 'No se pudo leer el historial de movimientos', x: String(e.message || e) }); }
-        if (window.SAR_Avisos) { try { (await window.SAR_Avisos.avisosDeActa(a.numero)).forEach(v => ev.push({ d: tsDe(v.fecha), t: v.estado === 'enviado' ? 'Correo de respaldo enviado' : (v.estado === 'programado' ? 'Correo de respaldo en cola (fuera de horario)' : v.estado === 'sin_configurar' ? 'Correo no enviado (envío automático sin configurar)' : 'Correo de respaldo NO enviado'), x: `${v.titulo || ''} · a ${(v.destinatarios || []).join(', ')}${(v.adjuntos || []).length ? ' · adjunto: ' + v.adjuntos.join(', ') : ''}${v.estado === 'error' && v.detalle ? ' · ' + v.detalle : ''}` })); } catch (e) { /* sin permiso */ } }
+        if (window.SAR_Avisos) {
+            try {
+                const avs = await window.SAR_Avisos.avisosDeActa(a.numero), dest = (v) => `${v.titulo || ''} · a ${(v.destinatarios || []).join(', ')}${(v.adjuntos || []).length ? ' · adjunto: ' + v.adjuntos.join(', ') : ''}`;
+                avs.forEach(v => {
+                    if (v.estado === 'enviado') ev.push({ d: tsDe(v.enviadoEn) || tsDe(v.fecha), t: 'Correo de respaldo enviado', x: dest(v) });
+                    else if (v.estado === 'programado') ev.push({ d: tsDe(v.fecha), t: 'Correo pendiente de envío', x: `${dest(v)} · saldrá en el próximo horario hábil (lunes a viernes, 8:00 a 17:00)`, pend: true });
+                    else if (v.estado === 'sin_configurar') ev.push({ d: tsDe(v.fecha), t: 'Correo no enviado (envío automático sin configurar)', x: dest(v) });
+                    else ev.push({ d: tsDe(v.fecha), t: 'Correo de respaldo NO enviado', x: `${dest(v)}${v.detalle ? ' · ' + v.detalle : ''}`, pend: true });
+                });
+                if (a.estado === 'EMITIDA' && !avs.some(v => v.evento === 'emision')) ev.push({ d: null, t: 'Correo de emisión: sin registro', x: 'No consta que el correo de esta acta se haya enviado ni quedado en cola.', pend: true });
+            } catch (e) { /* sin permiso */ }
+        }
         if (a.respaldo) ev.push({ d: tsDe(a.respaldo.fecha), t: 'Acta firmada subida', x: `${a.respaldo.nombre || ''} · por ${a.respaldo.subidoPor || '—'}` });
         if (a.estado === 'ANULADA') ev.push({ d: tsDe(a.anuladaEn), t: 'Acta eliminada (anulada)', x: `Por ${a.anuladaPor || '—'}. Motivo: ${a.anulacionMotivo || '—'}` });
         return ev.sort((x, y) => (x.d ? x.d.getTime() : Infinity) - (y.d ? y.d.getTime() : Infinity));

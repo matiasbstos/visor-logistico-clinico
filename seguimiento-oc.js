@@ -233,15 +233,28 @@
         const p = partesChile(d || new Date());
         return p.sem >= 1 && p.sem <= 5 && !feriados.has(p.iso) && p.hora >= HORA_DESDE && p.hora < HORA_HASTA;
     }
-    async function encolarCorreo(destinatarios, correo, extra) {
+    async function encolarCorreo(destinatarios, correo, extra, motivo) {
         const carga = JSON.stringify({ destinatarios, correo, extra });
         let guardar = carga, nota = '';
         if (carga.length > 900000) { guardar = JSON.stringify({ destinatarios, correo, extra: Object.assign({}, extra, { attachments: [] }) }); nota = ' (sin adjuntos por tamaño)'; }
         try {
             const id = 'cola-correo-' + Date.now() + '-' + Math.floor(Math.random() * 1e4);
             await fs().setDoc(fs().doc(fs().collection(db(), 'Contadores'), id), { tipo: 'cola-correo', estado: 'pendiente', asunto: String(correo.subject || ''), carga: guardar, creadoPor: (window.firebaseAuth && window.firebaseAuth.currentUser && window.firebaseAuth.currentUser.email) || '', updatedAt: fs().serverTimestamp() });
-            return { estado: 'programado', destinatarios: (destinatarios || []).filter(emailValido), cc: ((extra && extra.cc) || []).filter(emailValido), detalle: 'Fuera del horario de envío (lunes a viernes de 8:00 a 17:00, sin feriados). Quedó en cola y saldrá en el próximo horario hábil' + nota + '.' };
+            return { estado: 'programado', destinatarios: (destinatarios || []).filter(emailValido), cc: ((extra && extra.cc) || []).filter(emailValido), detalle: (motivo || 'Fuera del horario de envío (lunes a viernes de 8:00 a 17:00, sin feriados). Quedó en cola y saldrá en el próximo horario hábil') + nota + '.' };
         } catch (e) { return { estado: 'error', detalle: 'No se pudo dejar el correo en cola: ' + String((e && e.message) || e) }; }
+    }
+    /** v21.122: cuando un correo de la cola sale, el aviso del acta (Contadores/aviso-<acta>-<evento>) pasa a «enviado» con la hora real. */
+    const EVENTO_POR_TITULO = [['Acta de entrega emitida', 'emision'], ['Entrega confirmada', 'confirmacion'], ['Acta firmada guardada', 'firmada'], ['Acta de entrega eliminada', 'anulacion']];
+    async function marcarAvisoEnviado(item, r) {
+        let id = '';
+        try { id = (JSON.parse(item.carga).extra || {}).avisoId || ''; } catch (e) { /* sin carga */ }
+        if (!id) {   // colas anteriores a v21.122: se deduce del asunto «[Visor SAR] <título> · AE-2026-00NN · centro»
+            const m = /\] (.+?) · (AE-\d{4}-\d+)/.exec(String(item.asunto || '')), ev = m && (EVENTO_POR_TITULO.find(t => m[1].indexOf(t[0]) === 0) || [])[1];
+            if (m && ev) id = `aviso-${m[2]}-${ev}`;
+        }
+        if (!id) return;
+        const f = fs();
+        await f.updateDoc(f.doc(f.collection(db(), 'Contadores'), id), { estado: 'enviado', detalle: '', enviadoEn: new Date().toISOString(), updatedAt: f.serverTimestamp() });
     }
     let vaciando = false;
     async function vaciarCola() {
@@ -256,15 +269,25 @@
                 if (!tomado) continue;
                 let r; try { const c = JSON.parse(x.data().carga); r = await enviarCorreoAhora(c.destinatarios, c.correo, c.extra); } catch (e) { r = { estado: 'error', detalle: String((e && e.message) || e) }; }
                 await f.updateDoc(ref, { estado: r.estado === 'enviado' || r.estado === 'sin_adjuntos' ? 'enviado' : 'pendiente', detalleEnvio: r.detalle || '', enviadoEn: r.estado === 'enviado' ? new Date().toISOString() : '', updatedAt: f.serverTimestamp() });
-                if (r.estado === 'enviado') n++;
+                if (r.estado === 'enviado' || r.estado === 'sin_adjuntos') { n++; await marcarAvisoEnviado(x.data(), r).catch(() => {}); }
             }
         } catch (e) { console.warn('[Correo] cola', e); }
         vaciando = false; return n;
     }
     /** Envía ahora; si es un correo de respaldo (extra.respaldo) y no es horario hábil, lo deja en cola. */
     async function enviarCorreo(destinatarios, correo, extra) {
-        if (extra && extra.respaldo && configCorreo.webhookUrl && configCorreo.token && !enHorarioCorreo()) return encolarCorreo(destinatarios, correo, extra);
-        return enviarCorreoAhora(destinatarios, correo, extra);
+        const respaldo = !!(extra && extra.respaldo && configCorreo.webhookUrl && configCorreo.token);
+        if (respaldo && !enHorarioCorreo()) return encolarCorreo(destinatarios, correo, extra);
+        let r = await enviarCorreoAhora(destinatarios, correo, extra);
+        if (respaldo && r.estado === 'error') {   // v21.122: un reintento y, si sigue fallando, queda en cola (antes se perdía)
+            await new Promise(ok => setTimeout(ok, 2500));
+            r = await enviarCorreoAhora(destinatarios, correo, extra);
+            if (r.estado === 'error') {
+                const q = await encolarCorreo(destinatarios, correo, extra, 'No se pudo enviar (' + (r.detalle || 'error de red') + '). Quedó en cola y se reintentará solo cada 5 minutos en horario hábil');
+                if (q.estado === 'programado') return q;
+            }
+        }
+        return r;
     }
     setInterval(() => { vaciarCola(); }, 300000);
     setTimeout(() => { vaciarCola(); }, 20000);

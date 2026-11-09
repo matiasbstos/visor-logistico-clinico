@@ -1009,3 +1009,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Cambios de nombre, categoría, tipo e ID Mercado Público: sin motivo (quedan en la bitácora de edición).
 - Ajustes: el motivo se antepone a la justificación y el código ADJ aleatorio se reemplaza por el correlativo AJU.
 - Reglas Firestore: sin cambios (usa Contadores e Historial_Movimientos ya permitidos).
+
+## 4.185 Todo ingreso entra al catálogo (v21.131)
+- Antes solo entraban al catálogo los ingresos con ID de Mercado Público. Ahora todo producto ingresado (compra directa, convenio marco o Mercado Público) queda en Catalogo_Productos; sin ID se crea con id por nombre (`sinOrden: true`, `origen: INGRESO`) y el ID se puede asociar después (Editar insumo, Existencias, Auditoría "Asignar ID").
+- La corrección directa de cantidad/lote/vencimiento se mantiene acotada al período del ingreso (sin salidas y ≤ 72 h); después solo Ajustes/Desajustes. Nombre, categoría, tipo e ID siguen editables.

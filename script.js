@@ -9176,9 +9176,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!inputEmail || !selectRol) return;
 
             let prefijo = inputEmail.value.trim().toLowerCase();
-            if (prefijo.endsWith('@cormumel.cl')) {
-                prefijo = prefijo.replace('@cormumel.cl', '').trim();
-            }
+            // Acepta «valeria.aliaga», «valeria.aliaga@cormumel.cl» o «valeria.aliaga.cormumel.cl»: siempre queda solo el prefijo
+            if (prefijo.includes('@')) prefijo = prefijo.split('@')[0].trim();
+            prefijo = prefijo.replace(/\.cormumel\.cl$/, '').trim();
             const rol = selectRol.value;
             const nombre = inputNombre ? inputNombre.value.trim() : '';
 

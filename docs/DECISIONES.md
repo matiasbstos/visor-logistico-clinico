@@ -909,3 +909,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.164 · El rol «transitoria» faltaba en la lista real de roles (v21.110)
 - El formulario «Nuevo Usuario» arma el selector desde `ROLES_SISTEMA` (script.js), no desde el HTML; se agregó `transitoria` ahí. Con v21.109 la opción no aparecía.
+
+## 4.165 · Alta de usuario: el campo «Usuario» acepta el correo completo (v21.111)
+- Si se escribía el correo entero, el usuario quedaba como `nombre.cormumel.cl@cormumel.cl`. Ahora se toma solo lo anterior a la arroba y se quita un sufijo `.cormumel.cl`.

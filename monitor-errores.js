@@ -11,7 +11,7 @@
 (function (window, document) {
     'use strict';
     const IGNORAR = /ResizeObserver|^Script error\.?$|Non-Error promise rejection|Failed to fetch|NetworkError|Load failed|AbortError|ChunkLoadError|network-request-failed|unavailable/i;
-    const MAX_CORREOS = 3, vistos = new Set();
+    const MAX_CORREOS = 1, DESTINO_ERRORES = ['matias.bustos@cormumel.cl'], vistos = new Set();
     const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
     /** Puro: enmascara RUT y recorta. */
@@ -40,13 +40,24 @@
             await f.setDoc(ref, { tipo: 'error-app', clase: tipo, mensaje: msg, archivo: String(archivo || '').split('/').pop().split('?')[0], linea: linea || 0, vista: (location.hash || '').replace('#', ''), version: version(), ultimoUsuario: usuario, ultimoRol: rol(), navegador: String(navigator.userAgent || '').slice(0, 120), veces: f.increment ? f.increment(1) : 1, dia: dia(), ultimo: ahora, ...(ya.exists() ? {} : { primero: ahora }) }, { merge: true });
             if (!ya.exists() && correosHoy() < MAX_CORREOS && window.SAR_Avisos) {
                 sumaCorreo();
-                window.SAR_Avisos.avisar({ titulo: 'Error detectado en el Visor', sujeto: 'Aviso automático de error', asunto: `[Visor SAR] Error detectado: ${msg.slice(0, 80)}`, intro: 'Un usuario del Visor tuvo un error de programa. No hace falta actuar de inmediato; revisa «Directorio de errores» si se repite.',
+                window.SAR_Avisos.avisar({ destinos: DESTINO_ERRORES, titulo: 'Error detectado en el Visor', sujeto: 'Aviso automático de error', asunto: `[Visor SAR] Error detectado: ${msg.slice(0, 80)}`, intro: 'Un usuario del Visor tuvo un error de programa. No hace falta actuar de inmediato; revisa «Directorio de errores» si se repite.',
                     filas: [], notas: [`Error: ${msg}`, `Dónde: ${String(archivo || '').split('/').pop().split('?')[0]}${linea ? ':' + linea : ''} · pantalla ${(location.hash || 'inicio').replace('#', '')} · versión ${version() || '—'}`, `Usuario: ${usuario || '—'} (${rol()})`] });
             }
         } catch (e) { /* el monitoreo nunca debe causar otro error */ }
     }
     if (window.addEventListener) window.addEventListener('error', (ev) => { if (ev && ev.message) registrar(ev.message, ev.filename, ev.lineno, 'js'); });
     if (window.addEventListener) window.addEventListener('unhandledrejection', (ev) => { const r = ev && ev.reason; registrar((r && (r.code ? r.code + ': ' : '') + (r.message || r)) || 'Promesa rechazada', (r && r.fileName) || '', 0, 'promesa'); });
+
+    // ---- errores recientes para la campana de avisos (solo administración) ----
+    async function cargarRecientes() {
+        const f = window.firebaseFirestore, db = window.firebaseDb; if (!f || !db || !STAFF.includes(rol())) return;
+        try {
+            const sn = await f.getDocs(f.query(f.collection(db, 'Contadores'), f.where('tipo', '==', 'error-app')));
+            const l = []; sn.forEach(d => l.push(d.data())); l.sort((a, b) => String(b.ultimo).localeCompare(String(a.ultimo)));
+            window.SAR_ErroresRecientes = l.slice(0, 30);
+        } catch (e) { /* sin permiso: la campana no muestra errores */ }
+    }
+    setTimeout(cargarRecientes, 8000); setInterval(cargarRecientes, 600000);
 
     // ---- panel en «Directorio de errores» ----
     async function panel() {

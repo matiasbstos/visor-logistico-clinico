@@ -239,7 +239,7 @@
     // ---------------- Campana de notificaciones ----------------
     function pintarCampana() {
         const b = document.getElementById('btn-notificaciones'); if (!b) return;
-        const extra = window.SAR_Avisos ? window.SAR_Avisos.datosActuales() : { total: 0 };
+        const extra = window.SAR_AvisosCampana ? window.SAR_AvisosCampana.datosActuales() : { total: 0 };
         const n = grupos.reduce((s, g) => s + g.listos, 0) + porRecibir.filter(o => o.parcial).length + extra.total;
         let ins = b.querySelector('.noti-n'); if (!ins) { ins = document.createElement('span'); ins.className = 'noti-n'; b.appendChild(ins); }
         ins.textContent = n > 9 ? '9+' : String(n); ins.style.display = n ? '' : 'none';
@@ -254,7 +254,7 @@
         const con = grupos.filter(g => g.listos);
         const parc = porRecibir.filter(o => o.parcial);
         const bloqueRec = parc.length ? `<div class="noti-sec"><b>Por recibir (recepción parcial)</b>${parc.map(o => `<div class="noti-it"><b>OC ${esc(o.numeroOC)}</b> · ${esc(o.proveedor)}: faltan ${o.pendiente} un. (${o.lineas.length} producto(s))<small>${o.lineas.slice(0, 3).map(x => esc(String(x.producto).slice(0, 40)) + ' (' + x.pendiente + ')').join(' · ')}</small></div>`).join('')}</div>` : '';
-        const ext = window.SAR_Avisos ? window.SAR_Avisos.html(window.SAR_Avisos.datosActuales()) : '';
+        const ext = window.SAR_AvisosCampana ? window.SAR_AvisosCampana.html(window.SAR_AvisosCampana.datosActuales()) : '';
         p.innerHTML = `<strong class="noti-tit"><i class="ph-fill ph-bell-ringing"></i> Avisos</strong>${ext}${bloqueRec}${con.length ? con.map(g => `<div class="noti-it"><b>${esc(g.centro)}</b>: hay stock para entregar ${g.listos} de ${g.items.length} producto(s) pendiente(s)
             <small>${g.items.filter(x => x.entregable > 0).slice(0, 3).map(x => esc(x.nombre.slice(0, 40)) + ' (' + x.entregable + ')').join(' · ')}</small></div>`).join('') : (parc.length ? '' : '<p class="act-hint">Sin avisos por ahora.</p>')}
             <button type="button" class="btn btn-outline btn-sm" id="noti-ir">Ver pendientes por entregar</button>`;

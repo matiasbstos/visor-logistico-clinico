@@ -4291,6 +4291,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (docSnap.exists()) {
                             const data = docSnap.data();
                             window.__editOriginal = data;
+                            { const ff = document.getElementById('edit-foto'); if (ff) ff.value = ''; }
                             // Poblar formulario
                             document.getElementById('edit-doc-id').value = docId;
                             document.getElementById('edit-code').value = data.codigoSAR || '';
@@ -4457,6 +4458,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         document: gob ? gob.codigo : 'EDICION-MANUAL'
                     });
                     if (gob) await window.SAR_Gobernanza.registrar({ nombre: updatedData.name, lote: updatedData.batch, delta: gob.despues.cantidad - gob.antes.cantidad, codigo: gob.codigo, motivo: gob.motivo, nota: gob.nota, origen: 'EDITAR_INSUMO', antes: gob.antes, despues: gob.despues, insumoId: docId });
+
+                    // Foto cargada a mano: queda en el catálogo y tiene prioridad sobre la automática
+                    try {
+                        const fotoF = document.getElementById('edit-foto') && document.getElementById('edit-foto').files[0];
+                        if (fotoF) {
+                            const img = await new Promise((ok, mal) => { const im = new Image(), u = URL.createObjectURL(fotoF); im.onload = () => { const k = Math.min(1, 220 / Math.max(im.width, im.height)), c = document.createElement('canvas'); c.width = Math.round(im.width * k); c.height = Math.round(im.height * k); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); URL.revokeObjectURL(u); ok(c.toDataURL('image/jpeg', 0.8)); }; im.onerror = () => mal(new Error('No se pudo leer la imagen.')); im.src = u; });
+                            const mpC = String(updatedData.codigoMP || (window.__editOriginal && window.__editOriginal.codigoMP) || '');
+                            const idC = mpC || (updatedData.name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, '-').toLowerCase().replace(/^-|-$/g, '').slice(0, 60) || 'manual');
+                            await setDoc(doc(db, 'Catalogo_Productos', idC), { descripcion: updatedData.name, descripcion_lower: updatedData.name.toLowerCase(), codigoMP: mpC, insumoName: updatedData.name, imagen: img, ...(mpC ? {} : { sinOrden: true, origen: 'INGRESO' }), actualizado: serverTimestamp() }, { merge: true });
+                        }
+                    } catch (eF) { showToast('Foto', 'Se guardó el insumo, pero no la foto: ' + (eF.message || eF), 'warning'); }
 
                     showToast('Éxito', gob ? `Insumo actualizado. Código de seguimiento: ${gob.codigo}` : 'Insumo actualizado y auditoría registrada.', 'success');
 

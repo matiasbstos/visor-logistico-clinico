@@ -859,5 +859,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ### 4.154 Hojas de picking: foto por inventario y logo del Visor (v21.100)
 - La foto del producto se busca con **todos los nombres y códigos disponibles**: el del acta, el del inventario (por id del producto o por nombre) y el físico. Antes solo usaba el nombre/código escrito en el acta, por eso un producto con foto en Existencias (p. ej. la sabanilla) salía «sin foto» si el acta tenía la descripción de la orden de compra.
-- El encabezado de las hojas de picking y de pendientes usa el **logo del Visor/SAR**, no el de la Corporación (que queda solo para documentos).
+- El encabezado de las hojas de picking y de pendientes usa el **logo del Visor Logístico** (assets/logo/horizontal.svg; en v21.101, antes se había puesto el del SAR), no el de la Corporación (que queda solo para documentos).
 - Se quitan el encabezado y pie automáticos del navegador al imprimir (fecha, «about:blank», paginación) con margen de página en 0 y relleno propio.
+
+### 4.155 Logo de las hojas de picking = marca del Visor Logístico (v21.101)
+- Las hojas de picking y de pendientes llevan el **logotipo horizontal «Visor Logístico»** (`assets/logo/horizontal.svg`), no el del SAR ni el de la Corporación.

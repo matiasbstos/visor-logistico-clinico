@@ -899,3 +899,10 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - En «Bodega transitoria»: **Descargar planilla** (Estante, Producto, ID, Stock sistema, Disposición, Contado, Responsable, Observación + hoja con estantes válidos A1–C6) y **Subir planilla**.
 - Al subir: el estante se guarda en `ubicacionEstante` de los Insumos de esa bodega (quien toma el inventario lo va asignando) y lo contado se carga en la pantalla de conteo; el descuento de faltantes sigue solo con «Cerrar conteo». Se muestra la columna Estante en la tabla.
 - Productos de la planilla sin stock en la bodega se avisan y no se crean (no se inventa stock).
+
+## 4.163 · Rol «transitoria»: acceso solo a la Bodega transitoria (v21.109)
+- Nuevo rol `transitoria` (se elige en Usuarios, «Solo Bodega transitoria (conteo)») para personal que solo debe ubicar productos en la bodega transitoria (primer caso: Valeria Aliaga). La cuenta y la clave las crea la persona administradora en Usuarios; el sistema no maneja claves.
+- UI: el menú muestra únicamente «Bodega transitoria» y cualquier otra vista la devuelve ahí. En la pantalla no puede editar disposición, agregar/quitar productos, cerrar conteo ni reponer.
+- Barrera real (`firestore.rules`): `isTransitoria()` solo puede actualizar en Insumos los campos `ubicacionEstante` y `updatedAt`, y leer `Contadores` con prefijo `transitoria-`. Lee Insumos/Bodegas como cualquier rol con perfil.
+- Un rol desconocido caía como «operador»; `transitoria` ahora está reconocido explícitamente para que no ocurra.
+- Lo contado que ella cargue desde la planilla es solo visual (no se guarda); el conteo oficial y los descuentos los cierra el administrador.

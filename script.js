@@ -2083,6 +2083,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 operador: ['view-compras', 'view-usuarios', 'view-configuracion', 'view-errores']
             };
             const rolActual = String(document.body.dataset.userRole || '').toLowerCase();
+            // Rol «transitoria»: solo puede ver la Bodega transitoria (cualquier otra vista la devuelve ahí)
+            if (rolActual === 'transitoria' && hash !== 'view-transitoria') {
+                hash = 'view-transitoria';
+                if (window.location.hash !== '#view-transitoria') window.location.hash = 'view-transitoria';
+                targetItem = document.querySelector('.sidebar .menu-item[data-target="view-transitoria"]');
+            }
             if ((VISTAS_BLOQUEADAS[rolActual] || []).includes(hash)) {
                 console.warn(`[Router] Vista ${hash} no permitida para el rol ${rolActual}.`);
                 showToast('Acceso restringido', 'Su rol no tiene acceso a esa sección.', 'warning');
@@ -7031,6 +7037,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (userRole === 'operador' || userRole === 'operator') {
                     document.body.setAttribute('data-user-role', 'operador');
+                } else if (userRole === 'transitoria') {
+                    document.body.setAttribute('data-user-role', 'transitoria');
                 } else if (userRole === 'enfermero' || userRole === 'enfermera') {
                     document.body.setAttribute('data-user-role', 'enfermero');
                 } else if (userRole === 'admin' || userRole === 'administrador' || userRole === 'global') {

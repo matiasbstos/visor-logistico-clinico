@@ -4628,7 +4628,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const formData = new FormData(moveForm);
                 const data = Object.fromEntries(formData.entries());
 
-                const nombreInput = data.articleName;
+                let nombreInput = data.articleName;
+                // Talla (v21.117): se agrega al nombre para que cada talla sea su propio insumo (y los lotes de una misma talla se sumen)
+                if (nombreInput && data.talla && !/\btalla\s*(xxl|xl|xs|s|m|l)\b/i.test(nombreInput)) nombreInput = nombreInput.trim() + ' TALLA ' + data.talla;
                 if (!nombreInput) {
                     showToast('Error', 'Debe escribir o seleccionar un insumo.', 'error');
                     return;

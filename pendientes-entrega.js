@@ -163,7 +163,7 @@
         .n{text-align:right;white-space:nowrap}.f{width:54px}.f img{width:48px;height:48px;object-fit:contain}.sf{color:#999;font-size:11px}tr{page-break-inside:avoid}.pie{margin:4px 0 0;color:#555;font-size:12px}
         .ck{width:26px}.ck i{display:inline-block;width:18px;height:18px;border:2px solid #333;border-radius:3px}.big{font-size:17px;font-weight:700}small{color:#555}
         .pk h1{font-size:24px}.pk h2{font-size:22px}.pk header p{font-size:15px}.pk .lg{height:54px}.pk th{font-size:15px;padding:6px 8px}.pk td{font-size:19px;font-weight:600;padding:8px 8px;border-bottom:2px solid #bbb}
-        .pk td small{font-size:14px;font-weight:400}.pk .f{width:132px}.pk .f img{width:120px;height:120px}.pk .ck{width:44px}.pk .ck i{width:34px;height:34px;border-width:3px}.pk .big{font-size:46px;line-height:1}.pk .pie{font-size:16px;font-weight:700}
+        .pk td small{font-size:14px;font-weight:400}.pk .f{width:132px}.pk .f img{width:120px;height:120px}.pk .ck{width:44px}.pk .ck i{width:34px;height:34px;border-width:3px}.pk .big{font-size:46px;line-height:1}.pk h3.pk-pend{font-size:20px;margin:22px 0 6px;padding:6px 8px;background:#fff3d6;border-left:6px solid #e8a400}.pk .pie{font-size:16px;font-weight:700}
         @page{margin:0}@media print{body{padding:12mm}}`;
     function ventana(titulo, cuerpo) {
         const w = window.open('', '_blank'); if (!w) { toast('Ventana bloqueada', 'Permite las ventanas emergentes para imprimir.', 'warning'); return; }
@@ -206,10 +206,15 @@
         const lotes = (i) => (i.lotes || []).length ? i.lotes.map(l => `${esc(l.batch || 's/lote')}${l.expirationDate ? ' <small>vence ' + esc(l.expirationDate) + '</small>' : ''} <small>(${num(l.quantity)})</small>`).join('<br>') : '—';
         const filas = a.items.filter(i => num(i.cantidad) > 0);
         const total = filas.reduce((t, i) => t + num(i.cantidad), 0);
+        const pend = [];
+        (a.pendientes || []).forEach(x => { if (x && x.nombre && num(x.cantidad) > 0) pend.push({ nombre: x.nombre, cantidad: num(x.cantidad), codigoMP: x.codigoMP }); });
+        a.items.forEach(i => { const falta = num(i.solicitado) - num(i.cantidad); if (i.solicitado != null && falta > 0 && !pend.some(x => norm(x.nombre) === norm(i.nombre))) pend.push({ nombre: i.nombre, cantidad: falta, codigoMP: i.codigoMP, id: i.id }); });
+        const fotoP = (x) => { const ins = cache.find(c => c && ((x.id && c.id === x.id) || (c.name && norm(c.name) === norm(x.nombre)))); return fotoMulti([x.nombre, ins && ins.name], [x.codigoMP, ins && (ins.codigoMP || ins.code)]); };
+        const bloquePend = pend.length ? `<h3 class="pk-pend">Quedan pendientes de entregar a ${esc(a.centro || '')}</h3><table><thead><tr><th>Foto</th><th>Producto</th><th class="n">Pendiente</th></tr></thead><tbody>${pend.map(x => `<tr><td class="f">${fotoP(x)}</td><td>${esc(x.nombre)}${x.codigoMP ? '<br><small>ID ' + esc(x.codigoMP) + '</small>' : ''}</td><td class="n big">${x.cantidad}</td></tr>`).join('')}</tbody></table><p class="pie">${pend.length} producto(s) pendiente(s) · ${pend.reduce((t, x) => t + x.cantidad, 0)} unidad(es).</p>` : '';
         const cuerpo = `<section class="pk"><header><img class="lg" src="${esc(logo)}" alt=""><div><h1>Hoja de picking · ${esc(a.numero || '')}</h1><h2>Para: ${esc(a.centro || '')}</h2><p>SAR Elsa Romo Arpillerista · retirar de ${esc(a.bodegaOrigen || 'bodega')} · acta del ${esc(a.fecha || '')}${a.estado === 'ANULADA' ? ' · <b>ANULADA</b>' : ''}</p></div></header>
             <table><thead><tr><th class="ck"></th><th>Foto</th><th>Producto</th><th>Lote (vence primero)</th><th class="n">Retirar</th></tr></thead><tbody>
             ${filas.map(i => `<tr><td class="ck"><i></i></td><td class="f">${foto(i)}</td><td>${esc(i.nombre)}${i.codigoMP ? '<br><small>ID ' + esc(i.codigoMP) + '</small>' : ''}</td><td>${lotes(i)}</td><td class="n big">${num(i.cantidad)}</td></tr>`).join('')}</tbody></table>
-            <p class="pie">${filas.length} producto(s) · ${total} unidad(es) en total.</p></section>`;
+            <p class="pie">${filas.length} producto(s) · ${total} unidad(es) en total.</p>${bloquePend}</section>`;
         ventana('Hoja de picking ' + (a.numero || ''), cuerpo);
     }
     /** Busca las fotos de los productos pendientes que aún no tienen (por ID o por descripción) y las deja "por confirmar". */

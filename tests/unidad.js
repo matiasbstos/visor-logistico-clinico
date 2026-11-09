@@ -78,3 +78,4 @@ console.log(`\n${n} ok, ${mal} con falla`); process.exit(mal ? 1 : 0); });
   assert.strictEqual(T.claveDe('Suero', '12345'), '12345');
   console.log('ok bodega transitoria');
 })();
+(function () { const T = require('../bodega-transitoria.js'); require('assert').strictEqual(T.normEstante(' b-3 '), 'B3'); console.log('ok estante'); })();

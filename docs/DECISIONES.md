@@ -894,3 +894,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - **Cerrar conteo** (transacción, una vez al día, `Contadores/transitoria-conteo-<bodega>-<fecha>`): el faltante se descuenta del stock total por lote que vence primero y queda en Historial como `TRANSITORIA_FALTANTE`.
 - **Reponer desde Central** (transacción): traspaso FEFO Central → transitoria, Historial `traspaso` con documento `REPOSICION-…`.
 - Sin reglas nuevas (usa Contadores). Pruebas de la lógica pura añadidas a `tests/unidad.js`.
+
+## 4.162 · Planilla Excel de la bodega transitoria con ubicación por estante (v21.108)
+- En «Bodega transitoria»: **Descargar planilla** (Estante, Producto, ID, Stock sistema, Disposición, Contado, Responsable, Observación + hoja con estantes válidos A1–C6) y **Subir planilla**.
+- Al subir: el estante se guarda en `ubicacionEstante` de los Insumos de esa bodega (quien toma el inventario lo va asignando) y lo contado se carga en la pantalla de conteo; el descuento de faltantes sigue solo con «Cerrar conteo». Se muestra la columna Estante en la tabla.
+- Productos de la planilla sin stock en la bodega se avisan y no se crean (no se inventa stock).

@@ -939,3 +939,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.171 · Mismo producto en varios lotes y tallas (v21.117)
 - Confirmado: ingresar el mismo producto (mismo nombre y bodega) con otro lote o vencimiento **suma al total** y deja cada lote con su cantidad y vencimiento en `batches`; el mismo lote se acumula. El historial conserva proveedor y documento de cada ingreso.
 - Campo opcional **Talla** (XS–XXL) en Ingresos: se agrega al nombre («… TALLA S») salvo que ya la traiga, de modo que cada talla es un insumo distinto y sus lotes se agrupan entre sí.
+
+## 4.172 · Autocompletado de nombres en Ingresos (v21.118)
+- La lista de sugerencias se cargaba con una búsqueda por prefijo en minúsculas contra nombres guardados en mayúsculas (casi nunca coincidía). Ahora se cargan una vez todos los nombres de Existencias y del Catálogo de productos; el navegador sugiere por coincidencia dentro del nombre, sin distinguir mayúsculas. Se recarga tras cada ingreso.
+- Los listeners de simulación de stock se enlazan una sola vez (antes se duplicaban en cada ingreso).

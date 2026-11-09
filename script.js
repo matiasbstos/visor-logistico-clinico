@@ -3351,7 +3351,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td class="font-bold">${formattedPrice}</td>
                 <td>${quantityMarkup}</td>
                 <td class="font-bold">${formattedTotal}</td>
-                <td><div style="display:flex; flex-direction:column; gap:2px;">${batchesMarkup}</div></td>
+                <td><div style="display:flex; flex-direction:column; gap:2px;">${batchesMarkup}</div>${Array.isArray(item.batches) && item.batches.length ? `<button type="button" class="btn btn-outline btn-sm btn-desglose" data-id="${docSnapshot.id}" aria-expanded="false" style="margin-top:6px; padding:2px 8px; font-size:11px;"><i class="ph ph-caret-down"></i> Ver desglose</button>` : ''}</td>
                 <td><div class="font-bold">${window.escapeHTML(item.location || item.ubicacion || 'Bodega Central')}</div></td>
                 <td>
                     <div style="display:flex;gap:8px">
@@ -3364,6 +3364,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 </td>
             `;
                 inventoryTableBody.appendChild(tr);
+                (window.__desgloseDatos = window.__desgloseDatos || {})[docSnapshot.id] = _data;
+                if (window.__desgloseAbiertos && window.__desgloseAbiertos.has(docSnapshot.id) && window.__desglosePintar) window.__desglosePintar(tr, true);
             });
 
             // Offload predictivo al Main Thread Idle time (Mejora de UX)
@@ -3373,6 +3375,30 @@ document.addEventListener('DOMContentLoaded', () => {
                 setTimeout(processPredictiveColumns, 0); // Fallback Safari
             }
         }
+
+        // Desglose por lote (v21.127): fila desplegable bajo el producto con la cantidad, % del total, vencimiento y proveedor de cada lote
+        window.__desgloseAbiertos = window.__desgloseAbiertos || new Set();
+        window.__desglosePintar = function (tr, abrir) {
+            const id = tr.dataset.id, ya = tr.nextElementSibling && tr.nextElementSibling.classList.contains('desglose-row') ? tr.nextElementSibling : null;
+            const btn = tr.querySelector('.btn-desglose');
+            if (!abrir) { if (ya) ya.remove(); window.__desgloseAbiertos.delete(id); if (btn) { btn.setAttribute('aria-expanded', 'false'); btn.innerHTML = '<i class="ph ph-caret-down"></i> Ver desglose'; } return; }
+            const d = (window.__desgloseDatos || {})[id], A = window.SAR_LotesAlertas; if (!d || !A) return;
+            const a = A.analizar(d), total = a.lotes.reduce((t, l) => t + l.quantity, 0) || 1, esc = window.escapeHTML;
+            const orden = a.lotes.slice().sort((x, y) => (x.dias === null ? 1e9 : x.dias) - (y.dias === null ? 1e9 : y.dias));
+            const col = { vencido: 'var(--danger, #dc2626)', urgente: '#ea580c', precaucion: '#b45309' };
+            const fecha = (v) => { const f = A.parseFecha(v); return f ? f.toLocaleDateString('es-CL') : '—'; };
+            const filas = orden.map((l, i) => `<tr><td><strong>${esc(l.batch)}</strong>${i === 0 && a.lotes.length > 1 ? ' <small>(sale primero · FEFO)</small>' : ''}</td><td style="text-align:right;"><strong>${l.quantity.toLocaleString('es-CL')}</strong></td><td style="text-align:right;">${Math.round(l.quantity * 100 / total)}%</td><td>${fecha(l.expirationDate)}</td><td style="color:${col[l.nivel] || 'inherit'}; font-weight:${col[l.nivel] ? 700 : 400};">${l.nivel === 'sin_fecha' ? 'Sin fecha' : (A.etiqueta(l) || 'Vigente · ' + l.dias + ' d')}</td><td>${esc(String(l.provider || '—').trim())}</td></tr>`).join('');
+            const nueva = document.createElement('tr'); nueva.className = 'desglose-row';
+            nueva.innerHTML = `<td colspan="8" style="background:var(--surface-2, #f8fafc); padding:10px 16px;"><div style="font-weight:700; margin-bottom:6px;">Desglose de ${esc(d.name || '')} · ${esc(d.location || '')}</div>
+                <table class="table" style="width:100%; font-size:12px;"><thead><tr><th>Lote</th><th style="text-align:right;">Cantidad</th><th style="text-align:right;">% del total</th><th>Vencimiento</th><th>Estado</th><th>Proveedor</th></tr></thead><tbody>${filas}</tbody>
+                <tfoot><tr><td><strong>Total</strong></td><td style="text-align:right;"><strong>${a.total.toLocaleString('es-CL')}</strong></td><td></td><td colspan="3">Vigente (sin vencidos ni por vencer en 30 d): <strong>${a.util.toLocaleString('es-CL')}</strong> · mínimo ${a.minimo}</td></tr></tfoot></table></td>`;
+            if (ya) ya.remove(); tr.after(nueva); window.__desgloseAbiertos.add(id);
+            if (btn) { btn.setAttribute('aria-expanded', 'true'); btn.innerHTML = '<i class="ph ph-caret-up"></i> Ocultar desglose'; }
+        };
+        document.addEventListener('click', (e) => {
+            const b = e.target && e.target.closest ? e.target.closest('.btn-desglose') : null; if (!b) return;
+            const tr = b.closest('tr'); if (tr) window.__desglosePintar(tr, b.getAttribute('aria-expanded') !== 'true');
+        });
 
         function processPredictiveColumns() {
             const cols = document.querySelectorAll('.predictive-col');

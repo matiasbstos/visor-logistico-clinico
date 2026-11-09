@@ -6011,3 +6011,14 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .act-ind:focus-visible { outline: 3px solid var(--sar-blue, #1a3668); outline-offset: 2px; }
 .act-hbtns .act-pendrow[disabled] { opacity: .45; cursor: not-allowed; }
 @media (max-width: 640px) { .act-ind { flex: 1 1 45%; } }
+
+/* v21.105 · Oxígeno prestado a otros centros */
+.op-panel { margin-top: 22px; padding: 16px; border: 1.5px solid var(--id-borde, #d5dbe5); border-radius: var(--id-r-sm, 10px); background: #fff; }
+.op-cab { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; }
+.op-cab h3 { margin: 0 0 2px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.op-centro { margin-top: 14px; } .op-centro h4 { margin: 0 0 6px; color: var(--sar-blue, #1a3668); } .op-centro h4 small { color: var(--text-muted, #666); font-weight: 400; }
+.op-fila { display: grid; grid-template-columns: minmax(180px, 1.2fr) auto 2fr; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid var(--id-borde, #e3e8ef); }
+.op-main { display: flex; flex-direction: column; gap: 2px; } .op-serie { font-size: 1.1rem; }
+.op-resp { display: flex; gap: 6px; flex-wrap: wrap; } .op-acc { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.op-lista { max-height: 220px; overflow: auto; display: grid; gap: 4px; margin-bottom: 10px; }
+@media (max-width: 760px) { .op-fila { grid-template-columns: 1fr; } .op-acc { justify-content: flex-start; } }

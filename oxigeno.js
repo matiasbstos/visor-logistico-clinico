@@ -281,6 +281,7 @@
               <div class="oxi-ev" id="oxi-ev-${esc(e.id)}"${eventosAbiertos[e.id] ? '' : ' style="display:none"'}>${eventosAbiertos[e.id] ? eventosHTML(eventosAbiertos[e.id]) : ''}</div>`;
         }).join('') : '<p class="act-hint">Sin equipos con ese filtro. Usa "+ Agregar balones".</p>'}</div>`;
         enlazar();
+        try { if (window.SAR_OxiPrestamos) window.SAR_OxiPrestamos.pintar(r, equipos, { refrescar: async () => { await cargar(); pintar(); } }); } catch (e) { console.warn('[Oxígeno] préstamos', e); }
     }
     function eventosHTML(evs) {
         if (!evs.length) return '<p class="act-hint">Sin movimientos.</p>';

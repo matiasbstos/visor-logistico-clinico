@@ -107,7 +107,7 @@
       const ov = document.createElement('div'); ov.id = 'ei-overlay';
       ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,.55);z-index:99990;display:flex;align-items:center;justify-content:center;padding:16px;';
       ov.innerHTML = `<div role="dialog" aria-modal="true" aria-label="Editar ingreso" style="background:#fff;border-radius:14px;width:560px;max-width:100%;max-height:92vh;overflow:auto;padding:22px;">
-        <h3 style="margin:0 0 4px;">Editar ingreso</h3>
+        <h3 style="margin:0 0 4px;">Editar ingreso${m.codigoIngreso ? ' · ' + esc(m.codigoIngreso) : ''}</h3>
         <div style="font-weight:700;">${esc(m.insumoName || m.item)}</div>
         <p class="act-hint" style="margin:6px 0 10px;">${ins ? `Stock actual en Existencias: <b>${stock}</b>. Al guardar, el stock, el saldo contable y el disponible se ajustan solos.` : '<b>Este producto no está en Existencias.</b> Al guardar se creará con los datos de abajo.'}</p>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 12px;">
@@ -117,7 +117,7 @@
           <div>${campo('ei-fecha', 'Fecha del ingreso', fechaMov, 'date')}</div>
           <div>${campo('ei-prov', 'Proveedor', m.provider || '', 'text')}</div>
           <div>${campo('ei-compra', 'Tipo de compra', m.purchaseType && m.purchaseType !== 'S/I' ? m.purchaseType : '', 'text')}</div>
-          <div>${campo('ei-doc', 'Documento de respaldo', m.document && m.document !== 'S/N' ? m.document : '', 'text')}</div>
+          <div>${campo('ei-doc', 'N° de OC o documento (asócialo cuando lo identifiques)', m.document && m.document !== 'S/N' ? m.document : '', 'text')}</div>
           <div><label class="form-label" for="ei-tipo" style="margin-top:10px;">Tipo de insumo</label><select class="form-control" id="ei-tipo"><option value="medico">Insumos médicos</option><option value="aseo">Insumos de aseo</option><option value="oficina">Insumos de oficina</option></select></div>
         </div>
         ${campo('ei-obs', 'Observaciones', m.observations || '', 'text')}

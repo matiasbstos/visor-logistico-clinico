@@ -65,9 +65,9 @@ t('vida del producto: junta orden, recepción, acta y salida en orden cronológi
 Promise.all(tAsync).then(() => {
 t('gobernanza: ventana de corrección directa', () => {
     const G = require('../gobernanza.js'), ahora = new Date('2026-11-09T12:00:00Z');
-    assert.ok(G.evaluarVentana([{ type: 'INGRESO_PROVEEDOR', date: new Date('2026-11-08T12:00:00Z') }], ahora).ok);
-    assert.ok(!G.evaluarVentana([{ type: 'INGRESO_PROVEEDOR', date: new Date('2026-11-05T12:00:00Z') }], ahora).ok);
-    assert.ok(!G.evaluarVentana([{ type: 'INGRESO_PROVEEDOR', date: new Date('2026-11-08T12:00:00Z') }, { type: 'ENTREGA_ACTA' }], ahora).ok);
+    assert.ok(G.evaluarVentana([{ type: 'INGRESO_PROVEEDOR', date: new Date('2026-11-09T05:00:00Z') }], ahora).ok);
+    assert.ok(!G.evaluarVentana([{ type: 'INGRESO_PROVEEDOR', date: new Date('2026-11-08T12:00:00Z') }], ahora).ok);
+    assert.ok(!G.evaluarVentana([{ type: 'INGRESO_PROVEEDOR', date: new Date('2026-11-09T05:00:00Z') }, { type: 'ENTREGA_ACTA' }], ahora).ok);
     assert.ok(G.evaluarVentana([{ type: 'INGRESO_OC', date: new Date('2026-11-09T10:00:00Z') }, { type: 'ACTA_PRUEBA' }, { type: 'UNIFICACION_STOCK' }], ahora).ok);
 });
 

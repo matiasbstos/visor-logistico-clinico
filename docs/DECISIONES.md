@@ -882,3 +882,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - **Registrar préstamo**: centro + fecha + balones (llenos o vacíos) + nota. Sirve también para préstamos anteriores al sistema. Deja el balón en estado PRESTADO y anota el evento `PRESTAMO` en su historial.
 - **Acta firmada de quien recibe** (PDF o foto, hasta 6 MB) y **fotos de respaldo** (se achican a ~1280 px): se guardan en `Contadores/ox-resp-*` y `ox-foto-*`; cada una deja un evento `PRESTAMO_RESPALDO`. Se pueden ver y reemplazar desde el panel.
 - La devolución sigue siendo la acción «Devuelto al SAR» del balón.
+
+### 4.160 Informes › Vida del producto (v21.106)
+- Nueva pestaña en **Informes**: se busca un producto por **ID o nombre** y se arma su recorrido cronológico: orden de compra (con memo/SDC/CDP), recepciones, ingresos a bodega, traspasos, actas de entrega (por confirmar, firmadas o anuladas), salidas con descuento de stock, mermas y ajustes, más el **stock actual por bodega y lote**. Arriba, indicadores: pedido, recibido, entregado por actas, reservado (por confirmar), mermas y stock actual.
+- Solo lectura. Une las fuentes por **código MP** o **nombre** (incluye los alias del catálogo). Un movimiento puede aparecer dos veces con distinto enfoque (p. ej. «Recepción de la orden» y «Ingreso a bodega»): es el mismo hecho visto desde la orden y desde el inventario.
+- Límite: lee las últimas 400 actas y hasta 600 movimientos del producto.

@@ -6022,3 +6022,18 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .op-resp { display: flex; gap: 6px; flex-wrap: wrap; } .op-acc { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .op-lista { max-height: 220px; overflow: auto; display: grid; gap: 4px; margin-bottom: 10px; }
 @media (max-width: 760px) { .op-fila { grid-template-columns: 1fr; } .op-acc { justify-content: flex-start; } }
+
+/* v21.106 · Informes › Vida del producto */
+#view-informes .dashboard-container.vp-activa > :not(.page-header):not(.tab-links-container):not(#vp-root) { display: none !important; }
+.vp-root { padding: 8px 2px 24px; } .vp-root h2 { margin: 6px 0; }
+.vp-bus input { max-width: 520px; } .vp-sug { display: flex; flex-direction: column; gap: 6px; margin: 10px 0; max-width: 720px; }
+.vp-op { text-align: left; padding: 10px 14px; border: 1.5px solid var(--id-borde, #d5dbe5); border-radius: var(--id-r-sm, 10px); background: #fff; cursor: pointer; font: inherit; min-height: 44px; }
+.vp-op:hover, .vp-op:focus-visible { border-color: var(--sar-blue, #1a3668); outline: none; background: #f3f6fb; }
+.vp-cab h3 { margin: 14px 0 0; font-size: 1.3rem; } .vp-cab small { color: var(--text-muted, #666); }
+.vp-ks { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0 18px; }
+.vp-k { min-width: 140px; padding: 10px 14px; border: 1.5px solid var(--id-borde, #d5dbe5); border-radius: var(--id-r-sm, 10px); background: #fff; display: flex; flex-direction: column; } .vp-k b { font-size: 1.6rem; color: var(--c); } .vp-k span { font-size: .8rem; color: var(--text-muted, #666); }
+.vp-stock { list-style: none; padding: 0; margin: 4px 0 14px; display: grid; gap: 4px; }
+.vp-tl { list-style: none; padding: 0 0 0 14px; margin: 8px 0; border-left: 3px solid var(--id-borde, #d5dbe5); }
+.vp-tl li { position: relative; padding: 8px 0 12px 16px; display: grid; gap: 2px; }
+.vp-tl li::before { content: ''; position: absolute; left: -23px; top: 12px; width: 12px; height: 12px; border-radius: 50%; background: var(--c); border: 2px solid #fff; box-shadow: 0 0 0 1px var(--c); }
+.vp-tl time { font-size: .8rem; color: var(--text-muted, #666); } .vp-tl span { color: #333; }

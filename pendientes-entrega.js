@@ -185,6 +185,20 @@
         }).join('');
         ventana('Hoja de picking', hojas);
     }
+    /** Hoja de picking de un acta ya emitida: qué se retiró (o se retira) de la bodega, con foto, lote(s) y cantidad. */
+    function pickingActa(a) {
+        if (!a || !(a.items || []).length) { toast('Hoja de picking', 'El acta no tiene productos.', 'warning'); return; }
+        const IM = window.SAR_Imagenes, logo = new URL('assets/logo-corpo-melipilla.jpg', window.location.href).href;
+        const foto = (i) => { try { const e = IM && (IM.buscarConCandidata ? IM.buscarConCandidata(i.nombre, i.codigoMP) : IM.buscar(i.nombre, i.codigoMP)); const s = e && IM.src(e, 160); return s ? `<img src="${esc(s)}" alt="" referrerpolicy="no-referrer">` : '<span class="sf">sin foto</span>'; } catch (e) { return '<span class="sf">sin foto</span>'; } };
+        const lotes = (i) => (i.lotes || []).length ? i.lotes.map(l => `${esc(l.batch || 's/lote')}${l.expirationDate ? ' <small>vence ' + esc(l.expirationDate) + '</small>' : ''} <small>(${num(l.quantity)})</small>`).join('<br>') : '—';
+        const filas = a.items.filter(i => num(i.cantidad) > 0);
+        const total = filas.reduce((t, i) => t + num(i.cantidad), 0);
+        const cuerpo = `<section><header><img class="lg" src="${esc(logo)}" alt=""><div><h1>Hoja de picking · ${esc(a.numero || '')}</h1><h2>Para: ${esc(a.centro || '')}</h2><p>SAR Elsa Romo Arpillerista · retirar de ${esc(a.bodegaOrigen || 'bodega')} · acta del ${esc(a.fecha || '')}${a.estado === 'ANULADA' ? ' · <b>ANULADA</b>' : ''}</p></div></header>
+            <table><thead><tr><th class="ck"></th><th>Foto</th><th>Producto</th><th>Lote (vence primero)</th><th class="n">Retirar</th></tr></thead><tbody>
+            ${filas.map(i => `<tr><td class="ck"><i></i></td><td class="f">${foto(i)}</td><td>${esc(i.nombre)}${i.codigoMP ? '<br><small>ID ' + esc(i.codigoMP) + '</small>' : ''}</td><td>${lotes(i)}</td><td class="n big">${num(i.cantidad)}</td></tr>`).join('')}</tbody></table>
+            <p class="pie">${filas.length} producto(s) · ${total} unidad(es) en total.</p></section>`;
+        ventana('Hoja de picking ' + (a.numero || ''), cuerpo);
+    }
     /** Busca las fotos de los productos pendientes que aún no tienen (por ID o por descripción) y las deja "por confirmar". */
     async function buscarFotos() {
         const IM = window.SAR_Imagenes, f = fs(); if (!IM) return;
@@ -256,6 +270,6 @@
     }
     if (typeof document !== 'undefined' && document.addEventListener) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar(); }
 
-    window.SAR_Pendientes = { abrir, calcularPendientes, calcularPorRecibir, cruzarStock, datos: async () => { await traer(); return { grupos, porRecibir }; }, refrescar: () => traer().catch(() => {}) };
+    window.SAR_Pendientes = { pickingActa, abrir, calcularPendientes, calcularPorRecibir, cruzarStock, datos: async () => { await traer(); return { grupos, porRecibir }; }, refrescar: () => traer().catch(() => {}) };
     if (typeof module !== 'undefined') module.exports = window.SAR_Pendientes;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: { dataset: {} } });

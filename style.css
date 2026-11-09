@@ -5999,3 +5999,15 @@ th { letter-spacing: .04em; font-weight: 700; color: #475569; }
 .pr-oxi .po-fol { margin-top: auto; font-size: 8.5pt; font-weight: 400; } .pr-oxi .po-fol b { font-size: 11pt; font-weight: 700; }
 
 .pr-reuso { display:flex; gap:8px; align-items:center; margin-top:10px; font-size:.85rem; color:var(--text-muted); }
+
+/* v21.103 · Actas emitidas: indicadores y filtros rápidos */
+.act-inds { display: flex; flex-wrap: wrap; gap: 10px; margin: 4px 0 14px; }
+.act-ind { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border: 1.5px solid var(--id-borde, #d5dbe5); border-radius: var(--id-r-sm, 10px); background: #fff; color: var(--sar-blue, #1a3668); font: inherit; font-weight: 600; cursor: pointer; min-height: 44px; }
+.act-ind b { font-size: 1.25rem; min-width: 1.6em; text-align: center; padding: 1px 8px; border-radius: 999px; background: #eef1f6; }
+.act-ind-pen b { background: var(--sar-red, #d9363e); color: #fff; }
+.act-ind-ok b { background: var(--sar-green, #8cc63f); color: #10320b; }
+.act-ind-prod b { background: var(--sar-yellow, #f5b700); color: #4a3500; }
+.act-ind.on { border-color: var(--sar-blue, #1a3668); box-shadow: 0 0 0 2px rgba(26, 54, 104, .25); background: #f3f6fb; }
+.act-ind:focus-visible { outline: 3px solid var(--sar-blue, #1a3668); outline-offset: 2px; }
+.act-hbtns .act-pendrow[disabled] { opacity: .45; cursor: not-allowed; }
+@media (max-width: 640px) { .act-ind { flex: 1 1 45%; } }

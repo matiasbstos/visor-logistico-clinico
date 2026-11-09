@@ -926,3 +926,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - El formulario de ingreso tiene el campo obligatorio «Tipo de insumo» (Insumos médicos por defecto, de aseo, de oficina). Se guarda como `tipoInsumo` (`medico|aseo|oficina`) en el insumo y en el movimiento `INGRESO_PROVEEDOR`.
 - Es independiente de `category` (subcategoría clínica). Un insumo ya clasificado no cambia de tipo por un ingreso posterior; los anteriores sin `tipoInsumo` se tratan como médicos hasta clasificarlos.
 - Pendiente: filtro por tipo en Existencias e Informes, y clasificación de los insumos existentes (p. ej. bolsas de basura y cera → aseo).
+
+## 4.169 · Tipo de compra y documento de respaldo opcionales en Ingresos (v21.115)
+- Ya no son obligatorios en el Registro de Ingresos. Sin tipo de compra se guarda «S/I»; sin documento, «S/N». Proveedor, insumo, lote, vencimiento, cantidad, destino y tipo de insumo siguen siendo obligatorios.

@@ -4743,7 +4743,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const av = document.getElementById('ingreso-origen-aviso');
                 if (lbl) lbl.textContent = esPrestamo ? 'CENTRO DE ORIGEN' : 'PROVEEDOR';
                 if (prov) prov.placeholder = esPrestamo ? 'Ej: CESFAM, SAR u hospital que lo envía' : 'Escriba o seleccione...';
-                if (doc) doc.required = !esPrestamo;
+                if (doc) doc.required = false; // el documento de respaldo es opcional (v21.115)
                 if (av) av.style.display = esPrestamo ? 'block' : 'none';
             };
             tc.addEventListener('input', aplicar); tc.addEventListener('change', aplicar);

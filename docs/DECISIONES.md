@@ -876,3 +876,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.158 Verificación del descuento por acta firmada y actas históricas (v21.104)
 - **Verificado en el código:** emitir un acta la deja `EMITIDA` con `stockDescontado:false` (stock reservado, sin descuento). Al **subir el acta firmada** (confirmar entrega) se ejecuta una sola transacción que descuenta por lote que vence primero (FEFO), anota los movimientos `ENTREGA_ACTA` en el historial con el N° de acta y marca `stockDescontado:true`. Subir la firmada a un acta ya confirmada solo agrega el respaldo, sin tocar el stock.
 - **Actas anteriores al sistema:** en «Emitir acta» → «Acta anterior al sistema (histórica)». Se escribe el N° de la acta antigua y su fecha original; queda como **HIS-N°** (único, no se repite), con `historica:true`, y el stock se **descuenta de inmediato** (esa entrega ya ocurrió) con movimientos marcados como históricos y su fecha original en `fechaDocumento`. No consume correlativo AE, no genera PDF ni correo; se le puede subir la firmada después y anular como cualquier acta.
+
+### 4.159 Oxígeno prestado a otros centros (v21.105)
+- Nuevo panel en «Oxígeno portátil»: **Prestados a otros centros**, agrupado por centro, con N° de serie, tipo de gas, capacidad, desde cuándo, N° de acta AE (si salió por «Acta de entrega») y el estado del respaldo (acta firmada / fotos).
+- **Registrar préstamo**: centro + fecha + balones (llenos o vacíos) + nota. Sirve también para préstamos anteriores al sistema. Deja el balón en estado PRESTADO y anota el evento `PRESTAMO` en su historial.
+- **Acta firmada de quien recibe** (PDF o foto, hasta 6 MB) y **fotos de respaldo** (se achican a ~1280 px): se guardan en `Contadores/ox-resp-*` y `ox-foto-*`; cada una deja un evento `PRESTAMO_RESPALDO`. Se pueden ver y reemplazar desde el panel.
+- La devolución sigue siendo la acción «Devuelto al SAR» del balón.

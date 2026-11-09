@@ -856,3 +856,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Los errores de programa quedan **registrados internamente** (Directorio de errores) y **la campana de avisos los muestra** (últimos 3 días, con veces y usuario) para administración.
 - El correo por error sale **solo a matias.bustos@cormumel.cl** y como máximo **1 por día por equipo** (antes 3, a los tres destinatarios).
 - **Hoja de picking** también en la lista de actas emitidas, junto a «Ver acta» (además de dentro del acta).
+
+### 4.154 Hojas de picking: foto por inventario y logo del Visor (v21.100)
+- La foto del producto se busca con **todos los nombres y códigos disponibles**: el del acta, el del inventario (por id del producto o por nombre) y el físico. Antes solo usaba el nombre/código escrito en el acta, por eso un producto con foto en Existencias (p. ej. la sabanilla) salía «sin foto» si el acta tenía la descripción de la orden de compra.
+- El encabezado de las hojas de picking y de pendientes usa el **logo del Visor/SAR**, no el de la Corporación (que queda solo para documentos).
+- Se quitan el encabezado y pie automáticos del navegador al imprimir (fecha, «about:blank», paginación) con margen de página en 0 y relleno propio.

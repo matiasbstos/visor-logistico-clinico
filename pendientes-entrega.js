@@ -148,8 +148,8 @@
     /** Listado imprimible (con fotos) de lo que falta por entregar: una hoja por centro. */
     function imprimir(lista) {
         const IM = window.SAR_Imagenes, hoy = new Date().toLocaleDateString('es-CL');
-        const logo = new URL('assets/logo-corpo-melipilla.jpg', window.location.href).href;
-        const foto = (p) => { try { const e = IM && (IM.buscarConCandidata ? IM.buscarConCandidata(p.nombre, p.codigo) : IM.buscar(p.nombre, p.codigo)); const s = e && IM.src(e, 160); return s ? `<img src="${esc(s)}" alt="" referrerpolicy="no-referrer">` : '<span class="sf">sin foto</span>'; } catch (e) { return '<span class="sf">sin foto</span>'; } };
+        const logo = new URL('assets/logo-sar.png', window.location.href).href;
+        const foto = (p) => fotoMulti([p.nombre, p.insumoName], [p.codigo]);
         const hojas = (lista || []).filter(Boolean).map(g => `<section><header><img class="lg" src="${esc(logo)}" alt=""><div><h1>Productos pendientes de entrega</h1><h2>${esc(g.centro)}</h2><p>SAR Elsa Romo Arpillerista · ${esc(hoy)}</p></div></header>
             <table><thead><tr><th>Foto</th><th>Producto</th><th>ID</th><th class="n">Pendiente</th><th class="n">Disponible</th></tr></thead><tbody>
             ${g.items.map(p => `<tr><td class="f">${foto(p)}</td><td>${esc(p.nombre)}</td><td>${esc(p.codigo || '')}</td><td class="n"><b>${p.pendiente}</b></td><td class="n">${p.disponible}</td></tr>`).join('')}</tbody></table>
@@ -164,7 +164,7 @@
         .ck{width:26px}.ck i{display:inline-block;width:18px;height:18px;border:2px solid #333;border-radius:3px}.big{font-size:17px;font-weight:700}small{color:#555}
         .pk h1{font-size:24px}.pk h2{font-size:22px}.pk header p{font-size:15px}.pk .lg{height:54px}.pk th{font-size:15px;padding:6px 8px}.pk td{font-size:19px;font-weight:600;padding:8px 8px;border-bottom:2px solid #bbb}
         .pk td small{font-size:14px;font-weight:400}.pk .f{width:132px}.pk .f img{width:120px;height:120px}.pk .ck{width:44px}.pk .ck i{width:34px;height:34px;border-width:3px}.pk .big{font-size:46px;line-height:1}.pk .pie{font-size:16px;font-weight:700}
-        @page{margin:10mm}@media print{body{padding:0}}`;
+        @page{margin:0}@media print{body{padding:12mm}}`;
     function ventana(titulo, cuerpo) {
         const w = window.open('', '_blank'); if (!w) { toast('Ventana bloqueada', 'Permite las ventanas emergentes para imprimir.', 'warning'); return; }
         w.document.write(`<!doctype html><html lang="es"><head><meta charset="utf-8"><title>${esc(titulo)}</title><style>${CSS_DOC}</style></head><body>${cuerpo}<script>window.onload=function(){setTimeout(function(){window.print()},700)}<\/script></body></html>`);
@@ -173,8 +173,8 @@
     /** Hoja de picking: qué retirar de la bodega para cada centro, con foto, dónde está, lote y cantidad. */
     function picking(lista) {
         const IM = window.SAR_Imagenes, hoy = new Date().toLocaleDateString('es-CL');
-        const logo = new URL('assets/logo-corpo-melipilla.jpg', window.location.href).href;
-        const foto = (p) => { try { const e = IM && (IM.buscarConCandidata ? IM.buscarConCandidata(p.nombre, p.codigo) : IM.buscar(p.nombre, p.codigo)); const s = e && IM.src(e, 160); return s ? `<img src="${esc(s)}" alt="" referrerpolicy="no-referrer">` : '<span class="sf">sin foto</span>'; } catch (e) { return '<span class="sf">sin foto</span>'; } };
+        const logo = new URL('assets/logo-sar.png', window.location.href).href;
+        const foto = (p) => fotoMulti([p.nombre, p.insumoName], [p.codigo]);
         const dondeTxt = (p) => (p.donde || []).map(d => `${esc(d.bodega)}${d.ubicaciones && d.ubicaciones.length ? ' · <b>' + esc(d.ubicaciones.join(', ')) + '</b>' : ''} <small>(${d.cantidad})</small>`).join('<br>') || '—';
         const venceTxt = (p) => p.lote ? `${esc(p.lote.batch || 's/lote')}${p.lote.vence ? '<br><small>vence ' + esc(p.lote.vence) + '</small>' : ''}` : '—';
         const hojas = (lista || []).filter(Boolean).map(g => {
@@ -187,11 +187,22 @@
         }).join('');
         ventana('Hoja de picking', hojas);
     }
+    /** Foto de un producto probando varios nombres y códigos (el del acta, el del inventario y el físico): la hoja usa la misma foto que ve el personal en Existencias. */
+    function fotoMulti(nombres, codigos) {
+        const IM = window.SAR_Imagenes; if (!IM) return '<span class="sf">sin foto</span>';
+        const ns = [...new Set((nombres || []).filter(Boolean))], cs = [...new Set((codigos || []).filter(Boolean).map(String))];
+        const pares = []; ns.forEach(n => { cs.forEach(c => pares.push([n, c])); pares.push([n, '']); }); if (!ns.length) cs.forEach(c => pares.push(['', c]));
+        let e = null;
+        try { for (const [n, c] of pares) { e = IM.buscar(n, c); if (e) break; } if (!e && IM.buscarConCandidata) for (const [n, c] of pares) { e = IM.buscarConCandidata(n, c); if (e) break; } } catch (x) { e = null; }
+        const s = e && IM.src(e, 240);
+        return s ? `<img src="${esc(s)}" alt="" referrerpolicy="no-referrer">` : '<span class="sf">sin foto</span>';
+    }
     /** Hoja de picking de un acta ya emitida: qué se retiró (o se retira) de la bodega, con foto, lote(s) y cantidad. */
     function pickingActa(a) {
         if (!a || !(a.items || []).length) { toast('Hoja de picking', 'El acta no tiene productos.', 'warning'); return; }
-        const IM = window.SAR_Imagenes, logo = new URL('assets/logo-corpo-melipilla.jpg', window.location.href).href;
-        const foto = (i) => { try { const e = IM && (IM.buscarConCandidata ? IM.buscarConCandidata(i.nombre, i.codigoMP) : IM.buscar(i.nombre, i.codigoMP)); const s = e && IM.src(e, 160); return s ? `<img src="${esc(s)}" alt="" referrerpolicy="no-referrer">` : '<span class="sf">sin foto</span>'; } catch (e) { return '<span class="sf">sin foto</span>'; } };
+        const IM = window.SAR_Imagenes, logo = new URL('assets/logo-sar.png', window.location.href).href;
+        const cache = window.insumosDataCache || [];
+        const foto = (i) => { const ins = cache.find(x => x && x.id && x.id === i.id) || cache.find(x => x && x.name && norm(x.name) === norm(i.nombre)); return fotoMulti([i.nombre, ins && ins.name, i.fisico], [i.codigoMP, ins && (ins.codigoMP || ins.code)]); };
         const lotes = (i) => (i.lotes || []).length ? i.lotes.map(l => `${esc(l.batch || 's/lote')}${l.expirationDate ? ' <small>vence ' + esc(l.expirationDate) + '</small>' : ''} <small>(${num(l.quantity)})</small>`).join('<br>') : '—';
         const filas = a.items.filter(i => num(i.cantidad) > 0);
         const total = filas.reduce((t, i) => t + num(i.cantidad), 0);

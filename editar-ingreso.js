@@ -133,10 +133,24 @@
         const q = g('ei-cant');
         if (q === '' || !(Number(q) >= 0) || Math.floor(Number(q)) !== Number(q)) { err.textContent = 'La cantidad debe ser un número entero, 0 o mayor.'; return; }
         if (!up(g('ei-lote'))) { err.textContent = 'Indica el lote (o S/L si no tiene).'; return; }
+        const G = window.SAR_Gobernanza; let gob = null;
+        const cambiaStock = Math.floor(Number(q)) !== num(m.quantity) || up(g('ei-lote')) !== (m.batch || 'S/L') || (g('ei-vence') || '') !== soloFecha(m.expirationDate);
+        if (G && cambiaStock) {
+          b.disabled = true; err.textContent = 'Verificando…';
+          try {
+            const v = await G.puedeCorregir(m.insumoName || m.item);
+            if (!v.ok) { err.textContent = v.motivo + ' Para cambiar cantidad, lote o vencimiento usa Ajustes / Desajustes.'; b.disabled = false; return; }
+          } catch (e) { /* si no se puede verificar, se deja continuar con motivo */ }
+          err.textContent = ''; b.disabled = false;
+          const r = await G.pedirMotivo('¿Por qué corriges este ingreso?', esc(m.insumoName || m.item) + ': cantidad ' + num(m.quantity) + ' → ' + Math.floor(Number(q)) + '.');
+          if (!r) return;
+          gob = { ...r, codigo: await G.codigo('CAM') };
+        }
         b.disabled = true; err.textContent = '';
         try {
           await guardar(m, ins, { quantity: q, batch: g('ei-lote'), expirationDate: g('ei-vence'), fecha: g('ei-fecha'), provider: g('ei-prov').trim(), purchaseType: g('ei-compra').trim(), document: g('ei-doc').trim(), tipoInsumo: g('ei-tipo'), observations: g('ei-obs').trim() });
-          cerrar(); toast('Ingreso actualizado', 'Se corrigió el movimiento y el stock quedó ajustado.', 'success');
+          if (gob) await G.registrar({ nombre: m.insumoName || m.item, lote: up(g('ei-lote')), delta: Math.floor(Number(q)) - num(m.quantity), codigo: gob.codigo, motivo: gob.motivo, nota: gob.nota, origen: 'EDITAR_INGRESO', antes: { cantidad: num(m.quantity), lote: m.batch || '', vence: soloFecha(m.expirationDate) }, despues: { cantidad: Math.floor(Number(q)), lote: up(g('ei-lote')), vence: g('ei-vence') || '' }, insumoId: ins ? ins.id : '' });
+          cerrar(); toast('Ingreso actualizado', gob ? 'Código de seguimiento: ' + gob.codigo : 'Se corrigió el movimiento y el stock quedó ajustado.', 'success');
           // El Historial se actualiza solo (escucha en tiempo real); Existencias se recarga aquí
           if (typeof window.loadFirstPage === 'function') window.loadFirstPage();
           document.dispatchEvent(new CustomEvent('sar:ingreso-editado', { detail: { id } }));

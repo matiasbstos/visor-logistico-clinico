@@ -972,10 +972,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         const isSuperAdmin = userRole === 'superadmin';
 
+                        let codigoGob = null, justificacionFinal = justificacion;
+                        if (window.SAR_Gobernanza) {
+                            const r = await window.SAR_Gobernanza.pedirMotivo('Motivo del ajuste', `${window.escapeHTML(insumoNombre)}: ${stockActual} → ${nuevoStock}.`);
+                            if (!r) return;
+                            codigoGob = await window.SAR_Gobernanza.codigo('AJU');
+                            justificacionFinal = `[${r.motivo}${r.nota ? ' - ' + r.nota : ''}] ${justificacion}`;
+                            if (isSuperAdmin) window.SAR_Gobernanza.registrar({ nombre: insumoNombre, delta: cantidadParsed, codigo: codigoGob, motivo: r.motivo, nota: r.nota, origen: 'AJUSTE', antes: { cantidad: stockActual }, despues: { cantidad: nuevoStock }, insumoId: docId }).catch(() => {});
+                        }
+
                         try {
                             if (isSuperAdmin) {
                                 // Ejecutar directamente
-                                const res = await window.ejecutarAjusteDirecto(docId, stockActual, insumoNombre, cantidadParsed, justificacion);
+                                const res = await window.ejecutarAjusteDirecto(docId, stockActual, insumoNombre, cantidadParsed, justificacionFinal, codigoGob);
                                 window.showAlertCenter("Notificación", `¡AJUSTE REALIZADO CON ÉXITO!\nCÓDIGO DE AUDITORÍA: ${res.codigoAjuste}`);
                                 
                                 // Correo de respaldo
@@ -983,13 +992,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                 window.location.href = `mailto:visor@tudominio.com?subject=Ajuste Critico ${res.codigoAjuste}&body=${encodeURIComponent(mailBody)}`;
                             } else {
                                 // Solicitar Aprobación
-                                const code = "ADJ-" + Math.floor(10000 + Math.random() * 90000);
+                                const code = codigoGob || ("ADJ-" + Math.floor(10000 + Math.random() * 90000));
                                 await addDoc(collection(db, 'Solicitudes_Ajuste'), {
                                     code: code,
                                     insumoId: docId,
                                     insumoName: insumoNombre,
                                     cantidad: cantidadParsed,
-                                    justificacion: justificacion,
+                                    justificacion: justificacionFinal,
                                     previousStock: stockActual,
                                     projectedStock: nuevoStock,
                                     status: "pendiente",
@@ -4281,6 +4290,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         if (docSnap.exists()) {
                             const data = docSnap.data();
+                            window.__editOriginal = data;
                             // Poblar formulario
                             document.getElementById('edit-doc-id').value = docId;
                             document.getElementById('edit-code').value = data.codigoSAR || '';
@@ -4409,6 +4419,26 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
                 { const so = document.getElementById('edit-location'), op = so && so.selectedOptions[0]; if (op && op.dataset.id) updatedData.bodegaId = op.dataset.id; }
 
+                // Gobernanza: cambios de cantidad, lote, vencimiento o bodega exigen motivo y dejan código de seguimiento
+                let gob = null;
+                if (window.SAR_Gobernanza && window.__editOriginal) {
+                    const o = window.__editOriginal, G = window.SAR_Gobernanza;
+                    const ln = (a) => (a || []).map(b => `${String(b.batch || '').trim().toUpperCase()}|${Number(b.quantity) || 0}|${((d) => d && !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : '')(SAR_Utils.parseDate(b.expirationDate))}`).sort().join(';');
+                    const antesL = ln(Array.isArray(o.batches) && o.batches.length ? o.batches : [{ batch: o.batch, quantity: o.quantity, expirationDate: o.expirationDate }]);
+                    const despL = ln(updatedData.batches || [{ batch: updatedData.batch, quantity: updatedData.quantity, expirationDate: updatedData.expirationDate }]);
+                    const cambiaStock = Number(o.quantity || 0) !== updatedData.quantity || antesL !== despL;
+                    const cambiaBodega = String(o.location || '') !== updatedData.location;
+                    if (cambiaStock || cambiaBodega) {
+                        if (cambiaStock) {
+                            const v = await G.puedeCorregir(o.name || updatedData.name);
+                            if (!v.ok) { window.showAlertCenter('Corrección directa cerrada', `${v.motivo}\n\nPara cambiar cantidad, lote o vencimiento usa Ajustes / Desajustes (pide motivo y genera código).`); return; }
+                        }
+                        const r = await G.pedirMotivo('¿Por qué haces este cambio?', `${window.escapeHTML(o.name || '')}: ${cambiaStock ? 'cantidad / lote / vencimiento' : ''}${cambiaStock && cambiaBodega ? ' y ' : ''}${cambiaBodega ? 'bodega' : ''}.`);
+                        if (!r) return;
+                        gob = { ...r, codigo: await G.codigo('CAM'), antes: { cantidad: Number(o.quantity || 0), lote: o.batch || '', vence: String(o.expirationDate || ''), bodega: o.location || '' }, despues: { cantidad: updatedData.quantity, lote: updatedData.batch || '', vence: String(updatedData.expirationDate || ''), bodega: updatedData.location } };
+                    }
+                }
+
                 btn.innerHTML = '<i class="ph-spinner ph-spin"></i> GUARDANDO...';
                 btn.disabled = true;
 
@@ -4424,10 +4454,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         user: auth.currentUser?.email || 'Admin',
                         batch: updatedData.batch || 'S/L',
                         quantity: 0,
-                        document: 'EDICION-MANUAL'
+                        document: gob ? gob.codigo : 'EDICION-MANUAL'
                     });
+                    if (gob) await window.SAR_Gobernanza.registrar({ nombre: updatedData.name, lote: updatedData.batch, delta: gob.despues.cantidad - gob.antes.cantidad, codigo: gob.codigo, motivo: gob.motivo, nota: gob.nota, origen: 'EDITAR_INSUMO', antes: gob.antes, despues: gob.despues, insumoId: docId });
 
-                    showToast('Éxito', 'Insumo actualizado y auditoría registrada.', 'success');
+                    showToast('Éxito', gob ? `Insumo actualizado. Código de seguimiento: ${gob.codigo}` : 'Insumo actualizado y auditoría registrada.', 'success');
 
                     // Cerrar modal
                     const modal = document.getElementById('modal-edit-insumo');

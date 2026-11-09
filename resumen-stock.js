@@ -25,6 +25,7 @@
             const qty = num(it.quantity !== undefined ? it.quantity : it.totalAcumulado, 0), lim = num(it.criticalLimit !== undefined && it.criticalLimit !== '' ? it.criticalLimit : it.stock_minimo, 50);
             const nombre = String(it.name || it.insumoName || '').trim(); if (!nombre) return;
             if (qty <= lim) r.criticos.push({ nombre, cantidad: qty, minimo: lim, bodega: it.location || '' });
+            else if (window.SAR_LotesAlertas) { const a = window.SAR_LotesAlertas.analizar(it, hoy); if (a.criticoUtil) r.criticos.push({ nombre, cantidad: a.util, minimo: lim, bodega: it.location || '', vigente: true }); }
             const lotes = (Array.isArray(it.batches) && it.batches.length) ? it.batches.map(l => ({ batch: l.batch, vence: l.expirationDate, quantity: num(l.quantity, 0) })) : [{ batch: it.batch, vence: it.expirationDate, quantity: qty }];
             lotes.forEach(l => {
                 if (!(l.quantity > 0)) return; const d = parseFecha(l.vence); if (!d) return;
@@ -41,7 +42,7 @@
         const f = [];
         r.vencidos.slice(0, MAX_FILAS).forEach(x => f.push({ nombre: x.nombre, cantidad: x.cantidad, extra: `VENCIDO hace ${-x.dias} d (${x.vence})${x.lote ? ' · lote ' + x.lote : ''}${x.bodega ? ' · ' + x.bodega : ''}` }));
         r.urgentes.slice(0, MAX_FILAS).forEach(x => f.push({ nombre: x.nombre, cantidad: x.cantidad, extra: `Vence en ${x.dias} d (${x.vence})${x.lote ? ' · lote ' + x.lote : ''}${x.bodega ? ' · ' + x.bodega : ''}` }));
-        r.criticos.slice(0, MAX_FILAS).forEach(x => f.push({ nombre: x.nombre, cantidad: x.cantidad, extra: `Bajo el mínimo (${x.minimo})${x.bodega ? ' · ' + x.bodega : ''}` }));
+        r.criticos.slice(0, MAX_FILAS).forEach(x => f.push({ nombre: x.nombre, cantidad: x.cantidad, extra: `${x.vigente ? 'Stock vigente (sin lotes vencidos ni por vencer) bajo el mínimo' : 'Bajo el mínimo'} (${x.minimo})${x.bodega ? ' · ' + x.bodega : ''}` }));
         return f;
     }
     async function revisar() {

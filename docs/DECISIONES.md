@@ -980,3 +980,10 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - **Editar insumo (Existencias):** vuelve el **Tipo de insumo** (médico / aseo / oficina) y la ubicación pasa a ser una lista de **Bodegas** reales (cambia `location`, `bodegaNombre` y `bodegaId`). El **Código (SKU)** deja de ser obligatorio: ya se pueden guardar productos sin código.
 - **Un stock por producto y bodega, desglosado por lote:** cada lote guarda también su **proveedor** (`batches[].provider`), de modo que un mismo producto de distintos proveedores/lotes/vencimientos se suma en un solo stock y Existencias muestra el desglose «lote | cant | vto | proveedor». El proveedor se conserva al entregar (FEFO), al editar lotes y al editar un ingreso.
 - **Datos (09-11-2026):** se unificaron los productos repetidos creados antes de 4.178 (misma bodega y nombre): aerocámara ×4, guante M ×2, guante S ×2 y guante L ×2 (este con el nombre mal escrito «DE NITRILO»). Cada uno quedó en un solo documento con sus lotes y proveedores; el lote KR239530 (20 + 60) quedó sumado. Los movimientos del Historial apuntan al documento unificado.
+
+## 4.180 Alertas por lote en Existencias y en el resumen diario (v21.126)
+- Nuevo `lotes-alertas.js` (lógica pura, con prueba): cada lote del desglose se clasifica por vencimiento — **vencido**, **urgente** (≤ 30 días), **precaución** (31–90 días) u ok — con los mismos umbrales del resumen diario por correo.
+- **Existencias:** cada lote se pinta según su estado y dice «VENCIDO hace N d» o «Vence en N d». La fila se marca en rojo si hay un lote vencido o por vencer, o si el stock está bajo el mínimo.
+- **Stock vigente crítico:** si el total supera el mínimo pero lo que queda **vigente** (sin lotes vencidos ni por vencer en 30 días) está en el mínimo o bajo él, el producto también se marca crítico y se avisa «Stock vigente bajo el mínimo: X u.».
+- **Resumen diario (correo):** incluye esos productos como críticos por stock vigente (además de los vencidos, por vencer y bajo mínimo que ya traía).
+- Pendiente de decidir con el usuario: si además quiere un mínimo propio por lote (hoy el mínimo es del producto).

@@ -3270,8 +3270,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 const tr = document.createElement('tr');
 
                 // Evaluación dinámica (Usando la metadata robusta definida en el JSON)
-                const isCritical = item.quantity <= (item.criticalLimit || 50);
-                if (isCritical) tr.classList.add('table-row-danger');
+                const _al = window.SAR_LotesAlertas ? window.SAR_LotesAlertas.analizar(_data) : null;
+                const isCritical = item.quantity <= (item.criticalLimit || 50) || !!(_al && _al.criticoUtil);
+                if (isCritical || (_al && (_al.peor === 'vencido' || _al.peor === 'urgente'))) tr.classList.add('table-row-danger');
 
                 const totalValue = (item.quantity || 0) * (item.unitPrice || 0);
                 const formattedTotal = '$' + totalValue.toLocaleString('es-CL');
@@ -3328,12 +3329,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 // ==============================
                 let batchesMarkup = '';
                 if (item.batches && Array.isArray(item.batches) && item.batches.length > 0) {
-                    item.batches.forEach(b => {
-                        const bExp = formatDate(b.expirationDate);
-                        batchesMarkup += `<div class="${categoryClass}" style="font-size:10px; margin-bottom:2px;">
-                            <strong>${window.escapeHTML(b.batch)}</strong> | Cant: ${b.quantity} | Vto: ${bExp}${b.provider && b.provider !== 'S/I' ? ' | ' + window.escapeHTML(String(b.provider).trim()) : ''}
+                    const _lotesAl = _al ? _al.lotes : [];
+                    item.batches.forEach((b, bi) => {
+                        const bExp = formatDate(b.expirationDate), la = _lotesAl[bi] && _lotesAl[bi].batch === (b.batch || 'S/L') ? _lotesAl[bi] : null;
+                        const col = la ? ({ vencido: 'var(--danger, #dc2626)', urgente: '#ea580c', precaucion: '#b45309' }[la.nivel] || '') : '';
+                        const tag = la && la.nivel !== 'ok' && la.nivel !== 'sin_fecha' ? ` <b style="color:${col};">⚠ ${window.SAR_LotesAlertas.etiqueta(la)}</b>` : '';
+                        batchesMarkup += `<div class="${categoryClass}" style="font-size:10px; margin-bottom:2px;${col ? ' color:' + col + ';' : ''}">
+                            <strong>${window.escapeHTML(b.batch)}</strong> | Cant: ${b.quantity} | Vto: ${bExp}${b.provider && b.provider !== 'S/I' ? ' | ' + window.escapeHTML(String(b.provider).trim()) : ''}${tag}
                         </div>`;
                     });
+                    if (_al && _al.criticoUtil) batchesMarkup += `<div style="font-size:10px; font-weight:700; color:var(--danger, #dc2626);">⚠ Stock vigente bajo el mínimo: ${_al.util} u. (mínimo ${_al.minimo})</div>`;
                 } else {
                     batchesMarkup = `<div class="${categoryClass}">LOTE: ${window.escapeHTML(item.batch) || 'N/A'}</div><div class="${categoryClass}">Vto: ${visualExpDate}</div>`;
                 }

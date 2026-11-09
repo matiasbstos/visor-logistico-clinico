@@ -168,6 +168,7 @@ window.escapeHTML = function (str) {
 };
 
 const ROLES_SISTEMA = [
+    { id: 'transitoria', label: 'Solo Bodega transitoria (conteo)' },
     { id: 'enfermero', label: 'Enfermero (Gestión de Bandejas)' },
     { id: 'operador', label: 'Administrador de Bodega' },
     { id: 'administrador', label: 'Administrador (Inventario)' },

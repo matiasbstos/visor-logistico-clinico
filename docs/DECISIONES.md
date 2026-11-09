@@ -906,3 +906,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Barrera real (`firestore.rules`): `isTransitoria()` solo puede actualizar en Insumos los campos `ubicacionEstante` y `updatedAt`, y leer `Contadores` con prefijo `transitoria-`. Lee Insumos/Bodegas como cualquier rol con perfil.
 - Un rol desconocido caía como «operador»; `transitoria` ahora está reconocido explícitamente para que no ocurra.
 - Lo contado que ella cargue desde la planilla es solo visual (no se guarda); el conteo oficial y los descuentos los cierra el administrador.
+
+## 4.164 · El rol «transitoria» faltaba en la lista real de roles (v21.110)
+- El formulario «Nuevo Usuario» arma el selector desde `ROLES_SISTEMA` (script.js), no desde el HTML; se agregó `transitoria` ahí. Con v21.109 la opción no aparecía.

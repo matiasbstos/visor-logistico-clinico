@@ -3178,6 +3178,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     // We only do exact match if not 'all'. But categories can be flexible.
                     if (catFilter === 'Insumo Médico' && !cat.toLowerCase().includes('insumo')) return false;
                     if (catFilter === 'Medicamento' && !cat.toLowerCase().includes('medicamento')) return false;
+                    if (catFilter !== 'Insumo Médico' && catFilter !== 'Medicamento') {
+                        const nz = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+                        if (nz(cat) !== nz(catFilter)) return false;
+                    }
                 }
                 if (statFilter !== 'all') {
                     const qty = Number(data.physicalCount || data.quantity || data.cantidad || 0);
@@ -3486,6 +3490,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
         });
+
+        // Categorías (v21.129): el filtro de Existencias y el formulario de Ingresos usan la lista compartida
+        (async () => {
+            const esperar = () => new Promise(ok => { const t = setInterval(() => { if (window.SAR_Categorias && window.firebaseDb) { clearInterval(t); ok(); } }, 400); });
+            await esperar();
+            try {
+                const f = document.getElementById('inv-filter-category');
+                if (f) { const v = f.value; await window.SAR_Categorias.llenar(f, v === 'all' ? '' : v, { todas: 'Todas las Categorías', sinCrear: true }); f.value = v || 'all'; }
+                await window.SAR_Categorias.llenar(document.getElementById('movimiento-categoria'), 'General', {});
+            } catch (e) { /* las listas quedan como estaban */ }
+        })();
 
         async function handleManualSearch(text) {
             if (!inventoryTableBody) return;
@@ -4271,7 +4286,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             document.getElementById('edit-code').value = data.codigoSAR || '';
                             { const mp = document.getElementById('edit-codigoMP'); if (mp) mp.value = data.codigoMP || ''; }
                             document.getElementById('edit-name').value = data.name || '';
-                            document.getElementById('edit-category').value = data.category || '';
+                            if (window.SAR_Categorias) await window.SAR_Categorias.llenar(document.getElementById('edit-category'), data.category || data.categoria || 'General', {});
                             document.getElementById('edit-quantity').value = data.quantity || 0;
                             document.getElementById('edit-unitPrice').value = data.unitPrice || 0;
                             document.getElementById('edit-criticalLimit').value = data.criticalLimit || 50;
@@ -4372,8 +4387,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     nombre: rawData.name.trim(),
                     descripcion: rawData.name.trim(),
                     name_lowercase: rawData.name.trim().toLowerCase(), // Crucial para el buscador
-                    category: rawData.category.trim() || "General",
-                    categoria: rawData.category.trim() || "General",
+                    category: (rawData.category && rawData.category !== '__nueva__' ? rawData.category.trim() : '') || "General",
+                    categoria: (rawData.category && rawData.category !== '__nueva__' ? rawData.category.trim() : '') || "General",
                     quantity: Number(rawData.quantity),
                     cantidad: Number(rawData.quantity),
                     unitPrice: Number(rawData.unitPrice),
@@ -4710,6 +4725,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     // v21.128: código SAR del producto (y ID de Mercado Público opcional para la foto del catálogo)
+                    const categoriaSel = (() => { const v = String((document.getElementById('movimiento-categoria') || {}).value || '').trim(); return v && v !== '__nueva__' ? v : 'General'; })();
                     const codigoSAR = window.SAR_CodigoSAR ? await window.SAR_CodigoSAR.asignar(nombreInput.trim()) : '';
                     const codigoMP = String((document.getElementById('movimiento-codigoMP') || {}).value || '').replace(/\D/g, '');
 
@@ -4737,7 +4753,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 ...(codigoMP ? { codigoMP } : {}),
                                 origenOC: true,   // v21.124: sin esta marca la fase «solo OC» lo ocultaba de Existencias
                                 name_lowercase: nombreInput.trim().toLowerCase(),
-                                category: 'General',
+                                category: categoriaSel,
                                 location: destinoNombre,
                                 bodegaNombre: destinoNombre,
                                 ...(destinoId ? { bodegaId: destinoId } : {}),
@@ -4782,6 +4798,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 provider: data.providerId || insumoSnap.data().provider,
                                 purchaseType: data.purchaseType || insumoSnap.data().purchaseType,
                                 ...(!dataAnterior.codigoSAR && codigoSAR ? { codigoSAR } : {}),
+                                ...((!dataAnterior.category || dataAnterior.category === 'General') && categoriaSel !== 'General' ? { category: categoriaSel } : {}),
                                 ...(!dataAnterior.codigoMP && codigoMP ? { codigoMP } : {}),
                                 // El tipo de un insumo ya clasificado no se cambia desde un ingreso
                                 tipoInsumo: dataAnterior.tipoInsumo || (['medico', 'aseo', 'oficina'].includes(data.tipoInsumo) ? data.tipoInsumo : 'medico'),

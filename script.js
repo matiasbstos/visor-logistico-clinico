@@ -4518,6 +4518,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     const snap = await getDocs(query(collection(db, 'Insumos'), orderBy('name', 'asc')));
                     window.insumosDataCache = []; const nombres = new Set();
                     snap.forEach(d => { const x = d.data(); if (x.name) { window.insumosDataCache.push({ id: d.id, ...x }); nombres.add(String(x.name).trim()); } });
+                    // Nombres ya ingresados antes (aunque el producto no haya quedado en Existencias) y los escritos en este equipo
+                    try {
+                        const hs = await getDocs(query(collection(db, 'Historial_Movimientos'), where('type', '==', 'INGRESO_PROVEEDOR'), limit(400)));
+                        hs.forEach(d => { const n = String(d.data().insumoName || '').trim(); if (n) nombres.add(n); });
+                    } catch (_) { /* opcional */ }
+                    try { JSON.parse(localStorage.getItem('sar_nombres_ingreso') || '[]').forEach(n => { if (n) nombres.add(String(n)); }); } catch (_) { /* opcional */ }
                     try {
                         const cs = await getDocs(collection(db, 'Catalogo_Productos'));
                         cs.forEach(d => { const n = String(d.data().descripcion || '').trim(); if (n) nombres.add(n.toUpperCase()); });
@@ -4625,6 +4631,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const formattedDate = _expD
                     ? `${_expD.getFullYear()}-${String(_expD.getMonth() + 1).padStart(2, '0')}-${String(_expD.getDate()).padStart(2, '0')}`
                     : "N/A";
+
+                // Recuerda el nombre escrito en este equipo para sugerirlo la próxima vez, se guarde o no el ingreso
+                try {
+                    const mem = JSON.parse(localStorage.getItem('sar_nombres_ingreso') || '[]').filter(n => n.toLowerCase() !== nombreInput.trim().toLowerCase());
+                    mem.unshift(nombreInput.trim()); localStorage.setItem('sar_nombres_ingreso', JSON.stringify(mem.slice(0, 300)));
+                    const dl = document.getElementById('lista-insumos');
+                    if (dl) { const o = document.createElement('option'); o.value = nombreInput.trim(); dl.prepend(o); }
+                } catch (_) { /* sin almacenamiento local */ }
 
                 btn.innerHTML = '<i class="ph-spinner ph-spin"></i> PROCESANDO...';
                 btn.disabled = true;

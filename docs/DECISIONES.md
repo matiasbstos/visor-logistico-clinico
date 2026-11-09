@@ -947,3 +947,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.173 · Verificación del ingreso (v21.119)
 - Al revisar producción (09-11 ~16:30) se encontraron 3 movimientos `INGRESO_PROVEEDOR` en el historial (bata quirúrgica, catéter 1 1/4, mascarilla 2R) sin su documento en `Insumos`, aunque el guardado escribe ambos en una sola transacción. Causa no determinada (el código revisado es correcto; no hay eliminaciones registradas en el historial). Pendiente confirmar con el usuario si se borraron a mano.
 - Tras guardar, el ingreso relee el insumo y avisa con un mensaje de error si no existe, para detectar el problema en el momento.
+
+## 4.174 · Las sugerencias de nombre recuerdan lo ya ingresado (v21.120)
+- La lista de sugerencias de Ingresos suma, además de Existencias y Catálogo, los nombres de ingresos anteriores del Historial (aunque el producto no haya quedado en Existencias) y los nombres escritos en este equipo (localStorage `sar_nombres_ingreso`, máx. 300). El nombre se recuerda al enviar el formulario, se guarde o no el ingreso.

@@ -61,3 +61,20 @@ t('vida del producto: junta orden, recepción, acta y salida en orden cronológi
   assert.strictEqual(r.eventos[0].clase, 'oc'); assert.ok(r.eventos[0].detalle.includes('memo 77')); assert.ok(r.eventos.some(e => e.titulo.startsWith('Recepción REC-1'))); assert.ok(r.eventos.some(e => /firmada, stock descontado/.test(e.detalle))); assert.strictEqual(r.stock[0].cant, 10); assert.ok(r.eventos.findIndex(e => e.clase === 'oc') < r.eventos.findIndex(e => e.clase === 'sal')); });
 Promise.all(tAsync).then(() => {
 console.log(`\n${n} ok, ${mal} con falla`); process.exit(mal ? 1 : 0); });
+
+// ---- Bodega transitoria (v21.107)
+(function () {
+  const T = require('../bodega-transitoria.js'), assert = require('assert');
+  let r = T.calcularFila({ objetivo: 10, sistema: 10, contado: 5, central: 100 });
+  assert.deepStrictEqual([r.estado, r.faltante, r.reponer, r.reponible], ['faltante', 5, 5, 5]);
+  r = T.calcularFila({ objetivo: 10, sistema: 8, contado: 9, central: 0 });
+  assert.deepStrictEqual([r.estado, r.sobrante, r.reponer, r.reponible], ['sobrante', 1, 1, 0]);
+  assert.strictEqual(T.calcularFila({ objetivo: 10, sistema: 3, contado: '' }).estado, 'pendiente');
+  const rp = T.repartir([{ id: 'a', quantity: 3 }, { id: 'b', quantity: 10 }], 5);
+  assert.deepStrictEqual(rp.partes, [{ id: 'a', quitar: 3 }, { id: 'b', quitar: 2 }]);
+  assert.strictEqual(T.repartir([{ id: 'a', quantity: 1 }], 4).sinCubrir, 3);
+  const l = T.sumarLotes([{ batch: 'L1', quantity: 2, expirationDate: '2027-01-01' }], [{ batch: 'L1', quantity: 3, expirationDate: '2027-01-01' }, { batch: 'L2', quantity: 1 }]);
+  assert.strictEqual(l.length, 2); assert.strictEqual(l[0].quantity, 5);
+  assert.strictEqual(T.claveDe('Suero', '12345'), '12345');
+  console.log('ok bodega transitoria');
+})();

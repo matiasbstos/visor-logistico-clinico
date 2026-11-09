@@ -887,3 +887,10 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Nueva pestaña en **Informes**: se busca un producto por **ID o nombre** y se arma su recorrido cronológico: orden de compra (con memo/SDC/CDP), recepciones, ingresos a bodega, traspasos, actas de entrega (por confirmar, firmadas o anuladas), salidas con descuento de stock, mermas y ajustes, más el **stock actual por bodega y lote**. Arriba, indicadores: pedido, recibido, entregado por actas, reservado (por confirmar), mermas y stock actual.
 - Solo lectura. Une las fuentes por **código MP** o **nombre** (incluye los alias del catálogo). Un movimiento puede aparecer dos veces con distinto enfoque (p. ej. «Recepción de la orden» y «Ingreso a bodega»): es el mismo hecho visto desde la orden y desde el inventario.
 - Límite: lee las últimas 400 actas y hasta 600 movimientos del producto.
+
+## 4.161 · Bodega transitoria: disposición, conteo diario y reposición (v21.107)
+- Nueva vista «Bodega transitoria» (`bodega-transitoria.js`). Por cada bodega de tipo transitoria se define la **disposición** (stock objetivo) por producto (ej. suero: 10). Se guarda en `Contadores/transitoria-obj-<bodegaId>`.
+- **Conteo matinal**: se ingresa lo contado; Faltante = sistema − contado, Sobrante = contado − sistema (solo se avisa), Reponer = disposición − contado (limitado al stock de Bodega Central).
+- **Cerrar conteo** (transacción, una vez al día, `Contadores/transitoria-conteo-<bodega>-<fecha>`): el faltante se descuenta del stock total por lote que vence primero y queda en Historial como `TRANSITORIA_FALTANTE`.
+- **Reponer desde Central** (transacción): traspaso FEFO Central → transitoria, Historial `traspaso` con documento `REPOSICION-…`.
+- Sin reglas nuevas (usa Contadores). Pruebas de la lógica pura añadidas a `tests/unidad.js`.

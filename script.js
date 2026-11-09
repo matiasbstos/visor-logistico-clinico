@@ -3331,7 +3331,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     item.batches.forEach(b => {
                         const bExp = formatDate(b.expirationDate);
                         batchesMarkup += `<div class="${categoryClass}" style="font-size:10px; margin-bottom:2px;">
-                            <strong>${window.escapeHTML(b.batch)}</strong> | Cant: ${b.quantity} | Vto: ${bExp}
+                            <strong>${window.escapeHTML(b.batch)}</strong> | Cant: ${b.quantity} | Vto: ${bExp}${b.provider && b.provider !== 'S/I' ? ' | ' + window.escapeHTML(String(b.provider).trim()) : ''}
                         </div>`;
                     });
                 } else {
@@ -4245,7 +4245,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             document.getElementById('edit-criticalLimit').value = data.criticalLimit || 50;
                             document.getElementById('edit-batch').value = data.batch || '';
                             window.__editLotes = (Array.isArray(data.batches) && data.batches.length ? data.batches : [{ batch: data.batch || '', quantity: Number(data.quantity) || 0, expirationDate: data.expirationDate || '' }])
-                                .map(b => { const d = SAR_Utils.parseDate(b.expirationDate); return { batch: b.batch || '', quantity: Number(b.quantity) || 0, expirationDate: (d && !isNaN(d.getTime())) ? d.toISOString().split('T')[0] : '' }; });
+                                .map(b => { const d = SAR_Utils.parseDate(b.expirationDate); return { batch: b.batch || '', quantity: Number(b.quantity) || 0, expirationDate: (d && !isNaN(d.getTime())) ? d.toISOString().split('T')[0] : '', ...(b.provider ? { provider: b.provider } : {}) }; });
                             window.__pintarEditLotes();
                             document.getElementById('edit-status').value = data.status || 'ACTIVO';
 
@@ -4261,7 +4261,18 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                             document.getElementById('edit-expirationDate').value = rawDate;
 
-                            document.getElementById('edit-location').value = data.location || '';
+                            // v21.125: tipo de insumo y bodega (lista de bodegas reales) en la edición
+                            const selTipo = document.getElementById('edit-tipoInsumo'); if (selTipo) selTipo.value = ['medico', 'aseo', 'oficina'].includes(data.tipoInsumo) ? data.tipoInsumo : 'medico';
+                            const selBod = document.getElementById('edit-location');
+                            if (selBod) {
+                                const actual = String(data.location || data.ubicacion || 'Bodega Central').trim();
+                                let nombres = [];
+                                try { const bs = await getDocs(collection(db, 'Bodegas')); bs.forEach(b => { const x = b.data(); if (x.isActive !== false) nombres.push({ n: String(x.name || x.nombre || '').trim(), id: b.id }); }); } catch (e) { /* sin lista */ }
+                                nombres = nombres.filter(x => x.n);
+                                if (!nombres.some(x => x.n.toLowerCase() === actual.toLowerCase())) nombres.unshift({ n: actual, id: data.bodegaId || '' });
+                                selBod.innerHTML = nombres.map(x => `<option value="${window.escapeHTML(x.n)}" data-id="${window.escapeHTML(x.id)}">${window.escapeHTML(x.n)}</option>`).join('');
+                                const hit = nombres.find(x => x.n.toLowerCase() === actual.toLowerCase()); selBod.value = hit ? hit.n : actual;
+                            }
 
                             // Abrir modal (usando el motor centralizado)
                             const modal = document.getElementById('modal-edit-insumo');
@@ -4293,7 +4304,7 @@ document.addEventListener('DOMContentLoaded', () => {
         window.__lotesEditados = function () {
             const L = (window.__editLotes || []).filter(b => (b.batch || '').trim() || Number(b.quantity) > 0);
             if (!L.length) return {};
-            const batches = L.map(b => ({ batch: (b.batch || '').trim().toUpperCase() || 'S/L', quantity: Math.max(0, Math.floor(Number(b.quantity) || 0)), expirationDate: b.expirationDate || '' }));
+            const batches = L.map(b => ({ batch: (b.batch || '').trim().toUpperCase() || 'S/L', quantity: Math.max(0, Math.floor(Number(b.quantity) || 0)), expirationDate: b.expirationDate || '', ...(b.provider ? { provider: b.provider } : {}) }));
             const orden = batches.slice().sort(window.fefoCompare), p = orden[0];
             return { batches, quantity: batches.reduce((t, b) => t + b.quantity, 0), cantidad: batches.reduce((t, b) => t + b.quantity, 0), batch: p.batch, lote: p.batch, expirationDate: p.expirationDate, vencimiento: p.expirationDate, fechaVencimiento: p.expirationDate };
         };
@@ -4323,8 +4334,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 // Transformación y Limpieza de datos (Senior Standards)
                 const updatedData = {
-                    code: rawData.code.trim(),
-                    codigo: rawData.code.trim(),
+                    code: (rawData.code || '').trim(),
+                    codigo: (rawData.code || '').trim(),
                     name: rawData.name.trim(),
                     nombre: rawData.name.trim(),
                     descripcion: rawData.name.trim(),
@@ -4345,8 +4356,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     ...(window.__lotesEditados ? window.__lotesEditados() : {}),
                     location: rawData.location.trim() || "Sin asignar",
                     ubicacion: rawData.location.trim() || "Sin asignar",
+                    bodegaNombre: rawData.location.trim() || "Sin asignar",
+                    ...(['medico', 'aseo', 'oficina'].includes(rawData.tipoInsumo) ? { tipoInsumo: rawData.tipoInsumo } : {}),
                     status: rawData.status || "ACTIVO"
                 };
+                { const so = document.getElementById('edit-location'), op = so && so.selectedOptions[0]; if (op && op.dataset.id) updatedData.bodegaId = op.dataset.id; }
 
                 btn.innerHTML = '<i class="ph-spinner ph-spin"></i> GUARDANDO...';
                 btn.disabled = true;
@@ -4675,7 +4689,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 batches: [{
                                     batch: cleanBatch,
                                     quantity: quantity,
-                                    expirationDate: formattedDate
+                                    expirationDate: formattedDate,
+                                    provider: data.providerId || 'S/I'
                                 }],
                                 batch: cleanBatch, // Mantenemos por retrocompatibilidad UI temporal
                                 expirationDate: formattedDate,
@@ -4715,7 +4730,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                 currentBatches.push({
                                     batch: cleanBatch,
                                     quantity: quantity,
-                                    expirationDate: formattedDate
+                                    expirationDate: formattedDate,
+                                    provider: data.providerId || 'S/I'
                                 });
                             }
 

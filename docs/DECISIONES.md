@@ -975,3 +975,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - **Código:** los productos nuevos creados desde Ingresos y los recreados al editar un ingreso se guardan con `origenOC: true`.
 - **Traslado a «Bodega CAM» de 4.177:** al renombrar la bodega solo se movieron los 30 productos visibles (los demás Central estaban ocultos por la fase y quedaron intactos).
 - **Nota:** los 140 productos antiguos de Central con stock 0 siguen ocultos por la fase (no se tocaron).
+
+## 4.179 Editar insumo: tipo de insumo y bodega; código opcional; proveedor por lote (v21.125)
+- **Editar insumo (Existencias):** vuelve el **Tipo de insumo** (médico / aseo / oficina) y la ubicación pasa a ser una lista de **Bodegas** reales (cambia `location`, `bodegaNombre` y `bodegaId`). El **Código (SKU)** deja de ser obligatorio: ya se pueden guardar productos sin código.
+- **Un stock por producto y bodega, desglosado por lote:** cada lote guarda también su **proveedor** (`batches[].provider`), de modo que un mismo producto de distintos proveedores/lotes/vencimientos se suma en un solo stock y Existencias muestra el desglose «lote | cant | vto | proveedor». El proveedor se conserva al entregar (FEFO), al editar lotes y al editar un ingreso.
+- **Datos (09-11-2026):** se unificaron los productos repetidos creados antes de 4.178 (misma bodega y nombre): aerocámara ×4, guante M ×2, guante S ×2 y guante L ×2 (este con el nombre mal escrito «DE NITRILO»). Cada uno quedó en un solo documento con sus lotes y proveedores; el lote KR239530 (20 + 60) quedó sumado. Los movimientos del Historial apuntan al documento unificado.

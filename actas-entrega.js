@@ -34,7 +34,7 @@
     // Lógica pura (testeable)
     // ---------------------------------------------------------------
     function lotesDeDoc(d) {
-        if (Array.isArray(d.batches) && d.batches.length) return d.batches.map(b => ({ batch: b.batch || 'S/L', quantity: num(b.quantity), expirationDate: b.expirationDate || '' }));
+        if (Array.isArray(d.batches) && d.batches.length) return d.batches.map(b => ({ batch: b.batch || 'S/L', quantity: num(b.quantity), expirationDate: b.expirationDate || '', ...(b.provider ? { provider: b.provider } : {}) }));
         const q = num(d.quantity);
         return q > 0 ? [{ batch: d.batch || 'S/L', quantity: q, expirationDate: d.expirationDate || '' }] : [];
     }

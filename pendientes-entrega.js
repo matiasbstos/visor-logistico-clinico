@@ -162,6 +162,8 @@
         table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #ccc;padding:2px 5px;text-align:left;vertical-align:middle}th{background:#eef1f6;font-size:12px}
         .n{text-align:right;white-space:nowrap}.f{width:54px}.f img{width:48px;height:48px;object-fit:contain}.sf{color:#999;font-size:11px}tr{page-break-inside:avoid}.pie{margin:4px 0 0;color:#555;font-size:12px}
         .ck{width:26px}.ck i{display:inline-block;width:18px;height:18px;border:2px solid #333;border-radius:3px}.big{font-size:17px;font-weight:700}small{color:#555}
+        .pk h1{font-size:24px}.pk h2{font-size:22px}.pk header p{font-size:15px}.pk .lg{height:54px}.pk th{font-size:15px;padding:6px 8px}.pk td{font-size:19px;font-weight:600;padding:8px 8px;border-bottom:2px solid #bbb}
+        .pk td small{font-size:14px;font-weight:400}.pk .f{width:132px}.pk .f img{width:120px;height:120px}.pk .ck{width:44px}.pk .ck i{width:34px;height:34px;border-width:3px}.pk .big{font-size:46px;line-height:1}.pk .pie{font-size:16px;font-weight:700}
         @page{margin:10mm}@media print{body{padding:0}}`;
     function ventana(titulo, cuerpo) {
         const w = window.open('', '_blank'); if (!w) { toast('Ventana bloqueada', 'Permite las ventanas emergentes para imprimir.', 'warning'); return; }
@@ -177,7 +179,7 @@
         const venceTxt = (p) => p.lote ? `${esc(p.lote.batch || 's/lote')}${p.lote.vence ? '<br><small>vence ' + esc(p.lote.vence) + '</small>' : ''}` : '—';
         const hojas = (lista || []).filter(Boolean).map(g => {
             const si = g.items.filter(p => p.entregable > 0), no = g.items.filter(p => !(p.entregable > 0));
-            return `<section><header><img class="lg" src="${esc(logo)}" alt=""><div><h1>Hoja de picking · retirar de bodega</h1><h2>Para: ${esc(g.centro)}</h2><p>SAR Elsa Romo Arpillerista · ${esc(hoy)}</p></div></header>
+            return `<section class="pk"><header><img class="lg" src="${esc(logo)}" alt=""><div><h1>Hoja de picking · retirar de bodega</h1><h2>Para: ${esc(g.centro)}</h2><p>SAR Elsa Romo Arpillerista · ${esc(hoy)}</p></div></header>
             <table><thead><tr><th class="ck"></th><th>Foto</th><th>Producto</th><th>Dónde está</th><th>Lote (vence primero)</th><th class="n">Retirar</th><th class="n">Pendiente</th></tr></thead><tbody>
             ${si.map(p => `<tr><td class="ck"><i></i></td><td class="f">${foto(p)}</td><td>${esc(p.nombre)}${p.codigo ? '<br><small>ID ' + esc(p.codigo) + '</small>' : ''}</td><td>${dondeTxt(p)}</td><td>${venceTxt(p)}</td><td class="n big">${p.entregable}</td><td class="n">${p.pendiente}</td></tr>`).join('')}</tbody></table>
             <p class="pie">${si.length} producto(s) para retirar.</p>
@@ -193,7 +195,7 @@
         const lotes = (i) => (i.lotes || []).length ? i.lotes.map(l => `${esc(l.batch || 's/lote')}${l.expirationDate ? ' <small>vence ' + esc(l.expirationDate) + '</small>' : ''} <small>(${num(l.quantity)})</small>`).join('<br>') : '—';
         const filas = a.items.filter(i => num(i.cantidad) > 0);
         const total = filas.reduce((t, i) => t + num(i.cantidad), 0);
-        const cuerpo = `<section><header><img class="lg" src="${esc(logo)}" alt=""><div><h1>Hoja de picking · ${esc(a.numero || '')}</h1><h2>Para: ${esc(a.centro || '')}</h2><p>SAR Elsa Romo Arpillerista · retirar de ${esc(a.bodegaOrigen || 'bodega')} · acta del ${esc(a.fecha || '')}${a.estado === 'ANULADA' ? ' · <b>ANULADA</b>' : ''}</p></div></header>
+        const cuerpo = `<section class="pk"><header><img class="lg" src="${esc(logo)}" alt=""><div><h1>Hoja de picking · ${esc(a.numero || '')}</h1><h2>Para: ${esc(a.centro || '')}</h2><p>SAR Elsa Romo Arpillerista · retirar de ${esc(a.bodegaOrigen || 'bodega')} · acta del ${esc(a.fecha || '')}${a.estado === 'ANULADA' ? ' · <b>ANULADA</b>' : ''}</p></div></header>
             <table><thead><tr><th class="ck"></th><th>Foto</th><th>Producto</th><th>Lote (vence primero)</th><th class="n">Retirar</th></tr></thead><tbody>
             ${filas.map(i => `<tr><td class="ck"><i></i></td><td class="f">${foto(i)}</td><td>${esc(i.nombre)}${i.codigoMP ? '<br><small>ID ' + esc(i.codigoMP) + '</small>' : ''}</td><td>${lotes(i)}</td><td class="n big">${num(i.cantidad)}</td></tr>`).join('')}</tbody></table>
             <p class="pie">${filas.length} producto(s) · ${total} unidad(es) en total.</p></section>`;

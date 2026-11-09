@@ -929,3 +929,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.169 · Tipo de compra y documento de respaldo opcionales en Ingresos (v21.115)
 - Ya no son obligatorios en el Registro de Ingresos. Sin tipo de compra se guarda «S/I»; sin documento, «S/N». Proveedor, insumo, lote, vencimiento, cantidad, destino y tipo de insumo siguen siendo obligatorios.
+
+## 4.170 · Ingresos: cajas, bodega de destino real y edición de lotes (v21.116)
+- **Cantidad por cajas:** botones «Por unidades / Por cajas»; en cajas se indican N° de cajas y unidades por caja y la cantidad total se calcula sola.
+- **Destino real del stock:** un insumo se identifica por nombre **y** bodega de destino. Antes todo ingreso se sumaba al producto existente sin importar el destino, y los productos nuevos no guardaban bodega (aparecían en Central). Ahora los productos nuevos guardan `location`, `bodegaNombre`, `bodegaId`, `name_lowercase`, `category` y `tipoInsumo`.
+- **Edición posterior:** el modal «Editar» muestra una tabla de lotes (lote, vencimiento, cantidad) con agregar/quitar. Guarda `batches` completo, recalcula `quantity` (suma) y deja `batch/expirationDate` con el lote que vence primero. `updateInventoryWithAudit` ya no sobrescribe `batches` cuando vienen explícitos (antes la edición de lote se ignoraba si el insumo tenía varios lotes).
+- Todo cambio de edición sigue pasando por la auditoría existente (movimiento `ajuste` / EDICION-MANUAL).

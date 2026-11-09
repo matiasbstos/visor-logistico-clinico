@@ -378,7 +378,7 @@ export async function updateInventoryWithAudit(itemId, newData, currentUser) {
             // SINCRONIZACIÓN DE BATCHES (FEFO)
             // ===================================
             // Si hay un cambio manual que afecta al total y vienen datos de lote desde la UI
-            if (newData.batch !== undefined && newData.expirationDate !== undefined) {
+            if (newData.batches === undefined && newData.batch !== undefined && newData.expirationDate !== undefined) {
                 let currentBatches = previousData.batches || [];
 
                 if (currentBatches.length <= 1) {
@@ -4244,6 +4244,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             document.getElementById('edit-unitPrice').value = data.unitPrice || 0;
                             document.getElementById('edit-criticalLimit').value = data.criticalLimit || 50;
                             document.getElementById('edit-batch').value = data.batch || '';
+                            window.__editLotes = (Array.isArray(data.batches) && data.batches.length ? data.batches : [{ batch: data.batch || '', quantity: Number(data.quantity) || 0, expirationDate: data.expirationDate || '' }])
+                                .map(b => { const d = SAR_Utils.parseDate(b.expirationDate); return { batch: b.batch || '', quantity: Number(b.quantity) || 0, expirationDate: (d && !isNaN(d.getTime())) ? d.toISOString().split('T')[0] : '' }; });
+                            window.__pintarEditLotes();
                             document.getElementById('edit-status').value = data.status || 'ACTIVO';
 
                             // Robustez: Conversión de fecha para input HTML5 (YYYY-MM-DD)
@@ -4275,6 +4278,38 @@ document.addEventListener('DOMContentLoaded', () => {
         /* ----------------------------------------------------
            9d-3. GUARDAR CAMBIOS (EDICIÓN CON AUDITORÍA)
            ---------------------------------------------------- */
+        // Edición de lotes (v21.116): cada lote se corrige por separado; el total y el lote que vence primero se recalculan
+        window.__pintarEditLotes = function () {
+            const cont = document.getElementById('edit-lotes'); if (!cont) return;
+            const L = window.__editLotes || [];
+            cont.innerHTML = L.map((b, i) => `<div class="edl-fila" style="display:grid; grid-template-columns:1.4fr 1.2fr .8fr auto; gap:8px; margin-bottom:6px; align-items:center;">
+                <input type="text" class="form-control edl-b" data-i="${i}" value="${window.escapeHTML(b.batch)}" placeholder="Lote" aria-label="Lote ${i + 1}">
+                <input type="date" class="form-control edl-v" data-i="${i}" value="${window.escapeHTML(b.expirationDate)}" aria-label="Vencimiento lote ${i + 1}">
+                <input type="number" min="0" step="1" class="form-control edl-q" data-i="${i}" value="${Number(b.quantity) || 0}" aria-label="Cantidad lote ${i + 1}">
+                <button type="button" class="btn btn-icon edl-x" data-i="${i}" title="Quitar lote" aria-label="Quitar lote ${i + 1}"${L.length <= 1 ? ' disabled' : ''}><i class="ph ph-trash"></i></button></div>`).join('');
+            const q = document.getElementById('edit-quantity');
+            if (q) { q.value = L.reduce((t, b) => t + (Number(b.quantity) || 0), 0); q.readOnly = true; q.title = 'Es la suma de los lotes'; }
+        };
+        window.__lotesEditados = function () {
+            const L = (window.__editLotes || []).filter(b => (b.batch || '').trim() || Number(b.quantity) > 0);
+            if (!L.length) return {};
+            const batches = L.map(b => ({ batch: (b.batch || '').trim().toUpperCase() || 'S/L', quantity: Math.max(0, Math.floor(Number(b.quantity) || 0)), expirationDate: b.expirationDate || '' }));
+            const orden = batches.slice().sort(window.fefoCompare), p = orden[0];
+            return { batches, quantity: batches.reduce((t, b) => t + b.quantity, 0), cantidad: batches.reduce((t, b) => t + b.quantity, 0), batch: p.batch, lote: p.batch, expirationDate: p.expirationDate, vencimiento: p.expirationDate, fechaVencimiento: p.expirationDate };
+        };
+        document.addEventListener('input', (e) => {
+            const t = e.target; if (!t || !t.classList || !window.__editLotes) return; const i = Number(t.dataset && t.dataset.i);
+            if (t.classList.contains('edl-b')) window.__editLotes[i].batch = t.value;
+            else if (t.classList.contains('edl-v')) window.__editLotes[i].expirationDate = t.value;
+            else if (t.classList.contains('edl-q')) { window.__editLotes[i].quantity = Number(t.value) || 0; const q = document.getElementById('edit-quantity'); if (q) q.value = window.__editLotes.reduce((s, b) => s + (Number(b.quantity) || 0), 0); }
+        });
+        document.addEventListener('click', (e) => {
+            const x = e.target && e.target.closest ? e.target.closest('.edl-x, #edit-lote-add') : null; if (!x || !window.__editLotes) return;
+            if (x.id === 'edit-lote-add') window.__editLotes.push({ batch: '', quantity: 0, expirationDate: '' });
+            else window.__editLotes.splice(Number(x.dataset.i), 1);
+            window.__pintarEditLotes();
+        });
+
         const formEditInsumo = document.getElementById('form-edit-insumo');
         if (formEditInsumo) {
             formEditInsumo.addEventListener('submit', async (e) => {
@@ -4307,6 +4342,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     expirationDate: rawData.expirationDate,
                     vencimiento: rawData.expirationDate,
                     fechaVencimiento: rawData.expirationDate,
+                    ...(window.__lotesEditados ? window.__lotesEditados() : {}),
                     location: rawData.location.trim() || "Sin asignar",
                     ubicacion: rawData.location.trim() || "Sin asignar",
                     status: rawData.status || "ACTIVO"
@@ -4569,6 +4605,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const data = docSnap.data();
                         const option = document.createElement('option');
                         option.value = data.name;
+                        option.dataset.id = docSnap.id;
                         option.textContent = data.name;
                         select.appendChild(option);
                     });
@@ -4611,8 +4648,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 try {
                     let insumoId = null;
+                    // Un insumo se identifica por nombre Y bodega de destino: lo ingresado a otra bodega no se suma al stock de la Central
+                    const _nb = (t) => String(t || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+(sar)$/, '').trim();
+                    const destinoNombre = (data.destinationId || '').trim() || 'Bodega Central';
+                    const destinoSel = document.getElementById('movimiento-destino');
+                    const destinoId = (destinoSel && destinoSel.selectedOptions[0] && destinoSel.selectedOptions[0].dataset.id) || '';
                     const match = (window.insumosDataCache || []).find(i =>
                         i.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() === insumoNormalizado
+                        && _nb(i.location || i.ubicacion || 'Bodega Central') === _nb(destinoNombre)
                     );
 
                     if (match) {
@@ -4642,6 +4685,12 @@ document.addEventListener('DOMContentLoaded', () => {
                                 provider: data.providerId || "S/I",
                                 purchaseType: data.purchaseType || "S/I",
                                 tipoInsumo: ['medico', 'aseo', 'oficina'].includes(data.tipoInsumo) ? data.tipoInsumo : 'medico',
+                                name_lowercase: nombreInput.trim().toLowerCase(),
+                                category: 'General',
+                                location: destinoNombre,
+                                bodegaNombre: destinoNombre,
+                                ...(destinoId ? { bodegaId: destinoId } : {}),
+                                createdAt: serverTimestamp(),
                                 updatedAt: serverTimestamp()
                             });
                         } else {
@@ -4730,6 +4779,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
         }
+
+        // Cantidad por cajas (v21.116): N° de cajas × unidades por caja = cantidad total
+        (function () {
+            const bu = document.getElementById('ing-modo-un'), bc = document.getElementById('ing-modo-caja'), pan = document.getElementById('ing-cajas');
+            const nC = document.getElementById('ing-n-cajas'), uC = document.getElementById('ing-u-caja'), tot = document.getElementById('ing-total-cajas'), q = document.getElementById('movimiento-cantidad');
+            if (!bu || !bc || !pan || !q) return;
+            const calc = () => { const n = Math.max(0, Math.floor(Number(nC.value) || 0)), u = Math.max(0, Math.floor(Number(uC.value) || 0)), t = n * u; q.value = t || ''; if (tot) tot.textContent = `${n} caja(s) × ${u} = ${t} unidades`; };
+            const modo = (cajas) => {
+                pan.style.display = cajas ? 'flex' : 'none'; q.readOnly = cajas;
+                bc.className = 'btn btn-sm ' + (cajas ? 'btn-primary' : 'btn-outline'); bu.className = 'btn btn-sm ' + (cajas ? 'btn-outline' : 'btn-primary');
+                bc.setAttribute('aria-pressed', cajas); bu.setAttribute('aria-pressed', !cajas);
+                if (cajas) calc();
+            };
+            bu.addEventListener('click', () => modo(false)); bc.addEventListener('click', () => modo(true));
+            nC.addEventListener('input', calc); uC.addEventListener('input', calc);
+            moveForm && moveForm.addEventListener('reset', () => setTimeout(() => modo(false), 0));
+        })();
 
         // Origen del ingreso: préstamo / traspaso desde otro centro (sin OC) (v21.77)
         (function () {

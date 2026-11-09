@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=21.115",
+                "./script.js": "./script.js?v=21.116",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -93,7 +93,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
     <meta name="theme-color" content="#1A3668">
-    <link rel="stylesheet" href="style.css?v=21.115">
+    <link rel="stylesheet" href="style.css?v=21.116">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web@2.1.1" defer></script>
@@ -1647,6 +1647,15 @@
                                         <input type="date" class="form-control" name="expirationDate"
                                             id="movimiento-fechaVto" required>
                                     </div>
+                                </div>
+                                <div class="ing-modo" role="group" aria-label="Cómo ingresar la cantidad" style="display:flex; gap:8px; margin-bottom:10px;">
+                                    <button type="button" class="btn btn-primary btn-sm" id="ing-modo-un" aria-pressed="true">Por unidades</button>
+                                    <button type="button" class="btn btn-outline btn-sm" id="ing-modo-caja" aria-pressed="false">Por cajas</button>
+                                </div>
+                                <div id="ing-cajas" style="display:none; gap:12px; align-items:flex-end; margin-bottom:12px; flex-wrap:wrap;">
+                                    <div class="form-group" style="width:140px;"><label class="form-label" for="ing-n-cajas">N° DE CAJAS</label><input type="number" class="form-control" id="ing-n-cajas" min="1" step="1" value="1"></div>
+                                    <div class="form-group" style="width:170px;"><label class="form-label" for="ing-u-caja">UNIDADES POR CAJA</label><input type="number" class="form-control" id="ing-u-caja" min="1" step="1" value="1"></div>
+                                    <div id="ing-total-cajas" style="font-weight:700; color:var(--primary); padding-bottom:10px;"></div>
                                 </div>
                                 <div style="display:flex; gap:24px; align-items:center;">
                                     <div class="form-group" style="width:150px;">
@@ -4854,7 +4863,12 @@
                             value="50" aria-label="edit criticalLimit" title="edit criticalLimit">
                     </div>
                 </div>
-                <div class="grid-2-col-even mb-16">
+                <div class="form-group mb-16" id="edit-lotes-wrap">
+                    <label class="form-label">Lotes y vencimientos <small>(corrige aquí lote, fecha o cantidad de cada lote)</small></label>
+                    <div id="edit-lotes"></div>
+                    <button type="button" class="btn btn-outline btn-sm" id="edit-lote-add" style="margin-top:6px;"><i class="ph ph-plus"></i> Agregar lote</button>
+                </div>
+                <div class="grid-2-col-even mb-16" id="edit-lote-simple" style="display:none;">
                     <div class="form-group">
                         <label class="form-label">Lote</label>
                         <input type="text" id="edit-batch" name="batch" class="form-control" aria-label="edit batch" title="edit batch">
@@ -5918,59 +5932,59 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=21.115"></script>
-    <script type="module" src="patch-plantillas.js?v=21.115"></script>
+    <script type="module" src="script.js?v=21.116"></script>
+    <script type="module" src="patch-plantillas.js?v=21.116"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="bodega-explorador.js?v=21.115"></script>
-    <script src="precintos-inventario.js?v=21.115"></script>
-    <script src="prestamos-otros-centros.js?v=21.115"></script>
-    <script src="precinto-escaneo.js?v=21.115"></script>
-    <script src="sonidos.js?v=21.115"></script>
-    <script src="avisos-campana.js?v=21.115"></script>
-    <script src="bodegas-estantes.js?v=21.115"></script>
-    <script src="bodegas-cierre.js?v=21.115"></script>
-    <script src="progreso.js?v=21.115"></script>
-    <script src="oc-lector.js?v=21.115"></script>
-    <script src="acta-edicion.js?v=21.115"></script>
-    <script src="anonimizar-pacientes.js?v=21.115"></script>
-    <script src="cdp-presupuesto.js?v=21.115"></script>
-    <script src="imagenes-producto.js?v=21.115"></script>
-    <script src="catalogo-vista.js?v=21.115"></script>
-    <script src="correo-html.js?v=21.115"></script>
-    <script src="avisos-correo.js?v=21.115"></script>
-    <script src="monitor-errores.js?v=21.115"></script>
-    <script src="resumen-stock.js?v=21.115"></script>
-    <script src="vista-previa-agenda.js?v=21.115"></script>
-    <script src="menu-lateral.js?v=21.115"></script>
-    <script src="buscador-global.js?v=21.115"></script>
-    <script src="cargando-global.js?v=21.115"></script>
-    <script src="respaldo-diario.js?v=21.115"></script>
-    <script src="cierre-mensual.js?v=21.115"></script>
-    <script src="tabla-columnas.js?v=21.115"></script>
-    <script src="acerca.js?v=21.115"></script>
-    <script src="primeros-pasos.js?v=21.115"></script>
-    <script src="seguimiento-oc.js?v=21.115"></script>
-    <script src="compras-agiles.js?v=21.115"></script>
-    <script src="ingreso-rapido.js?v=21.115"></script>
-    <script src="pendientes-entrega.js?v=21.115"></script>
-    <script src="sugerencias-producto.js?v=21.115"></script>
-    <script src="duplicados.js?v=21.115"></script>
-    <script src="recepciones-conformes.js?v=21.115"></script>
-    <script src="sustituciones.js?v=21.115"></script>
-    <script src="bitacora-oc.js?v=21.115"></script>
-    <script src="id-producto.js?v=21.115"></script>
-    <script src="home-compras.js?v=21.115"></script>
-    <script src="home-ingresos.js?v=21.115"></script>
-    <script src="login-animado.js?v=21.115"></script>
-    <script src="errores.js?v=21.115"></script>
-    <script src="saldos-contables.js?v=21.115"></script>
-    <script src="recepcion-conforme.js?v=21.115"></script>
-    <script src="acta-documentos.js?v=21.115"></script>
-    <script src="actas-entrega.js?v=21.115"></script>
-    <script src="oxigeno.js?v=21.115"></script>
-    <script src="oxigeno-prestamos.js?v=21.115"></script>
-    <script src="vida-producto.js?v=21.115"></script>
-    <script src="bodega-transitoria.js?v=21.115"></script>
-    <script src="visor-adquisiciones.js?v=21.115"></script>
+    <script src="bodega-explorador.js?v=21.116"></script>
+    <script src="precintos-inventario.js?v=21.116"></script>
+    <script src="prestamos-otros-centros.js?v=21.116"></script>
+    <script src="precinto-escaneo.js?v=21.116"></script>
+    <script src="sonidos.js?v=21.116"></script>
+    <script src="avisos-campana.js?v=21.116"></script>
+    <script src="bodegas-estantes.js?v=21.116"></script>
+    <script src="bodegas-cierre.js?v=21.116"></script>
+    <script src="progreso.js?v=21.116"></script>
+    <script src="oc-lector.js?v=21.116"></script>
+    <script src="acta-edicion.js?v=21.116"></script>
+    <script src="anonimizar-pacientes.js?v=21.116"></script>
+    <script src="cdp-presupuesto.js?v=21.116"></script>
+    <script src="imagenes-producto.js?v=21.116"></script>
+    <script src="catalogo-vista.js?v=21.116"></script>
+    <script src="correo-html.js?v=21.116"></script>
+    <script src="avisos-correo.js?v=21.116"></script>
+    <script src="monitor-errores.js?v=21.116"></script>
+    <script src="resumen-stock.js?v=21.116"></script>
+    <script src="vista-previa-agenda.js?v=21.116"></script>
+    <script src="menu-lateral.js?v=21.116"></script>
+    <script src="buscador-global.js?v=21.116"></script>
+    <script src="cargando-global.js?v=21.116"></script>
+    <script src="respaldo-diario.js?v=21.116"></script>
+    <script src="cierre-mensual.js?v=21.116"></script>
+    <script src="tabla-columnas.js?v=21.116"></script>
+    <script src="acerca.js?v=21.116"></script>
+    <script src="primeros-pasos.js?v=21.116"></script>
+    <script src="seguimiento-oc.js?v=21.116"></script>
+    <script src="compras-agiles.js?v=21.116"></script>
+    <script src="ingreso-rapido.js?v=21.116"></script>
+    <script src="pendientes-entrega.js?v=21.116"></script>
+    <script src="sugerencias-producto.js?v=21.116"></script>
+    <script src="duplicados.js?v=21.116"></script>
+    <script src="recepciones-conformes.js?v=21.116"></script>
+    <script src="sustituciones.js?v=21.116"></script>
+    <script src="bitacora-oc.js?v=21.116"></script>
+    <script src="id-producto.js?v=21.116"></script>
+    <script src="home-compras.js?v=21.116"></script>
+    <script src="home-ingresos.js?v=21.116"></script>
+    <script src="login-animado.js?v=21.116"></script>
+    <script src="errores.js?v=21.116"></script>
+    <script src="saldos-contables.js?v=21.116"></script>
+    <script src="recepcion-conforme.js?v=21.116"></script>
+    <script src="acta-documentos.js?v=21.116"></script>
+    <script src="actas-entrega.js?v=21.116"></script>
+    <script src="oxigeno.js?v=21.116"></script>
+    <script src="oxigeno-prestamos.js?v=21.116"></script>
+    <script src="vida-producto.js?v=21.116"></script>
+    <script src="bodega-transitoria.js?v=21.116"></script>
+    <script src="visor-adquisiciones.js?v=21.116"></script>
 </body>
 </html>

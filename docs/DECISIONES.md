@@ -915,3 +915,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.166 · Planilla descargable aunque aún no exista la bodega transitoria (v21.112)
 - Si no hay bodega de tipo transitoria, la pantalla abre con Bodega Central (con aviso) y deja descargar la planilla Excel para subirla a Drive y compartirla; antes solo mostraba un aviso sin botones.
+
+## 4.167 · Planilla con lote, vencimiento y laboratorio; estante D (v21.113)
+- La planilla de la bodega pasa a **una fila por producto y lote**: Estante, Producto, ID, Lote, Vencimiento, Laboratorio, Stock sistema, Disposición, Contado, Responsable, Observación.
+- Laboratorio se lee de `laboratorio/fabricante/supplier/proveedor` del insumo (hoy el sistema no lo captura de forma fija). Al subir la planilla, el administrador guarda `laboratorio` en el insumo si estaba vacío; el rol `transitoria` solo puede guardar el estante.
+- Lo contado se suma por producto (varias filas de lotes). Estantes válidos: A1–A6, B1–B6, C1–C6 (rotulados) y D1–D6 (reservado).
+- Documento de apoyo «Guía de ubicaciones» (Word/PDF) entregado fuera del sistema.

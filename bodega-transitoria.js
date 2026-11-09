@@ -147,44 +147,55 @@
   }
 
   // ---------------- planilla Excel (ubicación por estante) ----------------
-  const ESTANTES = ['A1','A2','A3','A4','A5','A6','B1','B2','B3','B4','B5','B6','C1','C2','C3','C4','C5','C6'];
+  const ESTANTES = ['A1','A2','A3','A4','A5','A6','B1','B2','B3','B4','B5','B6','C1','C2','C3','C4','C5','C6','D1','D2','D3','D4','D5','D6'];
   const estanteDe = (o) => { const d = docsDe(insumosBod, o).find(x => x.ubicacionEstante); return d ? d.ubicacionEstante : ''; };
   const normEstante = (t) => String(t || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  /** Filas de la planilla: todo lo que hay en la bodega (stock del sistema) + productos con disposición sin stock. */
+  const labDe = (i) => i.laboratorio || i.fabricante || i.supplier || i.proveedor || i.provider || '';
+  const lotesDe = (i) => {
+    const SA = window.SAR_ActasEntrega;
+    let l = SA && SA.lotesDeDoc ? SA.lotesDeDoc(i) : (Array.isArray(i.batches) ? i.batches : []);
+    if (!l.length) l = [{ batch: i.batch || '', expirationDate: i.expirationDate || '', quantity: num(i.quantity) }];
+    return l.filter(x => num(x.quantity) > 0 || l.length === 1);
+  };
+  /** Filas de la planilla: una por producto y lote (lo que el sistema dice que hay aquí) + productos con disposición sin stock. */
   function filasPlanilla() {
-    const m = new Map();
+    const out = [], vistos = new Set();
     insumosBod.filter(i => i.status !== 'CUARENTENA').forEach(i => {
-      const cod = soloDig(i.codigoMP || i.code), k = claveDe(i.name, cod), x = m.get(k) || { nombre: i.name, codigo: cod, sistema: 0, estante: '' };
-      x.sistema += num(i.quantity); x.estante = x.estante || i.ubicacionEstante || ''; m.set(k, x);
+      const cod = soloDig(i.codigoMP || i.code), k = claveDe(i.name, cod); vistos.add(k);
+      lotesDe(i).forEach(l => out.push({ k, nombre: i.name, codigo: cod, estante: i.ubicacionEstante || '', lote: l.batch || '', vence: l.expirationDate || '', lab: labDe(i), sistema: num(l.quantity), objetivo: objetivos[k] ? num(objetivos[k].objetivo) : '' }));
     });
-    Object.entries(objetivos).forEach(([k, o]) => { if (!m.has(k)) m.set(k, { nombre: o.nombre, codigo: o.codigo || '', sistema: 0, estante: '' }); });
-    return [...m.entries()].map(([k, x]) => ({ k, ...x, objetivo: objetivos[k] ? num(objetivos[k].objetivo) : '' })).sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'));
+    Object.entries(objetivos).forEach(([k, o]) => { if (!vistos.has(k)) out.push({ k, nombre: o.nombre, codigo: o.codigo || '', estante: '', lote: '', vence: '', lab: '', sistema: 0, objetivo: num(o.objetivo) }); });
+    return out.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es') || String(a.vence).localeCompare(String(b.vence)));
   }
   function descargarPlanilla() {
     if (typeof XLSX === 'undefined') throw new Error('El generador de Excel aún no carga. Intenta de nuevo en unos segundos.');
     const b = bodegas.find(x => x.id === bodegaSel), fecha = hoy();
-    const aoa = [['Estante / ubicación', 'Producto', 'ID', 'Stock sistema', 'Disposición', 'Contado', 'Responsable', 'Observación']]
-      .concat(filasPlanilla().map(r => [r.estante, r.nombre, r.codigo, r.sistema, r.objetivo, '', '', '']));
-    const ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = [{ wch: 18 }, { wch: 46 }, { wch: 14 }, { wch: 13 }, { wch: 12 }, { wch: 11 }, { wch: 16 }, { wch: 30 }];
+    const aoa = [['Estante / ubicación', 'Producto', 'ID', 'Lote', 'Vencimiento', 'Laboratorio', 'Stock sistema', 'Disposición', 'Contado', 'Responsable', 'Observación']]
+      .concat(filasPlanilla().map(r => [r.estante, r.nombre, r.codigo, r.lote, r.vence, r.lab, r.sistema, r.objetivo, '', '', '']));
+    const ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = [{ wch: 18 }, { wch: 46 }, { wch: 14 }, { wch: 14 }, { wch: 13 }, { wch: 22 }, { wch: 13 }, { wch: 12 }, { wch: 11 }, { wch: 16 }, { wch: 30 }];
     const wsE = XLSX.utils.aoa_to_sheet([['Estantes válidos'], ...ESTANTES.map(e => [e])]), wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Bodega'); XLSX.utils.book_append_sheet(wb, wsE, 'Estantes');
     XLSX.writeFile(wb, `Planilla_${slug(b.name)}_${fecha}.xlsx`);
   }
-  /** Lee la planilla: asigna estante (se guarda en los Insumos de la bodega) y carga lo contado (sin cerrar el conteo). */
+  /** Lee la planilla: asigna estante y laboratorio (se guardan en los Insumos de la bodega) y carga lo contado (sin cerrar el conteo). */
   async function subirPlanilla(file) {
     if (typeof XLSX === 'undefined') throw new Error('El lector de Excel aún no carga.');
     const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' }), ws = wb.Sheets[wb.SheetNames[0]], filas = XLSX.utils.sheet_to_json(ws, { defval: '' });
-    let asignados = 0, contados = 0; const sinMatch = [], f = fs(), _c = {};
+    let asignados = 0, contados = 0; const sinMatch = [], f = fs(), _c = {}, hechos = new Set();
     for (const r of filas) {
       const nombre = r['Producto'] || '', codigo = soloDig(r['ID']); if (!nombre && !codigo) continue;
-      const o = { nombre, codigo }, est = normEstante(r['Estante / ubicación']), k = claveDe(nombre, codigo);
+      const o = { nombre, codigo }, est = normEstante(r['Estante / ubicación']), lab = String(r['Laboratorio'] || '').trim(), k = claveDe(nombre, codigo);
       const docs = docsDe(insumosBod, o);
-      if (est) {
-        if (!docs.length) { sinMatch.push(nombre || codigo); }
-        else for (const d of docs) { if (d.ubicacionEstante !== est) { await f.updateDoc(doc('Insumos', d.id), { ubicacionEstante: est, updatedAt: f.serverTimestamp() }); asignados++; } }
+      if ((est || lab) && !hechos.has(k)) {
+        hechos.add(k);
+        if (!docs.length) sinMatch.push(nombre || codigo);
+        else for (const d of docs) {
+          const cambio = {}; if (est && d.ubicacionEstante !== est) cambio.ubicacionEstante = est; if (lab && !soloConteo() && !labDe(d)) cambio.laboratorio = lab;
+          if (Object.keys(cambio).length) { await f.updateDoc(doc('Insumos', d.id), Object.assign(cambio, { updatedAt: f.serverTimestamp() })); asignados++; }
+        }
       }
       const c = r['Contado'];
-      if (c !== '' && c !== null && !isNaN(Number(c)) && objetivos[k]) { _c[k] = Math.max(0, Math.floor(Number(c))); contados++; }
+      if (c !== '' && c !== null && !isNaN(Number(c)) && objetivos[k]) { _c[k] = (_c[k] || 0) + Math.max(0, Math.floor(Number(c))); contados++; }
     }
     return { asignados, contados, sinMatch, _c };
   }

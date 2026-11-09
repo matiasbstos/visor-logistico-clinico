@@ -921,3 +921,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Laboratorio se lee de `laboratorio/fabricante/supplier/proveedor` del insumo (hoy el sistema no lo captura de forma fija). Al subir la planilla, el administrador guarda `laboratorio` en el insumo si estaba vacío; el rol `transitoria` solo puede guardar el estante.
 - Lo contado se suma por producto (varias filas de lotes). Estantes válidos: A1–A6, B1–B6, C1–C6 (rotulados) y D1–D6 (reservado).
 - Documento de apoyo «Guía de ubicaciones» (Word/PDF) entregado fuera del sistema.
+
+## 4.168 · Tipo de insumo en el Registro de Ingresos: médicos, aseo y oficina (v21.114)
+- El formulario de ingreso tiene el campo obligatorio «Tipo de insumo» (Insumos médicos por defecto, de aseo, de oficina). Se guarda como `tipoInsumo` (`medico|aseo|oficina`) en el insumo y en el movimiento `INGRESO_PROVEEDOR`.
+- Es independiente de `category` (subcategoría clínica). Un insumo ya clasificado no cambia de tipo por un ingreso posterior; los anteriores sin `tipoInsumo` se tratan como médicos hasta clasificarlos.
+- Pendiente: filtro por tipo en Existencias e Informes, y clasificación de los insumos existentes (p. ej. bolsas de basura y cera → aseo).

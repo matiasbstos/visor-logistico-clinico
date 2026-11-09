@@ -145,6 +145,49 @@
     });
   }
 
+  // ---------------- planilla Excel (ubicación por estante) ----------------
+  const ESTANTES = ['A1','A2','A3','A4','A5','A6','B1','B2','B3','B4','B5','B6','C1','C2','C3','C4','C5','C6'];
+  const estanteDe = (o) => { const d = docsDe(insumosBod, o).find(x => x.ubicacionEstante); return d ? d.ubicacionEstante : ''; };
+  const normEstante = (t) => String(t || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  /** Filas de la planilla: todo lo que hay en la bodega (stock del sistema) + productos con disposición sin stock. */
+  function filasPlanilla() {
+    const m = new Map();
+    insumosBod.filter(i => i.status !== 'CUARENTENA').forEach(i => {
+      const cod = soloDig(i.codigoMP || i.code), k = claveDe(i.name, cod), x = m.get(k) || { nombre: i.name, codigo: cod, sistema: 0, estante: '' };
+      x.sistema += num(i.quantity); x.estante = x.estante || i.ubicacionEstante || ''; m.set(k, x);
+    });
+    Object.entries(objetivos).forEach(([k, o]) => { if (!m.has(k)) m.set(k, { nombre: o.nombre, codigo: o.codigo || '', sistema: 0, estante: '' }); });
+    return [...m.entries()].map(([k, x]) => ({ k, ...x, objetivo: objetivos[k] ? num(objetivos[k].objetivo) : '' })).sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es'));
+  }
+  function descargarPlanilla() {
+    if (typeof XLSX === 'undefined') throw new Error('El generador de Excel aún no carga. Intenta de nuevo en unos segundos.');
+    const b = bodegas.find(x => x.id === bodegaSel), fecha = hoy();
+    const aoa = [['Estante / ubicación', 'Producto', 'ID', 'Stock sistema', 'Disposición', 'Contado', 'Responsable', 'Observación']]
+      .concat(filasPlanilla().map(r => [r.estante, r.nombre, r.codigo, r.sistema, r.objetivo, '', '', '']));
+    const ws = XLSX.utils.aoa_to_sheet(aoa); ws['!cols'] = [{ wch: 18 }, { wch: 46 }, { wch: 14 }, { wch: 13 }, { wch: 12 }, { wch: 11 }, { wch: 16 }, { wch: 30 }];
+    const wsE = XLSX.utils.aoa_to_sheet([['Estantes válidos'], ...ESTANTES.map(e => [e])]), wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Bodega'); XLSX.utils.book_append_sheet(wb, wsE, 'Estantes');
+    XLSX.writeFile(wb, `Planilla_${slug(b.name)}_${fecha}.xlsx`);
+  }
+  /** Lee la planilla: asigna estante (se guarda en los Insumos de la bodega) y carga lo contado (sin cerrar el conteo). */
+  async function subirPlanilla(file) {
+    if (typeof XLSX === 'undefined') throw new Error('El lector de Excel aún no carga.');
+    const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' }), ws = wb.Sheets[wb.SheetNames[0]], filas = XLSX.utils.sheet_to_json(ws, { defval: '' });
+    let asignados = 0, contados = 0; const sinMatch = [], f = fs(), _c = {};
+    for (const r of filas) {
+      const nombre = r['Producto'] || '', codigo = soloDig(r['ID']); if (!nombre && !codigo) continue;
+      const o = { nombre, codigo }, est = normEstante(r['Estante / ubicación']), k = claveDe(nombre, codigo);
+      const docs = docsDe(insumosBod, o);
+      if (est) {
+        if (!docs.length) { sinMatch.push(nombre || codigo); }
+        else for (const d of docs) { if (d.ubicacionEstante !== est) { await f.updateDoc(doc('Insumos', d.id), { ubicacionEstante: est, updatedAt: f.serverTimestamp() }); asignados++; } }
+      }
+      const c = r['Contado'];
+      if (c !== '' && c !== null && !isNaN(Number(c)) && objetivos[k]) { _c[k] = Math.max(0, Math.floor(Number(c))); contados++; }
+    }
+    return { asignados, contados, sinMatch, _c };
+  }
+
   // ---------------- interfaz ----------------
   const root = () => document.getElementById('tra-root');
   function pintar() {
@@ -159,12 +202,14 @@
       <div class="tra-ks"><div class="vp-k" style="--c:var(--sar-blue)"><b>${lista.length}</b><span>Productos con disposición</span></div><div class="vp-k" style="--c:var(--sar-yellow)"><b>${nSin}</b><span>Sin contar hoy</span></div><div class="vp-k" style="--c:var(--sar-red)"><b>${tFalt}</b><span>Faltante (se descuenta)</span></div><div class="vp-k" style="--c:var(--sar-green)"><b>${tRep}</b><span>A reponer desde Central</span></div></div>
       ${cerrado ? `<p class="tra-ok"><i class="ph-bold ph-seal-check"></i> El conteo de hoy ya se cerró (${esc(cerrado.por || '')}). Puedes reponer lo que falte; el conteo de mañana empieza limpio.</p>` : ''}
       <div class="data-table-card"><h3>Conteo de hoy (${esc(hoy().split('-').reverse().join('/'))})</h3>
-        ${lista.length ? `<div class="tra-tabla"><table><thead><tr><th>Producto</th><th class="n">Disposición</th><th class="n">Sistema</th><th class="n">Contado</th><th class="n">Faltante</th><th class="n">Reponer</th><th class="n">En Central</th><th></th></tr></thead><tbody>${lista.map(x => `<tr class="tra-${x.calc.estado}"><td>${esc(x.o.nombre)}${x.o.codigo ? '<br><small>ID ' + esc(x.o.codigo) + '</small>' : ''}</td>
+        ${lista.length ? `<div class="tra-tabla"><table><thead><tr><th>Estante</th><th>Producto</th><th class="n">Disposición</th><th class="n">Sistema</th><th class="n">Contado</th><th class="n">Faltante</th><th class="n">Reponer</th><th class="n">En Central</th><th></th></tr></thead><tbody>${lista.map(x => `<tr class="tra-${x.calc.estado}"><td><b>${esc(estanteDe(x.o) || '—')}</b></td><td>${esc(x.o.nombre)}${x.o.codigo ? '<br><small>ID ' + esc(x.o.codigo) + '</small>' : ''}</td>
           <td class="n"><input type="number" min="0" class="tra-obj" data-k="${esc(x.k)}" value="${num(x.o.objetivo)}" aria-label="Disposición de ${esc(x.o.nombre)}"></td><td class="n">${x.sistema}</td>
           <td class="n"><input type="number" min="0" class="tra-cont" data-k="${esc(x.k)}" value="${esc(x.contado)}" placeholder="—" aria-label="Contado de ${esc(x.o.nombre)}"${cerrado ? ' disabled' : ''}></td>
           <td class="n tra-f">${x.calc.estado === 'pendiente' ? '—' : (x.calc.faltante || (x.calc.sobrante ? '+' + x.calc.sobrante : 0))}</td><td class="n tra-r">${x.calc.estado === 'pendiente' ? '—' : x.calc.reponible + (x.calc.reponer > x.calc.reponible ? ` <small>(faltan ${x.calc.reponer - x.calc.reponible} en Central)</small>` : '')}</td><td class="n">${x.central}</td>
           <td><button type="button" class="btn btn-outline btn-sm tra-quitar" data-k="${esc(x.k)}" aria-label="Quitar ${esc(x.o.nombre)}">Quitar</button></td></tr>`).join('')}</tbody></table></div>
         <div class="tra-acc"><button type="button" class="btn btn-primary" id="tra-cerrar"${cerrado ? ' disabled' : ''}>Cerrar conteo y descontar faltantes</button><button type="button" class="btn btn-outline" id="tra-reponer"${tRep ? '' : ' disabled'}>Reponer desde Bodega Central (${tRep} u.)</button></div>` : '<p class="act-hint">Aún no defines qué productos van en esta bodega. Agrégalos abajo.</p>'}</div>
+      <div class="data-table-card mt-24"><h3>Planilla Excel de la bodega</h3><p class="act-hint">Descarga la planilla con todo lo que el sistema dice que hay aquí. Quien toma el inventario anota el <b>estante</b> (A1–C6) y lo <b>contado</b>; luego la subes y el Visor asigna las ubicaciones y carga el conteo (el descuento de faltantes sigue siendo con «Cerrar conteo»).</p>
+        <div class="tra-acc"><button type="button" class="btn btn-outline" id="tra-xls-bajar"><i class="ph-bold ph-download-simple"></i> Descargar planilla</button><button type="button" class="btn btn-outline" id="tra-xls-subir"><i class="ph-bold ph-upload-simple"></i> Subir planilla</button><input type="file" id="tra-xls-file" accept=".xlsx,.xls" style="display:none" aria-label="Subir planilla de la bodega"></div></div>
       <div class="data-table-card mt-24"><h3>Agregar producto a la disposición</h3><input type="search" id="tra-bus" class="form-control" placeholder="ID o nombre del producto…" value="${esc(buscaProd)}" autocomplete="off">
         <div class="tra-sug">${sug.map((s, i) => `<button type="button" class="vp-op tra-add" data-i="${i}"><b>${esc(s.nombre)}</b>${s.codigo ? ' <small>ID ' + esc(s.codigo) + '</small>' : ''}</button>`).join('')}</div></div>`}`;
     enlazar(sug);
@@ -182,6 +227,9 @@
     $$('.tra-obj').forEach(i => i.addEventListener('change', () => { objetivos[i.dataset.k].objetivo = Math.max(0, Math.floor(num(i.value))); proteger(guardarObjetivos); }));
     $$('.tra-quitar').forEach(b => b.addEventListener('click', () => { delete objetivos[b.dataset.k]; delete conteo[b.dataset.k]; proteger(guardarObjetivos); }));
     $$('.tra-cont').forEach(i => i.addEventListener('change', () => { conteo[i.dataset.k] = i.value === '' ? undefined : Math.max(0, Math.floor(num(i.value))); pintar(); }));
+    const xb = r.querySelector('#tra-xls-bajar'); if (xb) xb.addEventListener('click', () => { try { descargarPlanilla(); } catch (e) { toast('No se pudo', e.message, 'error'); } });
+    const xs = r.querySelector('#tra-xls-subir'), xf = r.querySelector('#tra-xls-file');
+    if (xs && xf) { xs.addEventListener('click', () => xf.click()); xf.addEventListener('change', async () => { const fl = xf.files[0]; if (!fl) return; try { const res = await subirPlanilla(fl); const prev = { ...conteo }; await cargarBodega(); Object.assign(conteo, prev, res._c); toast('Planilla cargada', `${res.asignados} ubicaciones asignadas, ${res.contados} conteos cargados${res.sinMatch.length ? '. Sin stock en esta bodega: ' + res.sinMatch.slice(0, 5).join(', ') : ''}.`, res.sinMatch.length ? 'warning' : 'success'); pintar(); } catch (e) { toast('No se pudo leer la planilla', e.message || String(e), 'error'); } }); }
     const c = r.querySelector('#tra-cerrar'); if (c) c.addEventListener('click', () => { if (!confirm('Se cerrará el conteo de hoy y los FALTANTES se descontarán del stock total.\n\n¿Continuar?')) return; c.disabled = true; proteger(cerrarConteo, 'Conteo cerrado: faltantes descontados del stock.'); });
     const rp = r.querySelector('#tra-reponer'); if (rp) rp.addEventListener('click', () => { if (!confirm('Se traspasará stock de la Bodega Central a esta bodega para llegar a la disposición.\n\n¿Reponer?')) return; rp.disabled = true; const keep = { ...conteo }; proteger(async () => { await reponer(); }, 'Reposición hecha: stock traspasado desde la Bodega Central.').then(() => { Object.assign(conteo, keep); }); });
   }
@@ -191,7 +239,7 @@
     try { await cargarBodegas(); await cargarBodega(); pintar(); } catch (e) { r.innerHTML = `<p class="act-err" style="padding:24px">No se pudo cargar: ${esc(e.message || e)}</p>`; }
   }
 
-  const api = { abrir, calcularFila, repartir, sumarLotes, claveDe };
+  const api = { abrir, normEstante, calcularFila, repartir, sumarLotes, claveDe };
   if (typeof window !== 'undefined') window.SAR_Transitoria = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

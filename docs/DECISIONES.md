@@ -847,3 +847,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ### 4.151 Hoja de picking desde un acta emitida (v21.97)
 - En «Ver acta» (Actas ya emitidas) hay un botón **Hoja de picking**: abre para imprimir la misma hoja que usa Pendientes por entregar, con los productos de esa acta (foto, producto/ID, lote y vencimiento usados, cantidad a retirar, casilla para marcar) y la bodega de origen en el encabezado. No se muestra en actas de oxígeno.
 - La ubicación exacta dentro de la bodega no se incluye (el acta no la guarda); pendiente si se necesita.
+
+### 4.152 Hojas de picking en tamaño grande (v21.98)
+- Las hojas de picking (de Pendientes por entregar y la del acta) usan letra de 19 px, fotos de 120 px, casillas de 34 px y cantidad a retirar de 46 px, para identificar el producto de un vistazo al pickear.

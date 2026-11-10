@@ -277,6 +277,7 @@
                 <small>${esc(e.ubicacion || '')}${e.estado === 'PRESTADO' && e.ultimaEntregaActa ? ' · acta ' + esc(e.ultimaEntregaActa) : ''} · ${num(e.recargas)} recarga(s)${e.ultimaRecarga ? ' · última ' + esc(e.ultimaRecarga) : ''}</small></div>
               <select class="oxi-acc" data-id="${esc(e.id)}"><option value="">Acción…</option>${accionesPara(e.estado).map(a => `<option value="${a.k}">${esc(a.txt)}</option>`).join('')}</select>
               <button type="button" class="btn btn-outline oxi-prec" data-id="${esc(e.id)}" title="Imprimir precinto con N° de serie">Precinto</button>
+              <button type="button" class="btn btn-outline oxi-edit" data-id="${esc(e.id)}" title="Corregir los datos de este balón">Editar</button>
               <button type="button" class="btn btn-outline oxi-hist" data-id="${esc(e.id)}">Historial</button></div>
               <div class="oxi-ev" id="oxi-ev-${esc(e.id)}"${eventosAbiertos[e.id] ? '' : ' style="display:none"'}>${eventosAbiertos[e.id] ? eventosHTML(eventosAbiertos[e.id]) : ''}</div>`;
         }).join('') : '<p class="act-hint">Sin equipos con ese filtro. Usa "+ Agregar balones".</p>'}</div>`;
@@ -285,7 +286,7 @@
     }
     function eventosHTML(evs) {
         if (!evs.length) return '<p class="act-hint">Sin movimientos.</p>';
-        return '<ul>' + evs.map(v => `<li><b>${esc(v.fecha)}</b> · ${esc((ACCIONES[v.tipo] || { txt: v.tipo === 'ALTA' ? 'Alta' : v.tipo === 'ENTREGA_ACTA' ? 'Entrega con acta' : v.tipo }).txt)}${v.detalle ? ' — ' + esc(v.detalle) : ''}${v.proveedor ? ' · ' + esc(v.proveedor) : ''}${v.documento ? ' · doc ' + esc(v.documento) : ''} <small>(${esc(v.usuario)})</small></li>`).join('') + '</ul>';
+        return '<ul>' + evs.map(v => `<li><b>${esc(v.fecha)}</b> · ${esc((ACCIONES[v.tipo] || { txt: v.tipo === 'ALTA' ? 'Alta' : v.tipo === 'EDICION_DATOS' ? 'Datos corregidos' : v.tipo === 'ENTREGA_ACTA' ? 'Entrega con acta' : v.tipo }).txt)}${v.detalle ? ' — ' + esc(v.detalle) : ''}${v.proveedor ? ' · ' + esc(v.proveedor) : ''}${v.documento ? ' · doc ' + esc(v.documento) : ''} <small>(${esc(v.usuario)})</small></li>`).join('') + '</ul>';
     }
     function modal(titulo, html, alAceptar, textoOk) {
         const ov = document.createElement('div'); ov.className = 'cierre-overlay';
@@ -322,6 +323,7 @@
             } catch (e) { toast('Error', 'No se pudo leer el historial: ' + e.message, 'error'); }
         }));
         $$('.oxi-acc').forEach(s => s.addEventListener('change', () => { if (s.value) dialogoAccion(s.dataset.id, s.value); else return; s.value = ''; }));
+        $$('.oxi-edit').forEach(b => b.addEventListener('click', () => dialogoEditar(b.dataset.id)));
         r.querySelector('#oxi-alta').addEventListener('click', dialogoAlta);
         r.querySelector('#oxi-entrega').addEventListener('click', dialogoEntrega);
     }
@@ -342,6 +344,45 @@
             toast('Balones', `${res.creados.length} agregado(s)${res.existentes.length ? '; ya existían: ' + res.existentes.join(', ') : ''}.`, res.existentes.length ? 'warning' : 'success');
             await cargar(); pintar();
         });
+    }
+
+    /** Corrige los datos de un balón (serie, gas, capacidad, proveedor, fecha de carga, recargas). Pide motivo y deja código en su historial. */
+    async function editarEquipo(id, nuevos, motivo, nota) {
+        const f = fs(), ref = f.doc(f.collection(db(), 'Equipos_Oxigeno'), id), evRef = f.doc(f.collection(db(), 'Equipos_Oxigeno', id, 'Eventos'));
+        if (nuevos.serie && equipos.some(x => x.id !== id && String(x.serie).trim().toLowerCase() === nuevos.serie.toLowerCase())) throw new Error('Ya existe otro balón con el N° de serie ' + nuevos.serie + '.');
+        const codigo = window.SAR_Gobernanza ? await window.SAR_Gobernanza.codigo('CAM').catch(() => '') : '';
+        return f.runTransaction(db(), async (tx) => {
+            const sn = await tx.get(ref); if (!sn.exists()) throw new Error('El equipo ya no existe.');
+            const e = sn.data(), cambios = {}, det = [];
+            const rot = { serie: 'N° de serie', gas: 'Gas', capacidad: 'Capacidad', proveedor: 'Proveedor', ultimaRecarga: 'Fecha de carga', recargas: 'N° de recargas' };
+            Object.keys(nuevos).forEach(k => { const a = k === 'gas' ? normGas(e.gas) : (e[k] == null ? '' : e[k]), b = nuevos[k]; if (String(a) !== String(b)) { cambios[k] = k === 'recargas' ? num(b) : b; det.push(rot[k] + ': ' + (a === '' ? '—' : a) + ' → ' + (b === '' ? '—' : b)); } });
+            if (!det.length) throw new Error('No cambiaste ningún dato.');
+            tx.update(ref, { ...cambios, updatedAt: f.serverTimestamp() });
+            tx.set(evRef, { tipo: 'EDICION_DATOS', fecha: hoy(), detalle: (codigo ? codigo + ' · ' : '') + motivo + (nota ? ' (' + nota + ')' : '') + ' — ' + det.join('; '), codigo: codigo || '', motivo, estadoAnterior: e.estado, estadoNuevo: e.estado, ubicacion: e.ubicacion || '', usuario: usuario(), creadoEn: f.serverTimestamp() });
+            return { codigo, cambios: det.length };
+        });
+    }
+    function dialogoEditar(id) {
+        const e = equipos.find(x => x.id === id); if (!e) return;
+        const G = window.SAR_Gobernanza, motivos = G ? G.MOTIVOS : ['Error de digitación', 'Otro'];
+        modal('Editar datos · N° ' + e.serie, `
+            <label class="act-l">N° de serie<input id="oxi-e-serie" value="${esc(e.serie)}" autocomplete="off"></label>
+            ${campoLista('oxi-e-cap', 'Capacidad', listaCap(), e.capacidad || '1 m³', 'cap')}
+            ${campoLista('oxi-e-gas', 'Tipo de gas', listaGas(), normGas(e.gas), 'gas')}
+            <label class="act-l">Proveedor<input id="oxi-e-prov" list="oxi-provs2" value="${esc(e.proveedor || '')}" autocomplete="off"><datalist id="oxi-provs2">${[...new Set(equipos.map(x => x.proveedor).filter(Boolean))].map(p => `<option value="${esc(p)}">`).join('')}</datalist></label>
+            <label class="act-l">Fecha de la última carga<input id="oxi-e-fc" type="date" value="${esc(String(e.ultimaRecarga || '').slice(0, 10))}"></label>
+            <label class="act-l">N° de recargas<input id="oxi-e-rec" type="number" min="0" step="1" value="${num(e.recargas)}"></label>
+            <p class="act-hint" style="margin:6px 0;">El estado (lleno, vacío, en recarga…) se cambia con «Acción…».</p>
+            <label class="act-l">Motivo de la corrección<select id="oxi-e-mot"><option value="">Selecciona un motivo…</option>${motivos.map(m => `<option>${esc(m)}</option>`).join('')}</select></label>
+            <label class="act-l">Detalle (opcional)<input id="oxi-e-nota" maxlength="160"></label>`, async (q) => {
+            const mot = q('#oxi-e-mot').value; if (!mot) throw new Error('Elige el motivo de la corrección.');
+            const serie = q('#oxi-e-serie').value.trim(); if (!serie) throw new Error('El N° de serie no puede quedar vacío.');
+            const rec = q('#oxi-e-rec').value; if (rec === '' || !(Number(rec) >= 0) || Math.floor(Number(rec)) !== Number(rec)) throw new Error('Las recargas deben ser un número entero, 0 o mayor.');
+            const cap = normCap(valLista(q, 'oxi-e-cap')) || e.capacidad || '1 m³', gas = normGas(valLista(q, 'oxi-e-gas'));
+            const r = await window.SAR_Progreso.correr('Guardando los datos del balón…', () => editarEquipo(id, { serie, capacidad: cap, gas, proveedor: q('#oxi-e-prov').value.trim(), ultimaRecarga: q('#oxi-e-fc').value || '', recargas: rec }, mot, q('#oxi-e-nota').value.trim()), (x) => x.codigo ? 'Código de seguimiento ' + x.codigo : 'Datos guardados');
+            await guardarOpciones(gas, cap);
+            toast('Balón actualizado', 'Datos corregidos' + (r && r.codigo ? ' · ' + r.codigo : '') + '.', 'success'); delete eventosAbiertos[id]; await cargar(); pintar();
+        }, 'Guardar cambios');
     }
     function dialogoAccion(id, clave) {
         const e = equipos.find(x => x.id === id), a = ACCIONES[clave]; if (!e) return;

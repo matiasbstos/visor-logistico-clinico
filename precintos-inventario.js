@@ -163,20 +163,38 @@
   }
   function abrirOxigeno(equipos) {
     if (!equipos || !equipos.length) { toast('Precinto', 'No hay balones para imprimir.', 'error'); return; }
+    const unico = equipos.length === 1, marc = new Set(unico ? [equipos[0].id] : []), asig = new Map();
     let m = document.getElementById('modal-precinto'); if (!m) { m = document.createElement('div'); m.id = 'modal-precinto'; m.className = 'modal-overlay'; document.body.appendChild(m); }
+    const elegidos = () => equipos.filter(e => marc.has(e.id));
     m.innerHTML = '<div class="modal-content pr-modal"><div class="modal-header"><div><span class="text-primary font-bold text-sm">OXÍGENO PORTÁTIL</span><h2>Precinto de control</h2></div><button type="button" class="btn btn-icon close-modal-btn" data-pr="cerrar"><i class="ph ph-x"></i></button></div>' +
-      '<div class="modal-body"><p class="sub-text">' + equipos.length + ' precinto(s) con N° de serie automático' + (equipos.length > 1 ? ' (vista previa del primero)' : '') + '. El folio correlativo se asigna al imprimir o descargar. Formato 100×60 mm para la Zebra.</p><label class="pr-reuso"><input type="checkbox" id="pr-reuso" checked> Si el balón ya tiene precinto, reimprimirlo con su mismo folio y el diseño actual</label><div class="pr-vista">' + etiquetaOxiHTML(equipos[0]) + '</div></div>' +
+      '<div class="modal-body"><p class="sub-text"><b>Elige qué balones imprimir.</b> El N° de serie sale solo; el folio correlativo se asigna al imprimir o descargar. Formato 100×60 mm para la Zebra.</p>' +
+      (unico ? '' : '<div class="pr-sel-barra"><button type="button" class="btn btn-outline" data-pr="todos">Marcar todos</button><button type="button" class="btn btn-outline" data-pr="ninguno">Quitar todos</button><span id="pr-cuenta"></span></div>') +
+      '<div class="pr-sel-lista">' + equipos.map(e => '<label class="pr-sel"><input type="checkbox" class="pr-ck" data-id="' + esc(e.id) + '"' + (marc.has(e.id) ? ' checked' : '') + '> <b>N° ' + esc(e.serie) + '</b> <small>' + esc(gasTxt(e)) + (e.capacidad ? ' · ' + esc(e.capacidad) : '') + (e.proveedor ? ' · ' + esc(e.proveedor) : '') + '</small></label>').join('') + '</div>' +
+      '<label class="pr-reuso"><input type="checkbox" id="pr-reuso" checked> Si el balón ya tiene precinto, reimprimirlo con su mismo folio y el diseño actual</label><div class="pr-vista" id="pr-vista-oxi"></div></div>' +
       '<div class="modal-footer pr-pie-m"><button type="button" class="btn btn-outline" data-pr="cerrar">Cerrar</button><button type="button" class="btn btn-outline" data-pr="pdf"><i class="ph-bold ph-file-pdf"></i> Descargar PDF</button><button type="button" class="btn btn-primary" data-pr="imprimir"><i class="ph-bold ph-printer"></i> Imprimir</button></div></div>';
     m.classList.add('active');
-    let asignados = null;
-    const asignar = async () => { if (!asignados) { const ch = m.querySelector('#pr-reuso'); asignados = await reservarOxi(equipos, !ch || ch.checked); if (ch) ch.disabled = true; const v = m.querySelector('.pr-vista'); if (v) v.innerHTML = etiquetaOxiHTML(asignados[0]); const t = m.querySelector('.sub-text'); if (t) t.textContent = asignados.length + ' precinto(s): ' + asignados[0].folio + (asignados.length > 1 ? ' a ' + asignados[asignados.length - 1].folio : '') + '. Formato 100×60 mm para la Zebra.'; } return asignados; };
+    const refrescar = () => {
+      const l = elegidos(), v = m.querySelector('#pr-vista-oxi'), c = m.querySelector('#pr-cuenta');
+      if (c) c.textContent = l.length + ' de ' + equipos.length + ' marcados';
+      v.innerHTML = l.length ? etiquetaOxiHTML(asig.get(l[0].id) || l[0]) + (l.length > 1 ? '<p class="sub-text">Vista previa del primero (' + l.length + ' etiquetas).</p>' : '') : '<p class="sub-text">Marca al menos un balón para ver y imprimir su precinto.</p>';
+      m.querySelectorAll('[data-pr="pdf"],[data-pr="imprimir"]').forEach(b => { b.disabled = !l.length; });
+      const bi = m.querySelector('[data-pr="imprimir"]'); if (bi) bi.innerHTML = '<i class="ph-bold ph-printer"></i> Imprimir' + (l.length ? ' (' + l.length + ')' : '');
+    };
+    refrescar();
+    const asignar = async () => {
+      const l = elegidos(), faltan = l.filter(e => !asig.has(e.id)); const ch = m.querySelector('#pr-reuso');
+      if (faltan.length) { const nuevos = await reservarOxi(faltan, !ch || ch.checked); nuevos.forEach((x, i) => asig.set(faltan[i].id, x)); }
+      return l.map(e => asig.get(e.id));
+    };
+    m.onchange = (e) => { const c = e.target.closest && e.target.closest('.pr-ck'); if (!c) return; c.checked ? marc.add(c.dataset.id) : marc.delete(c.dataset.id); refrescar(); };
     m.onclick = async (e) => {
       const b = e.target.closest('[data-pr]'); if (!b) return; const a = b.dataset.pr;
       if (a === 'cerrar') { m.classList.remove('active'); return; }
+      if (a === 'todos' || a === 'ninguno') { equipos.forEach(x => a === 'todos' ? marc.add(x.id) : marc.delete(x.id)); m.querySelectorAll('.pr-ck').forEach(c => { c.checked = marc.has(c.dataset.id); }); refrescar(); return; }
+      if (b.disabled || !elegidos().length) return;
       b.disabled = true;
-      try { const L = await asignar(); if (a === 'imprimir') imprimirHtml(L.map(etiquetaOxiHTML)); else if (a === 'pdf') await pdfOxigeno(L); }
-      catch (err) { console.error('[Precintos]', err); toast('Precinto', 'No se pudo reservar el folio (código PI-02). Revisa la conexión.', 'error'); }
-      b.disabled = false;
+      try { const L = await asignar(); if (a === 'imprimir') imprimirHtml(L.map(etiquetaOxiHTML)); else if (a === 'pdf') await pdfOxigeno(L); refrescar(); }
+      catch (err) { console.error('[Precintos]', err); toast('Precinto', 'No se pudo reservar el folio (código PI-02). Revisa la conexión.', 'error'); b.disabled = false; }
     };
   }
 

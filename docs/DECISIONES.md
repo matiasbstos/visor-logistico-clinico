@@ -1055,3 +1055,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - «Directorio de errores» pasa a **«Directorio»** con dos pestañas: *Errores y alertas* (igual que antes) y *Nomenclaturas y correlativos* (`nomenclaturas.js`).
 - Nomenclaturas: 18 códigos del sitio con nombre, formato, ejemplo, para qué sirve, quién lo asigna, si reinicia cada año, dónde se guarda y el **último número emitido** (leído de Contadores: SAR, ING/CAM/AJU, AE, PI, PO). Con buscador y agrupado (productos y lotes · ingresos y ajustes · entregas y correos · compras y recepciones · precintos · sistema).
 - AGENTS.md (regla 6): todo código o correlativo nuevo se agrega a `nomenclaturas.js`.
+
+## 4.194 Oxígeno: editar datos del balón y elegir qué precintos imprimir (v21.140)
+- Cada balón tiene un botón **Editar**: corrige N° de serie (sin repetir otro), gas, capacidad, proveedor, fecha de la última carga y N° de recargas. Pide **motivo** (lista de Gobernanza) y deja un evento «Datos corregidos» en el historial del balón con código `CAM-AAAA-NNNNNN` y el antes → después. El estado se sigue cambiando con «Acción…».
+- El modal de **Precinto** ya no imprime todo: lista los balones con casillas (desde la fila va solo ese marcado; desde «Precintos (N)» no hay ninguno marcado, con «Marcar todos / Quitar todos»). Se imprime o descarga solo lo marcado; el folio PO se asigna únicamente a los elegidos y se reutiliza si ya tenían.

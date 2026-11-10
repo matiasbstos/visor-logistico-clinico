@@ -123,18 +123,32 @@
     const refrescar = async () => { if (ctx && ctx.refrescar) await ctx.refrescar(); };
     const archivo = (accept, multiple) => new Promise(ok => { const i = document.createElement('input'); i.type = 'file'; i.accept = accept; i.multiple = !!multiple; i.onchange = () => ok(i.files); i.oncancel = () => ok(null); i.click(); });
     const proteger = async (fn, okTxt) => { try { await fn(); if (okTxt) toast('Oxígeno', okTxt, 'success'); await refrescar(); } catch (e) { toast('No se pudo', e.message || String(e), 'error'); } };
-    sec.querySelectorAll('.op-acta').forEach(b => b.addEventListener('click', async () => { const fl = await archivo('application/pdf,image/*', false); if (fl && fl[0]) proteger(() => subirActa(porId(b.dataset.id), fl[0]), 'Acta firmada guardada.'); }));
-    sec.querySelectorAll('.op-veracta').forEach(b => b.addEventListener('click', () => proteger(() => verActa(porId(b.dataset.id)))));
+    sec.querySelectorAll('.op-acta').forEach(b => b.addEventListener('click', async () => { const fl = await archivo('application/pdf,image/*', false); if (!(fl && fl[0])) return; const e = porId(b.dataset.id), A = window.SAR_ActasEntrega;
+      proteger(async () => { if (e && e.ultimaEntregaActa && A && A.subirFirmada) { const sn = await fs().getDoc(fs().doc(fs().collection(db(), 'Actas_Entrega'), e.ultimaEntregaActa)); if (sn.exists()) { await A.subirFirmada({ ...sn.data(), numero: sn.id }, fl[0], usuario()); return; } } await subirActa(e, fl[0]); }, 'Acta firmada guardada.'); }));
+    sec.querySelectorAll('.op-veracta').forEach(b => b.addEventListener('click', () => proteger(async () => { const e = porId(b.dataset.id), r = e && e.prestamo && e.prestamo.actaFirmada, A = window.SAR_ActasEntrega; if (r && r.actaNumero && A && A.verRespaldo) { const sn = await fs().getDoc(fs().doc(fs().collection(db(), 'Actas_Entrega'), r.actaNumero)); if (sn.exists()) { await A.verRespaldo({ ...sn.data(), numero: sn.id }); return; } } await verActa(e); })));
     sec.querySelectorAll('.op-fotos').forEach(b => b.addEventListener('click', async () => { const fl = await archivo('image/*', true); if (fl && fl.length) proteger(() => subirFotos(porId(b.dataset.id), fl), 'Fotos guardadas.'); }));
     sec.querySelectorAll('.op-verfotos').forEach(b => b.addEventListener('click', () => { const e = porId(b.dataset.id); ((e.prestamo && e.prestamo.fotos) || []).forEach(x => proteger(() => verFoto(x.id))); }));
     sec.querySelector('#op-nuevo').addEventListener('click', () => {
+      const O = window.SAR_Oxigeno, fm = O && O.firmaActual ? O.firmaActual() : { nombre: '', cargo: '' };
       const libres = equipos.filter(e => e.estado === 'LLENO' || e.estado === 'VACIO'), centros = (window.SAR_ActasEntrega && window.SAR_ActasEntrega.listaCentros ? window.SAR_ActasEntrega.listaCentros() : []);
       modal('Registrar préstamo de balones', `<label class="act-l">Centro al que se prestó<input id="op-centro" list="op-centros" placeholder="Ej: Pomaire"><datalist id="op-centros">${centros.map(c => `<option value="${esc(c)}">`).join('')}</datalist></label>
         <label class="act-l">¿Cuándo se entregaron los balones?<input type="date" id="op-fecha" value="${hoy()}" max="${hoy()}"></label>
-        <p class="act-hint">Balones (solo los que están en el SAR):</p><div class="op-lista">${libres.length ? libres.map(e => `<label class="pr-sel"><input type="checkbox" class="op-chk" value="${esc(e.id)}"> <b>N° ${esc(e.serie)}</b> <small>· ${esc((window.SAR_Oxigeno && window.SAR_Oxigeno.normGas ? window.SAR_Oxigeno.normGas(e.gas) : e.gas) || '')} · ${esc(e.capacidad || '')} (${esc(e.estado === 'LLENO' ? 'lleno' : 'vacío')})</small></label>`).join('') : '<p class="act-hint">No hay balones disponibles.</p>'}</div>
-        <label class="act-l">Acta de entrega firmada <small>(PDF o foto, máx. 6 MB; opcional, también puedes subirla después)</small><input type="file" id="op-acta-f" accept="application/pdf,image/*"></label>
-        <label class="act-l">Nota (opcional)<input id="op-nota" placeholder="Ej: por cambio de balón en ambulancia"></label>`,
-      async (q) => { const ids = [...document.querySelectorAll('.op-chk:checked')].map(c => c.value); const fa = q('#op-acta-f') && q('#op-acta-f').files[0]; if (fa) { if (!/^(application\/pdf|image\/)/.test(fa.type || '')) throw new Error('El acta debe ser PDF o una foto.'); if (fa.size > MAX_DOC) throw new Error('El archivo pesa más de 6 MB. Reduce la calidad del escaneo.'); } await registrarPrestamo(equipos, ids, q('#op-centro').value, q('#op-fecha').value, q('#op-nota').value); if (fa) { try { await subirActaGrupo(ids.map(id => porId(id)), fa, q('#op-centro').value.trim()); } catch (ea) { toast('Acta', 'El préstamo quedó registrado, pero el acta no se pudo subir: ' + (ea.message || ea) + ' Súbela desde «Subir acta firmada».', 'warning'); } } toast('Préstamo registrado', `${ids.length} balón(es) en ${q('#op-centro').value.trim()}. Sube el acta firmada y las fotos desde el panel.`, 'success'); await refrescar(); }, 'Registrar préstamo');
+        <p class="act-hint">Balones (solo los que están en el SAR):</p><div class="op-lista">${libres.length ? libres.map(e => `<label class="pr-sel"><input type="checkbox" class="op-chk" value="${esc(e.id)}"> <b>N° ${esc(e.serie)}</b> <small>· ${esc((O && O.normGas ? O.normGas(e.gas) : e.gas) || '')} · ${esc(e.capacidad || '')} (${esc(e.estado === 'LLENO' ? 'lleno' : 'vacío')})</small></label>`).join('') : '<p class="act-hint">No hay balones disponibles.</p>'}</div>
+        <label class="act-l">Entrega<input id="op-en" value="${esc(fm.nombre)}"></label><label class="act-l">Cargo<input id="op-ec" value="${esc(fm.cargo)}"></label>
+        <label class="act-l">Recibe (opcional)<input id="op-rn"></label><label class="act-l">Cargo de quien recibe (opcional)<input id="op-rc"></label>
+        <label class="act-l">Nota (opcional)<input id="op-nota" placeholder="Ej: por cambio de balón en ambulancia"></label>
+        <p class="act-hint">Al registrar se genera el <b>acta de entrega</b> con su correlativo (AE-AAAA-NNNN) y se descarga para firmar. Cuando esté firmada, súbela desde «Subir acta firmada» o desde Actas de entrega.</p>`,
+      async (q) => {
+        const ids = [...document.querySelectorAll('.op-chk:checked')].map(c => c.value), centro = q('#op-centro').value.trim(), fecha = q('#op-fecha').value;
+        if (!centro) throw new Error('Indica el centro al que se prestó.'); if (!ids.length) throw new Error('Elige al menos un balón.');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha || '') || fecha > hoy()) throw new Error('La fecha de entrega no es válida.');
+        const lista = ids.map(id => porId(id)).filter(Boolean), firma = { nombre: q('#op-en').value.trim(), cargo: q('#op-ec').value.trim() };
+        if (O && O.fijarFirma) O.fijarFirma(firma);
+        const acta = await window.SAR_Progreso.correr('Generando el acta de entrega…', () => O.entregar(centro, lista, firma, { nombre: q('#op-rn').value.trim(), cargo: q('#op-rc').value.trim() }, [], { prestamo: true, fecha, nota: q('#op-nota').value }), 'Acta emitida');
+        toast('Préstamo registrado', `${acta.numero} · ${lista.length} balón(es) a ${centro}. Descarga el acta, hazla firmar y súbela.`, 'success');
+        await refrescar();
+        const A = window.SAR_ActasEntrega; if (A && A.descargarActa) { try { await A.descargarActa(acta, 'pdf'); } catch (e) { toast('Descarga', 'El acta se emitió; bájala desde Actas de entrega. ' + e.message, 'warning'); } }
+      }, 'Generar acta y registrar');
     });
   }
 

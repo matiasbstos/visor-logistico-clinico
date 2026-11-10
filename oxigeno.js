@@ -186,7 +186,8 @@
     }
 
     /** Acta de entrega de balones: correlativo + acta + estado de cada equipo, en una transacción. */
-    async function entregar(centro, lista, firmaEntrega, recibe, documentos) {
+    async function entregar(centro, lista, firmaEntrega, recibe, documentos, opts) {
+        opts = opts || {};
         const f = fs();
         const anio = new Date().getFullYear();
         const ctrRef = f.doc(f.collection(db(), 'Contadores'), `acta-${anio}`);
@@ -196,14 +197,16 @@
             const n = (cs.exists() ? num(cs.data().ultimo) : 0) + 1;
             const numero = `AE-${anio}-${String(n).padStart(4, '0')}`;
             const snaps = []; for (const r of refs) snaps.push(await tx.get(r.ref));
-            snaps.forEach((s, k) => { if (!s.exists()) throw new Error(`El balón ${refs[k].e.serie} ya no existe.`); if (s.data().estado !== 'LLENO') throw new Error(`El balón ${refs[k].e.serie} ya no está lleno.`); });
-            refs.forEach((r) => {
-                tx.update(r.ref, { estado: 'PRESTADO', ubicacion: centro, prestadoA: centro, ultimaEntregaActa: numero, updatedAt: f.serverTimestamp() });
-                tx.set(r.ev, { tipo: 'ENTREGA_ACTA', fecha: hoy(), detalle: `Entregado a ${centro} (acta ${numero})`, estadoAnterior: 'LLENO', estadoNuevo: 'PRESTADO', ubicacion: centro, documento: numero, usuario: usuario(), creadoEn: f.serverTimestamp() });
+            snaps.forEach((s, k) => { if (!s.exists()) throw new Error(`El balón ${refs[k].e.serie} ya no existe.`); const est = s.data().estado; if (opts.prestamo ? !['LLENO', 'VACIO'].includes(est) : est !== 'LLENO') throw new Error(opts.prestamo ? `El balón ${refs[k].e.serie} no está en el SAR (${(ESTADOS[est] || {}).txt || est}).` : `El balón ${refs[k].e.serie} ya no está lleno.`); });
+            const fechaE = opts.fecha || hoy();
+            refs.forEach((r, k) => {
+                const antes = snaps[k].data().estado;
+                tx.update(r.ref, { estado: 'PRESTADO', ubicacion: centro, prestadoA: centro, ultimaEntregaActa: numero, ...(opts.prestamo ? { prestamo: { desde: fechaE, nota: String(opts.nota || '').trim(), registradoPor: usuario(), fotos: [], actaAE: numero } } : {}), updatedAt: f.serverTimestamp() });
+                tx.set(r.ev, { tipo: opts.prestamo ? 'PRESTAMO' : 'ENTREGA_ACTA', fecha: fechaE, detalle: `${opts.prestamo ? 'Prestado' : 'Entregado'} a ${centro} (acta ${numero})${opts.nota ? ' · ' + String(opts.nota).trim() : ''}`, estadoAnterior: antes, estadoNuevo: 'PRESTADO', ubicacion: centro, documento: numero, usuario: usuario(), creadoEn: f.serverTimestamp() });
             });
             tx.set(ctrRef, { ultimo: n, anio, updatedAt: f.serverTimestamp() });
             const acta = {
-                numero, fecha: hoy(), centro, tipo: 'OXIGENO', bodegaOrigen: SEDE, estado: 'EMITIDA', stockDescontado: false,
+                numero, fecha: fechaE, centro, tipo: 'OXIGENO', ...(opts.prestamo ? { motivo: 'PRESTAMO' } : {}), bodegaOrigen: SEDE, estado: 'EMITIDA', stockDescontado: false,
                 items: refs.map(r => ({ id: r.e.id, nombre: nombreEnActa(r.e), cantidad: 1, serie: r.e.serie })), pendientes: [],
                 documentos: documentos || [], entrega: firmaEntrega, recibe: recibe || { nombre: '', cargo: '' }, creadoPor: usuario(), creadoEn: f.serverTimestamp()
             };
@@ -426,6 +429,6 @@
         pintar();
     }
 
-    window.SAR_Oxigeno = { _quitar: quitarOpcion, normGas, GASES, fechaCL, normCap, capacidades, editarActa, listarLlenos, abrir, resumen, accionesPara, aplicarAccion, parsearSeries, validarEntrega, nombreEnActa, registrarAccion, crearEquipos, entregar, ESTADOS, ACCIONES };
+    window.SAR_Oxigeno = { firmaActual: () => ({ ...firma }), fijarFirma: (x) => { firma = { nombre: x.nombre, cargo: x.cargo }; }, _quitar: quitarOpcion, normGas, GASES, fechaCL, normCap, capacidades, editarActa, listarLlenos, abrir, resumen, accionesPara, aplicarAccion, parsearSeries, validarEntrega, nombreEnActa, registrarAccion, crearEquipos, entregar, ESTADOS, ACCIONES };
     if (typeof module !== 'undefined') module.exports = window.SAR_Oxigeno;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: { dataset: {} } });

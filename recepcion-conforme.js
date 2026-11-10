@@ -129,8 +129,8 @@
         T('Orden de Compra: ' + (oc.numeroOC || ''), ML, y, 10.5, true); y += 22;
         T(`Con fecha ${fechaCorta(d.fecha)}, en calidad de contraparte técnica, certifico lo siguiente:`, ML, y, 10.5, false); y += 22;
         // Caja con lo recibido (se parte en otra página si es muy larga)
-        const items = (d.lineas || lineasRecibidas(oc, centro)).map(l => envolver(`${String(l.producto).toUpperCase()} (CANTIDAD:${miles(l.recibido)})`, 10.5, false, MR - ML - 44));
-        const encab = `Que se recibió conforme en forma ${d.parcial ? 'Parcial' : 'Total'} de los productos, donde se recibió lo siguiente:`;
+        const items = (d.lineas && d.lineas.length ? d.lineas : lineasRecibidas(oc, centro)).map(l => envolver(`${String(l.producto).toUpperCase()} (CANTIDAD:${miles(l.recibido)})`, 10.5, false, MR - ML - 44));
+        const encab = (d.encabezado && String(d.encabezado).trim()) || `Que se recibió conforme en forma ${d.parcial ? 'Parcial' : 'Total'} de los productos, donde se recibió lo siguiente:`;
         const caja = (x0, x1, yTop, yBot) => { const t = 0.8; [[x0, yTop, x1, yTop], [x0, yBot, x1, yBot], [x0, yTop, x0, yBot], [x1, yTop, x1, yBot]].forEach(([a, b, c, e]) => page.drawLine({ start: { x: a, y: H - b }, end: { x: c, y: H - e }, thickness: t, color: negro })); };
         let top = y, cy = y + 16; T(encab, ML + 6, cy, 8.5, false); cy += 16;
         items.forEach(ls => {
@@ -150,6 +150,18 @@
     }
 
     const aBase64 = (bytes) => { let s = ''; const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes); for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
+
+    /** Encabezado por defecto del acta según Total/Parcial (editable por el usuario). */
+    const encabezadoBase = (parcial) => `Que se recibió conforme en forma ${parcial ? 'Parcial' : 'Total'} de los productos, donde se recibió lo siguiente:`;
+    const escA = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    /** Tabla editable del detalle del acta: incluir, producto y cantidad. */
+    function detalleHTML(lineas, pre) {
+        return `<div class="rc-det" id="${pre}-det"><div class="rc-det-cab"><span></span><span>Producto (como saldrá en el acta)</span><span>Cantidad</span></div>${lineas.map((l, i) => `<div class="rc-det-fila"><input type="checkbox" class="${pre}-inc" checked title="Incluir en el acta"><input type="text" class="${pre}-prod" value="${escA(l.producto)}"><input type="number" min="0" class="${pre}-cant" value="${l.recibido}"></div>`).join('')}</div>`;
+    }
+    function leerDetalle(root, pre) {
+        const inc = [...root.querySelectorAll('.' + pre + '-inc')], pr = [...root.querySelectorAll('.' + pre + '-prod')], ca = [...root.querySelectorAll('.' + pre + '-cant')];
+        return inc.map((c, i) => ({ on: c.checked, producto: (pr[i].value || '').trim(), recibido: Math.max(0, Number(ca[i].value) || 0) })).filter(l => l.on && l.producto && l.recibido > 0).map(l => ({ producto: l.producto, recibido: l.recibido }));
+    }
     function bajar(bytes, nombre) {
         const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
         const a = document.createElement('a'); a.href = url; a.download = nombre; document.body.appendChild(a); a.click(); setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1500);
@@ -168,10 +180,13 @@
         const f = (id, et, v, tipo, extra) => `<label>${et}<input type="${tipo || 'text'}" id="${id}" value="${esc(v == null ? '' : v)}" ${extra || ''}></label>`;
         const ov = modal('Recepción conforme', `
             <p class="cierre-hint">Genera el acta de recepción conforme y envía el correo con el acta y la guía/factura. Revisa los destinatarios.</p>
-            <div class="soc-fila"><label>Documento del proveedor<select id="rc-tipo"><option value="GUIA">Guía de despacho</option><option value="FACTURA">Factura</option></select></label>${f('rc-num', 'N° del documento', oc.ultimaGuia || '')}${f('rc-fec', 'Fecha de recepción (la que dirá el acta)', fechaRec, 'date')}</div>
+            <div class="soc-fila"><label>Documento del proveedor<select id="rc-tipo"><option value="GUIA">Guía de despacho</option><option value="FACTURA">Factura</option></select></label>${f('rc-num', 'N° del documento', oc.ultimaGuia || '')}${f('rc-fec', '¿Con qué fecha se emite el acta?', fechaRec, 'date')}</div>
             <p class="cierre-hint" id="rc-fec-ayuda">${fechaRec !== hoyISO() ? `Se propone el <b>${fechaCorta(fechaRec)}</b>, día en que se registró la recepción de los productos (hoy es ${fechaCorta(hoyISO())}). ` : ''}Si los productos llegaron otro día, cambia la fecha: el acta llevará la fecha que indiques. <a href="#" id="rc-fec-hoy">Usar hoy</a></p>
             <label>PDF de la guía o factura<input type="file" id="rc-file" accept="application/pdf"></label>
             <label>Tipo de recepción<select id="rc-parcial"><option value="0"${pend > 0 ? '' : ' selected'}>Total</option><option value="1"${pend > 0 ? ' selected' : ''}>Parcial${pend > 0 ? ` (faltan ${pend} unidades)` : ''}</option></select></label>
+            <label>Encabezado del acta (editable)<textarea id="rc-enc" rows="2">${escA(encabezadoBase(pend > 0))}</textarea></label>
+            <p class="cierre-hint">Detalle del acta: quita, corrige o cambia cantidades. Se ve igual en el PDF.</p>
+            ${detalleHTML(lineasActa(oc, centro).filter(l => l.recibido > 0), 'rc')}
             ${f('rc-ct', 'Contraparte técnica (firma del acta)', CONTRAPARTE_BASE)}
             <label class="soc-toggle"><input type="checkbox" id="rc-firma" checked> Incluir firma y timbre de la contraparte en el acta</label>
             <div class="soc-fila">${f('rc-fn', 'Correo firmado por', FIRMA_BASE.nombre)}${f('rc-fc', 'Cargo', FIRMA_BASE.cargo)}</div>
@@ -182,8 +197,10 @@
             <div id="rc-error" class="cierre-error"></div>`, async (o) => {
             const g = (id) => (o.querySelector('#' + id) || {}).value || '';
             const d = { tipoDoc: g('rc-tipo'), numeroDoc: g('rc-num').trim(), fecha: g('rc-fec') || hoyISO(), archivo: (o.querySelector('#rc-file').files || [])[0] || null, parcial: (o.querySelector('#rc-parcial') || {}).value === '1',
-                contraparte: g('rc-ct').trim() || CONTRAPARTE_BASE, conFirma: (o.querySelector('#rc-firma') || {}).checked !== false, firmaNombre: g('rc-fn').trim() || FIRMA_BASE.nombre, firmaCargo: g('rc-fc').trim() || FIRMA_BASE.cargo, observaciones: g('rc-obs').trim(), to: lista(g('rc-to')), cc: lista(g('rc-cc')) };
+                contraparte: g('rc-ct').trim() || CONTRAPARTE_BASE, conFirma: (o.querySelector('#rc-firma') || {}).checked !== false, firmaNombre: g('rc-fn').trim() || FIRMA_BASE.nombre, firmaCargo: g('rc-fc').trim() || FIRMA_BASE.cargo, observaciones: g('rc-obs').trim(), to: lista(g('rc-to')), cc: lista(g('rc-cc')), encabezado: g('rc-enc').trim(), lineas: leerDetalle(o, 'rc') };
             const err = validar(oc, d, centro);
+            if (!d.fecha) err.push('Indica la fecha del acta.');
+            if (!d.lineas.length) err.push('El detalle del acta no puede quedar vacío.');
             o.querySelector('#rc-error').innerHTML = err.map(e => `<div>${esc(e)}</div>`).join('');
             if (err.length) return false;
             const PDFLib = await cargarPDFLib(); const logoBytes = await cargarLogo(); const firmaBytes = await cargarFirma();
@@ -201,12 +218,13 @@
             const resumen = { estado: correo.estado, to: correo.destinatarios || d.to, cc: correo.cc || d.cc, detalle: correo.detalle || '', fecha: hoyISO() };
             const textoEv = `Recepción conforme registrada (${d.tipoDoc === 'FACTURA' ? 'factura' : 'guía'} N° ${d.numeroDoc})${d.parcial ? ', parcial' : ''}. Correo: ${correo.estado}${correo.detalle ? ' — ' + correo.detalle : ''}.`;
             const ocRef = fs().doc(fs().collection(db(), 'Seguimiento_OC'), oc.id);
-            await fs().updateDoc(ocRef, { recepcionConforme: { fecha: d.fecha, por: ctx.usuario, recibe: d.firmaNombre, tipoDoc: d.tipoDoc, numeroDoc: d.numeroDoc, parcial: d.parcial, observaciones: d.observaciones, correo: resumen } });
+            await fs().updateDoc(ocRef, { recepcionConforme: { fecha: d.fecha, por: ctx.usuario, recibe: d.firmaNombre, tipoDoc: d.tipoDoc, numeroDoc: d.numeroDoc, parcial: d.parcial, observaciones: d.observaciones, encabezado: d.encabezado, lineas: d.lineas, correo: resumen } });
             await fs().setDoc(fs().doc(fs().collection(db(), 'Seguimiento_OC', oc.id, 'Eventos')), { tipo: 'CONFORME', texto: textoEv, autor: ctx.usuario, fecha: fs().serverTimestamp(), correo: { estado: correo.estado, destinatarios: [...(correo.destinatarios || []), ...(correo.cc || [])], detalle: correo.detalle || '' } });
             if (correo.estado === 'enviado') toast('Correo enviado', `Acta y ${d.tipoDoc === 'FACTURA' ? 'factura' : 'guía'} enviadas a ${(correo.destinatarios || []).length + (correo.cc || []).length} destinatario(s).`, 'success');
             else if (correo.estado === 'programado') toast('Correo programado', correo.detalle, 'info');
             else if (correo.estado !== 'borrador' && enviar) toast('Revisa el correo', correo.detalle || 'El correo no se pudo enviar.', 'error');
         });
+        try { const sel = ov.querySelector('#rc-parcial'), enc = ov.querySelector('#rc-enc'); let tocado = false; enc.addEventListener('input', () => { tocado = true; }); sel.addEventListener('change', () => { if (!tocado) enc.value = encabezadoBase(sel.value === '1'); }); } catch (e) { /* sin sincronía */ }
         try { const h = ov && ov.querySelector('#rc-fec-hoy'); if (h) h.addEventListener('click', (ev) => { ev.preventDefault(); ov.querySelector('#rc-fec').value = hoyISO(); }); } catch (e) { /* sin atajo */ }
         return ov;
     }
@@ -216,7 +234,7 @@
         const { oc, toast } = ctx; const centro = ctx.centroPropio || 'SAR', rc = oc.recepcionConforme;
         if (!rc) throw new Error('Esta orden aún no tiene recepción conforme registrada.');
         const lin = lineasActa(oc, centro), pend = lin.reduce((t, l) => t + Math.max(0, l.pedido - l.recibido), 0);
-        const d = { fecha: rc.fecha || hoyISO(), parcial: typeof rc.parcial === 'boolean' ? rc.parcial : pend > 0, observaciones: rc.observaciones || '', contraparte: rc.contraparte || CONTRAPARTE_BASE, conFirma: true };
+        const d = { fecha: rc.fecha || hoyISO(), parcial: typeof rc.parcial === 'boolean' ? rc.parcial : pend > 0, observaciones: rc.observaciones || '', contraparte: rc.contraparte || CONTRAPARTE_BASE, conFirma: true, encabezado: rc.encabezado || '', lineas: rc.lineas || null };
         const prog = window.SAR_Progreso.iniciar('Regenerando la recepción conforme…', ['Armando el documento con el modelo vigente…']);
         try {
         const PDFLib = await cargarPDFLib(); const logoBytes = await cargarLogo(); const firmaBytes = await cargarFirma();
@@ -236,23 +254,28 @@
         const e = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
         const ov = document.createElement('div'); ov.className = 'cierre-overlay';
         ov.innerHTML = `<div class="cierre-box" role="dialog" aria-modal="true"><h3>Editar recepción conforme</h3>
-            <p class="cierre-hint">Al guardar se rehace el acta con estos datos y reemplaza el archivo de la orden. Los productos y cantidades salen de lo recibido en la orden.</p>
+            <p class="cierre-hint">Al guardar se rehace el acta con estos datos y reemplaza el archivo de la orden. Puedes corregir encabezado, productos y cantidades.</p>
             <div class="soc-fila"><label>Fecha<input type="date" id="rce-fecha" value="${e(rc.fecha || hoyISO())}"></label><label>Documento<select id="rce-tipo"><option value="GUIA"${rc.tipoDoc !== 'FACTURA' ? ' selected' : ''}>Guía de despacho</option><option value="FACTURA"${rc.tipoDoc === 'FACTURA' ? ' selected' : ''}>Factura</option></select></label><label>N° del documento<input id="rce-num" value="${e(rc.numeroDoc || '')}"></label></div>
             <div class="soc-fila"><label>Contraparte técnica<input id="rce-ct" value="${e(rc.contraparte || CONTRAPARTE_BASE)}"></label><label>Quien recibe (firma del correo)<input id="rce-rec" value="${e(rc.recibe || '')}"></label></div>
             <label class="soc-toggle"><input type="checkbox" id="rce-par"${rc.parcial ? ' checked' : ''}> Recepción parcial</label>
+            <label>Encabezado del acta<textarea id="rce-enc" rows="2">${e(rc.encabezado || encabezadoBase(!!rc.parcial))}</textarea></label>
+            <p class="cierre-hint">Detalle del acta (corrige productos y cantidades):</p>
+            ${detalleHTML((rc.lineas && rc.lineas.length) ? rc.lineas : lineasActa(oc, centro).filter(l => l.recibido > 0), 'rce')}
             <label>Observaciones<textarea id="rce-obs" rows="3">${e(rc.observaciones || '')}</textarea></label>
             <div class="cierre-acciones"><button type="button" class="btn btn-outline" id="rce-x">Cancelar</button><button type="button" class="btn btn-primary" id="rce-ok">Guardar y rehacer el acta</button></div></div>`;
         document.body.appendChild(ov);
         const q = (s) => ov.querySelector(s); q('#rce-x').addEventListener('click', () => ov.remove());
+        { let t = false; q('#rce-enc').addEventListener('input', () => { t = true; }); q('#rce-par').addEventListener('change', () => { if (!t) q('#rce-enc').value = encabezadoBase(q('#rce-par').checked); }); }
         q('#rce-ok').addEventListener('click', async () => {
-            const nuevo = { ...rc, fecha: q('#rce-fecha').value || rc.fecha, tipoDoc: q('#rce-tipo').value, numeroDoc: q('#rce-num').value.trim(), contraparte: q('#rce-ct').value.trim() || CONTRAPARTE_BASE, recibe: q('#rce-rec').value.trim(), parcial: q('#rce-par').checked, observaciones: q('#rce-obs').value.trim(), editadaPor: ctx.usuario, editadaEn: hoyISO() };
+            const nuevo = { ...rc, fecha: q('#rce-fecha').value || rc.fecha, tipoDoc: q('#rce-tipo').value, numeroDoc: q('#rce-num').value.trim(), contraparte: q('#rce-ct').value.trim() || CONTRAPARTE_BASE, recibe: q('#rce-rec').value.trim(), parcial: q('#rce-par').checked, observaciones: q('#rce-obs').value.trim(), encabezado: q('#rce-enc').value.trim(), lineas: leerDetalle(ov, 'rce'), editadaPor: ctx.usuario, editadaEn: hoyISO() };
+            if (!nuevo.lineas.length) { toast('Detalle vacío', 'El acta debe tener al menos un producto con cantidad.', 'warning'); return; }
             if (!nuevo.numeroDoc) { toast('Falta el número', 'Indica el N° de la guía o factura.', 'warning'); return; }
             ov.remove();
             const prog = window.SAR_Progreso.iniciar('Guardando los cambios de la recepción conforme…', ['Actualizando los datos de la orden…']);
             try {
                 await fs().updateDoc(fs().doc(fs().collection(db(), 'Seguimiento_OC'), oc.id), { recepcionConforme: nuevo, actualizadoEn: fs().serverTimestamp() });
                 prog.paso('Rehaciendo el acta de recepción conforme…');
-                const d = { fecha: nuevo.fecha, parcial: nuevo.parcial, observaciones: nuevo.observaciones, contraparte: nuevo.contraparte, conFirma: true, tipoDoc: nuevo.tipoDoc, numeroDoc: nuevo.numeroDoc, firmaNombre: nuevo.recibe };
+                const d = { fecha: nuevo.fecha, parcial: nuevo.parcial, observaciones: nuevo.observaciones, contraparte: nuevo.contraparte, conFirma: true, tipoDoc: nuevo.tipoDoc, numeroDoc: nuevo.numeroDoc, firmaNombre: nuevo.recibe, encabezado: nuevo.encabezado, lineas: nuevo.lineas };
                 const PDFLib = await cargarPDFLib(); const logoBytes = await cargarLogo(); const firmaBytes = await cargarFirma();
                 const acta = await generarActaPDF({ ...oc, recepcionConforme: nuevo }, d, centro, { PDFLib, logoBytes, firmaBytes });
                 bajar(acta, nombreActa(oc));

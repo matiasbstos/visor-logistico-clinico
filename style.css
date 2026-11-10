@@ -6101,3 +6101,10 @@ body[data-user-role="transitoria"] .tra-solo-admin { display: none !important; }
 
 /* Actas: aviso de productos repetidos (v21.153) */
 .act-aviso-dup{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:8px 0;padding:8px 12px;border-radius:8px;background:#fffbeb;border:1px solid #fcd34d;font-size:13px;text-align:left}
+
+/* Recepción conforme: detalle editable del acta */
+.rc-det { display: grid; gap: 6px; margin: 6px 0 10px; }
+.rc-det-cab, .rc-det-fila { display: grid; grid-template-columns: 28px 1fr 90px; gap: 8px; align-items: center; }
+.rc-det-cab { font-size: .75rem; color: #64748b; font-weight: 600; }
+.rc-det-fila input[type=text], .rc-det-fila input[type=number] { width: 100%; min-width: 0; }
+@media (max-width: 600px) { .rc-det-cab, .rc-det-fila { grid-template-columns: 24px 1fr 70px; } }

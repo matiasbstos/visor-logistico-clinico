@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=21.151",
+                "./script.js": "./script.js?v=21.152",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -93,7 +93,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
     <meta name="theme-color" content="#1A3668">
-    <link rel="stylesheet" href="style.css?v=21.151">
+    <link rel="stylesheet" href="style.css?v=21.152">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web@2.1.1" defer></script>
@@ -1620,6 +1620,14 @@
                             <div class="details-section">
                                 <label class="section-label"><i class="ph ph-clipboard-text"></i> DETALLES DEL
                                     PRODUCTO</label>
+                                <div class="form-group mb-16" style="max-width:520px;">
+                                    <label class="form-label" for="movimiento-tipoInsumo">TIPO DE INSUMO <small id="ing-tipo-ayuda">(elígelo primero: en aseo y oficina el lote y el vencimiento son opcionales)</small></label>
+                                    <select class="form-control" name="tipoInsumo" id="movimiento-tipoInsumo" required>
+                                        <option value="medico" selected>Insumos médicos</option>
+                                        <option value="aseo">Insumos de aseo</option>
+                                        <option value="oficina">Insumos de oficina</option>
+                                    </select>
+                                </div>
                                 <div class="grid-3-col">
                                     <div class="form-group">
                                         <label class="form-label" for="ingreso-insumo">INSUMO SELECCIONADO</label>
@@ -1638,12 +1646,12 @@
                                         </div>
                                     </div>
                                     <div class="form-group">
-                                        <label class="form-label" for="movimiento-lote">LOTE</label>
+                                        <label class="form-label" for="movimiento-lote">LOTE <small id="ing-lote-op" hidden>(opcional)</small></label>
                                         <input type="text" class="form-control" name="batch" id="movimiento-lote"
                                             placeholder="Ej: L-2451-B" required>
                                     </div>
                                     <div class="form-group">
-                                        <label class="form-label" for="movimiento-fechaVto">FECHA VENCIMIENTO</label>
+                                        <label class="form-label" for="movimiento-fechaVto">FECHA VENCIMIENTO <small id="ing-venc-op" hidden>(opcional)</small></label>
                                         <input type="date" class="form-control" name="expirationDate"
                                             id="movimiento-fechaVto" required>
                                     </div>
@@ -1688,14 +1696,6 @@
                                 <div class="form-group mb-16" style="max-width:420px;">
                                     <label class="form-label" for="movimiento-categoria">CATEGORÍA <small>(o crea una nueva)</small></label>
                                     <select class="form-control" name="categoria" id="movimiento-categoria"></select>
-                                </div>
-                                <div class="form-group mb-16" style="max-width:420px;">
-                                    <label class="form-label" for="movimiento-tipoInsumo">TIPO DE INSUMO</label>
-                                    <select class="form-control" name="tipoInsumo" id="movimiento-tipoInsumo" required>
-                                        <option value="medico" selected>Insumos médicos</option>
-                                        <option value="aseo">Insumos de aseo</option>
-                                        <option value="oficina">Insumos de oficina</option>
-                                    </select>
                                 </div>
                                 <div class="grid-3-col">
                                     <div class="form-group">
@@ -5966,67 +5966,67 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=21.151"></script>
-    <script type="module" src="patch-plantillas.js?v=21.151"></script>
+    <script type="module" src="script.js?v=21.152"></script>
+    <script type="module" src="patch-plantillas.js?v=21.152"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="bodega-explorador.js?v=21.151"></script>
-    <script src="precintos-inventario.js?v=21.151"></script>
-    <script src="prestamos-otros-centros.js?v=21.151"></script>
-    <script src="precinto-escaneo.js?v=21.151"></script>
-    <script src="sonidos.js?v=21.151"></script>
-    <script src="avisos-campana.js?v=21.151"></script>
-    <script src="bodegas-estantes.js?v=21.151"></script>
-    <script src="bodegas-cierre.js?v=21.151"></script>
-    <script src="progreso.js?v=21.151"></script>
-    <script src="oc-lector.js?v=21.151"></script>
-    <script src="acta-edicion.js?v=21.151"></script>
-    <script src="anonimizar-pacientes.js?v=21.151"></script>
-    <script src="cdp-presupuesto.js?v=21.151"></script>
-    <script src="imagenes-producto.js?v=21.151"></script>
-    <script src="catalogo-vista.js?v=21.151"></script>
-    <script src="correo-html.js?v=21.151"></script>
-    <script src="avisos-correo.js?v=21.151"></script>
-    <script src="monitor-errores.js?v=21.151"></script>
-    <script src="lotes-alertas.js?v=21.151"></script>
-    <script src="codigo-sar.js?v=21.151"></script>
-    <script src="categorias.js?v=21.151"></script>
-    <script src="gobernanza.js?v=21.151"></script>
-    <script src="resumen-stock.js?v=21.151"></script>
-    <script src="vista-previa-agenda.js?v=21.151"></script>
-    <script src="menu-lateral.js?v=21.151"></script>
-    <script src="buscador-global.js?v=21.151"></script>
-    <script src="cargando-global.js?v=21.151"></script>
-    <script src="respaldo-diario.js?v=21.151"></script>
-    <script src="cierre-mensual.js?v=21.151"></script>
-    <script src="tabla-columnas.js?v=21.151"></script>
-    <script src="acerca.js?v=21.151"></script>
-    <script src="primeros-pasos.js?v=21.151"></script>
-    <script src="guia-lector.js?v=21.151"></script>
-    <script src="seguimiento-oc.js?v=21.151"></script>
-    <script src="compras-agiles.js?v=21.151"></script>
-    <script src="ingreso-rapido.js?v=21.151"></script>
-    <script src="pendientes-entrega.js?v=21.151"></script>
-    <script src="sugerencias-producto.js?v=21.151"></script>
-    <script src="duplicados.js?v=21.151"></script>
-    <script src="recepciones-conformes.js?v=21.151"></script>
-    <script src="sustituciones.js?v=21.151"></script>
-    <script src="bitacora-oc.js?v=21.151"></script>
-    <script src="id-producto.js?v=21.151"></script>
-    <script src="home-compras.js?v=21.151"></script>
-    <script src="home-ingresos.js?v=21.151"></script>
-    <script src="login-animado.js?v=21.151"></script>
-    <script src="nomenclaturas.js?v=21.151"></script>
-    <script src="errores.js?v=21.151"></script>
-    <script src="saldos-contables.js?v=21.151"></script>
-    <script src="recepcion-conforme.js?v=21.151"></script>
-    <script src="acta-documentos.js?v=21.151"></script>
-    <script src="actas-entrega.js?v=21.151"></script>
-    <script src="oxigeno.js?v=21.151"></script>
-    <script src="oxigeno-prestamos.js?v=21.151"></script>
-    <script src="oxigeno-ciclos.js?v=21.151"></script>
-    <script src="vida-producto.js?v=21.151"></script>
-    <script src="editar-ingreso.js?v=21.151"></script>
-    <script src="bodega-transitoria.js?v=21.151"></script>
-    <script src="visor-adquisiciones.js?v=21.151"></script>
+    <script src="bodega-explorador.js?v=21.152"></script>
+    <script src="precintos-inventario.js?v=21.152"></script>
+    <script src="prestamos-otros-centros.js?v=21.152"></script>
+    <script src="precinto-escaneo.js?v=21.152"></script>
+    <script src="sonidos.js?v=21.152"></script>
+    <script src="avisos-campana.js?v=21.152"></script>
+    <script src="bodegas-estantes.js?v=21.152"></script>
+    <script src="bodegas-cierre.js?v=21.152"></script>
+    <script src="progreso.js?v=21.152"></script>
+    <script src="oc-lector.js?v=21.152"></script>
+    <script src="acta-edicion.js?v=21.152"></script>
+    <script src="anonimizar-pacientes.js?v=21.152"></script>
+    <script src="cdp-presupuesto.js?v=21.152"></script>
+    <script src="imagenes-producto.js?v=21.152"></script>
+    <script src="catalogo-vista.js?v=21.152"></script>
+    <script src="correo-html.js?v=21.152"></script>
+    <script src="avisos-correo.js?v=21.152"></script>
+    <script src="monitor-errores.js?v=21.152"></script>
+    <script src="lotes-alertas.js?v=21.152"></script>
+    <script src="codigo-sar.js?v=21.152"></script>
+    <script src="categorias.js?v=21.152"></script>
+    <script src="gobernanza.js?v=21.152"></script>
+    <script src="resumen-stock.js?v=21.152"></script>
+    <script src="vista-previa-agenda.js?v=21.152"></script>
+    <script src="menu-lateral.js?v=21.152"></script>
+    <script src="buscador-global.js?v=21.152"></script>
+    <script src="cargando-global.js?v=21.152"></script>
+    <script src="respaldo-diario.js?v=21.152"></script>
+    <script src="cierre-mensual.js?v=21.152"></script>
+    <script src="tabla-columnas.js?v=21.152"></script>
+    <script src="acerca.js?v=21.152"></script>
+    <script src="primeros-pasos.js?v=21.152"></script>
+    <script src="guia-lector.js?v=21.152"></script>
+    <script src="seguimiento-oc.js?v=21.152"></script>
+    <script src="compras-agiles.js?v=21.152"></script>
+    <script src="ingreso-rapido.js?v=21.152"></script>
+    <script src="pendientes-entrega.js?v=21.152"></script>
+    <script src="sugerencias-producto.js?v=21.152"></script>
+    <script src="duplicados.js?v=21.152"></script>
+    <script src="recepciones-conformes.js?v=21.152"></script>
+    <script src="sustituciones.js?v=21.152"></script>
+    <script src="bitacora-oc.js?v=21.152"></script>
+    <script src="id-producto.js?v=21.152"></script>
+    <script src="home-compras.js?v=21.152"></script>
+    <script src="home-ingresos.js?v=21.152"></script>
+    <script src="login-animado.js?v=21.152"></script>
+    <script src="nomenclaturas.js?v=21.152"></script>
+    <script src="errores.js?v=21.152"></script>
+    <script src="saldos-contables.js?v=21.152"></script>
+    <script src="recepcion-conforme.js?v=21.152"></script>
+    <script src="acta-documentos.js?v=21.152"></script>
+    <script src="actas-entrega.js?v=21.152"></script>
+    <script src="oxigeno.js?v=21.152"></script>
+    <script src="oxigeno-prestamos.js?v=21.152"></script>
+    <script src="oxigeno-ciclos.js?v=21.152"></script>
+    <script src="vida-producto.js?v=21.152"></script>
+    <script src="editar-ingreso.js?v=21.152"></script>
+    <script src="bodega-transitoria.js?v=21.152"></script>
+    <script src="visor-adquisiciones.js?v=21.152"></script>
 </body>
 </html>

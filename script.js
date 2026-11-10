@@ -4553,6 +4553,32 @@ document.addEventListener('DOMContentLoaded', () => {
            9g. GESTIÓN DE MOVIMIENTOS (ENTRADAS / SALIDAS)
            ---------------------------------------------------- */
 
+        // Tipo de insumo primero: en aseo y oficina el lote y el vencimiento son opcionales (muchos productos no los traen)
+        (function tipoIngreso() {
+            const tipo = document.getElementById('movimiento-tipoInsumo'), lote = document.getElementById('movimiento-lote'), venc = document.getElementById('movimiento-fechaVto'), nom = document.getElementById('ingreso-insumo');
+            if (!tipo || !lote || !venc) return;
+            const aplicar = () => {
+                const opc = tipo.value !== 'medico';
+                lote.required = !opc; venc.required = !opc;
+                lote.placeholder = opc ? 'Sin lote' : 'Ej: L-2451-B';
+                [['ing-lote-op'], ['ing-venc-op']].forEach(([id]) => { const el = document.getElementById(id); if (el) el.hidden = !opc; });
+            };
+            tipo.addEventListener('change', () => { tipo.dataset.manual = '1'; aplicar(); });
+            const ASEO = /\b(cloro|detergente|desinfectante|lavaloza|jab[oó]n|toalla\s+(de\s+)?(papel|nova)|papel\s+higi[eé]nico|bolsa\s+(de\s+)?(basura|residuo)|escobill|trapero|paño|pa[nñ]o\s+de\s+limpieza|limpia|ambientador|alcohol\s+gel|sanitizante|virutilla|esponja|basurero|guante\s+(de\s+)?(aseo|goma|dom[eé]stico)|dispensador)\b/i, OFI = /\b(l[aá]piz|lapicera|bol[ií]grafo|resma|carpeta|archivador|cuaderno|corchete|grapa|post[\s-]?it|plum[oó]n|tinta|toner|t[oó]ner|sobre|cinta\s+adhesiva|cartulina|regla|tijera\s+de\s+oficina)\b/i;
+            if (nom) {
+                const detectar = () => {
+                    if (tipo.dataset.manual === '1') return; const v = nom.value.trim(); if (v.length < 3) return;
+                    const key = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+                    const ya = (window.insumosDataCache || []).find(i => key(i.name) === key(v) && i.tipoInsumo);
+                    const t = ya ? ya.tipoInsumo : (ASEO.test(v) ? 'aseo' : (OFI.test(v) ? 'oficina' : ''));
+                    if (t && tipo.value !== t) { tipo.value = t; aplicar(); }
+                };
+                nom.addEventListener('change', detectar); nom.addEventListener('blur', detectar);
+            }
+            document.getElementById('form-movimiento').addEventListener('reset', () => { setTimeout(() => { delete tipo.dataset.manual; aplicar(); }, 0); });
+            aplicar();
+        })();
+
         // A. POBLAR SELECTOR DE INSUMOS (Dinamismo SPA con Debounce)
         async function populateInsumosSelect() {
             let datalistSearchTimeout;
@@ -4691,7 +4717,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 const insumoNormalizado = nombreInput.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
                 const quantity = Number(data.quantity);
-                const cleanBatch = (data.batch || "").trim().toUpperCase();
+                const cleanBatch = (data.batch || "").trim().toUpperCase() || 'S/L';
 
                 // Sanitización de Fecha Robusta (Type Guard)
                 const _expD = window.SAR_Utils.parseDate(data.expirationDate);

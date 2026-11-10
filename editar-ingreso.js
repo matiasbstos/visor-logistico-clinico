@@ -135,9 +135,8 @@
         const g = (i) => document.getElementById(i).value, err = document.getElementById('ei-err'), b = document.getElementById('ei-save');
         const q = g('ei-cant');
         if (q === '' || !(Number(q) >= 0) || Math.floor(Number(q)) !== Number(q)) { err.textContent = 'La cantidad debe ser un número entero, 0 o mayor.'; return; }
-        if (!up(g('ei-lote'))) { err.textContent = 'Indica el lote (o S/L si no tiene).'; return; }
         const G = window.SAR_Gobernanza; let gob = null;
-        const cambiaStock = Math.floor(Number(q)) !== num(m.quantity) || up(g('ei-lote')) !== (m.batch || 'S/L') || (g('ei-vence') || '') !== soloFecha(m.expirationDate);
+        const cambiaStock = Math.floor(Number(q)) !== num(m.quantity) || (up(g('ei-lote')) || 'S/L') !== (m.batch || 'S/L') || (g('ei-vence') || '') !== soloFecha(m.expirationDate);
         if (G && cambiaStock) {
           b.disabled = true; err.textContent = 'Verificando…';
           try {

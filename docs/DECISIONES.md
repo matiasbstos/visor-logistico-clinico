@@ -1046,3 +1046,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Efecto en el saldo: ingresos y anulaciones de acta suman; entregas, mermas, cuadres y bajas restan; ajuste crítico y edición de insumo con código suman su diferencia; traspasos, unificaciones, órdenes, recepciones y actas por confirmar se muestran sin mover el saldo.
 - Recepciones de mercadería (en Contable) ahora indican el motivo (recepción conforme / de orden de compra / anulada) y la bodega; "Cambios con código de seguimiento" también está en esta pestaña.
 - Botones y campos con el estilo del sitio (`btn`, `form-control`, pestañas con la paleta SAR).
+
+## 4.192 Los productos con sobregiro vuelven a verse (v21.138)
+- La fase "solo OC" ocultaba los insumos sin `origenOC`, y los productos creados por un acta sin stock (`provisional: true`, con `sobregiro`) no lo tenían: 66 productos / 805 unidades entregadas sin respaldo no aparecían en Existencias ni en Auditoría. Ahora `_fueraDeFase` no oculta los provisionales ni los que tienen sobregiro.
+- Aclaración: los "62 de aseo con stock 0" del 5–6 de noviembre eran en realidad estos provisionales con sobregiro; NO se deben borrar. Se cuadran al ingresar la OC/SDC o con un ajuste negativo.

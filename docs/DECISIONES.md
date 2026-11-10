@@ -1104,3 +1104,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.204 Ingresos: proveedores y productos ya escritos se autocompletan siempre (v21.150)
 - **Proveedor:** la lista de sugerencias ya no es fija (se quitaron los 4 proveedores de ejemplo). Se arma con todo lo ya ingresado: proveedor de Existencias y de cada lote, historial de ingresos, proveedores de las órdenes de compra y los escritos en este equipo; sin duplicados por mayúsculas/tildes. Un proveedor nuevo escrito en un ingreso queda en la lista de inmediato y en los ingresos siguientes (queda guardado en el historial).
 - **Producto:** se reafirma lo que ya hacía (Existencias, historial de ingresos, catálogo y lo escrito en el equipo); el nombre queda sugerido aunque el ingreso no se guarde, y coincide por cualquier parte de la palabra.
+
+## 4.205 Renombrar un producto ya no genera duplicados ni bloquea la corrección del ingreso (v21.151)
+- Problema: al cambiar el nombre de un insumo en Existencias, el ingreso, el autocompletado y la ventana de corrección seguían usando el nombre anterior; un nuevo ingreso o la corrección de cantidad creaba o buscaba un producto distinto (dos ítems, uno sin stock) y «Editar ingreso» no dejaba modificar.
+- Ahora el nombre anterior queda en `nombresAnteriores` del insumo. (1) Un ingreso escrito con el nombre antiguo se suma al producto renombrado, no crea otro. (2) «Editar ingreso» encuentra el producto por id o por nombre anterior. (3) La ventana de 12 h y la revisión de salidas miran el historial con el nombre actual y los anteriores. (4) El autocompletado deja de ofrecer nombres ya reemplazados.
+- Los duplicados que ya existen no se unen solos: hay que revisarlos (Revisar productos parecidos) y corregir el stock caso a caso.

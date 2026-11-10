@@ -1129,3 +1129,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.209 Memo informativo del flujo de recepción conforme (v21.155)
 - Criterio aclarado por el responsable: una recepción es **parcial solo si el SAR no recibió todo lo que la orden le asignó**; que la orden se reparta a otros centros no la vuelve parcial (el sistema ya calcula así: pedido y recibido del SAR = suma de sus columnas del cuadro de distribución).
 - Nuevo `memo-flujo.js`: ventana «Memo de flujo» en el menú lateral, visible **solo para el administrador global** (`superadmin`; además oculta por CSS y bloqueada en JS), con identidad visual del sitio: flujo paso a paso, decisión Total/Parcial, ejemplo y tabla de variables. Solo texto estático; no lee ni escribe datos.
+
+## 4.210 Acta de recepción conforme: el título dice TOTAL o PARCIAL (v21.156)
+- El título del acta ahora siempre indica el tipo: «RECEPCIÓN CONFORME PRODUCTO O SERVICIO TOTAL» o «… PARCIAL», coherente con el encabezado del recuadro («en forma Total/Parcial»). Antes solo se marcaba el parcial.
+- Para actas ya emitidas, «Regenerar» o «Editar recepción conforme» rehace el PDF con el título nuevo.

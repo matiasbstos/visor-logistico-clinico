@@ -120,7 +120,7 @@
         const envolver = (s, size, bold, maxW) => { const out = []; let cur = ''; for (const w of String(s).split(' ')) { const t = cur ? cur + ' ' + w : w; if (ancho(t, size, bold) <= maxW || !cur) cur = t; else { out.push(cur); cur = w; } } if (cur) out.push(cur); return out; };
         const centrar = (s, size, bold, yy, x0, x1) => T(s, (x0 + x1 - ancho(s, size, bold)) / 2, yy, size, bold);
         if (logo) { const h = 66, w = logo.width * h / logo.height; page.drawImage(logo, { x: ML, y: H - 62 - h, width: w, height: h }); }
-        const titulo = 'RECEPCIÓN CONFORME PRODUCTO O SERVICIO' + (d.parcial ? ' PARCIAL' : '');
+        const titulo = 'RECEPCIÓN CONFORME PRODUCTO O SERVICIO' + (d.parcial ? ' PARCIAL' : ' TOTAL');
         centrar(titulo, 10, true, 100, ML + 90, MR + 20);
         let y = 150;
         T('DATOS DEL PROVEEDOR', 160, y, 10.5, true); y += 24;

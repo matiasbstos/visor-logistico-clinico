@@ -1033,3 +1033,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - El traspaso entre bodegas ahora conserva `codigoLote` y `provider` del lote.
 - El desglose muestra el código de cada lote y, debajo, "Mismo producto en otras bodegas": bodega, lote, código, cantidad, vencimiento y estado, con el total en todas las bodegas.
 - Sin cambios de reglas Firestore.
+
+## 4.190 Catálogo: sin CENABAST, estados reales y secciones por categoría (v21.136)
+- Corregido: el catálogo quedaba vacío ("Aún no hay productos") porque se abría antes de terminar el inicio de sesión, fallaba la lectura y guardaba la lista vacía; ahora reintenta mientras esté vacío.
+- La tarjeta "SKUs activos en maestro" pasa a **"Stock maestro"** sin la etiqueta CENABAST.
+- Estados con datos reales: óptimo (sobre el stock crítico), bajo/reorden (≤ stock crítico, suma de bodegas) y quiebre (0).
+- El listado se subdivide en secciones por **categoría** (la del insumo en Existencias; "Sin categoría" si no tiene), y el filtro de categoría se arma con las categorías existentes.

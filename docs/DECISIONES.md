@@ -1096,3 +1096,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.202 Corrección: «Confirmar y generar código» fallaba al guardar el cambio (v21.148)
 - Causa: `gobernanza.js` usaba `addDoc`, que el objeto `window.firebaseFirestore` no expone (`f.addDoc is not a function`). El cambio del insumo se guardaba, pero el registro con código (CAM) fallaba y el sitio mostraba «Error Crítico».
 - Arreglo: se escribe con `setDoc(doc(collection))` (id automático). Mismo defecto corregido en «Nueva bodega» (Recepción de OC e Ingreso rápido), CDP/presupuesto y plantilla de bandeja. Regla: en módulos `window.firebaseFirestore` no tiene `addDoc`; usar `setDoc(doc(collection(...)), datos)`.
+
+## 4.203 Ingresos: se quita el aviso falso «Bloqueo de Seguridad» (v21.149)
+- Al confirmar un ingreso aparecía «Bloqueo de Seguridad: Debe seleccionar un insumo clínico válido» aunque el ingreso se procesaba bien. Causa: quedaba un manejador antiguo de `form-movimiento` (exigía un campo `articleId` que ya no existe) que corría junto al ingreso real (9g) y siempre mostraba ese aviso. Si el campo hubiera existido, habría registrado el movimiento dos veces.
+- Se eliminó el manejador antiguo; queda solo el ingreso real, con su correlativo ING, lote y bitácora.

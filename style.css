@@ -6098,3 +6098,6 @@ body[data-user-role="transitoria"] .tra-solo-admin { display: none !important; }
 .r-doc{margin:6px 0 10px;padding:8px 12px;border-radius:8px;font-size:13px;background:#f8fafc;border:1px solid var(--border,#e2e8f0);text-align:left}
 .r-doc--ok{background:#f0fdf4;border-color:#86efac}
 .r-doc--aviso{background:#fffbeb;border-color:#fcd34d}
+
+/* Actas: aviso de productos repetidos (v21.153) */
+.act-aviso-dup{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:8px 0;padding:8px 12px;border-radius:8px;background:#fffbeb;border:1px solid #fcd34d;font-size:13px;text-align:left}

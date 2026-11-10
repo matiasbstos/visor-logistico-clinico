@@ -16,7 +16,7 @@ const _fueraDeFase = (d) => {
     try {
         const p = (d && d.ref && d.ref.path) || '';
         if (p.startsWith('Bandejas_Turno/')) return true;
-        if (/^Insumos\/[^/]+$/.test(p)) return d.data().origenOC !== true;
+        if (/^Insumos\/[^/]+$/.test(p)) { const x = d.data(); return x.origenOC !== true && x.provisional !== true && !(Number(x.sobregiro) > 0); }
     } catch (e) { /* sin ruta: se muestra */ }
     return false;
 };

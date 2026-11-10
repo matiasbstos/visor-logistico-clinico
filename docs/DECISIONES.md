@@ -1114,3 +1114,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - «Tipo de insumo» (médico / aseo / oficina) pasa al comienzo de «Detalles del producto». Con **médico** el lote y el vencimiento siguen obligatorios; con **aseo u oficina** son opcionales (rótulo «opcional», sin lote queda como S/L y sin vencimiento como N/A, que no genera alertas de vencimiento).
 - El tipo se propone solo: si el nombre ya existe en Existencias toma su tipo; si no, por palabras clave (cloro, detergente, papel higiénico, bolsa de basura… → aseo; lápiz, resma, archivador… → oficina). Si lo eliges a mano, no se vuelve a cambiar solo.
 - «Editar ingreso» ya no exige lote (queda S/L).
+
+## 4.207 Productos repetidos en una bodega: aviso y unificación (v21.153)
+- Un producto debe existir una sola vez por bodega. En «Actas de entrega → Stock disponible», si hay productos repetidos (mismo ID de Mercado Público o mismo nombre) aparece el aviso «Hay N productos repetidos en esta bodega» con el botón **Unificar repetidos**.
+- Al confirmar, cada grupo queda en un solo registro (nuevo módulo `unificar-duplicados.js`): sobrevive el que tiene más stock; se suman cantidad, lotes (mismo lote y vencimiento) y sobregiro con su detalle por acta; las actas ya emitidas se reapuntan al registro que queda y se escribe un movimiento `UNIFICACION_STOCK` en el historial. Pide confirmación y no se puede deshacer.
+- Prevención: al emitir un acta con un producto manual, además de buscar por nombre se busca por ID de Mercado Público en la bodega antes de crear uno provisional nuevo.
+- Test agregado (36 tests). Sin códigos nuevos.

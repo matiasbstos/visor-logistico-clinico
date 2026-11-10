@@ -1059,3 +1059,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.194 Oxígeno: editar datos del balón y elegir qué precintos imprimir (v21.140)
 - Cada balón tiene un botón **Editar**: corrige N° de serie (sin repetir otro), gas, capacidad, proveedor, fecha de la última carga y N° de recargas. Pide **motivo** (lista de Gobernanza) y deja un evento «Datos corregidos» en el historial del balón con código `CAM-AAAA-NNNNNN` y el antes → después. El estado se sigue cambiando con «Acción…».
 - El modal de **Precinto** ya no imprime todo: lista los balones con casillas (desde la fila va solo ese marcado; desde «Precintos (N)» no hay ninguno marcado, con «Marcar todos / Quitar todos»). Se imprime o descarga solo lo marcado; el folio PO se asigna únicamente a los elegidos y se reutiliza si ya tenían.
+
+## 4.195 Préstamo de balones: lista alineada a la izquierda con el estilo del sitio (v21.141)
+- En «Registrar préstamo de balones», la lista de balones deja de verse centrada: cada balón es una fila alineada a la izquierda con casilla, N° en negrita y detalle (gas, capacidad, estado), con el mismo diseño de tarjeta seleccionable que el selector de precintos.

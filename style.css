@@ -6052,3 +6052,20 @@ body[data-user-role="transitoria"] .sidebar-group-title,
 body[data-user-role="transitoria"] .admin-only,
 body[data-user-role="transitoria"] .superadmin-only { display: none !important; }
 body[data-user-role="transitoria"] .tra-solo-admin { display: none !important; }
+
+/* Auditoría: pestañas Disponible / Contable y libro (v21.137) */
+.aud-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--id-borde); margin: 4px 0 16px; }
+.aud-tab { appearance: none; border: 0; background: none; padding: 10px 16px; font: inherit; font-weight: 600; color: var(--text-muted); border-bottom: 3px solid transparent; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.aud-tab.on { color: var(--sar-blue); border-bottom-color: var(--sar-blue); } .aud-tab:hover { color: var(--sar-blue); }
+.sal-barra .form-control { width: auto; min-width: 180px; max-width: 280px; height: 38px; padding: 6px 12px; }
+.sal-barra .btn { height: 38px; display: inline-flex; align-items: center; gap: 6px; }
+.aud-cab { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 14px; margin: 6px 0 10px; } .aud-cab h3 { margin: 0; } .aud-cab small { color: var(--text-muted); flex: 1 1 260px; }
+.aud-dif { background: #FFFBEB; border: 1px solid #FCD34D; color: #92400E; border-radius: 8px; padding: 9px 12px; font-size: .86rem; margin: 0 0 12px; } .aud-ok { color: var(--sar-green, #15803d); font-size: .86rem; margin: 0 0 12px; }
+.aud-lib { width: 100%; border-collapse: collapse; font-size: .86rem; min-width: 760px; }
+.aud-lib th { text-align: left; padding: 9px 12px; background: #f8fafc; color: var(--text-muted); font-size: .74rem; text-transform: uppercase; letter-spacing: .03em; }
+.aud-lib td { padding: 9px 12px; border-top: 1px solid #f1f5f9; vertical-align: top; } .aud-lib small { display: block; color: var(--text-muted); font-size: .76rem; margin-top: 2px; }
+.aud-lib .n { text-align: right; font-variant-numeric: tabular-nums; } .aud-lib td.n b { color: var(--sar-blue); }
+.aud-lib tr.aud-ing td:nth-child(4) { color: var(--sar-green, #15803d); font-weight: 700; } .aud-lib tr.aud-sal td:nth-child(5), .aud-lib tr.aud-baj td:nth-child(5) { color: #b42318; font-weight: 700; }
+.aud-lib tr.aud-oc td, .aud-lib tr.aud-rec td, .aud-lib tr.aud-acta td { background: #fcfcfd; }
+.sal-k { background: #fff; border: 1px solid var(--id-borde); border-left: 4px solid var(--c, var(--sar-blue)); border-radius: 10px; padding: 10px 14px; display: grid; } .sal-k b { font-size: 1.25rem; color: var(--sar-blue); } .sal-k span { font-size: .78rem; color: var(--text-muted); }
+.sal-fila > span { min-width: 0; overflow-wrap: anywhere; } .sal-fila small { display: block; color: var(--text-muted); font-size: .76rem; }

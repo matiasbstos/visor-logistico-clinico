@@ -1137,3 +1137,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.211 Ingreso: talla «Otra» y médicos sin lote ni vencimiento (v21.157)
 - Talla: además de XS–XXL hay la opción «Otra (escribir número u otra medida)…», que muestra un campo para digitar p. ej. 7, 7.5 o 38. Se agrega al nombre como `TALLA <valor>` igual que las letras (cada talla es su propio insumo). Si ya se escribió la talla en el nombre, no se duplica.
 - Insumos médicos sin lote ni vencimiento: casilla «Este producto no trae lote ni fecha de vencimiento» (visible en tipo Insumo médico) que vuelve ambos campos opcionales; es una decisión explícita para no omitirlos por descuido. Sin lote se guarda `S/L` y sin fecha `N/A` (igual que aseo y oficina, 4.206).
+
+## 4.212 Transferencias entre bodegas desde el menú (v21.158)
+- La pantalla «Transferencias» era una maqueta (plantillas de bandeja y un arqueo de ejemplo). Ahora es el traspaso real de bodega a bodega (`traspaso-bodegas.js`): se elige origen y destino, se buscan y marcan varios productos con su cantidad, nota opcional, y se mueven en un paso con confirmación.
+- Cada producto va en su propia transacción (origen por FEFO + destino + historial `traspaso`, documento `TRASP-ORI-DES`), igual que el botón «Mover a otra bodega» de Existencias: conserva lote y vencimiento y junta lotes iguales en el destino. Si el producto ya existe en el destino (por nombre o ID Mercado Público) se suma ahí, sin crear duplicados.
+- Solo se listan productos con stock; los en CUARENTENA se ven pero no se pueden mover. Si un producto falla, los demás igual se mueven y se informa cuál no. Sin códigos nuevos.
+- Se retiró la maqueta (plantillas «Urgencias/Noche» y arqueo de ejemplo); el arqueo real de bandejas sigue en su módulo.

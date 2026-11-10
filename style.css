@@ -6135,3 +6135,14 @@ body[data-user-role="transitoria"] .tra-solo-admin { display: none !important; }
 .mf-tabla-w { overflow-x: auto; }
 @media (max-width: 640px) { .mf-ramas, .mf-ej { grid-template-columns: 1fr; } }
 body:not([data-user-role="superadmin"]) #menu-memo-flujo { display: none !important; }
+
+/* Transferencias entre bodegas (v21.158) */
+.tb-fila { display: grid; grid-template-columns: 1fr auto 1fr; gap: 12px; align-items: end; margin-bottom: 14px; }
+.tb-fila label, .tb-nota { display: grid; gap: 4px; font-weight: 600; font-size: 13px; color: var(--sar-blue); }
+.tb-flecha { padding-bottom: 10px; color: var(--sar-red); font-size: 20px; }
+.tb-barra { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; } .tb-barra input { flex: 1; min-width: 200px; }
+.tb-tabla-w { overflow-x: auto; max-height: 55vh; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px 8px 8px 0; }
+.tb-cant { width: 90px; } .tb-lotes { font-size: 12px; color: #475569; }
+.tb-nota { margin: 12px 0; } .tb-acc { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.tb-res { margin-top: 12px; padding: 10px 14px; border-radius: 8px 8px 8px 0; background: var(--sar-blue-light); } .tb-ok { color: #3f7d12; } .tb-mal { color: var(--sar-red-dark); }
+@media (max-width: 640px) { .tb-fila { grid-template-columns: 1fr; } .tb-flecha { display: none; } }

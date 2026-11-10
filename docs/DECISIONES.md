@@ -1143,3 +1143,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Cada producto va en su propia transacción (origen por FEFO + destino + historial `traspaso`, documento `TRASP-ORI-DES`), igual que el botón «Mover a otra bodega» de Existencias: conserva lote y vencimiento y junta lotes iguales en el destino. Si el producto ya existe en el destino (por nombre o ID Mercado Público) se suma ahí, sin crear duplicados.
 - Solo se listan productos con stock; los en CUARENTENA se ven pero no se pueden mover. Si un producto falla, los demás igual se mueven y se informa cuál no. Sin códigos nuevos.
 - Se retiró la maqueta (plantillas «Urgencias/Noche» y arqueo de ejemplo); el arqueo real de bandejas sigue en su módulo.
+
+## 4.213 Encargado de bodega escrito a mano (v21.159)
+- «Nueva Bodega»: el campo Responsable pasa de una lista fija con nombres de ejemplo (Dr. Rossi, Marta Sánchez) a un campo de texto obligatorio, con sugerencias de los encargados ya escritos en otras bodegas. Se guarda `managerName` (lo escrito) y `managerId` (versión sin tildes ni espacios).
+- En el detalle de cada bodega, junto al encargado hay un lápiz para cambiarlo a mano (solo administradores). Las bodegas antiguas siguen mostrando su valor anterior hasta que se edite.

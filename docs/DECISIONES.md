@@ -1077,3 +1077,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Las actas de oxígeno ahora muestran chip «Sin acta firmada» / «Firmada», entran a los filtros «Pendientes por firmar» / «Firmadas» y tienen «Subir firmada» en su vista.
 - «Firmada» solo se marca si hay archivo subido (antes se deducía por tener acta AE).
 - Correos con los mismos parámetros y horario hábil (lunes a viernes 8:00–17:00, cola si es fuera de horario): al emitir el acta de préstamo sale el aviso de «emisión» con el PDF y al subir la firmada sale el aviso «firmada» con el adjunto. Las filas del correo muestran el N° de serie del balón.
+
+## 4.199 Actas firmadas: subir, ver y descargar en todas las actas (v21.145)
+- Se agrega **«Descargar firmada»** junto a «Ver acta firmada» en la vista del acta y en el panel de préstamos de oxígeno (baja el archivo subido con su nombre original). Subir, ver y descargar quedan iguales para actas de insumos y de oxígeno.

@@ -1039,3 +1039,10 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - La tarjeta "SKUs activos en maestro" pasa a **"Stock maestro"** sin la etiqueta CENABAST.
 - Estados con datos reales: óptimo (sobre el stock crítico), bajo/reorden (≤ stock crítico, suma de bodegas) y quiebre (0).
 - El listado se subdivide en secciones por **categoría** (la del insumo en Existencias; "Sin categoría" si no tiene), y el filtro de categoría se arma con las categorías existentes.
+
+## 4.191 Auditoría reestructurada: Disponible y Contable (v21.137)
+- Auditoría pasa a dos pestañas. **Disponible**: cuántas unidades hay (en sistema − sobregiro) por insumo y bodega, con buscador, filtro de bodega, "solo con sobregiro", cuadre y asignar ID; informe Excel del disponible.
+- **Contable**: libro (kárdex) por producto — se busca por nombre o ID — con todos los eventos en orden (orden de compra, recepción, ingreso por proveedor/OC y su bodega, traspasos, salidas por acta, mermas, ajustes, ediciones con código, cuadres), cada uno con **motivo/tipo en español**, bodega, lote, entra/sale, **saldo corrido**, código y responsable. Compara el saldo por movimientos con el stock actual y avisa la diferencia (stock anterior al sistema o sin movimiento). Excel del libro.
+- Efecto en el saldo: ingresos y anulaciones de acta suman; entregas, mermas, cuadres y bajas restan; ajuste crítico y edición de insumo con código suman su diferencia; traspasos, unificaciones, órdenes, recepciones y actas por confirmar se muestran sin mover el saldo.
+- Recepciones de mercadería (en Contable) ahora indican el motivo (recepción conforme / de orden de compra / anulada) y la bodega; "Cambios con código de seguimiento" también está en esta pestaña.
+- Botones y campos con el estilo del sitio (`btn`, `form-control`, pestañas con la paleta SAR).

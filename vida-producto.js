@@ -33,8 +33,12 @@
     traspaso: ['Traspaso entre bodegas', 'mov'], ENTREGA_ACTA: ['Salida por acta de entrega (stock descontado)', 'sal'], CUADRE_SOBREGIRO: ['Cuadre de sobregiro', 'mov'],
     merma_despacho: ['Merma', 'baj'], merma_inventario: ['Merma de inventario', 'baj'], eliminacion_inventario: ['Eliminación de inventario', 'baj'],
     ajuste: ['Ajuste de inventario', 'aju'], AJUSTE_CRITICO: ['Ajuste crítico', 'aju'], auditoria_modificacion_inventario: ['Modificación de inventario', 'aju'], toma_inventario: ['Toma de inventario', 'aju'],
-    ANULACION_ACTA: ['Acta anulada (stock devuelto)', 'ing'], salida: ['Salida', 'sal'], TRANSITORIA_FALTANTE: ['Faltante de bodega transitoria', 'baj'], TRANSITORIA_REPOSICION: ['Reposición a bodega transitoria', 'mov']
+    ANULACION_ACTA: ['Acta anulada (stock devuelto)', 'ing'], salida: ['Salida', 'sal'], TRANSITORIA_FALTANTE: ['Faltante de bodega transitoria', 'baj'], TRANSITORIA_REPOSICION: ['Reposición a bodega transitoria', 'mov'],
+    INGRESO_OC: ['Ingreso por orden de compra', 'ing'], UNIFICACION_STOCK: ['Unificación de stock', 'mov'], CAMBIO_CONTROLADO: ['Cambio con código de seguimiento', 'aju']
   };
+  const ENTRAN = ['INGRESO_PROVEEDOR', 'INGRESO_OC', 'INGRESO_INVENTARIO', 'entrada', 'carga masiva', 'ANULACION_ACTA'], SALEN = ['ENTREGA_ACTA', 'CUADRE_SOBREGIRO', 'merma_despacho', 'merma_inventario', 'eliminacion_inventario', 'salida', 'TRANSITORIA_FALTANTE'];
+  /** Efecto del movimiento sobre el stock total del producto (0 = no cambia el total o no es confiable). */
+  function deltaDe(h) { const q = num(h.quantity), t = h.type; if (ENTRAN.includes(t)) return q; if (SALEN.includes(t)) return -Math.abs(q); if (t === 'AJUSTE_CRITICO') return q; if (t === 'CAMBIO_CONTROLADO') return h.origen === 'EDITAR_INSUMO' ? q : 0; return 0; }
 
   /**
    * Arma la línea de tiempo. datos: { ocs:[…], historial:[…], actas:[…], insumos:[…] }, p: {codigos, nombres}.
@@ -55,7 +59,7 @@
     (datos.historial || []).forEach(h => {
       const t = TIPOS[h.type] || [String(h.type || 'Movimiento'), 'mov'], cant = num(h.quantity);
       if (t[1] === 'ing') res.ingresado += cant; if (t[1] === 'baj') res.merma += cant; if (h.type === 'ENTREGA_ACTA') res.entregado += cant;
-      ev.push({ f: iso(h.date) || iso(h.fechaDocumento), clase: t[1], titulo: t[0], detalle: [`${cant} u.`, h.origin && h.dest ? `${h.origin} → ${h.dest}` : (h.origin || h.dest || ''), h.batch && h.batch !== 'N/A' ? 'lote ' + h.batch : '', h.document ? 'doc. ' + h.document : '', h.historica ? 'acta histórica' : '', h.user ? 'por ' + h.user : ''].filter(Boolean).join(' · '), cant });
+      ev.push({ f: iso(h.date) || iso(h.fechaDocumento), clase: t[1], titulo: t[0], detalle: [`${cant} u.`, h.origin && h.dest ? `${h.origin} → ${h.dest}` : (h.origin || h.dest || ''), h.batch && h.batch !== 'N/A' ? 'lote ' + h.batch : '', h.document ? 'doc. ' + h.document : '', h.historica ? 'acta histórica' : '', h.user ? 'por ' + h.user : ''].filter(Boolean).join(' · '), cant, delta: deltaDe(h), tipo: h.type || '', bodega: h.destination && h.destination !== 'Principal' ? h.destination : (h.dest || h.origin || h.location || ''), lote: h.batch && h.batch !== 'N/A' ? h.batch : '', user: h.user || '', codigo: h.codigoSeguimiento || h.codigoIngreso || h.actaId || '', motivo: [h.motivo, h.nota, h.observacion || h.observations].filter(Boolean).join(' · ') });
     });
     (datos.actas || []).forEach(a => {
       if (a.estado === 'ANULADA') { /* se muestra igual, marcada */ }
@@ -63,12 +67,21 @@
         const pend = a.confirmacion && a.confirmacion.estado === 'PENDIENTE';
         if (a.estado === 'EMITIDA' && pend) res.reservado += num(i.cantidad);
         const estado = a.estado === 'ANULADA' ? 'ANULADA' : pend ? 'por confirmar (stock reservado)' : (a.respaldo ? 'firmada, stock descontado' : 'confirmada, sin acta firmada subida');
-        ev.push({ f: iso(a.fecha), clase: 'acta', titulo: `Acta ${a.numero} · ${a.centro || ''}`, detalle: `${num(i.cantidad)} u. · ${estado}${a.historica ? ' · histórica' : ''}${i.solicitado && num(i.solicitado) > num(i.cantidad) ? ' · pedido ' + i.solicitado : ''}`, cant: num(i.cantidad) });
+        ev.push({ f: iso(a.fecha), clase: 'acta', titulo: `Acta ${a.numero} · ${a.centro || ''}`, detalle: `${num(i.cantidad)} u. · ${estado}${a.historica ? ' · histórica' : ''}${i.solicitado && num(i.solicitado) > num(i.cantidad) ? ' · pedido ' + i.solicitado : ''}`, cant: num(i.cantidad), delta: 0, tipo: 'ACTA', bodega: a.bodegaOrigen || '', codigo: a.numero || '', motivo: 'Acta de entrega · ' + estado });
       });
     });
     ev.sort((x, y) => String(x.f || '9').localeCompare(String(y.f || '9')));
     const stock = (datos.insumos || []).map(i => ({ bodega: i.location || '—', cant: num(i.quantity), lotes: (i.batches || []).filter(b => num(b.quantity) > 0).map(b => ({ batch: b.batch || 'S/L', cant: num(b.quantity), vence: b.expirationDate || '' })), estado: i.status || '' }));
     return { eventos: ev, resumen: res, stock };
+  }
+
+  /** Libro contable (kárdex): eventos ordenados con entrada, salida y saldo corrido. Las órdenes y recepciones se muestran sin mover el saldo. */
+  function libro(eventos) {
+    let saldo = 0;
+    return (eventos || []).slice().sort((x, y) => String(x.f || '9').localeCompare(String(y.f || '9'))).map(e => {
+      const d = num(e.delta); saldo += d;
+      return { ...e, entra: d > 0 ? d : 0, sale: d < 0 ? -d : 0, saldo, mueve: d !== 0 };
+    });
   }
 
   // ---------------- datos ----------------
@@ -131,7 +144,7 @@
   }
   if (typeof document !== 'undefined' && document.addEventListener) { document.addEventListener('DOMContentLoaded', montar); setTimeout(montar, 1500); setTimeout(montar, 5000); }
 
-  const api = { construir, coincide, iso, norm, soloDig, montar, sugerencias };
+  const api = { construir, coincide, iso, norm, soloDig, montar, sugerencias, reunir, libro, deltaDe, TIPOS };
   if (typeof window !== 'undefined') window.SAR_VidaProducto = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

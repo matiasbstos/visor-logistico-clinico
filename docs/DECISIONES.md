@@ -1071,3 +1071,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - «Registrar préstamo de balones» ahora **emite el acta de entrega** (mismo formato y correlativo compartido AE-AAAA-NNNN de las actas de insumos, tipo OXIGENO, motivo PRESTAMO) y descarga el PDF para firmar. Se pide fecha de entrega, quién entrega (nombre/cargo), quién recibe (opcional) y nota. Acepta balones llenos o vacíos que estén en el SAR.
 - Cada balón queda PRESTADO con `prestamo{desde,nota,fotos,actaAE}` y evento PRESTAMO. Se reutiliza `SAR_Oxigeno.entregar(..., {prestamo:true})`; no hay nomenclatura nueva.
 - Respaldo firmado: igual que en insumos (`SAR_ActasEntrega.subirFirmada`, contador respaldo-<acta>-NNN). Se puede subir desde Actas de entrega o desde el panel de préstamos; en ambos casos todos los balones del acta quedan con `prestamo.actaFirmada`. «Ver acta» abre el respaldo con `verRespaldo`.
+
+## 4.198 Actas de oxígeno/préstamo: mismo flujo, nombres, bitácora y correos que las actas de insumos (v21.144)
+- En el panel de préstamos el botón se llama **«Subir firmada»** (y **«Ver acta firmada»** una vez subida), igual que en Actas de entrega; ya no existe «Cambiar acta». Se agrega **«Ver acta y bitácora»**, que abre el acta con su bitácora de estados.
+- Las actas de oxígeno ahora muestran chip «Sin acta firmada» / «Firmada», entran a los filtros «Pendientes por firmar» / «Firmadas» y tienen «Subir firmada» en su vista.
+- «Firmada» solo se marca si hay archivo subido (antes se deducía por tener acta AE).
+- Correos con los mismos parámetros y horario hábil (lunes a viernes 8:00–17:00, cola si es fuera de horario): al emitir el acta de préstamo sale el aviso de «emisión» con el PDF y al subir la firmada sale el aviso «firmada» con el adjunto. Las filas del correo muestran el N° de serie del balón.

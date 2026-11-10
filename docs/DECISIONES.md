@@ -1066,3 +1066,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.196 Préstamo de balones: fecha de entrega y acta al registrar (v21.142)
 - El formulario pregunta **«¿Cuándo se entregaron los balones?»** (fecha de entrega, no futura) y permite **adjuntar el acta de entrega firmada** (PDF o foto, máx. 6 MB) en el mismo momento; sigue pudiéndose subir después con «Subir acta firmada».
 - Si se eligen varios balones, el archivo se guarda una sola vez (con el primero) y los demás lo referencian (`actaFirmada.origenId`); «Ver acta» lo lee desde el original. Si el acta falla al subir, el préstamo igual queda registrado y se avisa.
+
+## 4.197 Préstamo de balones genera el acta de entrega con correlativo AE (v21.143)
+- «Registrar préstamo de balones» ahora **emite el acta de entrega** (mismo formato y correlativo compartido AE-AAAA-NNNN de las actas de insumos, tipo OXIGENO, motivo PRESTAMO) y descarga el PDF para firmar. Se pide fecha de entrega, quién entrega (nombre/cargo), quién recibe (opcional) y nota. Acepta balones llenos o vacíos que estén en el SAR.
+- Cada balón queda PRESTADO con `prestamo{desde,nota,fotos,actaAE}` y evento PRESTAMO. Se reutiliza `SAR_Oxigeno.entregar(..., {prestamo:true})`; no hay nomenclatura nueva.
+- Respaldo firmado: igual que en insumos (`SAR_ActasEntrega.subirFirmada`, contador respaldo-<acta>-NNN). Se puede subir desde Actas de entrega o desde el panel de préstamos; en ambos casos todos los balones del acta quedan con `prestamo.actaFirmada`. «Ver acta» abre el respaldo con `verRespaldo`.

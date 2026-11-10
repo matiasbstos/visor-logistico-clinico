@@ -320,6 +320,8 @@
     async function subirFirmada(a, file, usuario) {
         const resp = await guardarRespaldo(a.numero, file, usuario, a.oc && a.oc.id);
         await fs().updateDoc(fs().doc(fs().collection(db(), 'Actas_Entrega'), a.numero), { respaldo: resp, respaldoEn: fs().serverTimestamp() });
+        // Actas de oxígeno: cada balón queda con su acta firmada marcada (panel «Prestados a otros centros»)
+        if (a.tipo === 'OXIGENO') for (const it of a.items || []) { try { await fs().updateDoc(fs().doc(fs().collection(db(), 'Equipos_Oxigeno'), it.id), { 'prestamo.actaFirmada': { nombre: resp.nombre, mime: resp.mime, partes: resp.partes, actaNumero: a.numero, subidoPor: resp.subidoPor, fecha: resp.fecha } }); } catch (e) { /* el acta quedó guardada igual */ } }
         return resp;
     }
     const pedirArchivo = () => new Promise((ok) => { const i = document.createElement('input'); i.type = 'file'; i.accept = 'application/pdf,image/*'; i.onchange = () => ok(i.files && i.files[0] || null); i.oncancel = () => ok(null); i.click(); });
@@ -980,6 +982,6 @@
     let precarga = null, manualImg = '', manualAbierto = false;
     const vistaMImg = () => manualImg ? `<img src="${esc(manualImg)}" alt="" class="act-mimg-v"><button type="button" class="btn btn-outline btn-sm" id="act-mimg-q">Quitar</button>` : '<small>WEBP, JPG, PNG… (queda en el catálogo)</small>';
     function precargar(centro, lista) { precarga = { centro, lista: lista || [] }; if (window.location.hash === '#view-actas-entrega') abrir(); else window.location.hash = 'view-actas-entrega'; }
-    window.SAR_ActasEntrega = { ver: verActa, precargar, listaCentros, abrir, planificar, cuadrar, restaurarConSobregiro, detalleDe, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, lotesDeDoc };
+    window.SAR_ActasEntrega = { ver: verActa, precargar, listaCentros, abrir, planificar, cuadrar, restaurarConSobregiro, detalleDe, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, lotesDeDoc, subirFirmada, verRespaldo };
     if (typeof module !== 'undefined') module.exports = window.SAR_ActasEntrega;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: { dataset: {} } });

@@ -5727,6 +5727,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const formData = new FormData(formBodega);
                 const bodegaData = Object.fromEntries(formData.entries());
+                bodegaData.managerName = String(bodegaData.managerName || '').trim().replace(/\s+/g, ' ');
+                if (!bodegaData.managerName) { showToast('Falta el encargado', 'Escribe el nombre del encargado de la bodega.', 'warning'); return; }
+                bodegaData.managerId = bodegaData.managerName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
                 try {
                     await addDoc(collection(db, 'Bodegas'), {
@@ -5743,6 +5746,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             });
         }
+
+        // Encargados: sugerencias con los ya escritos en otras bodegas y cambio manual desde el detalle de la bodega
+        (async function encargados() {
+            try {
+                const dl = document.getElementById('lista-responsables'); const inp = document.getElementById('bodega-responsable');
+                if (inp && dl) inp.addEventListener('focus', async () => {
+                    if (dl.dataset.ok) return; dl.dataset.ok = '1';
+                    const s = await getDocs(collection(db, 'Bodegas')); const n = new Set();
+                    s.forEach(x => { const b = x.data(); const v = String(b.managerName || '').trim(); if (v) n.add(v); });
+                    dl.innerHTML = [...n].sort((a, z) => a.localeCompare(z, 'es')).map(v => `<option value="${window.escapeHTML(v)}"></option>`).join('');
+                });
+                const btn = document.getElementById('btn-cambiar-resp');
+                if (btn) btn.addEventListener('click', async () => {
+                    const modal = document.getElementById('bodega-modal'); const id = modal.dataset.currentBodegaId; if (!id) return;
+                    const rol = document.body.getAttribute('data-user-role');
+                    if (rol !== 'admin' && rol !== 'superadmin') { showToast('Acceso Denegado', 'Solo administradores pueden cambiar el encargado.', 'error'); return; }
+                    const actual = (document.getElementById('modal-bodega-resp') || {}).textContent || '';
+                    const v = window.prompt('Nombre del encargado de la bodega:', actual === '—' ? '' : actual); if (v === null) return;
+                    const nombre = v.trim().replace(/\s+/g, ' '); if (!nombre) { showToast('Falta el nombre', 'Escribe el nombre del encargado.', 'warning'); return; }
+                    try {
+                        await updateDoc(doc(db, 'Bodegas', id), { managerName: nombre, managerId: nombre.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') });
+                        document.getElementById('modal-bodega-resp').textContent = nombre; showToast('Encargado actualizado', nombre, 'success');
+                    } catch (err) { showToast('No se guardó', err.message || String(err), 'error'); }
+                });
+            } catch (_) { /* sin sugerencias */ }
+        })();
 
         // ELIMINAR BODEGA
         const btnDeleteBodega = document.getElementById('btn-delete-bodega');

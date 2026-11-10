@@ -440,6 +440,6 @@
     async function leerArchivo(file) { return esExcel(file) ? filasDeExcel(file) : leer(await itemsDePDF(await file.arrayBuffer())); }
     async function leerDistribucion(file) { const r = await leerArchivo(file); if (r.tipo === 'OC_MP') throw new Error('Ese archivo es una orden de compra: súbelo en el primer recuadro (el cuadro va aquí).'); if (r.tipo !== 'DIST_OC') throw new Error('Ese archivo no es un cuadro de distribución (busco columnas "MEMO N° …", FINANCIAMIENTO y CDP).'); return r; }
 
-    window.SAR_Lector = { leerHoja, extraerDistribucionExcel, extraerOCExcel, esExcel, leer, leerArchivo, leerDistribucion, extraerDistribucion, extraerDistribucionB, unirDistribucion, detectar, extraerOC, extraerCorreo, lineas, LECTORES };
+    window.SAR_Lector = { cargarPdfJs, leerHoja, extraerDistribucionExcel, extraerOCExcel, esExcel, leer, leerArchivo, leerDistribucion, extraerDistribucion, extraerDistribucionB, unirDistribucion, detectar, extraerOC, extraerCorreo, lineas, LECTORES };
     if (typeof module !== 'undefined') module.exports = window.SAR_Lector;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

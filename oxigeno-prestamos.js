@@ -62,9 +62,18 @@
     await f.updateDoc(f.doc(f.collection(db(), 'Equipos_Oxigeno'), e.id), { prestamo, updatedAt: f.serverTimestamp() });
     await evento(e.id, { tipo: 'PRESTAMO_RESPALDO', detalle: `Acta firmada de ${e.prestadoA || 'otro centro'} subida (${file.name})`, estadoAnterior: 'PRESTADO', estadoNuevo: 'PRESTADO', ubicacion: e.prestadoA || e.ubicacion || '' });
   }
+  /** Un solo archivo de acta para varios balones del mismo préstamo: se guarda con el primero y los demás lo referencian. */
+  async function subirActaGrupo(lista, file, centro) {
+    const f = fs(), L = [];
+    for (const e of (lista || []).filter(Boolean)) { const sn = await f.getDoc(f.doc(f.collection(db(), 'Equipos_Oxigeno'), e.id)); if (sn.exists()) L.push({ id: e.id, ...sn.data() }); }  // datos frescos: incluyen el préstamo recién registrado
+    if (!L.length) return;
+    await subirActa(L[0], file);
+    const prim = await f.getDoc(f.doc(f.collection(db(), 'Equipos_Oxigeno'), L[0].id)), ref = Object.assign({}, prim.data().prestamo.actaFirmada, { origenId: L[0].id });
+    for (const e of L.slice(1)) { await f.updateDoc(f.doc(f.collection(db(), 'Equipos_Oxigeno'), e.id), { prestamo: Object.assign({}, e.prestamo || {}, { actaFirmada: ref }), updatedAt: f.serverTimestamp() }); }
+  }
   async function verActa(e) {
     const f = fs(), r = e.prestamo && e.prestamo.actaFirmada; if (!r) return;
-    const bs = []; for (let i = 0; i < r.partes; i++) { const d = await f.getDoc(f.doc(f.collection(db(), 'Contadores'), `ox-resp-${e.id}-${String(i).padStart(3, '0')}`)); if (!d.exists()) throw new Error('Falta una parte del archivo.'); bs.push(d.data().b64); }
+    const bs = []; for (let i = 0; i < r.partes; i++) { const d = await f.getDoc(f.doc(f.collection(db(), 'Contadores'), `ox-resp-${r.origenId || e.id}-${String(i).padStart(3, '0')}`)); if (!d.exists()) throw new Error('Falta una parte del archivo.'); bs.push(d.data().b64); }
     bajarB64(bs.join(''), r.mime || 'application/pdf');
   }
   async function subirFotos(e, files) {
@@ -121,10 +130,11 @@
     sec.querySelector('#op-nuevo').addEventListener('click', () => {
       const libres = equipos.filter(e => e.estado === 'LLENO' || e.estado === 'VACIO'), centros = (window.SAR_ActasEntrega && window.SAR_ActasEntrega.listaCentros ? window.SAR_ActasEntrega.listaCentros() : []);
       modal('Registrar préstamo de balones', `<label class="act-l">Centro al que se prestó<input id="op-centro" list="op-centros" placeholder="Ej: Pomaire"><datalist id="op-centros">${centros.map(c => `<option value="${esc(c)}">`).join('')}</datalist></label>
-        <label class="act-l">Fecha del préstamo<input type="date" id="op-fecha" value="${hoy()}" max="${hoy()}"></label>
+        <label class="act-l">¿Cuándo se entregaron los balones?<input type="date" id="op-fecha" value="${hoy()}" max="${hoy()}"></label>
         <p class="act-hint">Balones (solo los que están en el SAR):</p><div class="op-lista">${libres.length ? libres.map(e => `<label class="pr-sel"><input type="checkbox" class="op-chk" value="${esc(e.id)}"> <b>N° ${esc(e.serie)}</b> <small>· ${esc((window.SAR_Oxigeno && window.SAR_Oxigeno.normGas ? window.SAR_Oxigeno.normGas(e.gas) : e.gas) || '')} · ${esc(e.capacidad || '')} (${esc(e.estado === 'LLENO' ? 'lleno' : 'vacío')})</small></label>`).join('') : '<p class="act-hint">No hay balones disponibles.</p>'}</div>
+        <label class="act-l">Acta de entrega firmada <small>(PDF o foto, máx. 6 MB; opcional, también puedes subirla después)</small><input type="file" id="op-acta-f" accept="application/pdf,image/*"></label>
         <label class="act-l">Nota (opcional)<input id="op-nota" placeholder="Ej: por cambio de balón en ambulancia"></label>`,
-      async (q) => { const ids = [...document.querySelectorAll('.op-chk:checked')].map(c => c.value); await registrarPrestamo(equipos, ids, q('#op-centro').value, q('#op-fecha').value, q('#op-nota').value); toast('Préstamo registrado', `${ids.length} balón(es) en ${q('#op-centro').value.trim()}. Sube el acta firmada y las fotos desde el panel.`, 'success'); await refrescar(); }, 'Registrar préstamo');
+      async (q) => { const ids = [...document.querySelectorAll('.op-chk:checked')].map(c => c.value); const fa = q('#op-acta-f') && q('#op-acta-f').files[0]; if (fa) { if (!/^(application\/pdf|image\/)/.test(fa.type || '')) throw new Error('El acta debe ser PDF o una foto.'); if (fa.size > MAX_DOC) throw new Error('El archivo pesa más de 6 MB. Reduce la calidad del escaneo.'); } await registrarPrestamo(equipos, ids, q('#op-centro').value, q('#op-fecha').value, q('#op-nota').value); if (fa) { try { await subirActaGrupo(ids.map(id => porId(id)), fa, q('#op-centro').value.trim()); } catch (ea) { toast('Acta', 'El préstamo quedó registrado, pero el acta no se pudo subir: ' + (ea.message || ea) + ' Súbela desde «Subir acta firmada».', 'warning'); } } toast('Préstamo registrado', `${ids.length} balón(es) en ${q('#op-centro').value.trim()}. Sube el acta firmada y las fotos desde el panel.`, 'success'); await refrescar(); }, 'Registrar préstamo');
     });
   }
 

@@ -1062,3 +1062,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.195 Préstamo de balones: lista alineada a la izquierda con el estilo del sitio (v21.141)
 - En «Registrar préstamo de balones», la lista de balones deja de verse centrada: cada balón es una fila alineada a la izquierda con casilla, N° en negrita y detalle (gas, capacidad, estado), con el mismo diseño de tarjeta seleccionable que el selector de precintos.
+
+## 4.196 Préstamo de balones: fecha de entrega y acta al registrar (v21.142)
+- El formulario pregunta **«¿Cuándo se entregaron los balones?»** (fecha de entrega, no futura) y permite **adjuntar el acta de entrega firmada** (PDF o foto, máx. 6 MB) en el mismo momento; sigue pudiéndose subir después con «Subir acta firmada».
+- Si se eligen varios balones, el archivo se guarda una sola vez (con el primero) y los demás lo referencian (`actaFirmada.origenId`); «Ver acta» lo lee desde el original. Si el acta falla al subir, el préstamo igual queda registrado y se avisa.

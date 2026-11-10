@@ -1080,3 +1080,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.199 Actas firmadas: subir, ver y descargar en todas las actas (v21.145)
 - Se agrega **«Descargar firmada»** junto a «Ver acta firmada» en la vista del acta y en el panel de préstamos de oxígeno (baja el archivo subido con su nombre original). Subir, ver y descargar quedan iguales para actas de insumos y de oxígeno.
+
+## 4.200 Oxígeno: seguimiento por ciclos y libro en Auditoría (v21.146)
+- Nuevo `oxigeno-ciclos.js`. **Ciclo** = el balón llega al SAR (alta, recarga recibida, devolución, vuelve a servicio), está, y se va (entrega o préstamo a un centro, envío a recarga, fuera de servicio). Si vuelve, empieza el ciclo siguiente. Se calcula desde los eventos del balón (`Equipos_Oxigeno/<id>/Eventos`); no se escribe nada nuevo.
+- Buscador de Oxígeno portátil: al escribir un **N° de serie** o un **correlativo de acta (AE-AAAA-NNNN)** aparece un seguimiento tipo compras: estado actual, ciclo en curso o cerrado (con destino y días) y cada ciclo con sus movimientos; si es un acta, además su centro, fecha y si está firmada. También busca por acta vigente en la lista.
+- Auditoría: pestaña **Disponible** suma el bloque de oxígeno (llenos, vacíos, en recarga, entregados, fuera de servicio) y **Contable** el libro de movimientos de todos los balones con su ciclo, descargable en Excel.
+- No hay códigos nuevos (nomenclaturas sin cambios). Test de ciclos agregado (34 tests).

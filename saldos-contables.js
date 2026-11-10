@@ -225,12 +225,14 @@
         ${cargando ? (window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando el informe…') : 'Cargando el informe…') : !vis.length ? '<p class="act-hint">Sin insumos para mostrar.</p>' : `
         <div class="sal-tabla"><div class="sal-fila sal-cab"><span>Insumo</span><span>Disponible</span><span>En sistema</span><span>Sobregiro</span><span>Bodega</span><span>Estado</span><span></span></div>
         ${vis.slice(0, 400).map(x => `<div class="sal-fila"><span class="sal-n">${esc(x.nombre)}<small>${x.codigo ? 'ID ' + esc(x.codigo) + ' · ' : (x.provisional ? 'sin ID · ' : '')}${x.actas.length ? esc(actasTxt(x)) : ''}</small></span><span><b>${x.disp}</b></span><span>${x.q}</span><span class="${x.sg > 0 ? 'act-sin' : ''}">${x.sg}</span><span>${esc(x.bodega)}</span><span><i class="sal-e sal-e--${x.estado}">${ETIQ[x.estado]}</i></span><span>${x.estado === 'LISTO' ? `<button type="button" class="btn btn-outline sal-q" data-id="${esc(x.id)}">Cuadrar</button>` : ''}${x.provisional && !x.codigo ? `<button type="button" class="btn btn-outline sal-id" data-id="${esc(x.id)}" data-n="${esc(x.nombre)}">Asignar ID</button>` : ''}</span></div>`).join('')}</div>${vis.length > 400 ? '<p class="act-hint">Se muestran 400; el informe Excel incluye todos.</p>' : ''}`}`;
+        const oxiD = '<div id="oxi-aud-d"></div>', oxiC = '<div id="oxi-aud-c"></div>';
         const conta = `
         <p class="act-hint"><b>Contable</b> es la historia completa de un producto, como un libro: cuándo llegó, a qué bodega, cuándo se movió o salió, ajustes, ediciones y recepciones, cada línea con su motivo y código.</p>
         <div class="sal-barra"><input type="search" id="aud-q" class="form-control" placeholder="Producto o ID de Mercado Público…" value="${esc(contQ)}" autocomplete="off" aria-label="Buscar producto"></div><div id="aud-sug" class="vp-sug"></div>
         <div id="aud-lib">${libroHtml()}</div>
-        <div id="rec-aud"></div><div id="gob-aud"></div>`;
-        r.innerHTML = `<div class="page-header mb-24"><div class="page-title"><h2>Auditoría</h2><p>Dos informes: lo que hay disponible y la historia contable de cada insumo.</p></div></div>${tabs}${tab === 'disp' ? disp : conta}`;
+        <div id="rec-aud"></div><div id="gob-aud"></div>${oxiC}`;
+        r.innerHTML = `<div class="page-header mb-24"><div class="page-title"><h2>Auditoría</h2><p>Dos informes: lo que hay disponible y la historia contable de cada insumo.</p></div></div>${tabs}${tab === 'disp' ? disp + oxiD : conta}`;
+        if (window.SAR_OxiCiclos) window.SAR_OxiCiclos[tab === 'disp' ? 'pintarDisponible' : 'pintarContable'](r.querySelector(tab === 'disp' ? '#oxi-aud-d' : '#oxi-aud-c'));
         r.querySelectorAll('.aud-tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; pintar(); }));
         if (tab === 'cont') {
             pintarRec(); if (window.SAR_Gobernanza) window.SAR_Gobernanza.pintarLista(r.querySelector('#gob-aud'));

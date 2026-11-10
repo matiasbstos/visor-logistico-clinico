@@ -58,6 +58,9 @@
     if (m.insumoId) { const s = await f.getDoc(f.doc(db(), 'Insumos', m.insumoId)); if (s.exists()) return { id: s.id, data: s.data() }; }
     const q = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('name', '==', m.insumoName || m.item || '')));
     const l = []; q.forEach(d => l.push({ id: d.id, data: d.data() }));
+    if (!l.length) {   // el producto pudo renombrarse después del ingreso: se busca por sus nombres anteriores
+      try { const a = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('nombresAnteriores', 'array-contains', m.insumoName || m.item || ''))); a.forEach(d => l.push({ id: d.id, data: d.data() })); } catch (e) { /* sin índice */ }
+    }
     if (!l.length) return null;
     const dest = norm(m.destination === 'Principal' ? 'Bodega Central' : m.destination);
     return l.find(x => norm(x.data.location || x.data.ubicacion || 'Bodega Central') === dest) || l[0];
@@ -138,7 +141,7 @@
         if (G && cambiaStock) {
           b.disabled = true; err.textContent = 'Verificando…';
           try {
-            const v = await G.puedeCorregir(m.insumoName || m.item);
+            const v = await G.puedeCorregir(m.insumoName || m.item, ins ? [ins.data.name].concat(ins.data.nombresAnteriores || []) : []);
             if (!v.ok) { err.textContent = v.motivo + ' Para cambiar cantidad, lote o vencimiento usa Ajustes / Desajustes.'; b.disabled = false; return; }
           } catch (e) { /* si no se puede verificar, se deja continuar con motivo */ }
           err.textContent = ''; b.disabled = false;

@@ -29,14 +29,15 @@
     return { ok: true, motivo: '' };
   }
 
-  async function movimientosDe(nombre) {
+  async function movimientosDe(nombre, anteriores) {
     const f = fs(), col = f.collection(db(), 'Historial_Movimientos'), out = new Map();
-    for (const campo of ['insumoName', 'item']) {
-      try { const s = await f.getDocs(f.query(col, f.where(campo, '==', nombre), f.limit(400))); s.forEach((d) => out.set(d.id, d.data())); } catch (e) { /* sin índice: se ignora */ }
+    const nombres = [...new Set([nombre].concat(Array.isArray(anteriores) ? anteriores : []).filter(Boolean))];   // el producto pudo cambiar de nombre
+    for (const n of nombres) for (const campo of ['insumoName', 'item']) {
+      try { const s = await f.getDocs(f.query(col, f.where(campo, '==', n), f.limit(400))); s.forEach((d) => out.set(d.id, d.data())); } catch (e) { /* sin índice: se ignora */ }
     }
     return [...out.values()];
   }
-  async function puedeCorregir(nombre) { return evaluarVentana(await movimientosDe(nombre)); }
+  async function puedeCorregir(nombre, anteriores) { return evaluarVentana(await movimientosDe(nombre, anteriores)); }
 
   async function codigo(pref) {
     const f = fs(), anio = new Date().getFullYear(), ref = f.doc(f.collection(db(), 'Contadores'), 'codigo-cambio-' + anio);

@@ -4360,6 +4360,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
                 { const so = document.getElementById('edit-location'), op = so && so.selectedOptions[0]; if (op && op.dataset.id) updatedData.bodegaId = op.dataset.id; }
                 if (window.SAR_CodigoSAR && Array.isArray(updatedData.batches)) await window.SAR_CodigoSAR.codificarLotes(updatedData.name, updatedData.batches);
+                // Si cambia el nombre, el anterior queda como alias: así los ingresos, ajustes y sugerencias siguen apuntando al mismo producto y no se crea un duplicado
+                if (window.__editOriginal && window.__editOriginal.name && String(window.__editOriginal.name).trim() !== updatedData.name) {
+                    updatedData.nombresAnteriores = [...new Set([...(Array.isArray(window.__editOriginal.nombresAnteriores) ? window.__editOriginal.nombresAnteriores : []), String(window.__editOriginal.name).trim()])].slice(-20);
+                }
 
                 // Gobernanza: cambios de cantidad, lote, vencimiento o bodega exigen motivo y dejan código de seguimiento
                 let gob = null;
@@ -4372,7 +4376,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const cambiaBodega = String(o.location || '') !== updatedData.location;
                     if (cambiaStock || cambiaBodega) {
                         if (cambiaStock) {
-                            const v = await G.puedeCorregir(o.name || updatedData.name);
+                            const v = await G.puedeCorregir(o.name || updatedData.name, updatedData.nombresAnteriores || o.nombresAnteriores || []);
                             if (!v.ok) { window.showAlertCenter('Corrección directa cerrada', `${v.motivo}\n\nPara cambiar cantidad, lote o vencimiento usa Ajustes / Desajustes (pide motivo y genera código).`); return; }
                         }
                         const r = await G.pedirMotivo('¿Por qué haces este cambio?', `${window.escapeHTML(o.name || '')}: ${cambiaStock ? 'cantidad / lote / vencimiento' : ''}${cambiaStock && cambiaBodega ? ' y ' : ''}${cambiaBodega ? 'bodega' : ''}.`);
@@ -4573,6 +4577,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         const cs = await getDocs(collection(db, 'Catalogo_Productos'));
                         cs.forEach(d => { const n = String(d.data().descripcion || '').trim(); if (n) nombres.add(n.toUpperCase()); });
                     } catch (_) { /* el catálogo es opcional */ }
+                    // Un nombre que ya fue reemplazado por otro (el producto se renombró) no se sugiere más
+                    { const nk = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim(), vig = new Set(), ant = new Set();
+                      (window.insumosDataCache || []).forEach(i => { vig.add(nk(i.name)); (i.nombresAnteriores || []).forEach(a => ant.add(nk(a))); });
+                      [...nombres].forEach(n => { const k = nk(n); if (ant.has(k) && !vig.has(k)) nombres.delete(n); }); }
                     const vistos = new Set(), frag = document.createDocumentFragment();
                     [...nombres].sort((x, y) => x.localeCompare(y, 'es')).forEach(n => { const k = n.toLowerCase(); if (vistos.has(k)) return; vistos.add(k); const o = document.createElement('option'); o.value = n; frag.appendChild(o); });
                     datalist.innerHTML = ''; datalist.appendChild(frag);
@@ -4718,8 +4726,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     const destinoNombre = (data.destinationId || '').trim() || 'Bodega Central';
                     const destinoSel = document.getElementById('movimiento-destino');
                     const destinoId = (destinoSel && destinoSel.selectedOptions[0] && destinoSel.selectedOptions[0].dataset.id) || '';
+                    const _nn = (t) => String(t || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
                     const match = (window.insumosDataCache || []).find(i =>
-                        i.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim() === insumoNormalizado
+                        (_nn(i.name) === insumoNormalizado || (Array.isArray(i.nombresAnteriores) && i.nombresAnteriores.some(a => _nn(a) === insumoNormalizado)))
                         && _nb(i.location || i.ubicacion || 'Bodega Central') === _nb(destinoNombre)
                     );
 

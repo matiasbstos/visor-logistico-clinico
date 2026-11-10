@@ -70,7 +70,7 @@
   // Deja el rastro visible (Historial + Auditoría).
   async function registrar(o) {
     const f = fs();
-    await f.addDoc(f.collection(db(), 'Historial_Movimientos'), {
+    await f.setDoc(f.doc(f.collection(db(), 'Historial_Movimientos')), {
       type: 'CAMBIO_CONTROLADO', insumoName: o.nombre, item: o.nombre, quantity: Number(o.delta) || 0, batch: o.lote || '', user: usuario(), date: f.serverTimestamp(),
       document: o.codigo, codigoSeguimiento: o.codigo, motivo: o.motivo, nota: o.nota || '', origen: o.origen || '', antes: o.antes || null, despues: o.despues || null, idInsumo: o.insumoId || ''
     });

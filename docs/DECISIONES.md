@@ -1092,3 +1092,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Lectura con el mismo Apps Script de las fotos de cajas, acción nueva `documento` (`guia-lector.js`; el código nuevo está en SCRIPT_GAS). **Requiere pegar la versión nueva del Apps Script y publicarla** (la clave ANTHROPIC_API_KEY ya está). Si el script es antiguo o no está conectado, el formulario avisa y se anota a mano como antes.
 - Los productos del documento se emparejan con las líneas de la orden por descripción/ID (≥50 % de coincidencia). Si un producto trae varios lotes, el primero llena la fila y los demás se listan en el aviso para anotarlos con «Agregar producto» o en «Lotes y vencimientos». Lo que no coincide también se lista.
 - Test agregado (35 tests). Sin códigos nuevos.
+
+## 4.202 Corrección: «Confirmar y generar código» fallaba al guardar el cambio (v21.148)
+- Causa: `gobernanza.js` usaba `addDoc`, que el objeto `window.firebaseFirestore` no expone (`f.addDoc is not a function`). El cambio del insumo se guardaba, pero el registro con código (CAM) fallaba y el sitio mostraba «Error Crítico».
+- Arreglo: se escribe con `setDoc(doc(collection))` (id automático). Mismo defecto corregido en «Nueva bodega» (Recepción de OC e Ingreso rápido), CDP/presupuesto y plantilla de bandeja. Regla: en módulos `window.firebaseFirestore` no tiene `addDoc`; usar `setDoc(doc(collection(...)), datos)`.

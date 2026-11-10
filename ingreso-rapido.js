@@ -156,7 +156,7 @@
         if (bodegas.some(b => norm(b.name) === norm(nombre))) { bodegaSel = bodegas.find(b => norm(b.name) === norm(nombre)).name; pintar(); return; }
         try {
             const f = fs();
-            await f.addDoc(f.collection(db(), 'Bodegas'), { name: nombre, type: 'transitoria', managerId: '', capacityMetrics: '', prefijo: '', usaEstantes: false, isActive: true, createdAt: f.serverTimestamp() });
+            await f.setDoc(f.doc(f.collection(db(), 'Bodegas')), { name: nombre, type: 'transitoria', managerId: '', capacityMetrics: '', prefijo: '', usaEstantes: false, isActive: true, createdAt: f.serverTimestamp() });
             await cargarDatos(); bodegaSel = nombre; pintar(); toast('Bodega creada', nombre, 'success');
         } catch (e) { toast('No se creó la bodega', e.message || String(e), 'error'); }
     }

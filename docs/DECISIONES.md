@@ -1100,3 +1100,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.203 Ingresos: se quita el aviso falso «Bloqueo de Seguridad» (v21.149)
 - Al confirmar un ingreso aparecía «Bloqueo de Seguridad: Debe seleccionar un insumo clínico válido» aunque el ingreso se procesaba bien. Causa: quedaba un manejador antiguo de `form-movimiento` (exigía un campo `articleId` que ya no existe) que corría junto al ingreso real (9g) y siempre mostraba ese aviso. Si el campo hubiera existido, habría registrado el movimiento dos veces.
 - Se eliminó el manejador antiguo; queda solo el ingreso real, con su correlativo ING, lote y bitácora.
+
+## 4.204 Ingresos: proveedores y productos ya escritos se autocompletan siempre (v21.150)
+- **Proveedor:** la lista de sugerencias ya no es fija (se quitaron los 4 proveedores de ejemplo). Se arma con todo lo ya ingresado: proveedor de Existencias y de cada lote, historial de ingresos, proveedores de las órdenes de compra y los escritos en este equipo; sin duplicados por mayúsculas/tildes. Un proveedor nuevo escrito en un ingreso queda en la lista de inmediato y en los ingresos siguientes (queda guardado en el historial).
+- **Producto:** se reafirma lo que ya hacía (Existencias, historial de ingresos, catálogo y lo escrito en el equipo); el nombre queda sugerido aunque el ingreso no se guarde, y coincide por cualquier parte de la palabra.

@@ -85,6 +85,7 @@ t('nomenclaturas: catálogo completo y sin duplicados', () => {
     assert.ok(Nm.catalogo.every(x => x.formato && x.ejemplo && x.asigna && x.uso));
 });
 
+t('oxígeno: ciclos de vida (llega, está, se va; si vuelve, ciclo nuevo)', () => { const O = require('../oxigeno-ciclos.js'); const ev = (fecha, tipo, o) => Object.assign({ fecha, tipo, detalle: '' }, o); const r = O.ciclos([ev('2026-11-01', 'ALTA', { estadoNuevo: 'LLENO' }), ev('2026-11-03', 'ENTREGA_ACTA', { estadoAnterior: 'LLENO', estadoNuevo: 'PRESTADO', ubicacion: 'Centro Vet', detalle: 'Entregado (acta AE-2026-0022)' }), ev('2026-11-05', 'DEVOLUCION', { estadoNuevo: 'VACIO', ubicacion: 'SAR' }), ev('2026-11-06', 'ENVIO_RECARGA', { estadoNuevo: 'EN_RECARGA', ubicacion: 'Proveedor' }), ev('2026-11-08', 'RECARGA_OK', { estadoNuevo: 'LLENO', ubicacion: 'SAR' })]); assert.strictEqual(r.ciclos.length, 3); assert.strictEqual(r.ciclos[0].destino, 'Centro Vet'); assert.deepStrictEqual(r.ciclos[0].actas, ['AE-2026-0022']); assert.ok(!r.ciclos[0].abierto && !r.ciclos[1].abierto && r.ciclos[2].abierto); assert.strictEqual(r.ciclos[0].dias, 2); });
 console.log(`\n${n} ok, ${mal} con falla`); process.exit(mal ? 1 : 0); });
 
 // ---- Bodega transitoria (v21.107)

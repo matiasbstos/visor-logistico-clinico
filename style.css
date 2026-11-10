@@ -6075,3 +6075,21 @@ body[data-user-role="transitoria"] .tra-solo-admin { display: none !important; }
 .pr-sel { display: flex; gap: 8px; align-items: center; padding: 7px 10px; border: 1px solid var(--id-borde); border-radius: 8px; cursor: pointer; background: #fff; } .pr-sel small { color: var(--text-muted); }
 .pr-sel:has(input:checked) { border-color: var(--sar-blue); background: #EFF6FF; }
 .cierre-box .pr-sel { flex-direction: row; align-items: center; font-weight: 500; font-size: 14px; text-align: left; } .cierre-box .pr-sel input[type=checkbox] { width: auto; flex: none; } .cierre-box .pr-sel small { font-weight: 400; } .op-lista { grid-template-columns: 1fr; justify-items: stretch; text-align: left; }
+
+/* Oxígeno: seguimiento por ciclos y libro en Auditoría (v21.146) */
+.oc-seg{margin:12px 0;padding:14px 16px;border:1px solid var(--border,#e2e8f0);border-radius:12px;background:#fff}
+.oc-seg h4,.oc-aud h4{margin:0 0 8px;font-size:15px}
+.oc-aud{margin-top:18px;padding:14px 16px;border:1px solid var(--border,#e2e8f0);border-radius:12px;background:#fff}
+.oc-acta{margin:0 0 8px;font-size:13px}
+.oc-balon{padding:8px 0;border-top:1px solid var(--border,#e2e8f0)}
+.oc-cab{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.oc-cab small{color:#64748b}
+.oc-res{margin:6px 0;font-size:13px;color:#334155}
+.oc-ciclo{margin:8px 0;padding:8px 12px;border-left:3px solid #cbd5e1;background:#f8fafc;border-radius:0 8px 8px 0}
+.oc-ciclo.oc-on{border-left-color:#16a34a;background:#f0fdf4}
+.oc-ciclo h5{margin:0 0 4px;font-size:13px}
+.oc-ciclo h5 small{font-weight:400;color:#64748b}
+.oc-ciclo ul{margin:0;padding-left:18px;font-size:13px}
+.oc-fila{display:grid;grid-template-columns:92px 150px 1fr auto;gap:8px;padding:6px 4px;border-bottom:1px solid var(--border,#e2e8f0);font-size:13px;text-align:left}
+.oc-fila small{color:#64748b}
+@media (max-width:720px){.oc-fila{grid-template-columns:1fr}}

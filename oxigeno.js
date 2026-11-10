@@ -104,7 +104,7 @@
     // ---------------------------------------------------------------
     // Estado y datos
     // ---------------------------------------------------------------
-    let equipos = [], filtro = 'TODOS', capFiltro = 'TODAS', gasFiltro = 'TODOS', busca = '', sel = new Set(), eventosAbiertos = {};
+    let segHtml = '', segTmr = null, segTok = 0, equipos = [], filtro = 'TODOS', capFiltro = 'TODAS', gasFiltro = 'TODOS', busca = '', sel = new Set(), eventosAbiertos = {};
     let firma = { nombre: 'Matias Bustos Huerta', cargo: 'Encargado de insumos' };
 
     // Opciones propias (gases y capacidades que el usuario agrega): Contadores/oxigeno-opciones
@@ -253,7 +253,7 @@
     const root = () => document.getElementById('oxi-root');
     function filtrados() {
         const q = busca.trim().toLowerCase();
-        return equipos.filter(e => (gasFiltro === 'TODOS' || normGas(e.gas) === gasFiltro) && (capFiltro === 'TODAS' || (e.capacidad || 'Sin capacidad') === capFiltro) && (filtro === 'TODOS' || e.estado === filtro) && (!q || `${e.serie} ${e.capacidad || ''} ${normGas(e.gas)} ${e.proveedor || ''} ${e.ubicacion} ${e.prestadoA}`.toLowerCase().includes(q)));
+        return equipos.filter(e => (gasFiltro === 'TODOS' || normGas(e.gas) === gasFiltro) && (capFiltro === 'TODAS' || (e.capacidad || 'Sin capacidad') === capFiltro) && (filtro === 'TODOS' || e.estado === filtro) && (!q || `${e.serie} ${e.capacidad || ''} ${normGas(e.gas)} ${e.proveedor || ''} ${e.ubicacion} ${e.prestadoA} ${e.ultimaEntregaActa || ''}`.toLowerCase().includes(q)));
     }
     function capacidades() {
         const c = {}; equipos.forEach(e => { const k = e.capacidad || 'Sin capacidad'; c[k] = (c[k] || 0) + 1; });
@@ -272,6 +272,7 @@
             <button type="button" class="btn btn-outline" id="oxi-prec-todos"${lista.length ? '' : ' disabled'}>Precintos (${lista.length})</button>
             <button type="button" class="btn btn-outline" id="oxi-alta">+ Agregar balones</button>
             <button type="button" class="btn btn-primary" id="oxi-entrega"${sel.size ? '' : ' disabled'}>Acta de entrega (${sel.size})</button></div>
+        <div id="oxi-seg">${busca.trim().length >= 3 ? segHtml : ''}</div>
         <div class="oxi-lista">${lista.length ? lista.map(e => {
             const st = ESTADOS[e.estado] || { txt: e.estado, color: '#64748b' };
             return `<div class="oxi-fila"><div class="oxi-chk">${e.estado === 'LLENO' ? `<input type="checkbox" class="oxi-sel" data-id="${esc(e.id)}"${sel.has(e.id) ? ' checked' : ''} aria-label="Seleccionar ${esc(e.serie)}">` : ''}</div>
@@ -305,6 +306,12 @@
         return ov;
     }
 
+    /** Seguimiento (ciclos) del balón o del acta buscados; se calcula aparte para no frenar la escritura. */
+    function seguirBusqueda() {
+        clearTimeout(segTmr); const tok = ++segTok, q = busca.trim();
+        if (q.length < 3 || !window.SAR_OxiCiclos) { segHtml = ''; return; }
+        segTmr = setTimeout(async () => { const h = await window.SAR_OxiCiclos.seguimiento(q, equipos); if (tok !== segTok) return; segHtml = h; const el = document.getElementById('oxi-seg'); if (el) el.innerHTML = h; }, 450);
+    }
     function enlazar() {
         const r = root(), $$ = (s) => r.querySelectorAll(s);
         $$('.oxi-card').forEach(b => b.addEventListener('click', () => { filtro = b.dataset.f; pintar(); }));
@@ -313,7 +320,7 @@
         const bt = r.querySelector('#oxi-prec-todos'); if (bt) bt.addEventListener('click', () => abrirPrec(filtrados()));
         $$('.oxi-cap:not(.oxi-gas)').forEach(b => b.addEventListener('click', () => { capFiltro = b.dataset.cap; pintar(); }));
         $$('.oxi-gas').forEach(b => b.addEventListener('click', () => { gasFiltro = b.dataset.gas; pintar(); }));
-        r.querySelector('#oxi-buscar').addEventListener('input', (e) => { busca = e.target.value; const p = e.target.selectionStart; pintar(); const n = document.getElementById('oxi-buscar'); n.focus(); n.setSelectionRange(p, p); });
+        r.querySelector('#oxi-buscar').addEventListener('input', (e) => { busca = e.target.value; seguirBusqueda(); const p = e.target.selectionStart; pintar(); const n = document.getElementById('oxi-buscar'); n.focus(); n.setSelectionRange(p, p); });
         $$('.oxi-sel').forEach(c => c.addEventListener('change', () => { c.checked ? sel.add(c.dataset.id) : sel.delete(c.dataset.id); pintar(); }));
         $$('.oxi-hist').forEach(b => b.addEventListener('click', async () => {
             const id = b.dataset.id;

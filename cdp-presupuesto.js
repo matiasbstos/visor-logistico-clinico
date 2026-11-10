@@ -98,7 +98,7 @@
             if (!nombre && !codigos.length) { toast('Falta el dato', 'Indica la categoría o al menos un N° de CDP.', 'warning'); return false; }
             const datos = { nombre, codigos, montoInicial: monto, nota: o.querySelector('#cdp-t').value.trim(), actualizadoPor: usuario(), actualizadoEn: fs().serverTimestamp() };
             if (e) await fs().updateDoc(fs().doc(db(), 'CDP_Presupuesto', e.id), datos);
-            else await fs().addDoc(fs().collection(db(), 'CDP_Presupuesto'), { ...datos, creadoPor: usuario(), creadoEn: fs().serverTimestamp() });
+            else await fs().setDoc(fs().doc(fs().collection(db(), 'CDP_Presupuesto')), { ...datos, creadoPor: usuario(), creadoEn: fs().serverTimestamp() });
             await cargar(); toast('Presupuesto guardado', nombre || codigos.join('-'), 'success'); if (repintar) repintar();
         });
         const del = ov.querySelector('#cdp-del');

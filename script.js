@@ -7450,7 +7450,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     window.filaAEliminar.remove();
                     window.filaAEliminar = null;
 
-                    await window.firebaseFirestore.addDoc(window.firebaseFirestore.collection(window.firebaseFirestore.db || window.db || db, 'Historial_Movimientos'), {
+                    await window.firebaseFirestore.setDoc(window.firebaseFirestore.doc(window.firebaseFirestore.collection(window.firebaseFirestore.db || window.db || db, 'Historial_Movimientos')), {
                         type: 'EDICION_PLANTILLA_BANDEJA',
                         item: nombre,
                         quantity: 0,

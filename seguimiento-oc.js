@@ -1335,7 +1335,7 @@
             const f = fs();
             const ya = await f.getDocs(f.collection(db(), 'Bodegas')); let existe = false; ya.forEach(d => { if (norm(d.data().name) === norm(nombre)) existe = true; });
             if (existe) { toast('Ya existe', 'Hay una bodega con ese nombre. Elígela en la lista.', 'warning'); return false; }
-            await f.addDoc(f.collection(db(), 'Bodegas'), { name: nombre, type: o.querySelector('#nb-t').value, managerId: '', capacityMetrics: '', prefijo: '', usaEstantes: o.querySelector('#nb-e').checked, isActive: true, createdAt: f.serverTimestamp() });
+            await f.setDoc(f.doc(f.collection(db(), 'Bodegas')), { name: nombre, type: o.querySelector('#nb-t').value, managerId: '', capacityMetrics: '', prefijo: '', usaEstantes: o.querySelector('#nb-e').checked, isActive: true, createdAt: f.serverTimestamp() });
             toast('Bodega creada', `${nombre} ya aparece en Bodegas.`, 'success');
             alCrear(nombre);
         }, { ok: 'Crear bodega' });

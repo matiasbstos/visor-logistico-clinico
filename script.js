@@ -2425,24 +2425,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // (v21.149) Se quitó el manejador antiguo de 'form-movimiento' (pedía un campo articleId inexistente y mostraba «Bloqueo de Seguridad» en cada ingreso). El ingreso real está en 9g.
 
-        const formBodegas = document.getElementById('form-bodegas');
-        if (formBodegas) {
-            formBodegas.addEventListener('submit', (e) => {
-                e.preventDefault();
-                const btn = formBodegas.querySelector('button[type="submit"]');
-                const originalText = btn.innerHTML;
-
-                btn.innerHTML = '<i class="ph-fill ph-check-circle"></i> Bodega Registrada';
-                btn.style.backgroundColor = 'var(--success)';
-                showToast('Nuevo Recinto Habilitado', 'La bodega se ha anexado a la red de distribución.', 'success');
-                formBodegas.reset();
-
-                setTimeout(() => {
-                    btn.innerHTML = originalText;
-                    btn.style.backgroundColor = 'var(--primary)';
-                }, 2500);
-            });
-        }
+        // (v21.160) Se quitó el manejador antiguo de 'form-bodegas': mostraba «Bodega registrada» y vaciaba el formulario sin guardar nada, antes de que el manejador real (CRUD BODEGAS) leyera los datos.
 
         /* ----------------------------------------------------
            8. MODAL DE BODEGAS

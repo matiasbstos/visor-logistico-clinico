@@ -1147,3 +1147,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.213 Encargado de bodega escrito a mano (v21.159)
 - «Nueva Bodega»: el campo Responsable pasa de una lista fija con nombres de ejemplo (Dr. Rossi, Marta Sánchez) a un campo de texto obligatorio, con sugerencias de los encargados ya escritos en otras bodegas. Se guarda `managerName` (lo escrito) y `managerId` (versión sin tildes ni espacios).
 - En el detalle de cada bodega, junto al encargado hay un lápiz para cambiarlo a mano (solo administradores). Las bodegas antiguas siguen mostrando su valor anterior hasta que se edite.
+
+## 4.214 Crear bodega: se quitó el manejador falso que vaciaba el formulario (v21.160)
+- Había dos manejadores del formulario «Nueva Bodega»: uno antiguo de maqueta (mostraba «Bodega registrada» y hacía `reset()` sin guardar) y el real (CRUD BODEGAS). El antiguo corría primero y vaciaba los campos, así que el real leía datos vacíos y fallaba: parecía que se creaba y luego daba error. Se eliminó el antiguo; ahora solo guarda el real y avisa con su propio mensaje.

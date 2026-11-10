@@ -40,7 +40,7 @@
             await f.setDoc(ref, { tipo: 'error-app', clase: tipo, mensaje: msg, archivo: String(archivo || '').split('/').pop().split('?')[0], linea: linea || 0, vista: (location.hash || '').replace('#', ''), version: version(), ultimoUsuario: usuario, ultimoRol: rol(), navegador: String(navigator.userAgent || '').slice(0, 120), veces: f.increment ? f.increment(1) : 1, dia: dia(), ultimo: ahora, ...(ya.exists() ? {} : { primero: ahora }) }, { merge: true });
             if (!ya.exists() && correosHoy() < MAX_CORREOS && window.SAR_Avisos) {
                 sumaCorreo();
-                window.SAR_Avisos.avisar({ destinos: DESTINO_ERRORES, titulo: 'Error detectado en el Visor', sujeto: 'Aviso automático de error', asunto: `[Visor SAR] Error detectado: ${msg.slice(0, 80)}`, intro: 'Un usuario del Visor tuvo un error de programa. No hace falta actuar de inmediato; revisa «Directorio de errores» si se repite.',
+                window.SAR_Avisos.avisar({ destinos: DESTINO_ERRORES, titulo: 'Error detectado en el Visor', sujeto: 'Aviso automático de error', asunto: `[Visor SAR] Error detectado: ${msg.slice(0, 80)}`, intro: 'Un usuario del Visor tuvo un error de programa. No hace falta actuar de inmediato; revisa el «Directorio» (Errores y alertas) si se repite.',
                     filas: [], notas: [`Error: ${msg}`, `Dónde: ${String(archivo || '').split('/').pop().split('?')[0]}${linea ? ':' + linea : ''} · pantalla ${(location.hash || 'inicio').replace('#', '')} · versión ${version() || '—'}`, `Usuario: ${usuario || '—'} (${rol()})`] });
             }
         } catch (e) { /* el monitoreo nunca debe causar otro error */ }

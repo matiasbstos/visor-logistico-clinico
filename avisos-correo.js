@@ -72,7 +72,7 @@
         return out;
     }
 
-    const filasActa = (a) => (a.items || []).map(i => ({ nombre: i.nombre, cantidad: i.cantidad, extra: i.codigoMP ? 'Cód. ' + i.codigoMP : '' }));
+    const filasActa = (a) => (a.items || []).map(i => ({ nombre: i.nombre, cantidad: i.cantidad, extra: i.codigoMP ? 'Cód. ' + i.codigoMP : (i.serie ? 'N° ' + i.serie : '') }));
     const baseActa = (a) => `Acta ${a.numero} · entrega a ${a.centro} desde ${a.bodegaOrigen}`;
     /** evento: 'emision' | 'confirmacion' | 'firmada' | 'anulacion'. extra: { pdf:{bytes,nombre}, firmada:{bytes,mime,nombre}, motivo } */
     function avisarActa(evento, a, extra) {

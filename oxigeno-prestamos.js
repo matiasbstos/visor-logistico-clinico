@@ -27,7 +27,7 @@
   /** Puro: estado del respaldo de un balón prestado. */
   function respaldoDe(e) {
     const p = (e && e.prestamo) || {};
-    return { firmada: !!(p.actaFirmada || (e && e.ultimaEntregaActa && p.actaAE)), fotos: (p.fotos || []).length, actaAE: (e && e.ultimaEntregaActa) || '' };
+    return { firmada: !!p.actaFirmada, fotos: (p.fotos || []).length, actaAE: (e && e.ultimaEntregaActa) || '' };
   }
 
   function modal(titulo, cuerpo, aceptar, textoOk) {
@@ -108,8 +108,8 @@
     const g = agrupar(equipos);
     const filas = (e) => { const r = respaldoDe(e), p = e.prestamo || {};
       return `<div class="op-fila"><div class="op-main"><b class="op-serie">N° ${esc(e.serie)}</b><span>${esc((window.SAR_Oxigeno && window.SAR_Oxigeno.normGas ? window.SAR_Oxigeno.normGas(e.gas) : e.gas) || '')} · ${esc(e.capacidad || 'Sin capacidad')}</span><small>desde ${esc(fCL(p.desde || (e.updatedAt && e.updatedAt.toDate ? e.updatedAt.toDate().toISOString() : '')))}${r.actaAE ? ' · acta ' + esc(r.actaAE) : ''}</small></div>
-        <div class="op-resp"><span class="act-chip ${r.firmada ? 'act-c-ok' : 'act-c-sin'}">${r.firmada ? 'Acta firmada' : 'Sin acta firmada'}</span><span class="act-chip">${r.fotos} foto${r.fotos === 1 ? '' : 's'}</span></div>
-        <div class="op-acc"><button type="button" class="btn btn-outline btn-sm op-acta" data-id="${esc(e.id)}">${r.firmada ? 'Cambiar acta' : 'Subir acta firmada'}</button>${r.firmada ? `<button type="button" class="btn btn-outline btn-sm op-veracta" data-id="${esc(e.id)}">Ver acta</button>` : ''}<button type="button" class="btn btn-outline btn-sm op-fotos" data-id="${esc(e.id)}">Agregar fotos</button>${r.fotos ? `<button type="button" class="btn btn-outline btn-sm op-verfotos" data-id="${esc(e.id)}">Ver fotos</button>` : ''}</div></div>`; };
+        <div class="op-resp"><span class="act-chip ${r.firmada ? 'act-c-ok' : 'act-c-sin'}">${r.firmada ? 'Firmada' : 'Sin acta firmada'}</span><span class="act-chip">${r.fotos} foto${r.fotos === 1 ? '' : 's'}</span></div>
+        <div class="op-acc">${r.firmada ? `<button type="button" class="btn btn-outline btn-sm op-veracta" data-id="${esc(e.id)}">Ver acta firmada</button>` : `<button type="button" class="btn btn-outline btn-sm op-acta" data-id="${esc(e.id)}">Subir firmada</button>`}${r.actaAE ? `<button type="button" class="btn btn-outline btn-sm op-bitacora" data-n="${esc(r.actaAE)}">Ver acta y bitácora</button>` : ''}<button type="button" class="btn btn-outline btn-sm op-fotos" data-id="${esc(e.id)}">Agregar fotos</button>${r.fotos ? `<button type="button" class="btn btn-outline btn-sm op-verfotos" data-id="${esc(e.id)}">Ver fotos</button>` : ''}</div></div>`; };
     const total = g.reduce((s, x) => s + x.equipos.length, 0), sin = g.reduce((s, x) => s + x.equipos.filter(e => !respaldoDe(e).firmada).length, 0);
     return `<section class="op-panel" id="oxi-prest"><div class="op-cab"><div><h3>Prestados a otros centros <span class="act-chip">${total}</span>${sin ? `<span class="act-chip act-c-sin">${sin} sin acta firmada</span>` : ''}</h3><small>Dónde está cada balón prestado, con su acta firmada y fotos de respaldo.</small></div><button type="button" class="btn btn-primary" id="op-nuevo"><i class="ph-bold ph-plus"></i> Registrar préstamo</button></div>
       ${g.length ? g.map(x => `<div class="op-centro"><h4>${esc(x.centro)} <small>${x.equipos.length} balón(es)</small></h4>${x.equipos.map(filas).join('')}</div>`).join('') : '<p class="act-hint">No hay balones prestados a otros centros.</p>'}</section>`;
@@ -124,7 +124,8 @@
     const archivo = (accept, multiple) => new Promise(ok => { const i = document.createElement('input'); i.type = 'file'; i.accept = accept; i.multiple = !!multiple; i.onchange = () => ok(i.files); i.oncancel = () => ok(null); i.click(); });
     const proteger = async (fn, okTxt) => { try { await fn(); if (okTxt) toast('Oxígeno', okTxt, 'success'); await refrescar(); } catch (e) { toast('No se pudo', e.message || String(e), 'error'); } };
     sec.querySelectorAll('.op-acta').forEach(b => b.addEventListener('click', async () => { const fl = await archivo('application/pdf,image/*', false); if (!(fl && fl[0])) return; const e = porId(b.dataset.id), A = window.SAR_ActasEntrega;
-      proteger(async () => { if (e && e.ultimaEntregaActa && A && A.subirFirmada) { const sn = await fs().getDoc(fs().doc(fs().collection(db(), 'Actas_Entrega'), e.ultimaEntregaActa)); if (sn.exists()) { await A.subirFirmada({ ...sn.data(), numero: sn.id }, fl[0], usuario()); return; } } await subirActa(e, fl[0]); }, 'Acta firmada guardada.'); }));
+      proteger(async () => { if (e && e.ultimaEntregaActa && A && A.subirFirmada) { const sn = await fs().getDoc(fs().doc(fs().collection(db(), 'Actas_Entrega'), e.ultimaEntregaActa)); if (sn.exists()) { const ac = { ...sn.data(), numero: sn.id }; await A.subirFirmada(ac, fl[0], usuario()); if (A.avisarFirmada) A.avisarFirmada(ac, fl[0]).then(av => { if (av && av.estado === 'enviado') toast('Correo enviado', `Aviso del acta firmada ${ac.numero} enviado.`, 'success'); else if (av && av.estado === 'programado') toast('Correo programado', av.detalle, 'info'); }).catch(() => {}); return; } } await subirActa(e, fl[0]); }, 'Acta firmada guardada.'); }));
+    sec.querySelectorAll('.op-bitacora').forEach(b => b.addEventListener('click', () => proteger(async () => { const A = window.SAR_ActasEntrega; if (A && A.verPorNumero) await A.verPorNumero(b.dataset.n); })));
     sec.querySelectorAll('.op-veracta').forEach(b => b.addEventListener('click', () => proteger(async () => { const e = porId(b.dataset.id), r = e && e.prestamo && e.prestamo.actaFirmada, A = window.SAR_ActasEntrega; if (r && r.actaNumero && A && A.verRespaldo) { const sn = await fs().getDoc(fs().doc(fs().collection(db(), 'Actas_Entrega'), r.actaNumero)); if (sn.exists()) { await A.verRespaldo({ ...sn.data(), numero: sn.id }); return; } } await verActa(e); })));
     sec.querySelectorAll('.op-fotos').forEach(b => b.addEventListener('click', async () => { const fl = await archivo('image/*', true); if (fl && fl.length) proteger(() => subirFotos(porId(b.dataset.id), fl), 'Fotos guardadas.'); }));
     sec.querySelectorAll('.op-verfotos').forEach(b => b.addEventListener('click', () => { const e = porId(b.dataset.id); ((e.prestamo && e.prestamo.fotos) || []).forEach(x => proteger(() => verFoto(x.id))); }));
@@ -137,7 +138,7 @@
         <label class="act-l">Entrega<input id="op-en" value="${esc(fm.nombre)}"></label><label class="act-l">Cargo<input id="op-ec" value="${esc(fm.cargo)}"></label>
         <label class="act-l">Recibe (opcional)<input id="op-rn"></label><label class="act-l">Cargo de quien recibe (opcional)<input id="op-rc"></label>
         <label class="act-l">Nota (opcional)<input id="op-nota" placeholder="Ej: por cambio de balón en ambulancia"></label>
-        <p class="act-hint">Al registrar se genera el <b>acta de entrega</b> con su correlativo (AE-AAAA-NNNN) y se descarga para firmar. Cuando esté firmada, súbela desde «Subir acta firmada» o desde Actas de entrega.</p>`,
+        <p class="act-hint">Al registrar se genera el <b>acta de entrega</b> con su correlativo (AE-AAAA-NNNN) y se descarga para firmar. Se avisa por correo igual que las actas de insumos. Cuando esté firmada, súbela con «Subir firmada» (aquí o en Actas de entrega).</p>`,
       async (q) => {
         const ids = [...document.querySelectorAll('.op-chk:checked')].map(c => c.value), centro = q('#op-centro').value.trim(), fecha = q('#op-fecha').value;
         if (!centro) throw new Error('Indica el centro al que se prestó.'); if (!ids.length) throw new Error('Elige al menos un balón.');
@@ -147,7 +148,7 @@
         const acta = await window.SAR_Progreso.correr('Generando el acta de entrega…', () => O.entregar(centro, lista, firma, { nombre: q('#op-rn').value.trim(), cargo: q('#op-rc').value.trim() }, [], { prestamo: true, fecha, nota: q('#op-nota').value }), 'Acta emitida');
         toast('Préstamo registrado', `${acta.numero} · ${lista.length} balón(es) a ${centro}. Descarga el acta, hazla firmar y súbela.`, 'success');
         await refrescar();
-        const A = window.SAR_ActasEntrega; if (A && A.descargarActa) { try { await A.descargarActa(acta, 'pdf'); } catch (e) { toast('Descarga', 'El acta se emitió; bájala desde Actas de entrega. ' + e.message, 'warning'); } }
+        const A = window.SAR_ActasEntrega; if (A && A.descargarActa) { try { const rr = await A.descargarActa(acta, 'pdf'); if (rr && window.SAR_Avisos) window.SAR_Avisos.avisarActa('emision', acta, { pdf: rr }).then(av => { if (av.estado === 'enviado') toast('Correo enviado', 'Aviso del acta enviado con el PDF adjunto.', 'success'); else if (av.estado === 'programado') toast('Correo programado', av.detalle, 'info'); }).catch(() => {}); } catch (e) { toast('Descarga', 'El acta se emitió; bájala desde Actas de entrega. ' + e.message, 'warning'); } }
       }, 'Generar acta y registrar');
     });
   }

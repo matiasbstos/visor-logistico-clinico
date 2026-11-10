@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=21.157",
+                "./script.js": "./script.js?v=21.158",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -93,7 +93,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
     <meta name="theme-color" content="#1A3668">
-    <link rel="stylesheet" href="style.css?v=21.157">
+    <link rel="stylesheet" href="style.css?v=21.158">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script src="https://unpkg.com/@phosphor-icons/web@2.1.1" defer></script>
@@ -2616,84 +2616,10 @@
             <!-- VIEW: Transferencias -->
             <section id="view-transferencias" class="view-section" style="display: none;">
                 <div class="view-header" style="padding: 20px; border-bottom: 1px solid #ddd;">
-                    <h2>Transferencias y Auditoría Clínica (SITRAE)</h2>
+                    <h2>Transferencias entre bodegas</h2>
+                    <p class="act-hint" style="margin:4px 0 0;">Mueve varios productos de una bodega a otra en un solo paso. Se conservan lote y vencimiento y queda registro en el historial.</p>
                 </div>
-
-                <div class="transfer-tabs-container" style="padding: 20px; background: #f8f9fa;">
-                    <button class="btn btn-primary"
-                        onclick="document.getElementById('tab-despacho').style.display='block'; document.getElementById('tab-bandejas').style.display='none';">Nueva
-                        Transferencia (Despacho)</button>
-                    <button class="btn btn-outline"
-                        onclick="document.getElementById('tab-despacho').style.display='none'; document.getElementById('tab-bandejas').style.display='block';">Bandejas
-                        Activas y Arqueos</button>
-                </div>
-
-                <div id="tab-despacho" class="transfer-tab-content" style="padding: 20px;">
-                    <div class="template-selector" style="margin-bottom: 20px;">
-                        <label><strong>Cargar Plantilla de Insumos:</strong></label>
-                        <select id="select-plantilla" class="form-control"
-                            style="width: 300px; display: inline-block; margin-left: 10px;" aria-label="select plantilla" title="select plantilla">
-                            <option value="">Seleccione una plantilla base...</option>
-                            <option value="urgencias">Bandeja Urgencias Estándar</option>
-                            <option value="noche">Bandeja Turno Noche</option>
-                        </select>
-                    </div>
-                    <table class="table" style="width: 100%; border-collapse: collapse;">
-                        <thead>
-                            <tr style="background: #e9ecef;">
-                                <th>Insumo / Medicamento</th>
-                                <th>Cantidad a Despachar</th>
-                                <th>Acción</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td colspan="3" style="text-align: center; padding: 20px;">Seleccione una plantilla o
-                                    agregue insumos</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                    <button class="btn btn-success" style="margin-top: 15px;">Autorizar y Despachar Bandeja</button>
-                </div>
-
-                <div id="tab-bandejas" class="transfer-tab-content" style="display: none; padding: 20px;">
-                    <div class="card bandeja-card"
-                        style="border: 1px solid #ccc; padding: 15px; border-radius: 8px; max-width: 400px;">
-                        <h4>Bandeja 1 - Turno Mañana</h4>
-                        <p><strong>Estado:</strong> En Uso (Pendiente de Arqueo)</p>
-                        <button class="btn btn-warning"
-                            onclick="document.getElementById('modal-arqueo').style.display='block'">Realizar
-                            Verificación Cruzada</button>
-                    </div>
-                </div>
-
-                <div id="modal-arqueo" class="modal"
-                    style="display: none; position: fixed; top: 5%; left: 10%; right: 10%; bottom: 5%; background: white; border: 1px solid #ccc; z-index: 1000; padding: 20px; overflow-y: auto; box-shadow: 0 4px 15px rgba(0,0,0,0.2);">
-                    <h3>Auditoría Cruzada (Fin de Turno)</h3>
-                    <div
-                        style="border: 2px dashed #007bff; padding: 30px; text-align: center; margin: 20px 0; background: #f0f8ff;">
-                        Arrastra aquí el "Consolidado de Pacientes" (PDF/Excel)</div>
-                    <table class="table" style="width: 100%;">
-                        <thead>
-                            <tr style="background: #e9ecef;">
-                                <th>Medicamento</th>
-                                <th>Faltante</th>
-                                <th>Uso Clínico</th>
-                                <th>Estado</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>Ketorolaco 30mg</td>
-                                <td>3</td>
-                                <td>3</td>
-                                <td><span class="action-badge green-badge"><i class="ph ph-check-circle"></i> Match</span></td>
-                            </tr>
-                        </tbody>
-                    </table>
-                    <button class="btn btn-danger" style="margin-top: 20px;"
-                        onclick="document.getElementById('modal-arqueo').style.display='none'">Cerrar Auditoría</button>
-                </div>
+                <div id="tb-root" class="tb-root" style="padding: 20px;"></div>
             </section>
 
             <!-- VIEW: Bodegas -->
@@ -5972,69 +5898,70 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=21.157"></script>
-    <script type="module" src="patch-plantillas.js?v=21.157"></script>
+    <script type="module" src="script.js?v=21.158"></script>
+    <script type="module" src="patch-plantillas.js?v=21.158"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="bodega-explorador.js?v=21.157"></script>
-    <script src="precintos-inventario.js?v=21.157"></script>
-    <script src="prestamos-otros-centros.js?v=21.157"></script>
-    <script src="precinto-escaneo.js?v=21.157"></script>
-    <script src="sonidos.js?v=21.157"></script>
-    <script src="avisos-campana.js?v=21.157"></script>
-    <script src="bodegas-estantes.js?v=21.157"></script>
-    <script src="bodegas-cierre.js?v=21.157"></script>
-    <script src="progreso.js?v=21.157"></script>
-    <script src="oc-lector.js?v=21.157"></script>
-    <script src="acta-edicion.js?v=21.157"></script>
-    <script src="anonimizar-pacientes.js?v=21.157"></script>
-    <script src="cdp-presupuesto.js?v=21.157"></script>
-    <script src="imagenes-producto.js?v=21.157"></script>
-    <script src="catalogo-vista.js?v=21.157"></script>
-    <script src="correo-html.js?v=21.157"></script>
-    <script src="avisos-correo.js?v=21.157"></script>
-    <script src="monitor-errores.js?v=21.157"></script>
-    <script src="lotes-alertas.js?v=21.157"></script>
-    <script src="codigo-sar.js?v=21.157"></script>
-    <script src="categorias.js?v=21.157"></script>
-    <script src="gobernanza.js?v=21.157"></script>
-    <script src="resumen-stock.js?v=21.157"></script>
-    <script src="vista-previa-agenda.js?v=21.157"></script>
-    <script src="menu-lateral.js?v=21.157"></script>
-    <script src="buscador-global.js?v=21.157"></script>
-    <script src="cargando-global.js?v=21.157"></script>
-    <script src="respaldo-diario.js?v=21.157"></script>
-    <script src="cierre-mensual.js?v=21.157"></script>
-    <script src="tabla-columnas.js?v=21.157"></script>
-    <script src="acerca.js?v=21.157"></script>
-    <script src="memo-flujo.js?v=21.157"></script>
-    <script src="primeros-pasos.js?v=21.157"></script>
-    <script src="guia-lector.js?v=21.157"></script>
-    <script src="seguimiento-oc.js?v=21.157"></script>
-    <script src="compras-agiles.js?v=21.157"></script>
-    <script src="ingreso-rapido.js?v=21.157"></script>
-    <script src="pendientes-entrega.js?v=21.157"></script>
-    <script src="sugerencias-producto.js?v=21.157"></script>
-    <script src="duplicados.js?v=21.157"></script>
-    <script src="recepciones-conformes.js?v=21.157"></script>
-    <script src="sustituciones.js?v=21.157"></script>
-    <script src="bitacora-oc.js?v=21.157"></script>
-    <script src="id-producto.js?v=21.157"></script>
-    <script src="home-compras.js?v=21.157"></script>
-    <script src="home-ingresos.js?v=21.157"></script>
-    <script src="login-animado.js?v=21.157"></script>
-    <script src="nomenclaturas.js?v=21.157"></script>
-    <script src="errores.js?v=21.157"></script>
-    <script src="saldos-contables.js?v=21.157"></script>
-    <script src="recepcion-conforme.js?v=21.157"></script>
-    <script src="acta-documentos.js?v=21.157"></script>
-    <script src="unificar-duplicados.js?v=21.157"></script>
-    <script src="actas-entrega.js?v=21.157"></script>
-    <script src="oxigeno.js?v=21.157"></script>
-    <script src="oxigeno-prestamos.js?v=21.157"></script>
-    <script src="oxigeno-ciclos.js?v=21.157"></script>
-    <script src="vida-producto.js?v=21.157"></script>
-    <script src="editar-ingreso.js?v=21.157"></script>
-    <script src="bodega-transitoria.js?v=21.157"></script>
-    <script src="visor-adquisiciones.js?v=21.157"></script>
+    <script src="bodega-explorador.js?v=21.158"></script>
+    <script src="precintos-inventario.js?v=21.158"></script>
+    <script src="prestamos-otros-centros.js?v=21.158"></script>
+    <script src="precinto-escaneo.js?v=21.158"></script>
+    <script src="sonidos.js?v=21.158"></script>
+    <script src="avisos-campana.js?v=21.158"></script>
+    <script src="bodegas-estantes.js?v=21.158"></script>
+    <script src="bodegas-cierre.js?v=21.158"></script>
+    <script src="progreso.js?v=21.158"></script>
+    <script src="oc-lector.js?v=21.158"></script>
+    <script src="acta-edicion.js?v=21.158"></script>
+    <script src="anonimizar-pacientes.js?v=21.158"></script>
+    <script src="cdp-presupuesto.js?v=21.158"></script>
+    <script src="imagenes-producto.js?v=21.158"></script>
+    <script src="catalogo-vista.js?v=21.158"></script>
+    <script src="correo-html.js?v=21.158"></script>
+    <script src="avisos-correo.js?v=21.158"></script>
+    <script src="monitor-errores.js?v=21.158"></script>
+    <script src="lotes-alertas.js?v=21.158"></script>
+    <script src="codigo-sar.js?v=21.158"></script>
+    <script src="categorias.js?v=21.158"></script>
+    <script src="gobernanza.js?v=21.158"></script>
+    <script src="resumen-stock.js?v=21.158"></script>
+    <script src="vista-previa-agenda.js?v=21.158"></script>
+    <script src="menu-lateral.js?v=21.158"></script>
+    <script src="buscador-global.js?v=21.158"></script>
+    <script src="cargando-global.js?v=21.158"></script>
+    <script src="respaldo-diario.js?v=21.158"></script>
+    <script src="cierre-mensual.js?v=21.158"></script>
+    <script src="tabla-columnas.js?v=21.158"></script>
+    <script src="acerca.js?v=21.158"></script>
+    <script src="memo-flujo.js?v=21.158"></script>
+    <script src="traspaso-bodegas.js?v=21.158"></script>
+    <script src="primeros-pasos.js?v=21.158"></script>
+    <script src="guia-lector.js?v=21.158"></script>
+    <script src="seguimiento-oc.js?v=21.158"></script>
+    <script src="compras-agiles.js?v=21.158"></script>
+    <script src="ingreso-rapido.js?v=21.158"></script>
+    <script src="pendientes-entrega.js?v=21.158"></script>
+    <script src="sugerencias-producto.js?v=21.158"></script>
+    <script src="duplicados.js?v=21.158"></script>
+    <script src="recepciones-conformes.js?v=21.158"></script>
+    <script src="sustituciones.js?v=21.158"></script>
+    <script src="bitacora-oc.js?v=21.158"></script>
+    <script src="id-producto.js?v=21.158"></script>
+    <script src="home-compras.js?v=21.158"></script>
+    <script src="home-ingresos.js?v=21.158"></script>
+    <script src="login-animado.js?v=21.158"></script>
+    <script src="nomenclaturas.js?v=21.158"></script>
+    <script src="errores.js?v=21.158"></script>
+    <script src="saldos-contables.js?v=21.158"></script>
+    <script src="recepcion-conforme.js?v=21.158"></script>
+    <script src="acta-documentos.js?v=21.158"></script>
+    <script src="unificar-duplicados.js?v=21.158"></script>
+    <script src="actas-entrega.js?v=21.158"></script>
+    <script src="oxigeno.js?v=21.158"></script>
+    <script src="oxigeno-prestamos.js?v=21.158"></script>
+    <script src="oxigeno-ciclos.js?v=21.158"></script>
+    <script src="vida-producto.js?v=21.158"></script>
+    <script src="editar-ingreso.js?v=21.158"></script>
+    <script src="bodega-transitoria.js?v=21.158"></script>
+    <script src="visor-adquisiciones.js?v=21.158"></script>
 </body>
 </html>

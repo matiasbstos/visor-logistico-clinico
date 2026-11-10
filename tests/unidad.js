@@ -131,3 +131,4 @@ console.log(`\n${n} ok, ${mal} con falla`); process.exit(mal ? 1 : 0); });
   assert.strictEqual(r.quantity, 12);
   console.log('ok editar ingreso');
 })();
+t('traspaso: saca por FEFO y junta lotes en destino', () => { const T = require('../traspaso-bodegas.js'); const cmp = (a, b) => String(a.expirationDate).localeCompare(String(b.expirationDate)); const r = T.sacarFEFO({ quantity: 15, batches: [{ batch: 'B', quantity: 10, expirationDate: '2028-01-01' }, { batch: 'A', quantity: 5, expirationDate: '2027-01-01' }] }, 8, cmp); assert.strictEqual(r.movidos.length, 2); assert.strictEqual(r.movidos[0].batch, 'A'); assert.strictEqual(r.movidos[0].used, 5); assert.strictEqual(r.movidos[1].used, 3); assert.strictEqual(r.lotes.reduce((s, b) => s + b.quantity, 0), 7); const d = T.juntarLotes([{ batch: 'A', quantity: 2, expirationDate: '2027-01-01' }], r.movidos); assert.strictEqual(d.find(b => b.batch === 'A').quantity, 7); assert.strictEqual(d.length, 2); });

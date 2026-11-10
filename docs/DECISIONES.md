@@ -1109,3 +1109,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Problema: al cambiar el nombre de un insumo en Existencias, el ingreso, el autocompletado y la ventana de corrección seguían usando el nombre anterior; un nuevo ingreso o la corrección de cantidad creaba o buscaba un producto distinto (dos ítems, uno sin stock) y «Editar ingreso» no dejaba modificar.
 - Ahora el nombre anterior queda en `nombresAnteriores` del insumo. (1) Un ingreso escrito con el nombre antiguo se suma al producto renombrado, no crea otro. (2) «Editar ingreso» encuentra el producto por id o por nombre anterior. (3) La ventana de 12 h y la revisión de salidas miran el historial con el nombre actual y los anteriores. (4) El autocompletado deja de ofrecer nombres ya reemplazados.
 - Los duplicados que ya existen no se unen solos: hay que revisarlos (Revisar productos parecidos) y corregir el stock caso a caso.
+
+## 4.206 Ingreso: el tipo de insumo se elige primero y define si lote y vencimiento son obligatorios (v21.152)
+- «Tipo de insumo» (médico / aseo / oficina) pasa al comienzo de «Detalles del producto». Con **médico** el lote y el vencimiento siguen obligatorios; con **aseo u oficina** son opcionales (rótulo «opcional», sin lote queda como S/L y sin vencimiento como N/A, que no genera alertas de vencimiento).
+- El tipo se propone solo: si el nombre ya existe en Existencias toma su tipo; si no, por palabras clave (cloro, detergente, papel higiénico, bolsa de basura… → aseo; lápiz, resma, archivador… → oficina). Si lo eliges a mano, no se vuelve a cambiar solo.
+- «Editar ingreso» ya no exige lote (queda S/L).

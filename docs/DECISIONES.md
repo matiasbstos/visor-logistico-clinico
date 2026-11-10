@@ -1125,3 +1125,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Al emitir y al editar una recepción conforme se puede modificar el **encabezado** del acta (por defecto «Que se recibió conforme en forma Total/Parcial…», que cambia solo al elegir Total/Parcial mientras no se haya escrito a mano) y el **detalle**: incluir/quitar productos, corregir el nombre y la cantidad.
 - La fecha del acta se pide de forma explícita («¿Con qué fecha se emite el acta?»): se propone el día de la recepción registrada, pero es editable y obligatoria; no se fuerza la de hoy.
 - Se guardan `encabezado` y `lineas` en `recepcionConforme`; «Regenerar» y «Editar» los respetan. Sin cambios en códigos.
+
+## 4.209 Memo informativo del flujo de recepción conforme (v21.155)
+- Criterio aclarado por el responsable: una recepción es **parcial solo si el SAR no recibió todo lo que la orden le asignó**; que la orden se reparta a otros centros no la vuelve parcial (el sistema ya calcula así: pedido y recibido del SAR = suma de sus columnas del cuadro de distribución).
+- Nuevo `memo-flujo.js`: ventana «Memo de flujo» en el menú lateral, visible **solo para el administrador global** (`superadmin`; además oculta por CSS y bloqueada en JS), con identidad visual del sitio: flujo paso a paso, decisión Total/Parcial, ejemplo y tabla de variables. Solo texto estático; no lee ni escribe datos.

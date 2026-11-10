@@ -1183,7 +1183,7 @@
         det.forEach(d => { const l = lineas[d.i]; l.recibido[key] = num(l.recibido[key]) + d.cantidad; if (ingresaStock) l.ingresado[key] = num(l.ingresado[key]) + d.cantidad; if (d.insumoName) l.insumoName = d.insumoName; });
         return { lineas, incidencias: [...(data.incidencias || []), ...incidencias.map((n, k) => ({ id: `inc-${Date.now()}-${k}`, ...n, estado: 'ABIERTA', fecha: hoyISO(), ...(extra || {}) }))] };
     }
-    async function recepcionConStock(oc, { extras, baseN, onPaso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar, ingresaStock, central, texto, titulo }) {
+    async function recepcionConStock(oc, { provDoc, extras, baseN, onPaso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar, ingresaStock, central, texto, titulo }) {
         const f = fs(); const paso = (t) => { if (onPaso) onPaso(t); };
         const aplicadoLocal = aplicarRecepcion(oc, key, det, incidencias, null, ingresaStock);
         let correo = null;
@@ -1221,11 +1221,11 @@
                 const actual = snap.exists() ? snap.data() : null, m = mezclarIngreso(actual, g.ingresos);
                 const limite = num(actual && (actual.criticalLimit || actual.stock_minimo)) || 50;
                 const prox = m.batches[0];
-                const base = { origenOC: true, ...(g.codigo ? { codigoMP: g.codigo } : {}), quantity: m.quantity, batches: m.batches, isCritical: m.quantity <= limite, batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', provider: oc.proveedor || (actual && actual.provider) || 'S/I', updatedAt: f.serverTimestamp() };
+                const base = { origenOC: true, ...(g.codigo ? { codigoMP: g.codigo } : {}), quantity: m.quantity, batches: m.batches, isCritical: m.quantity <= limite, batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', provider: oc.proveedor || provDoc || (actual && actual.provider) || 'S/I', updatedAt: f.serverTimestamp() };
                 if (actual) tx.update(g.ref, base); else tx.set(g.ref, { name: g.nombre, name_lowercase: String(g.nombre).toLowerCase(), location: central, criticalLimit: 50, ...base });
                 g.ingresos.forEach(ing => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), {
                     insumoName: g.nombre, item: g.nombre, quantity: ing.cantidad, type: 'INGRESO_OC', batch: ing.lote, expirationDate: ing.vence, destination: central, dest: central, origin: oc.proveedor || 'Proveedor',
-                    provider: oc.proveedor || 'S/I', user: usuario(), date: f.serverTimestamp(), document: `${recId} · OC ${oc.numeroOC}${guia ? ' · guía ' + guia : ''}`, observacion: obs || '', ocId: oc.id, idInsumoDestino: g.ref.id }));
+                    provider: oc.proveedor || provDoc || 'S/I', user: usuario(), date: f.serverTimestamp(), document: `${recId} · OC ${oc.numeroOC}${guia ? ' · guía ' + guia : ''}`, observacion: obs || '', ocId: oc.id, idInsumoDestino: g.ref.id }));
             });
         });
         if (notificar) { paso('Enviando el aviso por correo…'); try { correo = await enviarCorreo(DESTINO_RECEPCION, armarCorreo({ ...oc, ...aplicadoLocal }, titulo, texto, usuario())); } catch (e) { toast('Recepción guardada', 'No se pudo preparar el correo: ' + e.message, 'warning'); } }
@@ -1359,10 +1359,12 @@
             } catch (e) { /* sin lista de bodegas: queda la central */ }
             await cargaNombres();
         })();
+        let docLeido = null;
         const ov = modal('Recibir mercadería', `
             <label${cols.length === 1 ? ' hidden' : ''}>¿Qué memo/CDP se recibió?<select id="r-col">${cols.map(c => `<option value="${esc(c.key)}">${esc(c.centro)} · memo ${esc(c.memo)}${c.cdp ? ' · CDP ' + esc(c.cdp) : ''}</option>`).join('')}</select></label>
             <div class="soc-fila"><label>N° guía de despacho<input type="text" id="r-guia" autocomplete="off"></label><label>Fecha<input type="date" id="r-fecha" value="${hoyISO()}"></label></div>
             <label>Guía de despacho (foto o PDF, opcional: queda guardada en la orden)<input type="file" id="r-file" accept="application/pdf,image/*"></label>
+            <div id="r-doc" class="r-doc" hidden></div>
             <div class="soc-barra-rec"><button type="button" class="btn btn-outline btn-sm" id="r-total"><i class="ph-bold ph-checks"></i> Marcar todo recibido</button><button type="button" class="btn btn-outline btn-sm" id="r-nada">Limpiar</button><span id="r-resumen" class="soc-resumen-rec"></span></div>
             <div id="r-lineas"></div>
             <div class="r-extra"><button type="button" class="btn btn-outline btn-sm" id="r-add"><i class="ph-bold ph-plus"></i> Agregar producto</button>
@@ -1416,7 +1418,7 @@
                 const prog = progresoRecepcion(o, ['Validando la recepción…']);
                 try {
                 const fGuia = (q('#r-file').files || [])[0];
-                await recepcionConStock(oc, { extras, baseN, onPaso: prog.paso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar: q('#r-correo').checked, ingresaStock, central, texto, titulo: incidencias.length ? `Recepción con incidencias en ${col.centro}` : `Recepción en ${col.centro}` });
+                await recepcionConStock(oc, { provDoc: (docLeido && docLeido.empresa) || '', extras, baseN, onPaso: prog.paso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar: q('#r-correo').checked, ingresaStock, central, texto, titulo: incidencias.length ? `Recepción con incidencias en ${col.centro}` : `Recepción en ${col.centro}` });
                 if (ingresaStock) await aprenderNombres(oc, det);
                 else { const ex = extras.map(l => ({ i: oc.lineas.indexOf(l), insumoName: l.descripcion })).filter(d => d.i >= 0); if (ex.length) await aprenderNombres(oc, ex); }
                 if (fGuia) { prog.paso('Guardando la guía en la orden…'); await guardarFile(oc.id, fGuia, 'Guía de despacho ' + recId); }
@@ -1466,6 +1468,26 @@
             const ok = e.target.closest('.r-ok'); if (ok) { const tr = ok.closest('tr'); const c = tr.querySelector('.r-c'); c.value = c.value && num(c.value) === num(tr.dataset.pe) ? '' : tr.dataset.pe; resumen(); }
             if (e.target.closest('#r-total')) { ov.querySelectorAll('tr[data-i]').forEach(tr => { if (num(tr.dataset.pe)) tr.querySelector('.r-c').value = tr.dataset.pe; }); resumen(); }
             if (e.target.closest('#r-nada')) { ov.querySelectorAll('.r-c').forEach(i => { i.value = ''; }); resumen(); }
+        });
+        ov.querySelector('#r-file').addEventListener('change', async (e) => {
+            const file = (e.target.files || [])[0], box = ov.querySelector('#r-doc'); docLeido = null; if (!file) { box.hidden = true; return; }
+            const G = window.SAR_GuiaLector; if (!G) return;
+            box.hidden = false; box.className = 'r-doc'; box.textContent = 'Leyendo el documento (lote, vencimiento y empresa)…';
+            try {
+                const r = await G.leer(file, configCorreo); docLeido = r;
+                const m = G.emparejar(oc.lineas, r.lineas), key = ov.querySelector('#r-col').value;
+                const lv = ov.querySelector('#r-lv'); if (!lv.checked) { lv.checked = true; if (!ov.querySelector('#r-stock').checked) ov.querySelector('#r-stock').checked = true; pintar(); resumen(); }
+                let n = 0; m.pares.forEach(p => { const tr = ov.querySelector(`tr[data-i="${p.i}"]`); if (!tr) return; const L = tr.querySelector('.r-l'), V = tr.querySelector('.r-v'), C = tr.querySelector('.r-c'); if (L && p.doc.lote) L.value = p.doc.lote; if (V && p.doc.vence) V.value = p.doc.vence; if (C && !C.value && p.doc.cantidad > 0) C.value = Math.min(p.doc.cantidad, num(tr.dataset.pe)); n++; });
+                const g = ov.querySelector('#r-guia'); if (g && !g.value && r.numero) g.value = r.numero;
+                const f = ov.querySelector('#r-fecha'); if (f && r.fecha && r.fecha <= hoyISO() && f.value === hoyISO()) f.value = r.fecha;
+                resumen();
+                const aparte = m.extras.map(x => `${x.descripcion}: lote ${x.lote || '—'}${x.vence ? ' vence ' + x.vence : ''} (${x.cantidad} u.)`);
+                box.className = 'r-doc r-doc--ok';
+                box.innerHTML = `<b>Documento leído.</b> ${r.empresa ? 'Empresa: <b>' + esc(r.empresa) + '</b>. ' : ''}${n} producto${n === 1 ? '' : 's'} con lote y vencimiento completados. Revísalos antes de guardar.` + (m.sinPar.length ? `<br>Sin coincidir con la orden: ${esc(m.sinPar.map(x => x.descripcion).join('; '))}.` : '') + (aparte.length ? `<br>Otros lotes del mismo producto (anótalos con «Agregar producto» o después en «Lotes y vencimientos»): ${esc(aparte.join('; '))}.` : '');
+            } catch (err) {
+                box.className = 'r-doc r-doc--aviso';
+                box.textContent = err.message === 'SIN_SCRIPT' ? 'Para leer el documento solo falta conectar el script en «Configurar correo». Puedes anotar lote y vencimiento a mano.' : err.message === 'SIN_CLAVE' ? 'Falta la clave de lectura en el Apps Script. Puedes anotar lote y vencimiento a mano.' : err.message === 'SCRIPT_VIEJO' ? 'El Apps Script aún no tiene la lectura de documentos: hay que pegar la versión nueva (Configurar correo → ver código) y publicarla. Mientras, anota lote y vencimiento a mano.' : 'No se pudo leer el documento: ' + (err.message || err) + '. Puedes anotar lote y vencimiento a mano.';
+            }
         });
         ov.querySelector('#r-nueva-b').addEventListener('click', () => formNuevaBodega((nombre) => {
             bodegasLista.push(nombre); const sel = ov.querySelector('#r-dest'); sel.insertAdjacentHTML('beforeend', `<option>${esc(nombre)}</option>`); sel.value = nombre; sel.dispatchEvent(new Event('change'));
@@ -1518,6 +1540,7 @@ function doPost(e) {
     const d = JSON.parse(e.postData.contents);
     if (d.token !== TOKEN) return salida({ ok: false, error: 'token' });
     if (d.accion === 'foto') return salida(leerFotos(d.fotos));
+    if (d.accion === 'documento') return salida(leerDocumento(d.paginas));
     if (d.accion === 'porDescripcion') { const o = {}; (d.items || []).slice(0, 25).forEach(it => { o[it.k] = fotoPorDescripcion(it.q); }); return salida({ ok: true, fotos: o }); }
     if (d.accion === 'imagenes') {   // foto de producto en la tienda de Convenio Marco (por el código entre paréntesis)
       const out = {}; (d.codigos || []).slice(0, 60).forEach(c => { out[c] = imagenDe(String(c).replace(/\\D/g, '')); });
@@ -1583,6 +1606,20 @@ function leerFotos(fotos) {   // lee fotos de cajas con la API de Claude (la cla
   const t = (j.content || []).map(x => x.text || '').join(''), a = t.indexOf('['), b = t.lastIndexOf(']');
   if (a < 0 || b < a) return { ok: false, error: 'respuesta_ilegible' };
   return { ok: true, productos: JSON.parse(t.slice(a, b + 1)) };
+}
+function leerDocumento(paginas) {   // guia de despacho o factura: empresa, N° y lineas con lote y vencimiento (API de Claude)
+  const clave = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!clave) return { ok: false, error: 'sin_clave' };
+  const content = [];
+  (paginas || []).slice(0, 4).forEach(f => content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: String(f) } }));
+  if (!content.length) return { ok: false, error: 'sin_paginas' };
+  content.push({ type: 'text', text: 'Eres un asistente de bodega de un servicio de salud en Chile. Lee esta guia de despacho o factura de insumos medicos. Responde SOLO con un objeto JSON (sin texto adicional) con estas claves: empresa (razon social de quien despacha o factura), numero (N° de la guia o factura), fecha (AAAA-MM-DD), lineas (arreglo con un objeto por cada producto y lote: descripcion tal como esta impresa, cantidad (numero de unidades), lote (tal cual; vacio si no aparece), vence (fecha de VENCIMIENTO AAAA-MM-DD; si solo hay mes y anio usa el ultimo dia del mes; vacio si no aparece)). No inventes datos: si algo no se lee, dejalo vacio.' });
+  const r = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', { method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-api-key': clave, 'anthropic-version': '2023-06-01' }, payload: JSON.stringify({ model: 'claude-sonnet-5-5', max_tokens: 4000, messages: [{ role: 'user', content: content }] }) });
+  const j = JSON.parse(r.getContentText());
+  if (r.getResponseCode() !== 200) return { ok: false, error: 'api:' + ((j.error && j.error.message) || r.getResponseCode()) };
+  const t = (j.content || []).map(x => x.text || '').join(''), a = t.indexOf('{'), b = t.lastIndexOf('}');
+  if (a < 0 || b < a) return { ok: false, error: 'respuesta_ilegible' };
+  const o = JSON.parse(t.slice(a, b + 1)); o.ok = true; return o;
 }
 function normT(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' '); }
 function fotoPorDescripcion(desc) {   // busca por descripcion en todas las tiendas y elige el resultado mas parecido (siempre queda "por confirmar")

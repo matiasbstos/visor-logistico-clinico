@@ -1086,3 +1086,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Buscador de Oxígeno portátil: al escribir un **N° de serie** o un **correlativo de acta (AE-AAAA-NNNN)** aparece un seguimiento tipo compras: estado actual, ciclo en curso o cerrado (con destino y días) y cada ciclo con sus movimientos; si es un acta, además su centro, fecha y si está firmada. También busca por acta vigente en la lista.
 - Auditoría: pestaña **Disponible** suma el bloque de oxígeno (llenos, vacíos, en recarga, entregados, fuera de servicio) y **Contable** el libro de movimientos de todos los balones con su ciclo, descargable en Excel.
 - No hay códigos nuevos (nomenclaturas sin cambios). Test de ciclos agregado (34 tests).
+
+## 4.201 Recepción de una orden: lote, vencimiento y empresa leídos desde la guía/factura (v21.147)
+- En «Recibir mercadería» (Seguimiento de OC), al adjuntar la **guía de despacho o factura** (foto o PDF) el sistema la lee y completa solo, en cada producto de la orden: **lote, vencimiento y cantidad** (activa «Anotar lote y vencimiento»), además del **N° de guía**, la fecha y la **empresa**. Todo queda editable y se revisa antes de «Guardar recepción». La empresa se usa como proveedor del lote solo si la orden no trae uno.
+- Lectura con el mismo Apps Script de las fotos de cajas, acción nueva `documento` (`guia-lector.js`; el código nuevo está en SCRIPT_GAS). **Requiere pegar la versión nueva del Apps Script y publicarla** (la clave ANTHROPIC_API_KEY ya está). Si el script es antiguo o no está conectado, el formulario avisa y se anota a mano como antes.
+- Los productos del documento se emparejan con las líneas de la orden por descripción/ID (≥50 % de coincidencia). Si un producto trae varios lotes, el primero llena la fila y los demás se listan en el aviso para anotarlos con «Agregar producto» o en «Lotes y vencimientos». Lo que no coincide también se lista.
+- Test agregado (35 tests). Sin códigos nuevos.

@@ -1120,3 +1120,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Al confirmar, cada grupo queda en un solo registro (nuevo módulo `unificar-duplicados.js`): sobrevive el que tiene más stock; se suman cantidad, lotes (mismo lote y vencimiento) y sobregiro con su detalle por acta; las actas ya emitidas se reapuntan al registro que queda y se escribe un movimiento `UNIFICACION_STOCK` en el historial. Pide confirmación y no se puede deshacer.
 - Prevención: al emitir un acta con un producto manual, además de buscar por nombre se busca por ID de Mercado Público en la bodega antes de crear uno provisional nuevo.
 - Test agregado (36 tests). Sin códigos nuevos.
+
+## 4.208 Recepción conforme: encabezado y detalle editables, fecha explícita (v21.154)
+- Al emitir y al editar una recepción conforme se puede modificar el **encabezado** del acta (por defecto «Que se recibió conforme en forma Total/Parcial…», que cambia solo al elegir Total/Parcial mientras no se haya escrito a mano) y el **detalle**: incluir/quitar productos, corregir el nombre y la cantidad.
+- La fecha del acta se pide de forma explícita («¿Con qué fecha se emite el acta?»): se propone el día de la recepción registrada, pero es editable y obligatoria; no se fuerza la de hoy.
+- Se guardan `encabezado` y `lineas` en `recepcionConforme`; «Regenerar» y «Editar» los respetan. Sin cambios en códigos.

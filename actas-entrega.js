@@ -303,11 +303,13 @@
         if (ocId && window.SAR_SeguimientoOC && window.SAR_SeguimientoOC.guardarArchivo) { try { await window.SAR_SeguimientoOC.guardarArchivo(ocId, { nombre: file.name, categoria: 'Acta firmada ' + numero, bytes: u, mime: file.type }); } catch (e) { /* queda igual en el acta */ } }
         return { nombre: file.name, mime: file.type, tamano: u.length, partes: partes.length, subidoPor: usuario, fecha: new Date().toISOString() };
     }
-    async function verRespaldo(a) {
+    async function verRespaldo(a, bajar) {
         const f = fs(), r = a.respaldo; if (!r) return;
         const bs = []; for (let i = 0; i < r.partes; i++) { const d = await f.getDoc(f.doc(f.collection(db(), 'Contadores'), `respaldo-${a.numero}-${String(i).padStart(3, '0')}`)); if (!d.exists()) throw new Error('Falta una parte del archivo.'); bs.push(d.data().b64); }
         const bin = atob(bs.join('')), u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-        window.open(URL.createObjectURL(new Blob([u], { type: r.mime || 'application/pdf' })), '_blank');
+        const url = URL.createObjectURL(new Blob([u], { type: r.mime || 'application/pdf' }));
+        if (bajar) { const l = document.createElement('a'); l.href = url; l.download = r.nombre || `${a.numero}-firmada`; document.body.appendChild(l); l.click(); l.remove(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
+        else window.open(url, '_blank');
     }
     /** Confirma la entrega: sube el acta firmada y recién ahí se descuenta el stock (misma lógica de lotes, sobregiro, historial y orden de compra). */
     async function confirmarEntrega(a, file, usuario) {
@@ -772,6 +774,7 @@
             catch (e) { prog.error(); toast('No se guardó', e.message || String(e), 'error'); }
         }));
         $$('.act-verr').forEach(b => b.addEventListener('click', async () => { const a = historial.find(x => x.numero === b.dataset.n); try { await verRespaldo(a); } catch (e) { toast('Acta firmada', e.message || String(e), 'error'); } }));
+        $$('.act-dlr').forEach(b => b.addEventListener('click', async () => { const a = historial.find(x => x.numero === b.dataset.n); try { await verRespaldo(a, true); } catch (e) { toast('Acta firmada', e.message || String(e), 'error'); } }));
         $$('.act-dl').forEach(b => b.addEventListener('click', async () => {
             const a = historial.find(x => x.numero === b.dataset.n); if (!a) return;
             b.disabled = true; try { await descargar(actaParaDoc(a), b.dataset.f); } catch (e) { toast('Descarga', e.message, 'error'); } finally { b.disabled = false; }
@@ -840,7 +843,7 @@
         const n = esc(a.numero), pend = a.estado === 'EMITIDA' && a.tipo !== 'OXIGENO' && a.confirmacion && a.confirmacion.estado === 'PENDIENTE', ox = a.tipo === 'OXIGENO';
         const estado = a.estado === 'ANULADA' ? '<span class="act-chip act-c-anu">Anulada</span>' : pend ? '<span class="act-chip act-c-pen">Por confirmar</span>' : (a.respaldo ? '<span class="act-chip act-c-ok">Firmada</span>' : '<span class="act-chip act-c-sin">Sin acta firmada</span>');
         const prim = a.estado !== 'EMITIDA' || !esAdmin() ? '' : pend ? `<button type="button" class="btn btn-primary act-conf" data-n="${n}"><i class="ph-bold ph-seal-check"></i> Confirmar entrega</button>` : (a.respaldo ? '' : `<button type="button" class="btn btn-primary act-firm" data-n="${n}"><i class="ph-bold ph-upload-simple"></i> Subir firmada</button>`);
-        const verf = a.respaldo ? `<button type="button" class="btn btn-outline act-verr" data-n="${n}">Ver acta firmada</button>` : '';
+        const verf = a.respaldo ? `<button type="button" class="btn btn-outline act-verr" data-n="${n}">Ver acta firmada</button><button type="button" class="btn btn-outline act-dlr" data-n="${n}">Descargar firmada</button>` : '';
         const mas = (esAdmin() && a.estado === 'EMITIDA') || (esAdmin() && a.estado !== 'ANULADA' && !ox) ? `<details class="act-mas"><summary class="btn btn-outline" aria-haspopup="menu" aria-label="Más acciones">⋯</summary><div class="act-mas-m">${esAdmin() && a.estado === 'EMITIDA' ? `<button type="button" class="act-ed" data-n="${n}">Editar</button>` : ''}${esAdmin() && a.estado !== 'ANULADA' && !ox ? `<button type="button" class="act-an act-peligro" data-n="${n}">Eliminar acta</button>` : ''}</div></details>` : '';
         const o = document.createElement('div'); o.className = 'bit-modal act-vmodal'; o.setAttribute('role', 'dialog'); o.setAttribute('aria-modal', 'true'); o.setAttribute('aria-labelledby', 'act-vt');
         o.innerHTML = `<div class="act-vc" tabindex="-1">
@@ -982,6 +985,6 @@
     let precarga = null, manualImg = '', manualAbierto = false;
     const vistaMImg = () => manualImg ? `<img src="${esc(manualImg)}" alt="" class="act-mimg-v"><button type="button" class="btn btn-outline btn-sm" id="act-mimg-q">Quitar</button>` : '<small>WEBP, JPG, PNG… (queda en el catálogo)</small>';
     function precargar(centro, lista) { precarga = { centro, lista: lista || [] }; if (window.location.hash === '#view-actas-entrega') abrir(); else window.location.hash = 'view-actas-entrega'; }
-    window.SAR_ActasEntrega = { ver: verActa, verPorNumero: async (n) => { if (!historial.find(x => x.numero === n)) await cargarHistorial(); return verActa(n); }, avisarFirmada: (a, file) => file.arrayBuffer().then(buf => window.SAR_Avisos && window.SAR_Avisos.avisarActa('firmada', a, { firmada: { bytes: new Uint8Array(buf), mime: file.type, nombre: file.name } })), precargar, listaCentros, abrir, planificar, cuadrar, restaurarConSobregiro, detalleDe, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, lotesDeDoc, subirFirmada, verRespaldo };
+    window.SAR_ActasEntrega = { ver: verActa, verPorNumero: async (n) => { if (!historial.find(x => x.numero === n)) await cargarHistorial(); return verActa(n); }, avisarFirmada: (a, file) => file.arrayBuffer().then(buf => window.SAR_Avisos && window.SAR_Avisos.avisarActa('firmada', a, { firmada: { bytes: new Uint8Array(buf), mime: file.type, nombre: file.name } })), precargar, listaCentros, abrir, planificar, cuadrar, restaurarConSobregiro, detalleDe, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, lotesDeDoc, subirFirmada, verRespaldo, descargarRespaldo: (a) => verRespaldo(a, true) };
     if (typeof module !== 'undefined') module.exports = window.SAR_ActasEntrega;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: { dataset: {} } });

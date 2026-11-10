@@ -78,6 +78,13 @@ t('código de lote: clave estable y formato', () => {
     assert.strictEqual(S.formatoLote('SAR-000013', 2), 'SAR-000013-L02');
 });
 
+t('nomenclaturas: catálogo completo y sin duplicados', () => {
+    const Nm = require('../nomenclaturas.js'), nombres = Nm.catalogo.map(x => x.nombre);
+    assert.ok(Nm.catalogo.length >= 15); assert.strictEqual(new Set(nombres).size, nombres.length);
+    ['Acta de entrega', 'Código del lote', 'Código de ingreso', 'Precinto de oxígeno'].forEach(n => assert.ok(nombres.includes(n), n));
+    assert.ok(Nm.catalogo.every(x => x.formato && x.ejemplo && x.asigna && x.uso));
+});
+
 console.log(`\n${n} ok, ${mal} con falla`); process.exit(mal ? 1 : 0); });
 
 // ---- Bodega transitoria (v21.107)

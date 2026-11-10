@@ -89,14 +89,23 @@
     window.addEventListener('error', () => { anotar('SAR-SIS-001'); });
 
     // --- vista ---
-    let filtroCat = '', q = '', abierto = '';
+    let filtroCat = '', q = '', abierto = '', pestana = 'err';
     function root() { return document.getElementById('err-root'); }
+    function pestanas() {
+        return `<div class="aud-tabs" role="tablist"><button type="button" role="tab" class="aud-tab${pestana === 'err' ? ' on' : ''}" data-pest="err" aria-selected="${pestana === 'err'}"><i class="ph ph-bug"></i> Errores y alertas</button><button type="button" role="tab" class="aud-tab${pestana === 'nom' ? ' on' : ''}" data-pest="nom" aria-selected="${pestana === 'nom'}"><i class="ph ph-hash"></i> Nomenclaturas y correlativos</button></div>`;
+    }
+    function ligarPestanas(r) { r.querySelectorAll('[data-pest]').forEach(b => b.addEventListener('click', () => { pestana = b.dataset.pest; pintar(); })); }
     function pintar() {
         const r = root(); if (!r) return;
+        if (pestana === 'nom' && window.SAR_Nomenclaturas) {
+            r.innerHTML = `<div class="err-cab"><div><h2>Directorio</h2><p>Errores del sistema y nomenclaturas de todos los códigos.</p></div></div>${pestanas()}<div id="nom-root"></div>`;
+            ligarPestanas(r); window.SAR_Nomenclaturas.montar(r.querySelector('#nom-root')); return;
+        }
         const log = leer(); const cuenta = {}; log.forEach(x => { cuenta[x.c] = (cuenta[x.c] || 0) + (x.n || 1); });
         const lista = C.filter(e => (!filtroCat || e.cat === filtroCat) && (!q || `${e.codigo} ${e.titulo} ${e.mensaje} ${e.causa} ${e.solucion}`.toLowerCase().includes(q)));
         r.innerHTML = `
-        <div class="err-cab"><div><h2>Directorio de errores y alertas</h2><p>${C.length} códigos · cada aviso del sistema muestra su <b>Ref.</b> para ubicarlo aquí.</p></div></div>
+        <div class="err-cab"><div><h2>Directorio</h2><p>Errores del sistema y nomenclaturas de todos los códigos.</p></div></div>${pestanas()}
+        <p class="act-hint">${C.length} códigos de error · cada aviso del sistema muestra su <b>Ref.</b> para ubicarlo aquí.</p>
         <div class="err-barra">
           <input id="err-q" class="form-control" type="search" placeholder="Buscar por código, texto, causa o solución…" value="${esc(q)}">
           <div class="err-chips">
@@ -120,6 +129,7 @@
         <section class="err-recientes"><h3>Apariciones recientes en este equipo</h3>
           ${log.length ? `<ul>${log.slice(-15).reverse().map(x => `<li><b>${esc(x.c)}</b> · ${esc((porCodigo[x.c] || {}).titulo || '')} <span>${new Date(x.t).toLocaleString('es-CL')}${x.n > 1 ? ' · ' + x.n + '×' : ''}${x.v ? ' · ' + esc(x.v) : ''}</span></li>`).join('')}</ul><button type="button" class="btn btn-secondary" id="err-limpiar">Borrar registro local</button>` : '<p class="err-vacio">Aún no hay apariciones registradas.</p>'}
         </section>`;
+        ligarPestanas(r);
         const inp = r.querySelector('#err-q'); inp.addEventListener('input', () => { q = inp.value.trim().toLowerCase(); const p = inp.selectionStart; pintar(); const n = root().querySelector('#err-q'); n.focus(); n.setSelectionRange(p, p); });
         r.querySelectorAll('.err-chip').forEach(b => b.addEventListener('click', () => { filtroCat = b.dataset.cat; pintar(); }));
         r.querySelectorAll('.err-fila').forEach(b => b.addEventListener('click', () => { abierto = abierto === b.dataset.cod ? '' : b.dataset.cod; pintar(); }));

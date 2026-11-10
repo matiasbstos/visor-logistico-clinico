@@ -1050,3 +1050,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.192 Los productos con sobregiro vuelven a verse (v21.138)
 - La fase "solo OC" ocultaba los insumos sin `origenOC`, y los productos creados por un acta sin stock (`provisional: true`, con `sobregiro`) no lo tenían: 66 productos / 805 unidades entregadas sin respaldo no aparecían en Existencias ni en Auditoría. Ahora `_fueraDeFase` no oculta los provisionales ni los que tienen sobregiro.
 - Aclaración: los "62 de aseo con stock 0" del 5–6 de noviembre eran en realidad estos provisionales con sobregiro; NO se deben borrar. Se cuadran al ingresar la OC/SDC o con un ajuste negativo.
+
+## 4.193 Directorio: Errores y alertas + Nomenclaturas y correlativos (v21.139)
+- «Directorio de errores» pasa a **«Directorio»** con dos pestañas: *Errores y alertas* (igual que antes) y *Nomenclaturas y correlativos* (`nomenclaturas.js`).
+- Nomenclaturas: 18 códigos del sitio con nombre, formato, ejemplo, para qué sirve, quién lo asigna, si reinicia cada año, dónde se guarda y el **último número emitido** (leído de Contadores: SAR, ING/CAM/AJU, AE, PI, PO). Con buscador y agrupado (productos y lotes · ingresos y ajustes · entregas y correos · compras y recepciones · precintos · sistema).
+- AGENTS.md (regla 6): todo código o correlativo nuevo se agrega a `nomenclaturas.js`.

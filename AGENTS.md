@@ -116,3 +116,4 @@ Antes de desplegar reglas por primera vez, **exportar las reglas actualmente des
 3. **Reglas y datos**: ¿colección nueva? ¿regla? ¿migración con respaldo previo y modo de prueba (dry-run)?
 4. **Datos personales**: ¿la función captura algún dato de personas? Si es de pacientes, no se implementa; consultar antes.
 5. **Verificar** con el protocolo de la sección 3.
+6. **Códigos y correlativos**: si la función crea un código o correlativo nuevo, agrégalo a `nomenclaturas.js` (Directorio → Nomenclaturas) con formato, ejemplo, quién lo asigna y su contador.

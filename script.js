@@ -2049,7 +2049,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'view-sustituciones': 'Cuadre de sustituciones',
             'view-bitacora-oc': 'Bitácora de órdenes',
             'view-duplicados': 'Revisar productos parecidos',
-            'view-errores': 'Directorio de errores',
+            'view-errores': 'Directorio',
             'view-actas-entrega': 'Actas de entrega',
             'view-auditoria': 'Auditoría',
             'view-oxigeno': 'Oxígeno portátil',

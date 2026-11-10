@@ -4578,9 +4578,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     datalist.innerHTML = ''; datalist.appendChild(frag);
                 } catch (err) { console.error("Datalist Populating Error:", err); }
             };
+            // Proveedores: lo ya escrito en ingresos anteriores (Existencias, historial, órdenes de compra y este equipo) queda en la lista y se autocompleta
+            const cargarProveedores = async () => {
+                const dlp = document.getElementById('list-proveedores'); if (!dlp) return;
+                const nk = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+                const mapa = new Map(), sumar = (n) => { const v = String(n || '').trim(); if (!v || /^(s\/i|s\/d|n\/a|sin proveedor)$/i.test(v)) return; const k = nk(v); if (!mapa.has(k)) mapa.set(k, v); };
+                try { JSON.parse(localStorage.getItem('sar_proveedores_ingreso') || '[]').forEach(sumar); } catch (_) { /* sin almacenamiento */ }
+                (window.insumosDataCache || []).forEach(i => { sumar(i.provider); (i.batches || []).forEach(b => sumar(b.provider)); });
+                try { const hs = await getDocs(query(collection(db, 'Historial_Movimientos'), where('type', '==', 'INGRESO_PROVEEDOR'), limit(500))); hs.forEach(d => sumar(d.data().provider)); } catch (_) { /* opcional */ }
+                try { const os = await getDocs(collection(db, 'Seguimiento_OC')); os.forEach(d => sumar(d.data().proveedor)); } catch (_) { /* opcional */ }
+                dlp.innerHTML = ''; [...mapa.values()].sort((a, b) => a.localeCompare(b, 'es')).forEach(n => { const o = document.createElement('option'); o.value = n; dlp.appendChild(o); });
+                window.__proveedoresIngreso = [...mapa.values()];
+            };
+            window.__recargarProveedoresIngreso = cargarProveedores;
             window.__recargarNombresIngreso = cargarNombres;
             if (!window.__nombresIngresoListos) { window.__nombresIngresoListos = true; }
             await cargarNombres();
+            cargarProveedores();
 
             const simularStock = () => {
                 const text = input.value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
@@ -4683,6 +4697,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     mem.unshift(nombreInput.trim()); localStorage.setItem('sar_nombres_ingreso', JSON.stringify(mem.slice(0, 300)));
                     const dl = document.getElementById('lista-insumos');
                     if (dl) { const o = document.createElement('option'); o.value = nombreInput.trim(); dl.prepend(o); }
+                } catch (_) { /* sin almacenamiento local */ }
+
+                try {
+                    const pv = String(data.providerId || '').trim();
+                    if (pv) {
+                        const mp = JSON.parse(localStorage.getItem('sar_proveedores_ingreso') || '[]').filter(n => n.toLowerCase() !== pv.toLowerCase()); mp.unshift(pv); localStorage.setItem('sar_proveedores_ingreso', JSON.stringify(mp.slice(0, 200)));
+                        const dlp = document.getElementById('list-proveedores');
+                        if (dlp && ![...dlp.options].some(o => o.value.toLowerCase() === pv.toLowerCase())) { const o = document.createElement('option'); o.value = pv; dlp.prepend(o); }
+                    }
                 } catch (_) { /* sin almacenamiento local */ }
 
                 btn.innerHTML = '<i class="ph-spinner ph-spin"></i> PROCESANDO...';

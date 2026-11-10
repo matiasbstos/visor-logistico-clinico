@@ -1133,3 +1133,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.210 Acta de recepción conforme: el título dice TOTAL o PARCIAL (v21.156)
 - El título del acta ahora siempre indica el tipo: «RECEPCIÓN CONFORME PRODUCTO O SERVICIO TOTAL» o «… PARCIAL», coherente con el encabezado del recuadro («en forma Total/Parcial»). Antes solo se marcaba el parcial.
 - Para actas ya emitidas, «Regenerar» o «Editar recepción conforme» rehace el PDF con el título nuevo.
+
+## 4.211 Ingreso: talla «Otra» y médicos sin lote ni vencimiento (v21.157)
+- Talla: además de XS–XXL hay la opción «Otra (escribir número u otra medida)…», que muestra un campo para digitar p. ej. 7, 7.5 o 38. Se agrega al nombre como `TALLA <valor>` igual que las letras (cada talla es su propio insumo). Si ya se escribió la talla en el nombre, no se duplica.
+- Insumos médicos sin lote ni vencimiento: casilla «Este producto no trae lote ni fecha de vencimiento» (visible en tipo Insumo médico) que vuelve ambos campos opcionales; es una decisión explícita para no omitirlos por descuido. Sin lote se guarda `S/L` y sin fecha `N/A` (igual que aseo y oficina, 4.206).

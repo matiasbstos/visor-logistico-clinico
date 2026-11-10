@@ -4554,16 +4554,20 @@ document.addEventListener('DOMContentLoaded', () => {
            ---------------------------------------------------- */
 
         // Tipo de insumo primero: en aseo y oficina el lote y el vencimiento son opcionales (muchos productos no los traen)
+        (function tallaOtra() { const s = document.getElementById('movimiento-talla'), o = document.getElementById('movimiento-talla-otra'); if (!s || !o) return; s.addEventListener('change', () => { o.hidden = s.value !== '__otra'; if (!o.hidden) o.focus(); }); })();
         (function tipoIngreso() {
             const tipo = document.getElementById('movimiento-tipoInsumo'), lote = document.getElementById('movimiento-lote'), venc = document.getElementById('movimiento-fechaVto'), nom = document.getElementById('ingreso-insumo');
             if (!tipo || !lote || !venc) return;
             const aplicar = () => {
-                const opc = tipo.value !== 'medico';
+                const sinL = document.getElementById('ing-sin-lote'), sinW = document.getElementById('ing-sin-lote-w');
+                if (sinW) sinW.style.display = tipo.value === 'medico' ? 'flex' : 'none';
+                const opc = tipo.value !== 'medico' || !!(sinL && sinL.checked);
                 lote.required = !opc; venc.required = !opc;
                 lote.placeholder = opc ? 'Sin lote' : 'Ej: L-2451-B';
                 [['ing-lote-op'], ['ing-venc-op']].forEach(([id]) => { const el = document.getElementById(id); if (el) el.hidden = !opc; });
             };
             tipo.addEventListener('change', () => { tipo.dataset.manual = '1'; aplicar(); });
+            { const sl = document.getElementById('ing-sin-lote'); if (sl) sl.addEventListener('change', aplicar); }
             const ASEO = /\b(cloro|detergente|desinfectante|lavaloza|jab[oó]n|toalla\s+(de\s+)?(papel|nova)|papel\s+higi[eé]nico|bolsa\s+(de\s+)?(basura|residuo)|escobill|trapero|paño|pa[nñ]o\s+de\s+limpieza|limpia|ambientador|alcohol\s+gel|sanitizante|virutilla|esponja|basurero|guante\s+(de\s+)?(aseo|goma|dom[eé]stico)|dispensador)\b/i, OFI = /\b(l[aá]piz|lapicera|bol[ií]grafo|resma|carpeta|archivador|cuaderno|corchete|grapa|post[\s-]?it|plum[oó]n|tinta|toner|t[oó]ner|sobre|cinta\s+adhesiva|cartulina|regla|tijera\s+de\s+oficina)\b/i;
             if (nom) {
                 const detectar = () => {
@@ -4575,7 +4579,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 };
                 nom.addEventListener('change', detectar); nom.addEventListener('blur', detectar);
             }
-            document.getElementById('form-movimiento').addEventListener('reset', () => { setTimeout(() => { delete tipo.dataset.manual; aplicar(); }, 0); });
+            document.getElementById('form-movimiento').addEventListener('reset', () => { setTimeout(() => { delete tipo.dataset.manual; const sl = document.getElementById('ing-sin-lote'); if (sl) sl.checked = false; const to = document.getElementById('movimiento-talla-otra'); if (to) { to.hidden = true; to.value = ''; } aplicar(); }, 0); });
             aplicar();
         })();
 
@@ -4710,7 +4714,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 let nombreInput = data.articleName;
                 // Talla (v21.117): se agrega al nombre para que cada talla sea su propio insumo (y los lotes de una misma talla se sumen)
-                if (nombreInput && data.talla && !/\btalla\s*(xxl|xl|xs|s|m|l)\b/i.test(nombreInput)) nombreInput = nombreInput.trim() + ' TALLA ' + data.talla;
+                if (data.talla === '__otra') data.talla = String(((document.getElementById('movimiento-talla-otra') || {}).value) || '').trim().toUpperCase().replace(/\s+/g, ' ');
+                if (nombreInput && data.talla && !/\btalla\s*[a-z0-9.,\/-]+/i.test(nombreInput)) nombreInput = nombreInput.trim() + ' TALLA ' + data.talla;
+                if (document.getElementById('movimiento-talla') && document.getElementById('movimiento-talla').value === '__otra' && !data.talla) { showToast('Falta la talla', 'Escribe la talla o elige «Sin talla».', 'warning'); return; }
                 if (!nombreInput) {
                     showToast('Error', 'Debe escribir o seleccionar un insumo.', 'error');
                     return;

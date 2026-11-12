@@ -6146,3 +6146,5 @@ body:not([data-user-role="superadmin"]) #menu-memo-flujo { display: none !import
 .tb-nota { margin: 12px 0; } .tb-acc { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
 .tb-res { margin-top: 12px; padding: 10px 14px; border-radius: 8px 8px 8px 0; background: var(--sar-blue-light); } .tb-ok { color: #3f7d12; } .tb-mal { color: var(--sar-red-dark); }
 @media (max-width: 640px) { .tb-fila { grid-template-columns: 1fr; } .tb-flecha { display: none; } }
+.tb-lotes-in { display: grid; gap: 6px; } .tb-lote { display: grid; grid-template-columns: 1fr 90px; gap: 8px; align-items: center; font-size: 12px; color: #475569; }
+.tb-lote:has(span:empty) { grid-template-columns: 90px; }

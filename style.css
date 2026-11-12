@@ -6164,3 +6164,8 @@ body:not([data-user-role="superadmin"]) #menu-memo-flujo { display: none !import
 .dis-w { min-width: 240px; } .dis-m { min-width: 130px; } .dis-s { min-width: 78px; max-width: 110px; } .dis-tot { white-space: nowrap; font-weight: 700; }
 .dis-stk { min-width: 120px; } .dis-stk small { display: block; color: #64748b; } .dis-ok { color: #3f7d12; } .dis-par { color: var(--sar-orange-strong); } .dis-no { color: var(--sar-red-dark) !important; }
 .dis-pie { display: flex; gap: 12px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+.dis-id { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; } .dis-corr { font-weight: 800; letter-spacing: .04em; color: #fff; background: var(--sar-blue); padding: 4px 10px; border-radius: 8px 8px 8px 0; }
+.dis-act small, .dis-stk small { display: block; color: #64748b; font-size: 11px; } .dis-pend { font-size: 15px; }
+.dis-panel { background: #fff; border: 1px solid #e2e8f0; border-left: 4px solid var(--sar-blue); border-radius: 8px 8px 8px 0; margin-bottom: 14px; } .dis-panel > summary { cursor: pointer; padding: 12px 14px; font-weight: 700; color: var(--sar-blue); } .dis-panel > summary small { font-weight: 400; color: #64748b; margin-left: 8px; }
+.dis-pbody { padding: 0 14px 14px; } .dis-psel { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 10px; } .dis-psel label { display: grid; gap: 4px; font-size: 12px; font-weight: 600; color: var(--sar-blue); min-width: 220px; } .dis-psel select { padding: 6px 8px; border: 1px solid #cbd5e1; border-radius: 6px; font: inherit; }
+.dis-hecho td { color: #94a3b8; }

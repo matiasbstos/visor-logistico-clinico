@@ -1181,3 +1181,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.219 Panel de distribución en dos columnas, igual que el acta (v21.165)
 - El panel pasa a ocupar todo el ancho sobre las dos columnas del acta y deja de cortarse por la derecha. Izquierda: productos pendientes del centro (foto, nombre = equivalente, pendiente, stock, cantidad y «Agregar»). Derecha: «Se entregan» (cantidad editable, quitar ✕), «Quedan pendientes» y el botón «Armar acta con lo agregado», igual que al armar un acta a mano.
+
+## 4.220 Barra de avance con porcentaje en todas las cargas (v21.166)
+- `SAR_Progreso` (usado en todo guardado, carga, búsqueda y generación de documentos) muestra ahora una barra con **porcentaje** y una línea de detalle de lo que se está haciendo. Si el paso trae «N de M» el porcentaje es real; si no, la barra avanza sola y despacio hasta ~90% y llega a 100% al terminar. Nuevo `prog.avance(pct, detalle)` para fijarlo a mano.

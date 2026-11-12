@@ -1206,3 +1206,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.227 Buscador agrupado por insumo con sus centros (v21.173)
 - Los resultados del buscador se agrupan por insumo: cada insumo muestra en cuántos centros está, el total pedido y pendiente, y debajo una fila por centro (con la distribución, pedido y pendiente) que abre esa distribución en ese centro.
+
+## 4.228 Ingreso de orden: catálogo y fotos en segundo plano (v21.174)
+- Al ingresar una orden (cuadro Excel o PDF) la orden y sus archivos se guardan de inmediato; el registro de productos en el catálogo y la búsqueda de fotos siguen en segundo plano (insignia «Fotos de la orden … %» arriba) y avisan al terminar. Las fotos quedan «por confirmar» en Catálogo.

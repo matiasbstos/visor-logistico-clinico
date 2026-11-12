@@ -2051,6 +2051,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'view-duplicados': 'Revisar productos parecidos',
             'view-errores': 'Directorio',
             'view-actas-entrega': 'Actas de entrega',
+            'view-distribucion-centros': 'Distribución a centros',
             'view-auditoria': 'Auditoría',
             'view-oxigeno': 'Oxígeno portátil',
             'view-usuarios': 'Gestión de Usuarios',
@@ -2089,7 +2090,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Control de acceso por rol (espejo de las reglas CSS del menú; la barrera real son las reglas de Firestore)
             const VISTAS_BLOQUEADAS = {
                 enfermero: ['view-historial', 'view-ajustes', 'view-compras', 'view-informes', 'view-bodegas',
-                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-compras-agiles', 'view-ingreso-rapido', 'view-pendientes-entrega', 'view-transitoria', 'view-sustituciones', 'view-bitacora-oc', 'view-duplicados', 'view-actas-entrega', 'view-auditoria', 'view-oxigeno', 'view-errores'],
+                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-compras-agiles', 'view-ingreso-rapido', 'view-pendientes-entrega', 'view-distribucion-centros', 'view-transitoria', 'view-sustituciones', 'view-bitacora-oc', 'view-duplicados', 'view-actas-entrega', 'view-auditoria', 'view-oxigeno', 'view-errores'],
                 operador: ['view-compras', 'view-usuarios', 'view-configuracion', 'view-errores']
             };
             const rolActual = String(document.body.dataset.userRole || '').toLowerCase();
@@ -2142,6 +2143,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (hash === 'view-oxigeno') {
                     if (window.SAR_Oxigeno) window.SAR_Oxigeno.abrir();
+                } else if (hash === 'view-distribucion-centros') {
+                    if (window.SAR_Distribucion) window.SAR_Distribucion.abrir();
                 } else if (hash === 'view-actas-entrega') {
                     if (window.SAR_ActasEntrega) window.SAR_ActasEntrega.abrir();
                 } else if (hash === 'view-auditoria') {

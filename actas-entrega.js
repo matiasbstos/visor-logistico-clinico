@@ -566,6 +566,7 @@
 </div>
         <nav class="act-tabs" role="tablist" aria-label="Secciones de actas de entrega"${tab === 'seguimiento' ? ' hidden' : ''}>${TABS.map(t => `<button type="button" role="tab" class="act-tab${t[0] === tab ? ' active' : ''}" data-tab="${t[0]}" aria-selected="${t[0] === tab}"><i class="ph-bold ${t[1]}"></i><span>${t[2]}</span>${t[0] === 'emitidas' ? `<em>${historial.length}</em>` : ''}</button>`).join('')}</nav>
         <div data-act-tab="emitir"${tab === 'emitir' ? '' : ' hidden'}>
+        <div id="act-dist-host" class="act-dist-host"></div>
         <div class="act-grid">
           <div class="act-col">
             <h3 class="act-h">1 · Stock disponible</h3>
@@ -580,7 +581,6 @@
               <p class="act-hint">Pedido = lo solicitado en total (opcional); el segundo número es lo que entregas ahora. Lo que falte queda como pendiente en el acta; si no tienes nada para entregar, pon 0 y el pedido: todo queda pendiente para el centro. El nombre y el ID quedan guardados en el catálogo.</p>
               <label class="act-l act-chk"><input type="checkbox" id="act-mc"> Es medicamento controlado (no se permite sin stock)</label></details>
             ${(() => { const d = window.SAR_Unificar && borrador.origen ? window.SAR_Unificar.detectar(stock.map(s => ({ id: s.id, data: { name: s.name, codigoMP: /^\d{5,}$/.test(String(s.codigo || '')) ? s.codigo : '' } }))) : []; return d.length ? `<div class="act-aviso-dup"><span>Hay <b>${d.length}</b> producto${d.length === 1 ? '' : 's'} repetido${d.length === 1 ? '' : 's'} en esta bodega.</span> <button type="button" class="btn btn-outline btn-sm" data-unificar-bodega="${esc(borrador.origen)}">Unificar repetidos</button></div>` : ''; })()}
-            <div id="act-dist-host" class="act-dist-host"></div>
             <div class="act-stock">${!borrador.origen ? '<p class="act-hint">Elige una bodega para ver su stock.</p>' : !lista.length ? '<p class="act-hint">Sin resultados. Si no está en el sistema, agrégalo a mano abajo.</p>' : lista.map(s => `
               <div class="act-fila${yaEsta(s.id) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(s.name, { codigo: s.codigo }) : ''}${esc(s.name)}${s.controlado ? ' <small>(controlado)</small>' : ''}${s.provisional ? ' <small>(provisional)</small>' : ''}<small>${s.codigo ? '<b>ID ' + esc(s.codigo) + '</b> · ' : '<span class="act-sin">sin ID</span> · '}${s.disp > 0 ? 'Disponible: ' + s.disp + (s.reserv > 0 ? ' · reservado en actas por confirmar: ' + s.reserv : '') : '<span class="act-sin">Sin stock en sistema</span>'}${s.sobregiro > 0 ? ' · sobregiro: ' + s.sobregiro : ''}</small></div>
                 ${yaEsta(s.id) ? '<span class="act-chip">agregado</span>' : `<input type="number" min="0" class="act-qty" data-sid="${esc(s.id)}" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input type="number" min="1" value="1" class="act-qty" data-qid="${esc(s.id)}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-add" data-id="${esc(s.id)}">Agregar</button>`}</div>`).join('')}

@@ -1178,3 +1178,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - **Nombre del producto = EQUIVALENTE** (la descripción técnica queda como texto secundario de 2 líneas), tanto en Convenio Marco como en No Marco; en el editor la primera columna es «Producto (equivalente)».
 - **Buscar fotos**: usa el ID de Convenio Marco; en No Marco (sin ID) busca por el nombre. Las fotos halladas quedan «por confirmar» (se confirman en Catálogo) y se muestran como candidatas. Implementado como parámetro `extras` de `buscarFotosFaltantes`.
 
+
+## 4.219 Panel de distribución en dos columnas, igual que el acta (v21.165)
+- El panel pasa a ocupar todo el ancho sobre las dos columnas del acta y deja de cortarse por la derecha. Izquierda: productos pendientes del centro (foto, nombre = equivalente, pendiente, stock, cantidad y «Agregar»). Derecha: «Se entregan» (cantidad editable, quitar ✕), «Quedan pendientes» y el botón «Armar acta con lo agregado», igual que al armar un acta a mano.

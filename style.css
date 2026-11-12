@@ -6191,3 +6191,7 @@ body:not([data-user-role="superadmin"]) #menu-memo-flujo { display: none !import
 .sar-prog__info{display:flex;justify-content:space-between;gap:10px;width:100%;max-width:360px;margin:0 auto 6px;font-size:12px;color:#475569}
 .sar-prog__det{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left} .sar-prog__pct{color:var(--sar-blue);flex:0 0 auto}
 .sar-prog .r-prog__l{max-height:22vh}
+/* v21.167 insignia de tareas en segundo plano */
+.bg-tareas{position:relative;overflow:hidden;display:inline-flex;align-items:center;gap:6px;border:1px solid #bfdbfe;background:#eff6ff;color:var(--sar-blue);border-radius:999px;padding:6px 12px;font:600 12px inherit;cursor:default;white-space:nowrap}
+.bg-tareas[hidden]{display:none} .bg-tareas.ok{background:#ecfdf5;border-color:#a7f3d0;color:#047857} .bg-tareas span{position:relative;z-index:1} .bg-tareas i{position:relative;z-index:1}
+.bg-tareas em{position:absolute;left:0;bottom:0;height:3px;background:var(--brand-green,var(--sar-green));transition:width .35s} .bg-giro{animation:bggiro 1s linear infinite} @keyframes bggiro{to{transform:rotate(360deg)}}

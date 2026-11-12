@@ -1194,3 +1194,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.223 Ajustes UX/UI del panel de distribución (v21.169)
 - Auditoría UX: columnas fijas por fila (nombre · pend/stock · cantidad 72 px · botón) sin solape; foto de 40 px con ícono si no hay; nombre a 13 px máx. 2 líneas con ID y descripción en una sola línea; centros en pestañas que saltan de línea; «Quedan pendientes» pasa a un desplegable resumen; «Armar acta» pegado al pie y deshabilitado sin productos; aviso cuando ningún producto del centro tiene stock; sin acento lateral ni numeración «1 ·/2 ·».
+
+## 4.224 Importar el formato «solicitud de insumos» (v21.170)
+- El importador de distribuciones lee también la planilla de solicitud (hojas «SOLICITUD DSAR», «ASEO», «ESCRITORIO»): detecta el encabezado por EQUIVALENTE + VALOR/CANTIDAD cuando no hay columna de descripción (el equivalente pasa a ser el nombre y la descripción), limpia los saltos de línea de ID y nombre, corta en la fila «Total» y guarda la columna ITEM (imputación presupuestaria) si existe. Cada hoja entra como un grupo (pestaña) de la distribución.

@@ -21,7 +21,8 @@
 
   /** Puro: de las filas de una hoja (arreglo de arreglos) saca las líneas del centro. */
   function parsearHoja(filas) {
-    const hi = filas.findIndex(r => (r || []).some(c => /^descripci/i.test(norm(c))));
+    let hi = filas.findIndex(r => (r || []).some(c => /^descripci/i.test(norm(c))));
+    if (hi < 0) hi = filas.findIndex(r => (r || []).some(c => /^equivalente/.test(norm(c))) && (r || []).some(c => /^(valor|cantidad)/.test(norm(c))));   // planilla de solicitud sin columna de descripción
     if (hi < 0) return { lineas: [], convenio: false };
     const cab = filas[hi].map(norm), col = (re) => cab.findIndex(h => re.test(h));
     const c = { d: col(/^descripci/), id: col(/id convenio|^id\b/), eq: col(/^equivalente/), pr: col(/^presentaci/), v: col(/^valor$/), q: col(/^cantidad( |$)/), u: col(/^unidad/), py: col(/proyecto/), rf: col(/^referencia/), en: col(/^entregad|cantidad entregada|cantidacantidad entregada/) };
@@ -29,11 +30,11 @@
     const muestra = filas.slice(hi + 1).map(r => (r || [])[c.id]).filter(v => v !== '' && v != null && !/^total/i.test(String(v)));
     const corrido = c.id >= 0 && muestra.length > 0 && muestra.filter(v => /^\d{3,}$/.test(String(v).trim())).length / muestra.length < 0.5;
     if (corrido) { const dec = (k) => (k > c.id ? k - 1 : k); Object.keys(c).forEach(k => { if (c[k] > c.id) c[k] = dec(c[k]); }); c.id = -1; c.py = c.u >= 0 ? c.u + 1 : -1; c.rf = -1; }
-    const lineas = [];
+    const lineas = [], cit = cab.findIndex(h => /^item$/.test(h));
     for (let i = hi + 1; i < filas.length; i++) {
-      const r = filas[i] || [], d = String(r[c.d] == null ? '' : r[c.d]).trim();
-      if (/^total/i.test(d)) break; if (!d) continue;
-      lineas.push({ descripcion: d, idCM: c.id >= 0 ? digs(r[c.id]) : '', equivalente: c.eq >= 0 ? String(r[c.eq] == null ? '' : r[c.eq]).trim() : '', presentacion: c.pr >= 0 ? String(r[c.pr] == null ? '' : r[c.pr]).trim() : '', valor: c.v >= 0 ? num(r[c.v]) : 0, cantidad: c.q >= 0 ? num(r[c.q]) : 0, unidad: c.u >= 0 ? String(r[c.u] == null ? '' : r[c.u]).trim() : '', proyecto: c.py >= 0 ? String(r[c.py] == null ? '' : r[c.py]).trim() : '', referencia: c.rf >= 0 ? String(r[c.rf] == null ? '' : r[c.rf]).trim() : '', entregado: c.en >= 0 ? num(r[c.en]) : 0 });
+      const r = filas[i] || [], d0 = c.d >= 0 ? String(r[c.d] == null ? '' : r[c.d]).trim() : '', d = d0 || String(c.eq >= 0 && r[c.eq] != null ? r[c.eq] : '').replace(/\s+/g, ' ').trim();
+      if (/^total/i.test(d) || (c.d < 0 && r.some(x => /^total$/i.test(String(x).trim())))) break; if (!d) continue;
+      lineas.push({ descripcion: d, idCM: c.id >= 0 ? digs(r[c.id]) : '', equivalente: c.eq >= 0 ? String(r[c.eq] == null ? '' : r[c.eq]).trim() : '', presentacion: c.pr >= 0 ? String(r[c.pr] == null ? '' : r[c.pr]).trim() : '', valor: c.v >= 0 ? num(r[c.v]) : 0, cantidad: c.q >= 0 ? num(r[c.q]) : 0, unidad: c.u >= 0 ? String(r[c.u] == null ? '' : r[c.u]).trim() : '', proyecto: c.py >= 0 ? String(r[c.py] == null ? '' : r[c.py]).trim() : '', referencia: c.rf >= 0 ? String(r[c.rf] == null ? '' : r[c.rf]).trim() : '', entregado: c.en >= 0 ? num(r[c.en]) : 0, ...(cit >= 0 && r[cit] ? { item: String(r[cit]).trim() } : {}) });
     }
     return { lineas, convenio: c.id >= 0 };
   }
@@ -197,7 +198,7 @@
       const cantDe = (o) => o.x.on ? Math.min(o.k.puede, Math.max(0, Math.floor(num(o.x.qty)))) : 0;
       const izq = lineas.filter(o => !o.x.on || !cantDe(o)).filter(o => !q || norm(nombreDe(o.l) + ' ' + o.l.descripcion + ' ' + o.l.idCM).includes(q));
       const der = lineas.filter(o => o.x.on && cantDe(o));
-      const nom = (l) => `<div class="dis-pnom"><span class="dis-pfoto">${fotoDe(l, true)}</span><div class="dis-ptx"><b>${esc(nombreDe(l))}</b>${(l.idCM || (l.descripcion && l.equivalente)) ? `<small title="${esc(l.descripcion || '')}">${l.idCM ? 'ID ' + esc(l.idCM) : ''}${l.idCM && l.descripcion && l.equivalente ? ' · ' : ''}${l.equivalente ? esc(l.descripcion || '') : ''}</small>` : ''}</div></div>`;
+      const nom = (l) => `<div class="dis-pnom"><span class="dis-pfoto">${fotoDe(l, true)}</span><div class="dis-ptx"><b>${esc(nombreDe(l))}</b>${(() => { const dd = l.equivalente && norm(l.descripcion) !== norm(l.equivalente) ? l.descripcion : ''; return (l.idCM || dd) ? `<small title="${esc(dd)}">${l.idCM ? 'ID ' + esc(l.idCM) : ''}${l.idCM && dd ? ' · ' : ''}${esc(dd)}</small>` : ''; })()}</div></div>`;
       body.innerHTML = `<div class="dis-psel"><label>Distribución<select id="dp-d">${vis.map(x => `<option value="${esc(x.id)}"${x.id === pDist ? ' selected' : ''}>${esc((x.correlativo ? x.correlativo + ' · ' : '') + x.nombre)}</option>`).join('')}</select></label></div>
         <div class="dis-tabs dis-ptabs" role="tablist">${d.centros.map((c, k) => { const n = c.lineas.filter((l, i) => calc(k, l, i).pend > 0).length; return `<button type="button" role="tab" class="dis-tab${k === pCi ? ' on' : ''}" data-pc="${k}">${esc(c.nombre)}<small>${n}</small></button>`; }).join('')}</div>
         ${lineas.length && !lineas.some(o => o.k.puede > 0) && !der.length ? '<p class="dis-aviso"><i class="ph-bold ph-warning"></i> Ningún producto de este centro tiene stock en Bodega Central. Ingresa la recepción de la orden y vuelve aquí.</p>' : ''}

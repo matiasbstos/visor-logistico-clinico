@@ -1257,3 +1257,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.241 Confirmación con la marca y avance al mover entre bodegas (v21.187)
 - Nuevo `SAR_Progreso.confirmar({titulo, texto, lineas, si, no, peligro})` → Promise<boolean>: cuadro centrado con logo y colores del sitio (Esc o clic fuera cancelan), que reemplaza al `confirm()` del navegador («sarinventario.web.app says»). Primer uso: Transferencias entre bodegas, mostrando origen, destino y los productos con su cantidad.
 - Al confirmar, aparece la animación de avance con «Moviendo N de M: producto» y un ✔ al terminar; si algo no se pudo mover queda el detalle debajo. Quedan otros `confirm()` en el sistema por migrar a este cuadro.
+
+## 4.242 Pantallas en blanco después de confirmar (v21.188)
+- Criterio general: al terminar una gestión con éxito, los campos quedan vacíos esperando la siguiente; solo queda visible el resultado.
+- Transferencias entre bodegas: si todo se movió, se vacían origen, destino, búsqueda, nota y selección (antes quedaban «jer», la nota y las bodegas). Si algo falló, se conserva el formulario para reintentar.
+- Revisadas sin cambio: Ingreso rápido (vacía la tabla al ingresar) y Actas de entrega (vacía el borrador salvo la bodega de origen). Movimientos ya limpiaba su formulario.

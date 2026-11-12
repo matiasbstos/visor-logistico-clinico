@@ -120,7 +120,10 @@
     for (const [n, s] of sel.entries()) { if (prog) prog.paso(`Moviendo ${n + 1} de ${sel.length}: ${String(s.name).slice(0, 48)}`); try { await moverUno(s.id, desde, hasta, s.lotes.map(l => ({ clave: l.clave, qty: l.qty })), nota); ok.push(s); } catch (e) { mal2.push({ ...s, err: (e && e.message) || String(e) }); } }
     out.innerHTML = `<div class="tb-res">${ok.length ? `<p class="tb-ok"><b>${ok.length} movido(s):</b> ${ok.map(s => `${esc(s.name)} (${s.qty})`).join(', ')}.</p>` : ''}${mal2.length ? `<p class="tb-mal"><b>No se movieron ${mal2.length}:</b> ${mal2.map(s => `${esc(s.name)} — ${esc(s.err)}`).join('; ')}.</p>` : ''}</div>`;
     if (prog) { if (mal2.length && !ok.length) prog.error('No se pudo mover'); else prog.listo(`${ok.length} producto(s) movido(s) a ${hasta}`, { aviso: false }); }
-    btn.disabled = false; await cargarItems(desde); const nt = document.getElementById('tb-nota'); pintar(); const o2 = document.getElementById('tb-res'); if (o2) o2.innerHTML = out.innerHTML;
+    btn.disabled = false;
+    if (!mal2.length) { ['tb-desde', 'tb-hasta', 'tb-nota', 'tb-buscar'].forEach(id => { const x = document.getElementById(id); if (x) x.value = ''; }); items = []; }   // todo movido: la pantalla queda en blanco, lista para otra transferencia
+    else await cargarItems(desde);
+    pintar(); const o2 = document.getElementById('tb-res'); if (o2) o2.innerHTML = out.innerHTML;
     if (mal2.length) t('Transferencia', `${mal2.length} producto(s) no se pudieron mover; revisa el detalle.`, 'warning');
   }
   function limpiar() { items = []; const el = root(); if (el) el.innerHTML = ''; }

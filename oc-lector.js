@@ -285,14 +285,27 @@
     function unirDistribucion(oc, dist) {
         const avisos = [], usada = new Set();
         const toks = (t) => new Set(String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().split(/[^a-z0-9]+/).filter(x => x.length > 1));
-        const sim = (a, b) => { const A = toks(a), B = toks(b); let i = 0; A.forEach(x => { if (B.has(x)) i++; }); return A.size + B.size - i ? i / (A.size + B.size - i) : 0; };
+        // Parecido entre la descripción de la orden (suele ser larga) y la del cuadro (suele ser corta): se mide qué parte de la más corta está contenida en la otra,
+        // y se refuerza con el precio neto y la cantidad total (así «CARRETE 40 m» y «CARRETE 20 m» no se confunden).
+        const sim = (a, b) => { const A = toks(a), B = toks(b); let i = 0; A.forEach(x => { if (B.has(x)) i++; }); const u = A.size + B.size - i, mn = Math.min(A.size, B.size); return { jac: u ? i / u : 0, cont: mn ? i / mn : 0, comun: i }; };
         const distLineas = dist.lineas.map((d, n) => ({ d, n }));
-        const out = (oc.lineas || []).map(l => {
-            let hit = distLineas.find(x => !usada.has(x.n) && l.codigoMP && x.d.id === String(l.codigoMP));
-            if (!hit) { let mejor = 0; distLineas.forEach(x => { if (usada.has(x.n)) return; const s = sim(l.descripcion, x.d.descripcion); if (s > mejor && s >= 0.5) { mejor = s; hit = x; } }); }
+        const sumaD = (d) => Object.values(d.dist).reduce((t, x) => t + x, 0);
+        const lineasOC = oc.lineas || [], asign = new Array(lineasOC.length).fill(null);
+        lineasOC.forEach((l, i) => { const h = distLineas.find(x => !usada.has(x.n) && l.codigoMP && x.d.id === String(l.codigoMP)); if (h) { asign[i] = h; usada.add(h.n); } });
+        const pares = [];
+        lineasOC.forEach((l, i) => { if (asign[i]) return; distLineas.forEach(x => {
+            if (usada.has(x.n)) return; const q = sim(l.descripcion, x.d.descripcion);
+            const mismoPrecio = Number(l.valorNeto) > 0 && Math.abs(Number(l.valorNeto) - Number(x.d.valorNeto || 0)) < 1, mismaCant = Number(l.cantidad) === sumaD(x.d);
+            let sc = Math.max(q.jac, q.cont * 0.9) + (mismoPrecio ? 0.35 : 0) + (mismaCant ? 0.15 : 0);
+            if (q.comun < 1 && !mismoPrecio) return;
+            if (sc >= 0.5) pares.push({ i, x, sc });
+        }); });
+        pares.sort((p, q) => q.sc - p.sc);
+        pares.forEach(p => { if (asign[p.i] || usada.has(p.x.n)) return; asign[p.i] = p.x; usada.add(p.x.n); });
+        const out = lineasOC.map((l, i) => {
+            const hit = asign[i];
             if (!hit) { avisos.push(`"${String(l.descripcion).slice(0, 50)}" no aparece en el cuadro de distribución.`); return {}; }
-            usada.add(hit.n);
-            const sum = Object.values(hit.d.dist).reduce((t, x) => t + x, 0);
+            const sum = sumaD(hit.d);
             if (sum !== Number(l.cantidad)) avisos.push(`"${String(l.descripcion).slice(0, 40)}": la orden dice ${l.cantidad} y el cuadro reparte ${sum}.`);
             return { ...hit.d.dist };
         });

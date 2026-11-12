@@ -1245,3 +1245,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.238 Lector de cuadros universal y formatos conservados (v21.184)
 - El lector de Excel se hizo tolerante a variaciones (columnas corridas, otros nombres de encabezado, memo sobre CANTIDAD o TOTAL). Cada formato entregado queda registrado en `docs/FORMATOS_DISTRIBUCION.md` con su prueba automática; todo formato nuevo se suma sin romper los anteriores.
+
+## 4.239 Cruce orden ↔ cuadro con descripciones de distinto largo (v21.185)
+- La orden de Mercado Público trae descripciones largas («MOUSE INALAMBRICO CONVENCIONAL RESOLUCION DEL SENS…») y el cuadro nombres cortos («MOUSE INALAMBRICO»); el cruce exigía parecido ≥ 50 % y no calzaba nada. Ahora se mide qué parte de la descripción corta está contenida en la larga y se refuerza con el precio neto y la cantidad total; la asignación es global (primero los pares más seguros), así «Carrete 25 m» de la orden calza con «Carrete 20 m» del cuadro por precio y no se cruzan productos parecidos.
+- Prueba con las 18 líneas de la OC de insumos eléctricos (1298355-933-AG26).

@@ -424,6 +424,11 @@
         }
         return n;
     }
+    /** Registra los productos en el catálogo y busca sus fotos SIN detener el ingreso: avanza en segundo plano con la insignia de arriba y avisa al terminar. */
+    function catalogoEnSegundoPlano(oc) {
+        const bg = window.SAR_Progreso && window.SAR_Progreso.segundoPlano ? window.SAR_Progreso.segundoPlano('Fotos de la orden ' + (oc.numeroOC || '')) : null;
+        registrarCatalogo(oc, bg ? (t) => bg.paso(t) : undefined).then(() => { if (bg) bg.listo(`Catálogo y fotos de la orden ${oc.numeroOC || ''} listos: confírmalas en Catálogo`); if (window.SAR_Imagenes) window.SAR_Imagenes.cargar(true).catch(() => {}); }).catch(e => { if (bg) bg.error((e && e.message) || String(e)); });
+    }
     async function aprenderNombres(oc, det) {
         const f = fs();
         for (const d of det) {
@@ -999,7 +1004,7 @@
                     tx.set(ref, oc);
                     tx.set(fs().doc(fs().collection(db(), 'Seguimiento_OC', id, 'Eventos')), { tipo: 'CREACION', texto: `Orden ingresada: ${cuadro.lineas.length} productos, ${cuadro.columnas.length} memos/CDP. Vence el ${fmtFecha(oc.fechaLimite)}.`, autor: usuario(), fecha: fs().serverTimestamp() });
                 });
-                await registrarCatalogo({ ...oc, id });
+                catalogoEnSegundoPlano({ ...oc, id });
                 await guardarFile(id, q('#n-file').files[0], 'Cuadro de distribución');
                 toast('Orden ingresada', `Vence el ${fmtFecha(oc.fechaLimite)}.`, 'success');
             });
@@ -1103,8 +1108,8 @@
                 tx.set(fs().doc(fs().collection(db(), 'Seguimiento_OC', id, 'Eventos')), { tipo: 'CREACION', texto: `Orden ingresada${oc.origen === 'OC_MP' ? ' desde el PDF' : ''}: ${oc.lineas.length} producto(s). El proveedor debe aceptarla hasta el ${fmtFecha(oc.aceptarLimite)}; entrega en ${oc.plazoDiasHabiles} días hábiles desde la aceptación.`, autor: usuario(), fecha: fs().serverTimestamp() });
             });
             if (usoCuadro) window.SAR_ComprasAgiles.vincularOC(usoCuadro.id, oc.numeroOC);
-            prog.paso('Registrando los productos en el catálogo y buscando sus fotos…');
-            await registrarCatalogo({ ...oc, id });
+            prog.paso('Buscando fotos y catálogo en segundo plano…');
+            catalogoEnSegundoPlano({ ...oc, id });
             prog.paso('Guardando los archivos de la orden…');
             const fOC = (o.querySelector('#p-file') || {}).files, fDist = (o.querySelector('#p-dist') || {}).files;
             await guardarFile(id, fOC && fOC[0], 'Orden de compra'); await guardarFile(id, fDist && fDist[0], 'Cuadro de distribución');

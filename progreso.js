@@ -69,5 +69,18 @@
             error(msg) { t.fin = true; bgPintar(); if (typeof window.showToast === 'function') try { window.showToast(titulo, msg || 'No se pudo completar', 'error'); } catch (e) { /* sin aviso */ } quitar(300); }
         };
     }
-    window.SAR_Progreso = { iniciar, correr, cargando, segundoPlano };
+    /** Confirmación con la marca (reemplaza al cuadro «sarinventario.web.app says»): SAR_Confirmar({titulo, texto, lineas:[…], si, no, peligro}) → Promise<boolean>. */
+    function confirmar(o) {
+        o = o || {};
+        return new Promise(resolve => {
+            const prev = document.activeElement, d = document.createElement('div'); d.className = 'sar-conf'; d.setAttribute('role', 'alertdialog'); d.setAttribute('aria-modal', 'true'); d.setAttribute('aria-labelledby', 'sar-conf-t');
+            d.innerHTML = `<div class="sar-conf__c"><div class="sar-conf__marca" aria-hidden="true"><img src="assets/logo-sar.png" alt=""></div><h3 id="sar-conf-t" class="sar-conf__t">${esc(o.titulo || '¿Confirmas?')}</h3>${o.texto ? `<p class="sar-conf__x">${o.texto}</p>` : ''}${(o.lineas || []).length ? `<ul class="sar-conf__l">${o.lineas.map(l => `<li>${l}</li>`).join('')}</ul>` : ''}<div class="sar-conf__b"><button type="button" class="btn btn-secondary" data-r="0">${esc(o.no || 'Cancelar')}</button><button type="button" class="btn ${o.peligro ? 'btn-danger' : 'btn-primary'}" data-r="1">${esc(o.si || 'Confirmar')}</button></div></div>`;
+            const cierra = (v) => { document.removeEventListener('keydown', tecla, true); d.remove(); try { if (prev && prev.focus) prev.focus(); } catch (e) { /* sin foco */ } resolve(v); };
+            const tecla = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cierra(false); } };
+            d.addEventListener('click', (e) => { const b = e.target.closest('[data-r]'); if (b) cierra(b.dataset.r === '1'); else if (e.target === d) cierra(false); });
+            document.addEventListener('keydown', tecla, true); document.body.appendChild(d);
+            const ok = d.querySelector('[data-r="1"]'); if (ok) ok.focus();
+        });
+    }
+    window.SAR_Progreso = { confirmar, iniciar, correr, cargando, segundoPlano };
 })(window, document);

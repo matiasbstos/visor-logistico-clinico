@@ -112,12 +112,16 @@
     if (desde === hasta) { t('Transferencia', 'El destino debe ser distinto del origen.', 'warning'); return; }
     if (!sel.length) { t('Transferencia', 'Marca al menos un producto.', 'warning'); return; }
     const mal = sel.find(s => s.qty < 1 || s.lotes.some(l => l.qty < 0 || l.qty > l.max)); if (mal) { t('Cantidad', `«${mal.name}»: indica cuánto mover (en productos con varios lotes, de qué lote).`, 'warning'); return; }
-    if (!window.confirm(`¿Mover ${sel.length} producto(s) de «${desde}» a «${hasta}»?`)) return;
+    const P = window.SAR_Progreso;
+    const sigue = P && P.confirmar ? await P.confirmar({ titulo: `¿Mover ${sel.length} producto${sel.length === 1 ? '' : 's'}?`, texto: `De <b>${esc(desde)}</b> a <b>${esc(hasta)}</b>.`, lineas: sel.slice(0, 8).map(s => `${esc(s.name)} · <b>${s.qty}</b> u.`).concat(sel.length > 8 ? [`y ${sel.length - 8} más…`] : []), si: 'Mover', no: 'Cancelar' }) : window.confirm(`¿Mover ${sel.length} producto(s) de «${desde}» a «${hasta}»?`);
+    if (!sigue) return;
     const btn = document.getElementById('tb-ir'); btn.disabled = true; const ok = [], mal2 = [];
-    for (const s of sel) { try { await moverUno(s.id, desde, hasta, s.lotes.map(l => ({ clave: l.clave, qty: l.qty })), nota); ok.push(s); } catch (e) { mal2.push({ ...s, err: (e && e.message) || String(e) }); } }
+    const prog = P && P.iniciar ? P.iniciar('Moviendo productos…', []) : null;
+    for (const [n, s] of sel.entries()) { if (prog) prog.paso(`Moviendo ${n + 1} de ${sel.length}: ${String(s.name).slice(0, 48)}`); try { await moverUno(s.id, desde, hasta, s.lotes.map(l => ({ clave: l.clave, qty: l.qty })), nota); ok.push(s); } catch (e) { mal2.push({ ...s, err: (e && e.message) || String(e) }); } }
     out.innerHTML = `<div class="tb-res">${ok.length ? `<p class="tb-ok"><b>${ok.length} movido(s):</b> ${ok.map(s => `${esc(s.name)} (${s.qty})`).join(', ')}.</p>` : ''}${mal2.length ? `<p class="tb-mal"><b>No se movieron ${mal2.length}:</b> ${mal2.map(s => `${esc(s.name)} — ${esc(s.err)}`).join('; ')}.</p>` : ''}</div>`;
+    if (prog) { if (mal2.length && !ok.length) prog.error('No se pudo mover'); else prog.listo(`${ok.length} producto(s) movido(s) a ${hasta}`, { aviso: false }); }
     btn.disabled = false; await cargarItems(desde); const nt = document.getElementById('tb-nota'); pintar(); const o2 = document.getElementById('tb-res'); if (o2) o2.innerHTML = out.innerHTML;
-    if (ok.length) t('Transferencia', `${ok.length} producto(s) movido(s) a ${hasta}.`, 'success');
+    if (mal2.length) t('Transferencia', `${mal2.length} producto(s) no se pudieron mover; revisa el detalle.`, 'warning');
   }
   function limpiar() { items = []; const el = root(); if (el) el.innerHTML = ''; }
   async function abrir() {

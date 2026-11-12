@@ -37,6 +37,8 @@
     }
     return { lineas, convenio: c.id >= 0 };
   }
+  /** Nombre con que se trabaja un producto: el EQUIVALENTE; si falta, la descripción técnica. */
+  const nombreDe = (l) => String(l.equivalente || '').trim() || String(l.descripcion || '').trim();
   const totalCentro = (ce) => (ce.lineas || []).reduce((s, l) => s + num(l.valor) * num(l.cantidad), 0);
 
   /** Puro: filas de la hoja de un centro en el formato de las planillas. */
@@ -116,12 +118,12 @@
   function pintarDetalle() {
     const el = root(); if (!el || !act) return; const cv = act.modalidad === 'CONVENIO', ce = act.centros[ci] || act.centros[0]; if (!ce) return;
     const tot = totalCentro(ce);
-    const fila = (l, i) => { const k = calcLinea(l, entMap[ci + ':' + i], (stockDe(l) || {}).central); return `<tr data-i="${i}"><td><input data-k="descripcion" value="${esc(l.descripcion)}" class="dis-w"></td>${cv ? `<td><input data-k="idCM" value="${esc(l.idCM)}" class="dis-s"></td>` : ''}<td><input data-k="equivalente" value="${esc(l.equivalente)}" class="dis-w"></td><td><input data-k="presentacion" value="${esc(l.presentacion)}" class="dis-m"></td><td><input data-k="valor" type="number" min="0" step="any" value="${num(l.valor)}" class="dis-s"></td><td><input data-k="cantidad" type="number" min="0" step="any" value="${num(l.cantidad)}" class="dis-s"></td>${cv ? '' : `<td><input data-k="unidad" value="${esc(l.unidad)}" class="dis-s"></td>`}<td class="dis-tot">${peso(num(l.valor) * num(l.cantidad))}</td><td><input data-k="proyecto" value="${esc(l.proyecto)}" class="dis-m"></td>${cv ? '' : `<td><input data-k="referencia" value="${esc(l.referencia)}" class="dis-m"></td>`}<td><input data-k="entregado" type="number" min="0" step="any" value="${num(l.entregado)}" class="dis-s" title="Lo que ya se entregó antes de usar el sistema"></td><td class="dis-act">${num(k.entregado) - num(l.entregado)}${(entMap[ci + ':' + i] || {}).porConf ? '<small>' + entMap[ci + ':' + i].porConf + ' por confirmar</small>' : ''}</td><td class="dis-pend"><b>${k.pend}</b></td><td class="dis-stk">${stockHTML(l, i)}</td><td><button type="button" class="btn btn-outline btn-sm dis-del" title="Quitar línea" aria-label="Quitar línea">✕</button></td></tr>`; };
+    const fila = (l, i) => { const k = calcLinea(l, entMap[ci + ':' + i], (stockDe(l) || {}).central); return `<tr data-i="${i}"><td><input data-k="equivalente" value="${esc(l.equivalente)}" class="dis-w" placeholder="${esc(nombreDe(l))}"></td><td><input data-k="descripcion" value="${esc(l.descripcion)}" class="dis-w"></td>${cv ? `<td><input data-k="idCM" value="${esc(l.idCM)}" class="dis-s"></td>` : ''}<td><input data-k="presentacion" value="${esc(l.presentacion)}" class="dis-m"></td><td><input data-k="valor" type="number" min="0" step="any" value="${num(l.valor)}" class="dis-s"></td><td><input data-k="cantidad" type="number" min="0" step="any" value="${num(l.cantidad)}" class="dis-s"></td>${cv ? '' : `<td><input data-k="unidad" value="${esc(l.unidad)}" class="dis-s"></td>`}<td class="dis-tot">${peso(num(l.valor) * num(l.cantidad))}</td><td><input data-k="proyecto" value="${esc(l.proyecto)}" class="dis-m"></td>${cv ? '' : `<td><input data-k="referencia" value="${esc(l.referencia)}" class="dis-m"></td>`}<td><input data-k="entregado" type="number" min="0" step="any" value="${num(l.entregado)}" class="dis-s" title="Lo que ya se entregó antes de usar el sistema"></td><td class="dis-act">${num(k.entregado) - num(l.entregado)}${(entMap[ci + ':' + i] || {}).porConf ? '<small>' + entMap[ci + ':' + i].porConf + ' por confirmar</small>' : ''}</td><td class="dis-pend"><b>${k.pend}</b></td><td class="dis-stk">${stockHTML(l, i)}</td><td><button type="button" class="btn btn-outline btn-sm dis-del" title="Quitar línea" aria-label="Quitar línea">✕</button></td></tr>`; };
     el.innerHTML = `<div class="dis-cab"><div class="dis-id"><button type="button" class="btn btn-outline" id="dis-volver">← Distribuciones</button><span class="dis-corr" title="Correlativo de seguimiento">${esc(act.correlativo || '')}</span></div><div class="dis-acc"><button type="button" class="btn btn-primary" id="dis-guardar"><i class="ph-bold ph-floppy-disk"></i> Guardar</button><button type="button" class="btn btn-outline" id="dis-xls"><i class="ph-bold ph-download-simple"></i> Descargar Excel</button><label class="dis-chk"><input type="checkbox" id="dis-xl-ent"> con columna Entregado</label></div></div>
       <div class="dis-datos"><label>Nombre<input id="dis-nom" value="${esc(act.nombre)}"></label><label>Tipo de compra<select id="dis-mod">${MODOS.map(m => `<option value="${m[0]}"${m[0] === act.modalidad ? ' selected' : ''}>${m[1]}</option>`).join('')}</select></label><label>N° de SDC<input id="dis-sdc" value="${esc(act.sdc || act.referencia || '')}" placeholder="Opcional"></label><label>Orden de compra asociada<input id="dis-oc" list="dis-ocs" value="${esc(act.oc || '')}" placeholder="Se asocia cuando exista"><datalist id="dis-ocs">${ocs.map(o => `<option value="${esc(o)}"></option>`).join('')}</datalist></label><label>Estado<select id="dis-est">${ESTADOS.map(e => `<option value="${e[0]}"${e[0] === act.estado ? ' selected' : ''}>${e[1]}</option>`).join('')}</select></label></div>
       <div class="dis-tabs" role="tablist">${act.centros.map((c, i) => `<button type="button" role="tab" class="dis-tab${i === ci ? ' on' : ''}" data-ci="${i}">${esc(c.nombre)}<small>${(c.lineas || []).length}</small></button>`).join('')}<button type="button" class="dis-tab dis-mas" id="dis-addc">+ Centro</button></div>
       <div class="dis-centro-h"><b>${esc(ce.nombre)}</b><button type="button" class="btn btn-outline btn-sm" id="dis-ren">Renombrar</button><button type="button" class="btn btn-outline btn-sm" id="dis-quitc">Quitar centro</button><span class="dis-sp"></span><span>Total: <b id="dis-total">${peso(tot)}</b></span><button type="button" class="btn btn-primary" id="dis-entregar"><i class="ph-bold ph-file-text"></i> Entregar a este centro (acta)</button></div>
-      <div class="dis-tw"><table class="bit-tabla dis-t"><thead><tr><th>Descripción</th>${cv ? '<th>ID CM</th>' : ''}<th>Equivalente</th><th>Presentación</th><th>Valor</th><th>Cantidad</th>${cv ? '' : '<th>Unidad / caja</th>'}<th>${cv ? 'Total' : 'Valor + IVA'}</th><th>Proyecto</th>${cv ? '' : '<th>Referencia</th>'}<th>Entregado antes</th><th>Entregado con actas</th><th>Pendiente</th><th>Stock / se puede entregar</th><th></th></tr></thead><tbody>${ce.lineas.length ? ce.lineas.map(fila).join('') : '<tr><td colspan="15">Este centro aún no tiene líneas.</td></tr>'}</tbody></table></div>
+      <div class="dis-tw"><table class="bit-tabla dis-t"><thead><tr><th>Producto (equivalente)</th><th>Descripción técnica</th>${cv ? '<th>ID CM</th>' : ''}<th>Presentación</th><th>Valor</th><th>Cantidad</th>${cv ? '' : '<th>Unidad / caja</th>'}<th>${cv ? 'Total' : 'Valor + IVA'}</th><th>Proyecto</th>${cv ? '' : '<th>Referencia</th>'}<th>Entregado antes</th><th>Entregado con actas</th><th>Pendiente</th><th>Stock / se puede entregar</th><th></th></tr></thead><tbody>${ce.lineas.length ? ce.lineas.map(fila).join('') : '<tr><td colspan="16">Este centro aún no tiene líneas.</td></tr>'}</tbody></table></div>
       <div class="dis-pie"><button type="button" class="btn btn-outline btn-sm" id="dis-addl">+ Agregar línea</button><span class="act-hint">El stock se lee de la Bodega Central: lo que aún no llega aparece «sin stock» hasta que se ingrese la orden de compra.</span></div>`;
   }
 
@@ -152,19 +154,24 @@
     XL.writeFile(wb, `${String(act.nombre || 'distribucion').replace(/[^\w\- ]+/g, '').trim() || 'distribucion'} - ${cv ? 'CONVENIO MARCO' : 'NO MARCO'}.xlsx`);
   }
   /** Arma el acta de entrega del centro: lo que hay en stock se entrega y lo que no queda pendiente en el acta (mismo flujo de Actas de entrega). */
-  async function armarActa(d, cidx, ent) {
+  async function armarActa(d, cidx, ent, sel) {
     const ce = d.centros[cidx]; if (!ce) return; const A = window.SAR_ActasEntrega; if (!A || !A.precargar) { toast('Actas', 'El módulo de actas no está disponible.', 'warning'); return; }
-    const lst = []; ce.lineas.forEach((l, i) => { const s = stockDe(l), k = calcLinea(l, ent[cidx + ':' + i], (s || {}).central); if (!k.pend) return; lst.push({ codigo: digs(l.idCM) || (s && digs(s.codigo)) || '', nombre: (s && s.nombre) || l.descripcion, entregable: k.pend, pendiente: k.pend, distI: i, sinStock: true }); });
+    const lst = []; ce.lineas.forEach((l, i) => {
+      const s = stockDe(l), k = calcLinea(l, ent[cidx + ':' + i], (s || {}).central); if (!k.pend) return;
+      const x = sel && sel[cidx + ':' + i]; const entrega = x ? (x.on ? Math.min(k.pend, Math.max(0, Math.floor(num(x.qty)))) : 0) : k.puede;
+      lst.push({ codigo: digs(l.idCM) || (s && digs(s.codigo)) || '', nombre: (s && s.nombre) || nombreDe(l), entregable: entrega, pendiente: k.pend, distI: i, sinStock: true });
+    });
     if (!lst.length) { toast('Entregar', 'Este centro no tiene cantidades pendientes de entrega.', 'info'); return; }
-    if (lst.length > 60) { lst.sort((x, y) => (stockDe(ce.lineas[y.distI]) ? 1 : 0) - (stockDe(ce.lineas[x.distI]) ? 1 : 0)); lst.length = 60; toast('Acta', 'Un acta admite 60 productos: se armó con los primeros 60 (los con stock primero). Repite para el resto.', 'info'); }
-    if (!lst.some(p => { const s = stockDe(ce.lineas[p.distI]); return s && s.central > 0; }) && !window.confirm('Ninguna línea tiene stock en Bodega Central: el acta saldría solo con pendientes. ¿Continuar?')) return;
+    if (lst.length > 60) { lst.sort((x, y) => (y.entregable > 0) - (x.entregable > 0)); lst.length = 60; toast('Acta', 'Un acta admite 60 productos: se armó con los primeros 60 (los que se entregan primero). Repite para el resto.', 'info'); }
+    if (!lst.some(p => p.entregable > 0) && !window.confirm('No marcaste nada para entregar: el acta saldría solo con pendientes. ¿Continuar?')) return;
     if (act && act.id === d.id) { try { await guardar(true); } catch (e) { /* sigue */ } }
     A.precargar(ce.nombre, lst, { id: d.id, correlativo: d.correlativo || '', centro: ce.nombre, ci: cidx });
   }
   const entregar = () => armarActa(act, ci, entMap);
 
-  // ---- Panel dentro de «Actas de entrega» (v21.162): qué hay que entregar, qué alcanza con el stock y qué queda pendiente ----
-  let pAbierto = false, pDist = '', pCi = 0;
+  // ---- Panel dentro de «Actas de entrega» (v21.164): con foto, casilla y cantidad por producto ----
+  let pAbierto = false, pDist = '', pCi = 0, pSel = {}, pBus = '', pSolo = false;
+  const fotoDe = (l, cand) => (window.SAR_Imagenes ? window.SAR_Imagenes.thumb(nombreDe(l), { codigo: digs(l.idCM), candidata: !!cand }) : '');
   function panelEn(host) {
     if (!host) return;
     host.innerHTML = `<details class="dis-panel"${pAbierto ? ' open' : ''}><summary><i class="ph-bold ph-share-network"></i> Distribución a centros <small>entregar lo comprado a cada centro con el stock disponible</small></summary><div class="dis-pbody"></div></details>`;
@@ -172,21 +179,51 @@
     dt.addEventListener('toggle', () => { pAbierto = dt.open; if (pAbierto) cargarPanel(body); });
     if (pAbierto) cargarPanel(body);
   }
-  async function cargarPanel(body) {
-    body.innerHTML = '<p class="act-hint">Cargando…</p>';
+  const defSel = (k) => ({ on: k.puede > 0, qty: k.puede });
+  async function cargarPanel(body, ligero) {
+    if (!ligero) body.innerHTML = '<p class="act-hint">Cargando…</p>';
     try {
-      await cargarLista(); await cargarOCs(); if (!stockIdx) await cargarStock();
+      if (!ligero) { await cargarLista(); await cargarOCs(); if (!stockIdx) await cargarStock(); if (window.SAR_Imagenes) window.SAR_Imagenes.cargar().catch(() => {}); }
       const vis = lista.filter(d => !['archivada', 'cerrada'].includes(d.estado)); if (!vis.length) { body.innerHTML = '<p class="act-hint">No hay distribuciones activas. Créalas en el menú «Distribución a centros».</p>'; return; }
       if (!vis.some(d => d.id === pDist)) { pDist = vis[0].id; pCi = 0; } const d = vis.find(x => x.id === pDist); if (!d.centros[pCi]) pCi = 0;
-      const ent = await cargarEntregas(d.id), ce = d.centros[pCi];
-      const res = d.centros.map((c, k) => { let pend = 0, hoy = 0; c.lineas.forEach((l, i) => { const q = calcLinea(l, ent[k + ':' + i], (stockDe(l) || {}).central); pend += q.pend > 0 ? 1 : 0; hoy += q.puede > 0 ? 1 : 0; }); return { c, k, pend, hoy }; });
-      body.innerHTML = `<div class="dis-psel"><label>Distribución<select id="dp-d">${vis.map(x => `<option value="${esc(x.id)}"${x.id === pDist ? ' selected' : ''}>${esc((x.correlativo ? x.correlativo + ' · ' : '') + x.nombre)}</option>`).join('')}</select></label><label>Centro<select id="dp-c">${res.map(r => `<option value="${r.k}"${r.k === pCi ? ' selected' : ''}>${esc(r.c.nombre)} — ${r.pend} por entregar, ${r.hoy} con stock</option>`).join('')}</select></label><button type="button" class="btn btn-primary" id="dp-armar"><i class="ph-bold ph-file-plus"></i> Armar acta con lo disponible</button></div>
-        <div class="dis-tw"><table class="bit-tabla dis-t"><thead><tr><th>Producto</th><th>Pedido</th><th>Entregado</th><th>Pendiente</th><th>Stock Central</th><th>Se puede entregar</th><th>Quedará pendiente</th></tr></thead><tbody>${ce.lineas.map((l, i) => { const s = stockDe(l), q = calcLinea(l, ent[pCi + ':' + i], (s || {}).central); return `<tr class="${q.pend ? '' : 'dis-hecho'}"><td>${esc(l.descripcion)}${l.idCM ? ' <small>ID ' + esc(l.idCM) + '</small>' : ''}</td><td>${num(l.cantidad)}</td><td>${q.entregado}</td><td><b>${q.pend}</b></td><td>${s ? s.central : '<small class="dis-no">sin stock en sistema</small>'}</td><td class="${q.puede ? 'dis-ok' : ''}">${q.puede}</td><td class="${q.quedara ? 'dis-no' : ''}">${q.quedara}</td></tr>`; }).join('') || '<tr><td colspan="7">Sin líneas.</td></tr>'}</tbody></table></div>
-        <p class="act-hint">Al armar el acta se precarga lo que alcanza con el stock; lo demás queda como pendiente en el acta. El stock se descuenta al confirmar el acta, igual que siempre.</p>`;
-      body.querySelector('#dp-d').addEventListener('change', (e) => { pDist = e.target.value; pCi = 0; cargarPanel(body); });
-      body.querySelector('#dp-c').addEventListener('change', (e) => { pCi = Number(e.target.value); cargarPanel(body); });
-      body.querySelector('#dp-armar').addEventListener('click', () => armarActa(d, pCi, ent));
+      const ent = ligero && body._ent ? body._ent : await cargarEntregas(d.id); body._ent = ent; const ce = d.centros[pCi];
+      const calc = (cidx, l, i) => calcLinea(l, ent[cidx + ':' + i], (stockDe(l) || {}).central);
+      const selDe = (cidx, l, i) => { const key = d.id + '|' + cidx + ':' + i; return pSel[key] || (pSel[key] = defSel(calc(cidx, l, i))); };
+      const q = norm(pBus), filas = ce.lineas.map((l, i) => ({ l, i, k: calc(pCi, l, i) })).filter(x => (!pSolo || x.k.pend > 0) && (!q || norm(nombreDe(x.l) + ' ' + x.l.descripcion + ' ' + x.l.idCM).includes(q)));
+      let entrega = 0, queda = 0; ce.lineas.forEach((l, i) => { const k = calc(pCi, l, i); if (!k.pend) return; const s = selDe(pCi, l, i), e = s.on ? Math.min(k.pend, Math.max(0, Math.floor(num(s.qty)))) : 0; entrega += e; queda += k.pend - e; });
+      body.innerHTML = `<div class="dis-psel"><label>Distribución<select id="dp-d">${vis.map(x => `<option value="${esc(x.id)}"${x.id === pDist ? ' selected' : ''}>${esc((x.correlativo ? x.correlativo + ' · ' : '') + x.nombre)}</option>`).join('')}</select></label></div>
+        <div class="dis-tabs dis-ptabs" role="tablist">${d.centros.map((c, k) => { const n = c.lineas.filter((l, i) => calc(k, l, i).pend > 0).length; return `<button type="button" role="tab" class="dis-tab${k === pCi ? ' on' : ''}" data-pc="${k}">${esc(c.nombre)}<small>${n}</small></button>`; }).join('')}</div>
+        <div class="dis-pbar"><input type="search" id="dp-q" placeholder="Buscar producto…" value="${esc(pBus)}"><label class="dis-chk"><input type="checkbox" id="dp-solo"${pSolo ? ' checked' : ''}> solo pendientes</label><button type="button" class="btn btn-outline btn-sm" id="dp-todo">Marcar los que tienen stock</button><button type="button" class="btn btn-outline btn-sm" id="dp-nada">Desmarcar todo</button><button type="button" class="btn btn-outline btn-sm" id="dp-fotos"><i class="ph-bold ph-magnifying-glass"></i> Buscar fotos</button><span class="dis-sp"></span><span class="dis-resu">Se entregan <b>${entrega}</b> u. · quedan pendientes <b>${queda}</b> u.</span><button type="button" class="btn btn-primary" id="dp-armar"><i class="ph-bold ph-file-plus"></i> Armar acta con lo marcado</button></div>
+        <div class="dis-pscroll"><table class="dis-pt"><thead><tr><th></th><th>Foto</th><th>Producto</th><th>Pedido</th><th>Pendiente</th><th>Stock Central</th><th>Entrego</th><th>Queda</th></tr></thead><tbody>${filas.map(({ l, i, k }) => { const s = stockDe(l), x = selDe(pCi, l, i), e = x.on ? Math.min(k.pend, Math.max(0, Math.floor(num(x.qty)))) : 0; return `<tr data-i="${i}" class="${k.pend ? '' : 'dis-hecho'}"><td><input type="checkbox" class="dp-on"${x.on && k.pend ? ' checked' : ''}${k.pend ? '' : ' disabled'} aria-label="Entregar ${esc(nombreDe(l))}"></td><td class="dis-pfoto">${fotoDe(l, true)}</td><td class="dis-pnom"><b>${esc(nombreDe(l))}</b>${l.descripcion && l.equivalente ? `<small title="${esc(l.descripcion)}">${esc(l.descripcion)}</small>` : ''}${l.idCM ? `<small>ID ${esc(l.idCM)}</small>` : ''}</td><td>${num(l.cantidad)}</td><td><b>${k.pend}</b></td><td>${s ? `<b class="${s.central >= k.pend && k.pend ? 'dis-ok' : (s.central > 0 ? 'dis-par' : 'dis-no')}">${s.central}</b>` : '<small class="dis-no">sin stock<br>en sistema</small>'}</td><td><input type="number" class="dp-q dis-s" min="0" max="${k.pend}" value="${x.on ? e : 0}"${k.pend ? '' : ' disabled'} aria-label="Cantidad a entregar"></td><td class="${k.pend - e ? 'dis-no' : ''}">${k.pend - e}</td></tr>`; }).join('') || '<tr><td colspan="8">Sin productos con ese filtro.</td></tr>'}</tbody></table></div>
+        <p class="act-hint">Marca lo que entregas y ajusta la cantidad si llegó menos: lo que no marques o quede por debajo del pedido pasa a pendiente en el acta. El stock se descuenta al confirmar el acta firmada.</p>`;
+      if (window.SAR_Imagenes) window.SAR_Imagenes.rellenar(body);
+      const re = () => cargarPanel(body, true), $ = (s) => body.querySelector(s);
+      $('#dp-d').addEventListener('change', (e) => { pDist = e.target.value; pCi = 0; cargarPanel(body); });
+      body.querySelectorAll('[data-pc]').forEach(b => b.addEventListener('click', () => { pCi = Number(b.dataset.pc); re(); }));
+      $('#dp-q').addEventListener('input', (e) => { pBus = e.target.value; const pos = e.target.selectionStart; re().then(() => { const n = body.querySelector('#dp-q'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }); });
+      $('#dp-solo').addEventListener('change', (e) => { pSolo = e.target.checked; re(); });
+      $('#dp-todo').addEventListener('click', () => { ce.lineas.forEach((l, i) => { const k = calc(pCi, l, i); pSel[d.id + '|' + pCi + ':' + i] = defSel(k); }); re(); });
+      $('#dp-nada').addEventListener('click', () => { ce.lineas.forEach((l, i) => { pSel[d.id + '|' + pCi + ':' + i] = { on: false, qty: 0 }; }); re(); });
+      body.querySelectorAll('tr[data-i]').forEach(tr => {
+        const i = Number(tr.dataset.i), key = d.id + '|' + pCi + ':' + i, l = ce.lineas[i], k = calc(pCi, l, i);
+        const on = tr.querySelector('.dp-on'), qty = tr.querySelector('.dp-q'); if (!on) return;
+        on.addEventListener('change', () => { pSel[key] = { on: on.checked, qty: on.checked ? (num(pSel[key] && pSel[key].qty) || Math.max(k.puede, 1)) : 0 }; if (on.checked && num(pSel[key].qty) > k.pend) pSel[key].qty = k.pend; re(); });
+        qty.addEventListener('change', () => { const v = Math.max(0, Math.min(k.pend, Math.floor(num(qty.value)))); pSel[key] = { on: v > 0, qty: v }; re(); });
+      });
+      $('#dp-armar').addEventListener('click', () => armarActa(d, pCi, ent, Object.fromEntries(Object.entries(pSel).filter(([kk]) => kk.startsWith(d.id + '|')).map(([kk, v]) => [kk.slice(d.id.length + 1), v]))));
+      $('#dp-fotos').addEventListener('click', () => buscarFotos(ce, body));
     } catch (e) { body.innerHTML = '<p class="act-err">No se pudo cargar: ' + esc((e && e.message) || e) + '</p>'; }
+  }
+  /** Busca la foto de los productos del centro que no la tienen (por ID de Convenio Marco o por el nombre/equivalente). Quedan «por confirmar» y se muestran con marca. */
+  async function buscarFotos(ce, body) {
+    const S = window.SAR_SeguimientoOC; if (!S || !S.buscarFotosFaltantes || !window.SAR_Progreso) { toast('Fotos', 'La búsqueda de fotos no está disponible.', 'warning'); return; }
+    const prog = window.SAR_Progreso.iniciar('Buscando fotos…', ['Revisando los productos de ' + ce.nombre + '…']);
+    try {
+      const extras = ce.lineas.map(l => ({ nombre: nombreDe(l), codigo: digs(l.idCM) })).filter(x => x.nombre);
+      const r = await S.buscarFotosFaltantes((t) => prog.paso(t), 40, extras);
+      prog.listo(r.buscados ? `${r.encontrados} foto(s) hallada(s) de ${r.buscados}${r.pendientes ? ' · quedan ' + r.pendientes + ': vuelve a pulsar' : ''}` : 'Todos los productos ya tienen foto');
+      if (window.SAR_Imagenes) await window.SAR_Imagenes.cargar(true).catch(() => {}); cargarPanel(body, true);
+    } catch (e) { prog.error(); toast('No se pudo buscar', (e && e.message) || String(e), 'error'); }
   }
 
   function enlazar() {

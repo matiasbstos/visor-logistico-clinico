@@ -45,7 +45,13 @@
       if (out.length < (tope || 40) && norm([l.equivalente, l.descripcion, l.idCM].join(' ')).includes(q)) out.push({ distId: d.id, correlativo: d.correlativo || '', dist: d.nombre, ci, centro: c.nombre, i, nombre: (String(l.equivalente || '').trim() || String(l.descripcion || '').trim()), idCM: l.idCM || '', cantidad: num(l.cantidad), entregado: num(l.entregado) }); })); });
     return out;
   }
-  const resHTML = (res) => res.length ? res.map((r, k) => `<button type="button" class="dis-hit" data-k="${k}"><b>${esc(r.nombre)}</b><small>${esc(r.centro)} · ${esc(r.correlativo || r.dist)}${r.idCM ? ' · ID ' + esc(r.idCM) : ''} · pedido ${r.cantidad}</small></button>`).join('') : '<p class="act-hint">Ningún insumo coincide en las distribuciones.</p>';
+  /** Resultados agrupados por insumo: cada insumo lista los centros que lo tienen (con distribución, pedido y pendiente). */
+  const resHTML = (res) => {
+    if (!res.length) return '<p class="act-hint">Ningún insumo coincide en las distribuciones.</p>';
+    const g = new Map(); res.forEach((r, k) => { const key = r.idCM || norm(r.nombre); (g.get(key) || g.set(key, { nombre: r.nombre, idCM: r.idCM, filas: [] }).get(key)).filas.push({ r, k }); });
+    return [...g.values()].map(x => { const tot = x.filas.reduce((s, f) => s + f.r.cantidad, 0), pen = x.filas.reduce((s, f) => s + Math.max(0, f.r.cantidad - f.r.entregado), 0), nc = new Set(x.filas.map(f => f.r.centro)).size;
+      return `<div class="dis-hgrp"><div class="dis-hh"><b>${esc(x.nombre)}</b><small>${x.idCM ? 'ID ' + esc(x.idCM) + ' · ' : ''}en ${nc} centro${nc === 1 ? '' : 's'} · pedido ${tot} u. · pendiente ${pen} u.</small></div>${x.filas.map(({ r, k }) => `<button type="button" class="dis-hit" data-k="${k}"><b>${esc(r.centro)}</b><small>${esc(r.correlativo || r.dist)} · pedido ${r.cantidad} · pendiente ${Math.max(0, r.cantidad - r.entregado)}</small></button>`).join('')}</div>`; }).join('');
+  };
   /** Nombre con que se trabaja un producto: el EQUIVALENTE; si falta, la descripción técnica. */
   const nombreDe = (l) => String(l.equivalente || '').trim() || String(l.descripcion || '').trim();
   const totalCentro = (ce) => (ce.lineas || []).reduce((s, l) => s + num(l.valor) * num(l.cantidad), 0);

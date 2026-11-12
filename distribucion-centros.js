@@ -97,13 +97,15 @@
     const e = ent || { conf: 0, porConf: 0 }, entregado = num(l.entregado) + num(e.conf) + num(e.porConf), pend = Math.max(0, num(l.cantidad) - entregado), disp = Math.max(0, num(stockCentral));
     const puede = Math.min(pend, disp); return { entregado, pend, puede, quedara: pend - puede };
   }
+  /** Stock de Bodega Central menos lo ya comprometido en actas de esta distribución aún sin confirmar. */
+  const netoCentral = (l, ent) => { const s = stockDe(l); if (!s) return undefined; return Math.max(0, num(s.central) - num(((ent || {})['#res'] || {})[norm(s.nombre)])); };
   /** Entregas hechas con actas de entrega a cada línea: confirmadas (stock descontado) y por confirmar. */
   async function cargarEntregas(distId) {
     const f = fs(), m = {};
     try {
       const sn = await f.getDocs(f.query(f.collection(db(), 'Actas_Entrega'), f.where('distribucion.id', '==', distId)));
       sn.forEach(d => { const a = d.data(); if (a.estado === 'ANULADA') return; const conf = !!(a.stockDescontado || (a.confirmacion && a.confirmacion.estado === 'CONFIRMADA')); const ci = a.distribucion && a.distribucion.ci;
-        (a.items || []).forEach(i => { if (i.distI == null || ci == null) return; const k = ci + ':' + i.distI; const e = m[k] || (m[k] = { conf: 0, porConf: 0 }); if (conf) e.conf += num(i.cantidad); else e.porConf += num(i.cantidad); }); });
+        (a.items || []).forEach(i => { if (!conf && num(i.cantidad) > 0) { const R = m['#res'] || (m['#res'] = {}), nk = norm(i.nombre); R[nk] = (R[nk] || 0) + num(i.cantidad); } if (i.distI == null || ci == null) return; const k = ci + ':' + i.distI; const e = m[k] || (m[k] = { conf: 0, porConf: 0 }); if (conf) e.conf += num(i.cantidad); else e.porConf += num(i.cantidad); }); });
     } catch (e) { /* sin lectura */ }
     return m;
   }
@@ -157,8 +159,8 @@
   async function armarActa(d, cidx, ent, sel) {
     const ce = d.centros[cidx]; if (!ce) return; const A = window.SAR_ActasEntrega; if (!A || !A.precargar) { toast('Actas', 'El módulo de actas no está disponible.', 'warning'); return; }
     const lst = []; ce.lineas.forEach((l, i) => {
-      const s = stockDe(l), k = calcLinea(l, ent[cidx + ':' + i], (s || {}).central); if (!k.pend) return;
-      const x = sel && sel[cidx + ':' + i]; const entrega = x ? (x.on ? Math.min(k.pend, Math.max(0, Math.floor(num(x.qty)))) : 0) : k.puede;
+      const s = stockDe(l), k = calcLinea(l, ent[cidx + ':' + i], netoCentral(l, ent)); if (!k.pend) return;
+      const x = sel && sel[cidx + ':' + i]; const entrega = x ? (x.on ? Math.min(k.puede, Math.max(0, Math.floor(num(x.qty)))) : 0) : k.puede;
       lst.push({ codigo: digs(l.idCM) || (s && digs(s.codigo)) || '', nombre: (s && s.nombre) || nombreDe(l), entregable: entrega, pendiente: k.pend, distI: i, sinStock: true });
     });
     if (!lst.length) { toast('Entregar', 'Este centro no tiene cantidades pendientes de entrega.', 'info'); return; }
@@ -187,12 +189,12 @@
       const vis = lista.filter(d => !['archivada', 'cerrada'].includes(d.estado)); if (!vis.length) { body.innerHTML = '<p class="act-hint">No hay distribuciones activas. Créalas en el menú «Distribución a centros».</p>'; return; }
       if (!vis.some(d => d.id === pDist)) { pDist = vis[0].id; pCi = 0; } const d = vis.find(x => x.id === pDist); if (!d.centros[pCi]) pCi = 0;
       const ent = ligero && body._ent ? body._ent : await cargarEntregas(d.id); body._ent = ent; const ce = d.centros[pCi];
-      const calc = (cidx, l, i) => calcLinea(l, ent[cidx + ':' + i], (stockDe(l) || {}).central);
+      const calc = (cidx, l, i) => calcLinea(l, ent[cidx + ':' + i], netoCentral(l, ent));
       const selDe = (cidx, l, i) => { const key = d.id + '|' + cidx + ':' + i; return pSel[key] || (pSel[key] = defSel(calc(cidx, l, i))); };
       const q = norm(pBus), filas = ce.lineas.map((l, i) => ({ l, i, k: calc(pCi, l, i) })).filter(x => (!pSolo || x.k.pend > 0) && (!q || norm(nombreDe(x.l) + ' ' + x.l.descripcion + ' ' + x.l.idCM).includes(q)));
-      let entrega = 0, queda = 0; ce.lineas.forEach((l, i) => { const k = calc(pCi, l, i); if (!k.pend) return; const s = selDe(pCi, l, i), e = s.on ? Math.min(k.pend, Math.max(0, Math.floor(num(s.qty)))) : 0; entrega += e; queda += k.pend - e; });
+      let entrega = 0, queda = 0; ce.lineas.forEach((l, i) => { const k = calc(pCi, l, i); if (!k.pend) return; const s = selDe(pCi, l, i), e = s.on ? Math.min(k.puede, Math.max(0, Math.floor(num(s.qty)))) : 0; entrega += e; queda += k.pend - e; });
       const lineas = ce.lineas.map((l, i) => ({ l, i, k: calc(pCi, l, i), x: selDe(pCi, l, i) })).filter(o => o.k.pend > 0);
-      const cantDe = (o) => o.x.on ? Math.min(o.k.pend, Math.max(0, Math.floor(num(o.x.qty)))) : 0;
+      const cantDe = (o) => o.x.on ? Math.min(o.k.puede, Math.max(0, Math.floor(num(o.x.qty)))) : 0;
       const izq = lineas.filter(o => !o.x.on || !cantDe(o)).filter(o => !q || norm(nombreDe(o.l) + ' ' + o.l.descripcion + ' ' + o.l.idCM).includes(q));
       const der = lineas.filter(o => o.x.on && cantDe(o));
       const nom = (l) => `<div class="dis-pnom"><span class="dis-pfoto">${fotoDe(l, true)}</span><div class="dis-ptx"><b>${esc(nombreDe(l))}</b>${l.descripcion && l.equivalente ? `<small title="${esc(l.descripcion)}">${esc(l.descripcion)}</small>` : ''}${l.idCM ? `<small>ID ${esc(l.idCM)}</small>` : ''}</div></div>`;
@@ -201,11 +203,11 @@
         <div class="dis-pgrid">
           <div class="dis-pcol"><h4 class="act-h4">1 · Productos del centro (${izq.length})</h4>
             <div class="dis-pbar"><input type="search" id="dp-q" placeholder="Buscar producto…" value="${esc(pBus)}"><button type="button" class="btn btn-outline btn-sm" id="dp-todo">Agregar los que tienen stock</button></div>
-            <div class="dis-plist">${izq.map(o => { const s = stockDe(o.l); return `<div class="dis-prow" data-i="${o.i}">${nom(o.l)}<div class="dis-pnum"><span>Pend. <b>${o.k.pend}</b></span><span>Stock ${s ? `<b class="${s.central >= o.k.pend ? 'dis-ok' : (s.central > 0 ? 'dis-par' : 'dis-no')}">${s.central}</b>` : '<b class="dis-no">0</b>'}</span></div><input type="number" class="dp-q dis-s" min="0" max="${o.k.pend}" value="${Math.min(o.k.pend, o.k.puede || 0) || ''}" placeholder="${o.k.pend}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline btn-sm dp-add">Agregar</button></div>`; }).join('') || '<p class="act-hint">No hay más productos pendientes con ese filtro.</p>'}</div></div>
+            <div class="dis-plist">${izq.map(o => { const s = stockDe(o.l); return `<div class="dis-prow" data-i="${o.i}">${nom(o.l)}<div class="dis-pnum"><span>Pend. <b>${o.k.pend}</b></span><span>Stock ${s ? `<b class="${netoCentral(o.l, ent) >= o.k.pend ? 'dis-ok' : (netoCentral(o.l, ent) > 0 ? 'dis-par' : 'dis-no')}">${netoCentral(o.l, ent)}</b>` : '<b class="dis-no">0</b>'}</span></div><input type="number" class="dp-q dis-s" min="0" max="${o.k.puede}" value="${o.k.puede || ''}" placeholder="0" aria-label="Cantidad a entregar"${o.k.puede ? '' : ' disabled'}><button type="button" class="btn btn-outline btn-sm dp-add"${o.k.puede ? '' : ' disabled title="Sin stock en Bodega Central: ingresa la recepción primero"'}>Agregar</button></div>`; }).join('') || '<p class="act-hint">No hay más productos pendientes con ese filtro.</p>'}</div></div>
           <div class="dis-pcol"><h4 class="act-h4">2 · Acta del centro</h4>
             <div class="dis-pbar"><span class="dis-resu">Se entregan <b>${entrega}</b> u. · quedan pendientes <b>${queda}</b> u.</span><span class="dis-sp"></span><button type="button" class="btn btn-outline btn-sm" id="dp-nada">Quitar todo</button><button type="button" class="btn btn-outline btn-sm" id="dp-fotos"><i class="ph-bold ph-magnifying-glass"></i> Buscar fotos</button></div>
             <h5 class="dis-h5">Se entregan (${der.length})</h5>
-            <div class="dis-plist dis-pder">${der.map(o => `<div class="dis-prow" data-i="${o.i}">${nom(o.l)}<div class="dis-pnum"><span>Pedido <b>${o.k.pend}</b></span><span class="${o.k.pend - cantDe(o) ? 'dis-no' : 'dis-ok'}">Queda <b>${o.k.pend - cantDe(o)}</b></span></div><input type="number" class="dp-q dis-s" min="0" max="${o.k.pend}" value="${cantDe(o)}" aria-label="Cantidad entregada"><button type="button" class="btn btn-outline btn-sm dp-del" title="Quitar">✕</button></div>`).join('') || '<p class="act-hint">Aún no agregas productos. Elige a la izquierda.</p>'}</div>
+            <div class="dis-plist dis-pder">${der.map(o => `<div class="dis-prow" data-i="${o.i}">${nom(o.l)}<div class="dis-pnum"><span>Pedido <b>${o.k.pend}</b></span><span class="${o.k.pend - cantDe(o) ? 'dis-no' : 'dis-ok'}">Queda <b>${o.k.pend - cantDe(o)}</b></span></div><input type="number" class="dp-q dis-s" min="0" max="${o.k.puede}" value="${cantDe(o)}" aria-label="Cantidad entregada"><button type="button" class="btn btn-outline btn-sm dp-del" title="Quitar">✕</button></div>`).join('') || '<p class="act-hint">Aún no agregas productos. Elige a la izquierda.</p>'}</div>
             <h5 class="dis-h5">Quedan pendientes (${lineas.filter(o => o.k.pend - cantDe(o) > 0).length})</h5>
             <div class="dis-plist dis-ppend">${lineas.filter(o => o.k.pend - cantDe(o) > 0).map(o => `<div class="dis-prow dis-prow-s"><div class="dis-pnom"><b>${esc(nombreDe(o.l))}</b></div><span class="dis-no"><b>${o.k.pend - cantDe(o)}</b> u.</span></div>`).join('') || '<p class="act-hint">Nada pendiente.</p>'}</div>
             <button type="button" class="btn btn-primary" id="dp-armar"><i class="ph-bold ph-file-plus"></i> Armar acta con lo agregado</button>
@@ -220,9 +222,9 @@
       $('#dp-nada').addEventListener('click', () => { ce.lineas.forEach((l, i) => { pSel[d.id + '|' + pCi + ':' + i] = { on: false, qty: 0 }; }); re(); });
       body.querySelectorAll('.dis-prow[data-i]').forEach(tr => {
         const i = Number(tr.dataset.i), key = d.id + '|' + pCi + ':' + i, k = calc(pCi, ce.lineas[i], i), qty = tr.querySelector('.dp-q');
-        const val = () => Math.max(0, Math.min(k.pend, Math.floor(num(qty.value))));
+        const val = () => Math.max(0, Math.min(k.puede, Math.floor(num(qty.value))));
         const add = tr.querySelector('.dp-add'), del = tr.querySelector('.dp-del');
-        if (add) add.addEventListener('click', () => { const v = val() || k.pend; pSel[key] = { on: true, qty: v }; re(); });
+        if (add) add.addEventListener('click', () => { const v = val() || k.puede; pSel[key] = { on: true, qty: v }; re(); });
         if (del) del.addEventListener('click', () => { pSel[key] = { on: false, qty: 0 }; re(); });
         if (!add) qty.addEventListener('change', () => { const v = val(); pSel[key] = { on: v > 0, qty: v }; re(); });
       });

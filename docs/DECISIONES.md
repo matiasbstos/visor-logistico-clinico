@@ -1187,3 +1187,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.221 Búsqueda de fotos en segundo plano (v21.167)
 - `SAR_Progreso.segundoPlano(titulo)` crea una tarea que no tapa la pantalla: una insignia arriba (junto a «Nube actualizada») muestra «Buscando fotos · NN%» con barra y gira mientras trabaja; al terminar pasa a verde, suena y avisa con un aviso. Las fotos aparecen al refrescarse el panel/catálogo. Usado por «Buscar fotos» (panel de distribución y Catálogo); disponible para otras cargas largas.
+
+## 4.222 Distribución: stock neto y entrega limitada al stock (v21.168)
+- Verificado el flujo: lo agregado al acta se descuenta del stock al confirmar el acta firmada (mismo flujo de actas manuales); lo no agregado o entregado incompleto queda como **pendiente** de la distribución (pedido − entregado) y no requiere ajuste manual: cuando llegue más stock (recepción de la OC) el panel lo ofrece solo en el siguiente acta.
+- El stock mostrado en el panel descuenta lo ya comprometido en actas de esta distribución aún sin confirmar (evita ofrecer dos veces lo mismo a dos centros). La cantidad a entregar no puede superar ese stock; sin stock, «Agregar» queda deshabilitado.

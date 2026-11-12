@@ -1430,8 +1430,8 @@
         })();
         let docLeido = null;
         const ov = modal('Recibir mercadería', `
-            <div class="r-mcs"${cols.length === 1 ? ' hidden' : ''}><span class="r-mcs-t">¿Qué memos/CDP se recibieron? <small>(puedes marcar varios: es una sola recepción con una sola guía)</small></span>${cols.length > 1 ? `<label class="r-mc-todos"><input type="checkbox" id="r-mc-todos"> Seleccionar todos</label>` : ''}${cols.map((c, n) => `<label class="r-mc-f"><input type="checkbox" class="r-mc" data-key="${esc(c.key)}"${n === 0 ? ' checked' : ''}> ${esc(c.centro)} · memo ${esc(c.memo)}${c.cdp ? ' · CDP ' + esc(c.cdp) : ''}</label>`).join('')}</div>
-            <label hidden>Memo principal<select id="r-col">${cols.map(c => `<option value="${esc(c.key)}">${esc(c.centro)} · memo ${esc(c.memo)}${c.cdp ? ' · CDP ' + esc(c.cdp) : ''}</option>`).join('')}</select></label>
+            <div class="r-mcs"${cols.length === 1 ? ' hidden' : ''}><div class="r-mcs-h"><span class="r-mcs-t">¿Qué memos se recibieron? <small>Marca los que llegan juntos: una sola recepción, una sola guía.</small></span>${cols.length > 1 ? `<label class="r-mc-todos"><input type="checkbox" id="r-mc-todos"> Todos</label>` : ''}</div><div class="r-mcs-g">${cols.map((c, n) => `<label class="r-mc-f"><input type="checkbox" class="r-mc" data-key="${esc(c.key)}"${n === 0 ? ' checked' : ''}><span class="r-mc-tx"><b>${esc(c.centro)} · memo ${esc(c.memo)}</b>${c.cdp ? `<small>CDP ${esc(c.cdp)}</small>` : ''}</span></label>`).join('')}</div></div>
+            <div hidden><select id="r-col">${cols.map(c => `<option value="${esc(c.key)}">${esc(c.centro)} · memo ${esc(c.memo)}${c.cdp ? ' · CDP ' + esc(c.cdp) : ''}</option>`).join('')}</select></div>
             <div class="soc-fila"><label>N° guía de despacho<input type="text" id="r-guia" autocomplete="off"></label><label>Fecha<input type="date" id="r-fecha" value="${hoyISO()}"></label></div>
             <label>Guía de despacho (foto o PDF, opcional: queda guardada en la orden)<input type="file" id="r-file" accept="application/pdf,image/*"></label>
             <div id="r-doc" class="r-doc" hidden></div>

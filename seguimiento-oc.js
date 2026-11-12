@@ -1042,12 +1042,14 @@
         const cuadro = (cuadro0 && cuadro0.dist && cuadro0.dist.length === lineas.length
             && lineas.every((l, i) => Object.values(cuadro0.dist[i] || {}).reduce((t, x) => t + num(x), 0) === num(l.cantidad))) ? cuadro0 : null;
         if (v.distrib && !cuadro) throw new Error('El cuadro de distribución no calza con los productos de la orden (revisa los avisos). Corrige las cantidades o quita el cuadro.');
-        const propia = cuadro && cuadro.columnas ? cuadro.columnas.find(c => c.centro === CENTRO_PROPIO) : null;
+        // v21.177: SAR puede tener VARIOS memos/CDP en el mismo cuadro (ej. memos 55, 37, 36 y 9): se conservan todos; solo se omiten los de otros centros.
+        const propias = cuadro && cuadro.columnas ? cuadro.columnas.filter(c => c.centro === CENTRO_PROPIO) : [], propia = propias[0] || null;
         // v20.65: del cuadro solo importa lo que dice SAR; lo de otros centros se omite (queda anotado cuáles).
         let cuadroF = cuadro; const otrosCentros = [];
-        if (cuadro && propia && cuadro.columnas.length > 1) {
-            cuadro.columnas.filter(c => c !== propia).forEach(c => otrosCentros.push({ centro: c.centro, memo: c.memo }));
-            cuadroF = { ...cuadro, columnas: [propia], dist: cuadro.dist.map(d => (propia.key in d ? { [propia.key]: d[propia.key] } : {})) };
+        if (cuadro && propias.length && cuadro.columnas.length > propias.length) {
+            cuadro.columnas.filter(c => !propias.includes(c)).forEach(c => otrosCentros.push({ centro: c.centro, memo: c.memo }));
+            const claves = propias.map(c => c.key);
+            cuadroF = { ...cuadro, columnas: propias, dist: cuadro.dist.map(d => { const o = {}; claves.forEach(k => { if (k in d) o[k] = d[k]; }); return o; }) };
         }
         return {
             numeroOC: numero, proveedor: String(v.proveedor || '').trim(), rutProveedor: String(v.rutProveedor || '').trim(), descripcion: String(v.descripcion || '').trim(),

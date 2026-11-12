@@ -127,7 +127,9 @@
         const r = { tipo: 'DIST_OC', avisos: [], columnas: [], lineas: [] };
         const its = items.filter(i => limpiar(i.str));
         // 1) columnas de cantidades: los "CANTIDAD" de una misma fila; el que va solo (con "TOTAL" debajo) es el total
-        const cants = its.filter(i => /^CANTIDAD$/i.test(limpiar(i.str)) && i.x > 330);
+        // v21.176: las posiciones se calibran con el encabezado «VALOR NETO» (el cuadro puede venir corrido a la izquierda según el emisor)
+        const vn = its.find(i => /^VALOR\s*NETO$/i.test(limpiar(i.str))), xMinCant = vn ? Math.min(330, vn.x + 40) : 330, xPrecio = vn ? Math.min(330, vn.x - 20) : 330;
+        const cants = its.filter(i => /^CANTIDAD$/i.test(limpiar(i.str)) && i.x > xMinCant);
         const porY = []; cants.forEach(i => { const g = porY.find(o => Math.abs(o.y - i.y) <= TOL); if (g) g.items.push(i); else porY.push({ y: i.y, items: [i] }); });
         const gCols = porY.sort((a, b) => b.items.length - a.items.length)[0];
         if (!gCols || gCols.items.length < 1) { r.avisos.push('No encontré las columnas de cantidades (encabezado "CANTIDAD").'); return r; }
@@ -140,10 +142,10 @@
         const yEnc = gCols.y;
         // 2) etiquetas de la izquierda
         const ETQ = [['financiamiento', /^FINANCIAMIENTO$/i], ['cdp', /^CDP$/], ['neto', /^NETO$/], ['iva', /^IVA$/], ['total', /^TOTAL$/], ['direccion', /^DIRECCI[OÓ]N/i], ['contraparte', /^CONTRAPARTE/i], ['contacto', /^CONTACTO$/i], ['correo', /^(CORREO|EMAIL|E-MAIL)/i], ['horario', /^HORARIO/i]];
-        const etiquetas = []; ETQ.forEach(([k, re]) => { const it = its.filter(i => i.x < lim[0] - 20 && i.x > 250 && re.test(limpiar(i.str)) && (k === 'financiamiento' || k === 'cdp' ? i.y < yEnc : i.y > yEnc)).sort((a, b) => a.y - b.y)[0]; if (it) etiquetas.push({ k, y0: it.y, y1: it.y }); });
+        const etiquetas = []; ETQ.forEach(([k, re]) => { const it = its.filter(i => i.x < lim[0] - 20 && i.x > 230 && re.test(limpiar(i.str)) && (k === 'cdp' ? i.y < yEnc : k === 'financiamiento' ? true : i.y > yEnc)).sort((a, b) => a.y - b.y)[0]; if (it) etiquetas.push({ k, y0: it.y, y1: it.y }); });
         etiquetas.sort((a, b) => a.y0 - b.y0);
         // etiquetas de dos líneas ("DIRECCION DE / DESPACHO"): su extensión llega hasta la última palabra de esa columna antes de la siguiente
-        const izq = its.filter(i => i.x > 250 && i.x < lim[0] - 20 && i.y > yEnc);
+        const izq = its.filter(i => i.x > 230 && i.x < lim[0] - 20 && i.y > yEnc);
         etiquetas.forEach((e, n) => { const sig = etiquetas[n + 1]; izq.forEach(i => { if (i.y > e.y1 && (!sig || i.y < sig.y0 - 3) && i.y - e.y1 < 20) e.y1 = i.y; }); });
         const sec = {};
         etiquetas.forEach((e, n) => {
@@ -151,7 +153,7 @@
             const desde = ant && e.y0 - ant.y1 < 45 ? (ant.y1 + e.y0) / 2 : e.y0 - (e.k === 'neto' ? 9 : 18), hasta = sig ? (e.y1 + sig.y0) / 2 : e.y1 + 25;
             sec[e.k] = [e.k === 'cdp' ? Math.max(desde, (ant ? ant.y1 + e.y0 : 0) / 2) : desde, e.k === 'cdp' ? Math.min(hasta, yEnc - 8) : hasta];
         });
-        const encabezadoHasta = sec.financiamiento ? sec.financiamiento[0] : yEnc - 60;
+        const hastaEnc = [sec.financiamiento, sec.cdp].filter(Boolean).map(x => x[0]).filter(y => y < yEnc), encabezadoHasta = hastaEnc.length ? Math.min(...hastaEnc) : yEnc - 60;   // financiamiento puede ir arriba o al pie
         const ysEnc = its.filter(i => i.y < encabezadoHasta && banda(i.x) >= 0);
         const texto = (k, y0, y1, junta) => { const v = its.filter(i => i.y >= y0 && i.y < y1 && banda(i.x) === k).sort((a, b) => a.y - b.y || a.x - b.x).map(i => limpiar(i.str)); return limpiar(junta === '' ? v.join('').replace(/-\s+/g, '-') : v.join(' ')); };
         // 3) columnas
@@ -180,8 +182,9 @@
         const zona = its.filter(i => i.y > yEnc + 8 && i.y < yFinTabla);
         r.lineas = ids.map(() => ({ id: '', descripcion: [], valorNeto: 0, dist: {}, totalDeclarado: null }));
         ids.forEach((x, n) => { r.lineas[n].id = limpiar(x.str); });
-        zona.filter(i => i.x >= 100 && i.x < 280).sort((a, b) => a.y - b.y).forEach(i => { if (ids.length) r.lineas[cercana(i.y)].descripcion.push(limpiar(i.str)); });
-        zona.filter(i => i.x >= 330 && i.x < lim[0] - 4 && /\d/.test(i.str)).forEach(i => { if (ids.length && !r.lineas[cercana(i.y)].valorNeto) r.lineas[cercana(i.y)].valorNeto = entero(i.str); });
+        const xDesc = (ids.length ? Math.max(...ids.map(x => x.x)) : 75) + 25;
+        zona.filter(i => i.x >= Math.min(100, xDesc) && i.x < xPrecio).sort((a, b) => a.y - b.y).forEach(i => { if (ids.length) r.lineas[cercana(i.y)].descripcion.push(limpiar(i.str)); });
+        zona.filter(i => i.x >= xPrecio && i.x < lim[0] - 4 && /\d/.test(i.str)).forEach(i => { if (ids.length && !r.lineas[cercana(i.y)].valorNeto) r.lineas[cercana(i.y)].valorNeto = entero(i.str); });
         zona.filter(i => /^\d+$/.test(limpiar(i.str)) && i.x >= lim[0] - 4).forEach(i => {
             if (!ids.length) return; const l = r.lineas[cercana(i.y)], q = Number(limpiar(i.str)), k = banda(i.x);
             if (k >= 0) l.dist[cols[k].key] = (l.dist[cols[k].key] || 0) + q; else if (i.x >= xTotal) l.totalDeclarado = q;

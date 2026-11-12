@@ -1200,3 +1200,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.225 Lectura verificada de los tres formatos (v21.171)
 - Verificado con los archivos reales: CONVENIO MARCO consolidado (9 centros), NO MARCO consolidado (10 centros) y planilla de solicitud (3 hojas). Todas las hojas se leen igual que antes, salvo dos filas que antes se perdían por traer la descripción vacía y ahora se leen con su equivalente (SONDA NELATON 40 CM #8FR en CESFAM BORIS; Tiras Reactivas Accu-chek guide en CESFAM FLORENCIA).
+
+## 4.226 Buscador de insumos en Distribución a centros y en Actas (v21.172)
+- En la lista de distribuciones y en el panel de Actas de entrega hay un buscador por nombre/equivalente o ID: muestra en qué distribución (correlativo), centro y con qué pedido está el insumo. Al elegir un resultado se abre esa distribución en ese centro (línea resaltada) o, en Actas, el panel queda en ese centro con el insumo filtrado. No incluye distribuciones archivadas.

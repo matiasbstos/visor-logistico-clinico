@@ -677,7 +677,7 @@
                     <button type="button" class="btn btn-outline" id="soc-guardar-nota">Registrar comentario</button></div>
                 <label class="soc-toggle"><input type="checkbox" id="soc-solo-notas" ${soloNotas ? 'checked' : ''}> Ver solo comentarios y archivos (ocultar movimientos automáticos)</label>
                 <div id="soc-bitacora"></div></div>
-            <div class="soc-pie">${esAdmin() ? '<button type="button" class="btn btn-outline btn-sm" id="soc-multa">Registrar decisión de multa</button> <button type="button" class="btn btn-outline btn-sm" id="soc-cerrar">' + (oc.cerrada ? 'Reabrir seguimiento' : 'Cerrar seguimiento') + '</button> <button type="button" class="btn btn-outline btn-sm" id="soc-config">Configurar correo</button>' : ''}</div>`;
+            <div class="soc-pie">${esAdmin() ? '<button type="button" class="btn btn-outline btn-sm" id="soc-multa">Registrar decisión de multa</button> <button type="button" class="btn btn-outline btn-sm" id="soc-cerrar">' + (oc.cerrada ? 'Reabrir seguimiento' : 'Cerrar seguimiento') + '</button> <button type="button" class="btn btn-outline btn-sm" id="soc-config">Configurar correo</button> <button type="button" class="btn btn-outline btn-sm soc-elim" id="soc-elim"><i class="ph-bold ph-trash"></i> Eliminar orden</button>' : ''}</div>`;
         const q = (s) => root().querySelector(s);
         q('#soc-volver').addEventListener('click', () => { ocActual = null; pintarLista(); });
         marcarMigas(true);
@@ -740,6 +740,7 @@
         q('#soc-guardar-nota').addEventListener('click', guardarNota);
         q('#soc-solo-notas').addEventListener('change', (e) => { soloNotas = e.target.checked; pintarBitacora(); });
         const m = q('#soc-multa'); if (m) m.addEventListener('click', formMulta);
+        const el = q('#soc-elim'); if (el) el.addEventListener('click', () => eliminarOrden(ocActual));
         const c = q('#soc-cerrar'); if (c) c.addEventListener('click', alternarCierre);
         const cf = q('#soc-config'); if (cf) cf.addEventListener('click', formConfig);
         pintarDestinatarios(); pintarBitacora(); pintarArchivos();
@@ -749,6 +750,21 @@
     /** El título de la ruta superior ("Seguimiento de OC") vuelve a la lista cuando hay una ficha abierta. */
     function marcarMigas(on) { const bc = document.getElementById('erp-breadcrumb-current'); if (bc) { bc.classList.toggle('soc-bc-link', !!on); bc.title = on ? 'Volver a la lista de órdenes' : ''; } }
     document.addEventListener('click', (e) => { if (ocActual && e.target.closest && e.target.closest('#erp-breadcrumb-current.soc-bc-link')) { ocActual = null; pintarLista(); } });
+    /** Elimina una orden ingresada por error (solo administrador). No toca el stock: si ya hubo recepciones con ingreso a bodega, primero hay que anularlas. */
+    async function eliminarOrden(oc) {
+        if (!oc || !esAdmin()) return; const f = fs();
+        const recs = (oc.recepciones || []).filter(r => !r.anulada);
+        if (recs.length || hayRecibido(oc)) { toast('No se puede eliminar', 'Esta orden ya tiene recepciones (' + recs.length + '). Anúlalas primero para devolver el stock y luego elimínala.', 'warning'); return; }
+        const t = window.prompt(`Vas a ELIMINAR la orden ${oc.numeroOC} (sin recepciones, no hay stock que revertir). Esto no se puede deshacer.\n\nEscribe el N° de la orden para confirmar:`, '');
+        if (t == null) return; if (String(t).trim().toUpperCase() !== String(oc.numeroOC).trim().toUpperCase()) { toast('No coincide', 'El número escrito no coincide: no se eliminó nada.', 'warning'); return; }
+        const prog = window.SAR_Progreso.iniciar('Eliminando la orden…', ['Borrando los archivos de la orden…']);
+        try {
+            const ar = await f.getDocs(f.collection(db(), 'Seguimiento_OC', oc.id, 'Archivos'));
+            for (const d of ar.docs) { const ps = await f.getDocs(f.collection(db(), 'Seguimiento_OC', oc.id, 'Archivos', d.id, 'Partes')); for (const p of ps.docs) await f.deleteDoc(p.ref); await f.deleteDoc(d.ref); }
+            prog.paso('Borrando la orden…'); await f.deleteDoc(f.doc(f.collection(db(), 'Seguimiento_OC'), oc.id));
+            prog.listo(`Orden ${oc.numeroOC} eliminada`); ocActual = null; lista = lista.filter(x => x.id !== oc.id); pintarLista();
+        } catch (e) { prog.error(); toast('No se pudo eliminar', (e && e.message) || String(e), 'error'); }
+    }
     const hayRecibido = (oc) => (oc.lineas || []).some(l => Object.values(l.recibido || {}).some(v => num(v) > 0));
     function bannerSiguiente(oc, pl) {
         if (oc.cerrada) return '';

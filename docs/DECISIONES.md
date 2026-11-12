@@ -1223,3 +1223,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.232 Al ingresar la orden se elige qué memos cargar (v21.178)
 - En el recuadro «Cuadro leído» cada memo tiene una casilla «Cargar» y un «seleccionar todos». Por defecto vienen marcados los de SAR (todos los que sean de SAR); se puede marcar cualquier otro. Los no marcados quedan anotados como «otros centros». Si no se marca ninguno, el ingreso avisa.
+
+## 4.233 Eliminar una orden ingresada por error (v21.179)
+- Botón «Eliminar orden» al pie del detalle de la orden, solo administrador. Solo permite eliminar órdenes **sin recepciones** (no hay stock que revertir); si ya hubo recepciones hay que anularlas primero. Pide escribir el N° de la orden para confirmar, borra sus archivos y la orden. Los eventos de la bitácora no se pueden borrar por reglas de Firestore (quedan huérfanos, sin efecto). El catálogo de productos y las fotos creadas por la orden se conservan.

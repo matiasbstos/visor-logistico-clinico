@@ -1171,3 +1171,10 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - **Mismo flujo de actas**: el acta sale con el correlativo AE de siempre; lo que alcanza con el stock se entrega y lo que no queda como pendiente del acta (cantidad 0 con pedido). El stock se descuenta al confirmar el acta (lotes, sobregiro e historial como siempre). El acta guarda `distribucion {id, correlativo, centro, ci}` y cada producto `distI` (línea de la distribución).
 - **Entregado automático**: el avance de cada línea se calcula desde las actas (confirmadas + por confirmar, sin las anuladas) más el campo «Entregado antes» (lo entregado antes de usar el sistema); no hay un contador aparte que pueda desfasarse. Un acta anulada libera de nuevo la cantidad.
 - Un acta admite 60 productos: si el centro tiene más, se arma con los primeros 60 (los con stock primero). El Excel descargado incluye lo entregado total si se marca la casilla.
+
+## 4.218 Panel de distribución en actas: foto, casilla y cantidad por producto (v21.164)
+- El panel pasa a ser compacto: centros como pestañas con contador, buscador, filtro «solo pendientes» y tabla con scroll (encabezado fijo) que ya no empuja la página hacia abajo.
+- Cada producto muestra su **foto**, una **casilla ✓** (entrego / no entrego) y la cantidad a entregar editable (por defecto lo que alcanza con el stock; si llegó menos se escribe la cantidad real). Lo no marcado o no entregado pasa a pendiente del acta. «Armar acta con lo marcado» usa esa selección.
+- **Nombre del producto = EQUIVALENTE** (la descripción técnica queda como texto secundario de 2 líneas), tanto en Convenio Marco como en No Marco; en el editor la primera columna es «Producto (equivalente)».
+- **Buscar fotos**: usa el ID de Convenio Marco; en No Marco (sin ID) busca por el nombre. Las fotos halladas quedan «por confirmar» (se confirman en Catálogo) y se muestran como candidatas. Implementado como parámetro `extras` de `buscarFotosFaltantes`.
+

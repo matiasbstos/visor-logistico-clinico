@@ -445,7 +445,7 @@
         });
     }
     /** Busca fotos de los productos que no tienen (catálogo + inventario). Las halladas quedan «por confirmar». Máx. 40 por vez. */
-    async function buscarFotosFaltantes(onPaso, tope) {
+    async function buscarFotosFaltantes(onPaso, tope, extras) {
         const f = fs(), IM = window.SAR_Imagenes; if (!IM) return { buscados: 0, encontrados: 0, pendientes: 0 };
         await cargarConfig(); await IM.cargar(true).catch(() => {});
         const cat = await cargarCatalogo(), nd = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -460,6 +460,11 @@
                 const ya = cat.get(id); if (ya && !sinFoto(ya)) return;
                 vistos.add(id); cola.push({ id, nombre, desc: nombre, codigo: x.codigoMP || '', nuevo: !ya, tieneNombre: !!(ya && ya.insumoName) }); });
         } catch (e) { /* sin inventario */ }
+        (extras || []).forEach(x => {   // productos de una distribución a centros (equivalente + ID Convenio Marco)
+            const nombre = String(x.nombre || '').trim(); if (!nombre || IM.buscar(nombre, x.codigo) || (IM.buscarConCandidata && IM.buscarConCandidata(nombre, x.codigo))) return;
+            const id = catId({ codigoMP: x.codigo, descripcion: nombre }); if (!id || vistos.has(id)) return; const ya = cat.get(id); if (ya && !sinFoto(ya)) return;
+            vistos.add(id); cola.unshift({ id, nombre, desc: nombre, codigo: x.codigo || '', nuevo: !ya, tieneNombre: !!(ya && ya.insumoName) });
+        });
         const lote = cola.slice(0, tope || 40); let enc = 0, i = 0;
         for (const p of lote) {
             i++; let foto = null;

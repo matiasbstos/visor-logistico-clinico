@@ -38,6 +38,13 @@
     }
     return { lineas, convenio: c.id >= 0 };
   }
+  /** Puro: productos del stock que se parecen a un nombre (misma familia y varias palabras en común). Sirve para detectar «es casi el mismo, pero con otro ID». */
+  function similares(nombre, stock, tope) {
+    const tk = (s) => norm(s).replace(/[^a-z0-9ñ ]/g, ' ').split(' ').filter(w => w.length >= 3 && !['para', 'con', 'sin', 'unidad', 'unidades', 'caja', 'cajas'].includes(w));
+    const a = tk(nombre); if (a.length < 2) return [];
+    return (stock || []).map(s => { const b = tk(s.nombre), com = a.filter(w => b.some(x => x === w || (w.length >= 5 && (x.startsWith(w.slice(0, 5)) && w.slice(0, 5) === x.slice(0, 5))))); const sc = com.length / new Set([...a, ...b]).size; return { s, sc, com: com.length, fam: a[0].slice(0, 5) === (b[0] || '').slice(0, 5) }; })
+      .filter(x => x.com >= 2 && x.sc >= 0.3 && x.fam).sort((p, q) => q.sc - p.sc).slice(0, tope || 3).map(x => x.s);
+  }
   /** Puro: en qué distribuciones, centros y líneas aparece un insumo (por equivalente, descripción o ID). */
   function buscarEnLista(lista, texto, tope) {
     const q = norm(texto); if (q.length < 2) return []; const out = [];
@@ -70,12 +77,13 @@
   const root = () => document.getElementById('dis-root');
 
   async function cargarStock() {
-    const f = fs(), idx = { cod: new Map(), nom: new Map() };
+    const f = fs(), idx = { cod: new Map(), nom: new Map(), todos: new Map() };
     try {
       const sn = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(5000)));
       sn.forEach(d => { const x = d.data(); if (x.status === 'CUARENTENA') return; const q = num(x.quantity), central = /central/i.test(String(x.location || ''));
         const add = (m, k) => { if (!k) return; const e = m.get(k) || { central: 0, otras: 0, nombre: x.name, codigo: x.codigoMP || '' }; if (central) e.central += q; else e.otras += q; m.set(k, e); };
-        add(idx.cod, digs(x.codigoMP)); add(idx.nom, norm(x.name)); });
+        add(idx.cod, digs(x.codigoMP)); add(idx.nom, norm(x.name));
+        if (q > 0) { const k = norm(x.name), e = idx.todos.get(k) || { nombre: x.name, codigo: x.codigoMP || '', cant: 0, donde: new Set() }; e.cant += q; e.donde.add(String(x.location || 'sin bodega')); idx.todos.set(k, e); } });
     } catch (e) { /* sin lectura */ }
     nombresCat = new Map();
     try { const sn = await f.getDocs(f.query(f.collection(db(), 'Catalogo_Productos'), f.limit(3000))); sn.forEach(d => { const x = d.data(); if (x.insumoName) { if (x.descripcion) nombresCat.set(norm(x.descripcion), norm(x.insumoName)); if (x.codigoMP) nombresCat.set('c' + digs(x.codigoMP), norm(x.insumoName)); } }); } catch (e) { /* sin catálogo */ }
@@ -198,6 +206,11 @@
     if (pAbierto) cargarPanel(body);
   }
   const defSel = (k) => ({ on: k.puede > 0, qty: k.puede });
+  /** Si la línea no calza con ningún producto del stock, ofrece los parecidos (otro ID, misma familia) para vincularlos con un clic. */
+  function sugHTML(l, s) {
+    if (s || !stockIdx || !stockIdx.todos) return ''; const sg = similares(nombreDe(l), [...stockIdx.todos.values()], 2); if (!sg.length) return '';
+    return `<div class="dis-sug"><i class="ph-bold ph-lightbulb"></i><span>Sin ese ID en stock. Hay uno parecido:</span>${sg.map(x => `<button type="button" class="btn btn-outline btn-sm dp-vinc" data-n="${esc(x.nombre)}" title="Vincular: usar este producto del stock para esta línea">${esc(x.nombre)} · ${x.cant} u. en ${esc([...x.donde].join(', '))} · ID ${esc(x.codigo || 's/i')}</button>`).join('')}</div>`;
+  }
   async function cargarPanel(body, ligero) {
     if (!ligero) body.innerHTML = '<p class="act-hint">Cargando…</p>';
     try {
@@ -221,7 +234,7 @@
         <div class="dis-pgrid">
           <div class="dis-pcol"><h4 class="act-h4">Productos del centro (${izq.length})</h4>
             <div class="dis-pbar"><input type="search" id="dp-q" placeholder="Buscar producto…" value="${esc(pBus)}"><button type="button" class="btn btn-outline btn-sm" id="dp-todo">Agregar los que tienen stock</button></div>
-            <div class="dis-plist">${izq.map(o => { const s = stockDe(o.l); return `<div class="dis-prow${o.k.puede ? '' : ' sin-stock'}" data-i="${o.i}">${nom(o.l)}<div class="dis-pnum"><span>Pend. <b>${o.k.pend}</b></span><span>Stock ${s ? `<b class="${netoCentral(o.l, ent) >= o.k.pend ? 'dis-ok' : (netoCentral(o.l, ent) > 0 ? 'dis-par' : 'dis-no')}">${netoCentral(o.l, ent)}</b>` : '<b class="dis-no">0</b>'}${o.k.puede ? '' : ' · sin stock'}</span></div><input type="number" class="dp-q dis-s" min="0" max="${o.k.puede}" value="${o.k.puede || ''}" placeholder="0" aria-label="Cantidad a entregar"${o.k.puede ? '' : ' disabled'}><button type="button" class="btn btn-outline btn-sm dp-add"${o.k.puede ? '' : ' disabled title="Sin stock en Bodega Central: ingresa la recepción primero"'}>Agregar</button></div>`; }).join('') || '<p class="act-hint">No hay más productos pendientes con ese filtro.</p>'}</div></div>
+            <div class="dis-plist">${izq.map(o => { const s = stockDe(o.l); return `<div class="dis-prow${o.k.puede ? '' : ' sin-stock'}" data-i="${o.i}">${nom(o.l)}<div class="dis-pnum"><span>Pend. <b>${o.k.pend}</b></span><span>Stock ${s ? `<b class="${netoCentral(o.l, ent) >= o.k.pend ? 'dis-ok' : (netoCentral(o.l, ent) > 0 ? 'dis-par' : 'dis-no')}">${netoCentral(o.l, ent)}</b>` : '<b class="dis-no">0</b>'}${o.k.puede ? '' : ' · sin stock'}</span>${s && s.otras > 0 && !o.k.puede ? `<span class="dis-otra">hay ${s.otras} en otra bodega</span>` : ''}</div><input type="number" class="dp-q dis-s" min="0" max="${o.k.puede}" value="${o.k.puede || ''}" placeholder="0" aria-label="Cantidad a entregar"${o.k.puede ? '' : ' disabled'}><button type="button" class="btn btn-outline btn-sm dp-add"${o.k.puede ? '' : ' disabled title="Sin stock en Bodega Central: ingresa la recepción primero"'}>Agregar</button>${sugHTML(o.l, s)}</div>`; }).join('') || '<p class="act-hint">No hay más productos pendientes con ese filtro.</p>'}</div></div>
           <div class="dis-pcol"><h4 class="act-h4">Acta del centro</h4>
             <div class="dis-pbar"><span class="dis-resu">Se entregan <b>${entrega}</b> u. · quedan pendientes <b>${queda}</b> u.</span><span class="dis-sp"></span><button type="button" class="btn btn-outline btn-sm" id="dp-nada">Quitar todo</button><button type="button" class="btn btn-outline btn-sm" id="dp-fotos"><i class="ph-bold ph-magnifying-glass"></i> Buscar fotos</button></div>
             <h5 class="dis-h5">Se entregan (${der.length})</h5>
@@ -247,6 +260,13 @@
         if (del) del.addEventListener('click', () => { pSel[key] = { on: false, qty: 0 }; re(); });
         if (!add) qty.addEventListener('change', () => { const v = val(); pSel[key] = { on: v > 0, qty: v }; re(); });
       });
+      body.querySelectorAll('.dp-vinc').forEach(b => b.addEventListener('click', async () => {
+        const tr = b.closest('.dis-prow'), l = ce.lineas[Number(tr.dataset.i)], destino = b.dataset.n;
+        if (!window.confirm(`¿«${nombreDe(l)}» (ID ${l.idCM || 's/i'}) es el MISMO producto que «${destino}» del stock?\n\nSe recordará para las próximas distribuciones y órdenes.`)) return;
+        try { const f = fs(), id = String(l.idCM || l.descripcion || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60).slice(0, 120);
+          await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: l.descripcion, descripcion_lower: String(l.descripcion).toLowerCase(), codigoMP: l.idCM || '', insumoName: destino, actualizado: f.serverTimestamp() }, { merge: true });
+          await cargarStock(); toast('Vinculado', 'Esa línea ahora usa el stock de «' + destino + '».', 'success'); cargarPanel(body, true);
+        } catch (e) { toast('No se pudo vincular', (e && e.message) || String(e), 'error'); } }));
       $('#dp-armar').addEventListener('click', () => armarActa(d, pCi, ent, Object.fromEntries(Object.entries(pSel).filter(([kk]) => kk.startsWith(d.id + '|')).map(([kk, v]) => [kk.slice(d.id.length + 1), v]))));
       $('#dp-fotos').addEventListener('click', () => buscarFotos(ce, body));
     } catch (e) { body.innerHTML = '<p class="act-err">No se pudo cargar: ' + esc((e && e.message) || e) + '</p>'; }
@@ -307,6 +327,6 @@
     catch (e) { el.innerHTML = '<p class="act-err" style="padding:24px;">No se pudo cargar: ' + esc((e && e.message) || e) + '</p>'; }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', enlazar); else enlazar();
-  if (typeof module !== 'undefined' && module.exports) module.exports = { buscarEnLista, parsearHoja, filasHoja, totalCentro, num, calcLinea, correlativo };
+  if (typeof module !== 'undefined' && module.exports) module.exports = { similares, buscarEnLista, parsearHoja, filasHoja, totalCentro, num, calcLinea, correlativo };
   window.SAR_Distribucion = { abrir, panelEn, parsearHoja, filasHoja };
 })(typeof window !== 'undefined' ? window : {}, typeof document !== 'undefined' ? document : { querySelectorAll: () => [], getElementById: () => null, readyState: 'complete', addEventListener() {} });

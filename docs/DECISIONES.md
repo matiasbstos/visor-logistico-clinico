@@ -1209,3 +1209,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.228 Ingreso de orden: catálogo y fotos en segundo plano (v21.174)
 - Al ingresar una orden (cuadro Excel o PDF) la orden y sus archivos se guardan de inmediato; el registro de productos en el catálogo y la búsqueda de fotos siguen en segundo plano (insignia «Fotos de la orden … %» arriba) y avisan al terminar. Las fotos quedan «por confirmar» en Catálogo.
+
+## 4.229 Distribución: stock en otras bodegas y productos parecidos (v21.175)
+- Verificado el caso CORCHETERA/CORCHETES: los productos de Existencias (ID 4402119 «25 hojas» y 4405672 «CORCHETES TORRE caja 5000», en Bodega Transitoria) NO son los de la distribución (ID 4402087 «20 hojas» y 4405089 «CORCHETES FULTON'S caja 1000»): son productos distintos de Convenio Marco, por eso el panel marca «sin stock». Además el panel solo cuenta la Bodega Central; lo que está en otra bodega ahora se avisa («hay N en otra bodega»).
+- Si una línea no calza con ningún producto del stock, el panel ofrece los **parecidos** (misma familia y varias palabras en común) con su cantidad, bodega e ID, y un botón para **vincular** («es el mismo producto»): queda recordado en el catálogo (`insumoName`) y desde entonces la línea usa ese stock en distribuciones y órdenes. No se vincula nada sin confirmación.

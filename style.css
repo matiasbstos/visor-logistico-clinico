@@ -6226,3 +6226,4 @@ body:not([data-user-role="superadmin"]) #menu-memo-flujo { display: none !import
 .r-mcs input[type=checkbox] { width: 18px; height: 18px; flex: 0 0 18px; margin: 0; accent-color: var(--sar-blue); }
 .r-mc-tx { display: grid; gap: 2px; min-width: 0; } .r-mc-tx b { font-size: 13px; font-weight: 700; color: #0f172a; } .r-mc-tx small { font-size: 12px; color: #64748b; overflow-wrap: anywhere; }
 .r-mh td { background: #eff6ff; color: var(--sar-blue); font-weight: 700; font-size: 12px; padding: 6px 10px; text-transform: uppercase; letter-spacing: .02em; }
+.pen-or td{background:#eef1f6;padding:6px 8px;font-size:.85rem;border-top:2px solid #c9d2e3}.pen-tag{display:inline-block;background:#1a3668;color:#fff;border-radius:10px;padding:1px 8px;font-size:.75rem;font-weight:600}

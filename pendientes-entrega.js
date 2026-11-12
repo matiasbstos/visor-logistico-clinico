@@ -21,6 +21,18 @@
     const rol = () => String(document.body.dataset.userRole || '').toLowerCase();
     const toast = (t, m, tipo) => { if (typeof window.showToast === 'function') window.showToast(t, m, tipo || 'info'); };
 
+    /** De dónde viene un pendiente: acta, fecha, orden de compra y distribución (DIST-…) que la originó. */
+    function origenActa(a) {
+        const d = a.distribucion || {}, oc = a.oc || {};
+        const ocn = oc.numeroOC || d.oc || ((a.items || []).find(i => i && i.oc) || {}).oc || '';
+        return { acta: a.numero || '', fecha: String(a.fecha || ''), oc: ocn ? String(ocn) : '', dist: d.correlativo || '' };
+    }
+    /** Agrupa los pendientes de un centro por origen (fecha + acta + OC + DIST), del más antiguo al más nuevo. */
+    function agruparPorOrigen(items) {
+        const m = new Map();
+        (items || []).forEach(p => { const o = p.origen || { acta: p.desde || '', fecha: '', oc: '', dist: '' }, k = [o.fecha, o.acta, o.oc, o.dist].join('|'); if (!m.has(k)) m.set(k, { origen: o, items: [] }); m.get(k).items.push(p); });
+        return [...m.values()].sort((a, b) => String(a.origen.fecha + a.origen.acta).localeCompare(String(b.origen.fecha + b.origen.acta)));
+    }
     /** Lógica pura: actas (cualquier orden) → pendientes vigentes por centro. */
     function calcularPendientes(actas) {
         const orden = (a) => String(a.fecha || '') + String(a.numero || '');
@@ -32,7 +44,7 @@
         const fijar = (centro, it, valor, acta) => {
             const p = buscar(centro, it) || { centro, nombre: it.nombre, codigo: it.codigo ? String(it.codigo) : '', pendiente: 0, desde: acta.numero };
             if (!p.codigo && it.codigo) p.codigo = String(it.codigo);
-            if (valor > 0 && !(p.pendiente > 0)) p.desde = acta.numero;
+            if (valor > 0 && (!(p.pendiente > 0) || !p.origen)) { p.desde = acta.numero; p.origen = origenActa(acta); }
             p.pendiente = Math.max(0, valor); p.ultima = acta.numero;
             mapa.set(kn(centro, it), p); if (kc(centro, it)) mapa.set(kc(centro, it), p);
         };
@@ -119,10 +131,11 @@
         ? `<span class="pen-ok">Hay stock para entregar ${g.listos} de ${g.items.length}</span>`
         : '<span class="pen-sin">Sin stock por ahora</span>';
     function filas(g) {
+        const cab = (o) => `<tr class="pen-or"><td colspan="4"><b>${esc(o.fecha || 'Sin fecha')}</b>${o.acta ? ` · Acta ${esc(o.acta)}` : ''}${o.oc ? ` · <span class="pen-tag">OC ${esc(o.oc)}</span>` : ''}${o.dist ? ` · <span class="pen-tag">${esc(o.dist)}</span>` : ''}${!o.oc && !o.dist ? ' · <small>sin orden ni distribución asociada</small>' : ''}</td></tr>`;
         return `<div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pendiente</th><th>Disponible</th><th>Estado</th></tr></thead><tbody>
-            ${g.items.map(p => `<tr><td>${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(p.nombre, { codigo: p.codigo }) : ''}${esc(p.nombre)}${p.codigo ? ` <small class="soc-id">ID ${esc(p.codigo)}</small>` : ''}</td>
+            ${agruparPorOrigen(g.items).map(gr => cab(gr.origen) + gr.items.map(p => `<tr><td>${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(p.nombre, { codigo: p.codigo }) : ''}${esc(p.nombre)}${p.codigo ? ` <small class="soc-id">ID ${esc(p.codigo)}</small>` : ''}</td>
                 <td><strong>${p.pendiente}</strong></td><td>${p.disponible}</td>
-                <td>${p.entregable >= p.pendiente ? '<span class="pen-ok">Completo</span>' : p.entregable > 0 ? `<span class="pen-parcial">Se pueden ${p.entregable}</span>` : '<span class="pen-sin">Sin stock</span>'}</td></tr>`).join('')}
+                <td>${p.entregable >= p.pendiente ? '<span class="pen-ok">Completo</span>' : p.entregable > 0 ? `<span class="pen-parcial">Se pueden ${p.entregable}</span>` : '<span class="pen-sin">Sin stock</span>'}</td></tr>`).join('')).join('')}
             </tbody></table></div>`;
     }
     function pintar() {
@@ -299,6 +312,6 @@
     }
     if (typeof document !== 'undefined' && document.addEventListener) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar(); }
 
-    window.SAR_Pendientes = { pendientesActa, pickingActa, abrir, calcularPendientes, calcularPorRecibir, cruzarStock, datos: async () => { await traer(); return { grupos, porRecibir }; }, refrescar: () => traer().catch(() => {}) };
+    window.SAR_Pendientes = { pendientesActa, pickingActa, abrir, calcularPendientes, agruparPorOrigen, calcularPorRecibir, cruzarStock, datos: async () => { await traer(); return { grupos, porRecibir }; }, refrescar: () => traer().catch(() => {}) };
     if (typeof module !== 'undefined') module.exports = window.SAR_Pendientes;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: { dataset: {} } });

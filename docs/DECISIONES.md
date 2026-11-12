@@ -1234,3 +1234,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.235 Lista de memos de la recepción: tarjetas (v21.181)
 - La selección de memos pasa a tarjetas en cuadrícula (casilla a la izquierda, memo en negrita y CDP debajo; la marcada se resalta), con «Todos» arriba a la derecha. Se oculta el selector auxiliar «Memo principal» que se había colado en la pantalla.
+
+## 4.236 Pendientes por entregar: detalle por fecha, orden de compra y distribución (v21.182)
+- Cada pendiente recuerda de qué acta nació (acta, fecha, OC y correlativo DIST-AAAA-NNNN de la distribución). En el detalle de cada centro las líneas se agrupan por origen, de la más antigua a la más nueva, con una cabecera «fecha · Acta · OC · DIST». Si el acta no viene de una orden ni de una distribución, se indica.
+- El pendiente sigue calculándose igual (pedido − entregado); solo se añadió el origen. Pendientes por entregar de un mismo producto que se cumplen/recalculan en una acta posterior toman como origen la acta que los reabre.

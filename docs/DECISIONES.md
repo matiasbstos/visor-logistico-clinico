@@ -1242,3 +1242,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.237 Tercer formato de cuadro de distribución en Excel (v21.183)
 - El lector de Excel reconoce también el cuadro con encabezado «MEMO # N-CENTRO-CDP #…», título «PRODUCTOS» y columnas CANTIDAD | TOTAL por cada memo (ej. insumos eléctricos, OC 1298355-933-AG26). Los montos NETO/IVA/TOTAL del pie se toman de la columna TOTAL de cada memo; el N° de orden se lee de la celda superior.
 - Un memo cuyo centro dice «SAR» (p. ej. «MINSAL-SAR») queda como centro SAR, que es el que se carga al ingresar la orden. Los formatos anteriores (PDF y Excel «MEMO N°») siguen funcionando.
+
+## 4.238 Lector de cuadros universal y formatos conservados (v21.184)
+- El lector de Excel se hizo tolerante a variaciones (columnas corridas, otros nombres de encabezado, memo sobre CANTIDAD o TOTAL). Cada formato entregado queda registrado en `docs/FORMATOS_DISTRIBUCION.md` con su prueba automática; todo formato nuevo se suma sin romper los anteriores.

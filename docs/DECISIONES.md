@@ -1238,3 +1238,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.236 Pendientes por entregar: detalle por fecha, orden de compra y distribución (v21.182)
 - Cada pendiente recuerda de qué acta nació (acta, fecha, OC y correlativo DIST-AAAA-NNNN de la distribución). En el detalle de cada centro las líneas se agrupan por origen, de la más antigua a la más nueva, con una cabecera «fecha · Acta · OC · DIST». Si el acta no viene de una orden ni de una distribución, se indica.
 - El pendiente sigue calculándose igual (pedido − entregado); solo se añadió el origen. Pendientes por entregar de un mismo producto que se cumplen/recalculan en una acta posterior toman como origen la acta que los reabre.
+
+## 4.237 Tercer formato de cuadro de distribución en Excel (v21.183)
+- El lector de Excel reconoce también el cuadro con encabezado «MEMO # N-CENTRO-CDP #…», título «PRODUCTOS» y columnas CANTIDAD | TOTAL por cada memo (ej. insumos eléctricos, OC 1298355-933-AG26). Los montos NETO/IVA/TOTAL del pie se toman de la columna TOTAL de cada memo; el N° de orden se lee de la celda superior.
+- Un memo cuyo centro dice «SAR» (p. ej. «MINSAL-SAR») queda como centro SAR, que es el que se carga al ingresar la orden. Los formatos anteriores (PDF y Excel «MEMO N°») siguen funcionando.

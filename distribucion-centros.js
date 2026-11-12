@@ -231,15 +231,14 @@
     } catch (e) { body.innerHTML = '<p class="act-err">No se pudo cargar: ' + esc((e && e.message) || e) + '</p>'; }
   }
   /** Busca la foto de los productos del centro que no la tienen (por ID de Convenio Marco o por el nombre/equivalente). Quedan «por confirmar» y se muestran con marca. */
-  async function buscarFotos(ce, body) {
+  function buscarFotos(ce, body) {
     const S = window.SAR_SeguimientoOC; if (!S || !S.buscarFotosFaltantes || !window.SAR_Progreso) { toast('Fotos', 'La búsqueda de fotos no está disponible.', 'warning'); return; }
-    const prog = window.SAR_Progreso.iniciar('Buscando fotos…', ['Revisando los productos de ' + ce.nombre + '…']);
-    try {
-      const extras = ce.lineas.map(l => ({ nombre: nombreDe(l), codigo: digs(l.idCM) })).filter(x => x.nombre);
-      const r = await S.buscarFotosFaltantes((t) => prog.paso(t), 40, extras);
-      prog.listo(r.buscados ? `${r.encontrados} foto(s) hallada(s) de ${r.buscados}${r.pendientes ? ' · quedan ' + r.pendientes + ': vuelve a pulsar' : ''}` : 'Todos los productos ya tienen foto');
-      if (window.SAR_Imagenes) await window.SAR_Imagenes.cargar(true).catch(() => {}); cargarPanel(body, true);
-    } catch (e) { prog.error(); toast('No se pudo buscar', (e && e.message) || String(e), 'error'); }
+    const bg = window.SAR_Progreso.segundoPlano('Buscando fotos'); toast('Buscando fotos', 'Sigue en segundo plano: puedes seguir armando el acta; te aviso al terminar.', 'info');
+    const extras = ce.lineas.map(l => ({ nombre: nombreDe(l), codigo: digs(l.idCM) })).filter(x => x.nombre);
+    S.buscarFotosFaltantes((t) => bg.paso(t), 40, extras).then(async (r) => {
+      bg.listo(r.buscados ? `${r.encontrados} foto(s) hallada(s) de ${r.buscados}${r.encontrados ? ' · por confirmar en Catálogo' : ''}${r.pendientes ? ' · quedan ' + r.pendientes + ': vuelve a pulsar' : ''}` : 'Todos los productos ya tienen foto');
+      if (window.SAR_Imagenes) await window.SAR_Imagenes.cargar(true).catch(() => {}); if (body.isConnected) cargarPanel(body, true);
+    }).catch(e => bg.error((e && e.message) || String(e)));
   }
 
   function enlazar() {

@@ -1184,3 +1184,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.220 Barra de avance con porcentaje en todas las cargas (v21.166)
 - `SAR_Progreso` (usado en todo guardado, carga, búsqueda y generación de documentos) muestra ahora una barra con **porcentaje** y una línea de detalle de lo que se está haciendo. Si el paso trae «N de M» el porcentaje es real; si no, la barra avanza sola y despacio hasta ~90% y llega a 100% al terminar. Nuevo `prog.avance(pct, detalle)` para fijarlo a mano.
+
+## 4.221 Búsqueda de fotos en segundo plano (v21.167)
+- `SAR_Progreso.segundoPlano(titulo)` crea una tarea que no tapa la pantalla: una insignia arriba (junto a «Nube actualizada») muestra «Buscando fotos · NN%» con barra y gira mientras trabaja; al terminar pasa a verde, suena y avisa con un aviso. Las fotos aparecen al refrescarse el panel/catálogo. Usado por «Buscar fotos» (panel de distribución y Catálogo); disponible para otras cargas largas.

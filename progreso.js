@@ -44,5 +44,30 @@
         const t = esc(texto || 'Cargando…');
         return `<div class="sar-cargando sar-esq" role="status" aria-live="polite" aria-label="${t}"><span class="sar-esq__t">${t}</span><div class="sar-esq__fila"><i></i><i></i><i></i></div><div class="sar-esq__lin"></div><div class="sar-esq__lin"></div><div class="sar-esq__lin sar-esq__lin--c"></div></div>`;
     }
-    window.SAR_Progreso = { iniciar, correr, cargando };
+    /** Tarea en segundo plano (v21.167): no tapa la pantalla; muestra una insignia arriba (junto a «Nube actualizada») con el avance y avisa al terminar. */
+    const bgTareas = new Map();
+    function bgChip() {
+        let c = document.getElementById('bg-tareas'); if (c) return c;
+        const ref = document.querySelector('.status-badge'); if (!ref || !ref.parentNode) return null;
+        c = document.createElement('button'); c.type = 'button'; c.id = 'bg-tareas'; c.className = 'bg-tareas'; c.hidden = true; c.setAttribute('aria-live', 'polite');
+        ref.parentNode.insertBefore(c, ref); return c;
+    }
+    function bgPintar() {
+        const c = bgChip(); if (!c) return; const v = [...bgTareas.values()];
+        if (!v.length) { c.hidden = true; return; }
+        c.hidden = false; const t = v[0]; c.className = 'bg-tareas' + (v.every(x => x.fin) ? ' ok' : '');
+        c.innerHTML = (t.fin ? '<i class="ph-bold ph-check-circle"></i>' : '<i class="ph-bold ph-circle-notch bg-giro"></i>') + `<span>${esc(t.titulo)}${v.length > 1 ? ' +' + (v.length - 1) : ''} · ${Math.round(t.pct)}%</span><em style="width:${t.pct}%"></em>`;
+        c.title = v.map(x => `${x.titulo}: ${Math.round(x.pct)}% ${x.det || ''}`).join('\n');
+    }
+    function segundoPlano(titulo) {
+        const id = Symbol(titulo), t = { titulo, pct: 0, det: '', fin: false }; bgTareas.set(id, t); bgPintar();
+        const quitar = (ms) => setTimeout(() => { bgTareas.delete(id); bgPintar(); }, ms);
+        return {
+            paso(txt) { t.det = txt; const m = /(\d+)\s*(?:de|\/)\s*(\d+)/.exec(String(txt)); if (m && Number(m[2]) > 0) t.pct = Math.max(t.pct, Math.min(99, Number(m[1]) / Number(m[2]) * 100)); else t.pct = Math.max(t.pct, Math.min(90, t.pct + 3)); bgPintar(); },
+            avance(v, d) { t.pct = Math.max(t.pct, Math.min(100, v)); if (d != null) t.det = d; bgPintar(); },
+            listo(txt) { t.pct = 100; t.fin = true; t.det = txt; bgPintar(); try { if (window.SAR_Sonidos) window.SAR_Sonidos.tocar('listo'); } catch (e) { /* sin sonido */ } if (typeof window.showToast === 'function') try { window.showToast('Listo', txt, 'success'); } catch (e) { /* sin aviso */ } quitar(4000); },
+            error(msg) { t.fin = true; bgPintar(); if (typeof window.showToast === 'function') try { window.showToast(titulo, msg || 'No se pudo completar', 'error'); } catch (e) { /* sin aviso */ } quitar(300); }
+        };
+    }
+    window.SAR_Progreso = { iniciar, correr, cargando, segundoPlano };
 })(window, document);

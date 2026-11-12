@@ -1197,3 +1197,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.224 Importar el formato «solicitud de insumos» (v21.170)
 - El importador de distribuciones lee también la planilla de solicitud (hojas «SOLICITUD DSAR», «ASEO», «ESCRITORIO»): detecta el encabezado por EQUIVALENTE + VALOR/CANTIDAD cuando no hay columna de descripción (el equivalente pasa a ser el nombre y la descripción), limpia los saltos de línea de ID y nombre, corta en la fila «Total» y guarda la columna ITEM (imputación presupuestaria) si existe. Cada hoja entra como un grupo (pestaña) de la distribución.
+
+## 4.225 Lectura verificada de los tres formatos (v21.171)
+- Verificado con los archivos reales: CONVENIO MARCO consolidado (9 centros), NO MARCO consolidado (10 centros) y planilla de solicitud (3 hojas). Todas las hojas se leen igual que antes, salvo dos filas que antes se perdían por traer la descripción vacía y ahora se leen con su equivalente (SONDA NELATON 40 CM #8FR en CESFAM BORIS; Tiras Reactivas Accu-chek guide en CESFAM FLORENCIA).

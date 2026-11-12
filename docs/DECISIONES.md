@@ -1203,3 +1203,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.226 Buscador de insumos en Distribución a centros y en Actas (v21.172)
 - En la lista de distribuciones y en el panel de Actas de entrega hay un buscador por nombre/equivalente o ID: muestra en qué distribución (correlativo), centro y con qué pedido está el insumo. Al elegir un resultado se abre esa distribución en ese centro (línea resaltada) o, en Actas, el panel queda en ese centro con el insumo filtrado. No incluye distribuciones archivadas.
+
+## 4.227 Buscador agrupado por insumo con sus centros (v21.173)
+- Los resultados del buscador se agrupan por insumo: cada insumo muestra en cuántos centros está, el total pedido y pendiente, y debajo una fila por centro (con la distribución, pedido y pendiente) que abre esa distribución en ese centro.

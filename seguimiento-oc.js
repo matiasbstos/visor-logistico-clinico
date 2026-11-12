@@ -1252,7 +1252,7 @@
         det.forEach(d => { const l = lineas[d.i]; l.recibido[key] = num(l.recibido[key]) + d.cantidad; if (ingresaStock) l.ingresado[key] = num(l.ingresado[key]) + d.cantidad; if (d.insumoName) l.insumoName = d.insumoName; });
         return { lineas, incidencias: [...(data.incidencias || []), ...incidencias.map((n, k) => ({ id: `inc-${Date.now()}-${k}`, ...n, estado: 'ABIERTA', fecha: hoyISO(), ...(extra || {}) }))] };
     }
-    async function recepcionConStock(oc, { provDoc, extras, baseN, onPaso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar, ingresaStock, central, texto, titulo }) {
+    async function recepcionConStock(oc, { provDoc, extras, baseN, onPaso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar, ingresaStock, central, texto, titulo, textoCorreo }) {
         const f = fs(); const paso = (t) => { if (onPaso) onPaso(t); };
         const aplicadoLocal = aplicarRecepcion(oc, key, det, incidencias, null, ingresaStock);
         let correo = null;
@@ -1297,7 +1297,7 @@
                     provider: oc.proveedor || provDoc || 'S/I', user: usuario(), date: f.serverTimestamp(), document: `${recId} · OC ${oc.numeroOC}${guia ? ' · guía ' + guia : ''}`, observacion: obs || '', ocId: oc.id, idInsumoDestino: g.ref.id }));
             });
         });
-        if (notificar) { paso('Enviando el aviso por correo…'); try { correo = await enviarCorreo(DESTINO_RECEPCION, armarCorreo({ ...oc, ...aplicadoLocal }, titulo, texto, usuario())); } catch (e) { toast('Recepción guardada', 'No se pudo preparar el correo: ' + e.message, 'warning'); } }
+        if (notificar) { paso('Enviando el aviso por correo…'); try { correo = await enviarCorreo(DESTINO_RECEPCION, armarCorreo({ ...oc, ...aplicadoLocal }, titulo, textoCorreo || texto, usuario())); } catch (e) { toast('Recepción guardada', 'No se pudo preparar el correo: ' + e.message, 'warning'); } }
         return correo;
     }
 
@@ -1430,7 +1430,8 @@
         })();
         let docLeido = null;
         const ov = modal('Recibir mercadería', `
-            <label${cols.length === 1 ? ' hidden' : ''}>¿Qué memo/CDP se recibió?<select id="r-col">${cols.map(c => `<option value="${esc(c.key)}">${esc(c.centro)} · memo ${esc(c.memo)}${c.cdp ? ' · CDP ' + esc(c.cdp) : ''}</option>`).join('')}</select></label>
+            <div class="r-mcs"${cols.length === 1 ? ' hidden' : ''}><span class="r-mcs-t">¿Qué memos/CDP se recibieron? <small>(puedes marcar varios: es una sola recepción con una sola guía)</small></span>${cols.length > 1 ? `<label class="r-mc-todos"><input type="checkbox" id="r-mc-todos"> Seleccionar todos</label>` : ''}${cols.map((c, n) => `<label class="r-mc-f"><input type="checkbox" class="r-mc" data-key="${esc(c.key)}"${n === 0 ? ' checked' : ''}> ${esc(c.centro)} · memo ${esc(c.memo)}${c.cdp ? ' · CDP ' + esc(c.cdp) : ''}</label>`).join('')}</div>
+            <label hidden>Memo principal<select id="r-col">${cols.map(c => `<option value="${esc(c.key)}">${esc(c.centro)} · memo ${esc(c.memo)}${c.cdp ? ' · CDP ' + esc(c.cdp) : ''}</option>`).join('')}</select></label>
             <div class="soc-fila"><label>N° guía de despacho<input type="text" id="r-guia" autocomplete="off"></label><label>Fecha<input type="date" id="r-fecha" value="${hoyISO()}"></label></div>
             <label>Guía de despacho (foto o PDF, opcional: queda guardada en la orden)<input type="file" id="r-file" accept="application/pdf,image/*"></label>
             <div id="r-doc" class="r-doc" hidden></div>
@@ -1451,67 +1452,82 @@
             async (o) => {
                 // Los avisos también se escriben dentro de la ventana (los toasts podían quedar tapados por ella)
                 const toast = (t, m, tipo) => { window.showToast && window.showToast(t, m, tipo || 'info'); if (tipo === 'warning' || tipo === 'error') { const b = o.querySelector('#r-aviso'); if (b) { b.hidden = false; b.className = 'r-aviso r-aviso--' + tipo; b.innerHTML = `<b>${esc(t)}</b> ${esc(m)}`; b.scrollIntoView({ block: 'center', behavior: 'smooth' }); } } };
-                const q = (s) => o.querySelector(s), key = q('#r-col').value, ingresaStock = q('#r-stock').checked; central = q('#r-dest').value || central;
-                const det = [], incidencias = [];
+                const q = (s) => o.querySelector(s), ingresaStock = q('#r-stock').checked; central = q('#r-dest').value || central;
+                const keysS = keysSel(), porKey = new Map(keysS.map(k => [k, { det: [], incidencias: [] }]));
                 o.querySelectorAll('tr[data-i]').forEach(tr => {
+                    const k = tr.dataset.k || keysS[0], g = porKey.get(k) || porKey.get(keysS[0]); if (!g) return;
                     const v = num(tr.querySelector('.r-c').value), tipo = tr.querySelector('.r-t').value, i = Number(tr.dataset.i);
-                    if (v > 0) { const venc = tr.querySelector('.r-v'); det.push({ i, cantidad: v, lote: tr.querySelector('.r-l') ? tr.querySelector('.r-l').value : '', vence: venc && venc.value ? venc.value : '', insumoName: tr.querySelector('.r-n') ? tr.querySelector('.r-n').value.trim() : '' }); }
-                    if (tipo) incidencias.push({ producto: oc.lineas[i].descripcion, tipo, detalle: tr.querySelector('.r-td').value.trim() });
+                    if (v > 0) { const venc = tr.querySelector('.r-v'); g.det.push({ i, cantidad: v, lote: tr.querySelector('.r-l') ? tr.querySelector('.r-l').value : '', vence: venc && venc.value ? venc.value : '', insumoName: tr.querySelector('.r-n') ? tr.querySelector('.r-n').value.trim() : '' }); }
+                    if (tipo) g.incidencias.push({ producto: oc.lineas[i].descripcion, tipo, detalle: tr.querySelector('.r-td').value.trim() });
                 });
-                if (!det.length && !incidencias.length) { toast('Sin datos', 'Indica una cantidad recibida o una incidencia.', 'warning'); return false; }
+                const activos = keysS.filter(k => porKey.get(k).det.length || porKey.get(k).incidencias.length);
+                if (!activos.length) { toast('Sin datos', 'Indica una cantidad recibida o una incidencia.', 'warning'); return false; }
+                const allDet = activos.flatMap(k => porKey.get(k).det);
                 // Producto agregado sin pedido: lo que se digita en "Llega ahora" pasa a ser su pedido; si no se digita nada, hay que quitarlo o indicar las unidades
-                const sinU = extras.find(l => !num(l.dist && l.dist[key]) && !det.some(d => oc.lineas[d.i] === l));
+                const key0 = keysS[0];
+                const sinU = extras.find(l => !num(l.dist && l.dist[key0]) && !allDet.some(d => oc.lineas[d.i] === l));
                 if (sinU) { toast('Falta la cantidad', `Indica en "Llega ahora" cuántas unidades llegan de "${String(sinU.descripcion).slice(0, 40)}".`, 'warning'); return false; }
-                det.forEach(d => { const l = oc.lineas[d.i]; if (l && l.agregada && !num(l.dist && l.dist[key])) l.dist = { ...(l.dist || {}), [key]: d.cantidad }; });
-                const mal = det.find(d => !Number.isInteger(d.cantidad) || d.cantidad > Math.max(0, num(oc.lineas[d.i].dist && oc.lineas[d.i].dist[q('#r-col').value]) - num(oc.lineas[d.i].recibido && oc.lineas[d.i].recibido[q('#r-col').value])));
-                if (mal) { toast('Cantidad no válida', `"${String(oc.lineas[mal.i].descripcion).slice(0, 40)}": indica un número entero que no supere lo pendiente.`, 'warning'); return false; }
-                const vencida = det.find(d => d.vence && d.vence < hoyISO());
+                activos.forEach(k => porKey.get(k).det.forEach(d => { const l = oc.lineas[d.i]; if (l && l.agregada && !num(l.dist && l.dist[k])) l.dist = { ...(l.dist || {}), [k]: d.cantidad }; }));
+                for (const k of activos) {
+                    const mal = porKey.get(k).det.find(d => !Number.isInteger(d.cantidad) || d.cantidad > Math.max(0, num(oc.lineas[d.i].dist && oc.lineas[d.i].dist[k]) - num(oc.lineas[d.i].recibido && oc.lineas[d.i].recibido[k])));
+                    if (mal) { toast('Cantidad no válida', `"${String(oc.lineas[mal.i].descripcion).slice(0, 40)}": indica un número entero que no supere lo pendiente.`, 'warning'); return false; }
+                }
+                const vencida = allDet.find(d => d.vence && d.vence < hoyISO());
                 if (vencida) { toast('Vencimiento pasado', `"${String(oc.lineas[vencida.i].descripcion).slice(0, 40)}" tiene un vencimiento anterior a hoy. Revisa la fecha.`, 'warning'); return false; }
-                const col = cols.find(c => c.key === key), guia = q('#r-guia').value.trim(), fecha = q('#r-fecha').value || hoyISO(), obs = q('#r-obs').value.trim();
-                if (ingresaStock && det.some(d => !d.insumoName)) { toast('Falta el producto', 'Indica el producto del inventario de cada línea que recibes.', 'warning'); return false; }
+                const guia = q('#r-guia').value.trim(), fecha = q('#r-fecha').value || hoyISO(), obs = q('#r-obs').value.trim();
+                if (ingresaStock && allDet.some(d => !d.insumoName)) { toast('Falta el producto', 'Indica el producto del inventario de cada línea que recibes.', 'warning'); return false; }
                 const avisos = [], conoce = new Set(nombresInv.map(norm));
                 if (ingresaStock) {
-                    const nuevos = det.filter(d => !conoce.has(norm(d.insumoName))).map(d => d.insumoName);
+                    const nuevos = allDet.filter(d => !conoce.has(norm(d.insumoName))).map(d => d.insumoName);
                     if (nuevos.length) avisos.push(`${nuevos.length} producto(s) no existen en el inventario y se crearían como nuevos: ${nuevos.slice(0, 3).join(', ')}${nuevos.length > 3 ? '…' : ''}`);
-                    
                 }
                 const guiaN = q('#r-guia').value.trim();
                 if (guiaN && eventos.some(e => e.tipo === 'RECEPCION' && String(e.guia || '') === guiaN)) avisos.push(`la guía N° ${guiaN} ya se registró en esta orden`);
                 const firma = avisos.join('|');
                 if (avisos.length && o.dataset.aviso !== firma) { o.dataset.aviso = firma; toast('Revisa antes de guardar', avisos.join('. ') + '. Si es correcto, pulsa Guardar recepción otra vez.', 'warning'); return false; }
-                const nRec = eventos.filter(e => e.tipo === 'RECEPCION').length + 1, recId = `REC-${String(oc.numeroOC).replace(/[^A-Za-z0-9-]+/g, '')}-${String(nRec).padStart(2, '0')}`, hora = new Date().toTimeString().slice(0, 5);
-                const texto = `${recId} · Recepción en ${col.centro}${col.memo ? ' (memo ' + col.memo + (col.cdp ? ', CDP ' + col.cdp : '') + ')' : ''} el ${fmtFecha(fecha)} a las ${hora}${guia ? ' · guía N° ' + guia : ''}:\n` +
+                const nRec0 = eventos.filter(e => e.tipo === 'RECEPCION').length, hora = new Date().toTimeString().slice(0, 5), base = `REC-${String(oc.numeroOC).replace(/[^A-Za-z0-9-]+/g, '')}`;
+                const idDe = (n) => `${base}-${String(nRec0 + 1 + n).padStart(2, '0')}`;
+                const textoDe = (k, recId) => { const col = cols.find(c => c.key === k), g = porKey.get(k), det = g.det, incidencias = g.incidencias; return `${recId} · Recepción en ${col.centro}${col.memo ? ' (memo ' + col.memo + (col.cdp ? ', CDP ' + col.cdp : '') + ')' : ''} el ${fmtFecha(fecha)} a las ${hora}${guia ? ' · guía N° ' + guia : ''}:\n` +
                     (det.length ? det.map(d => `- ${oc.lineas[d.i].descripcion}${oc.lineas[d.i].agregada ? ' (agregado en la recepción)' : ''}: ${d.cantidad} un.${d.lote ? ' · lote ' + d.lote : ''}${d.vence ? ' · vence ' + fmtFecha(d.vence) : ''}`).join('\n') : '- (sin unidades recibidas)') +
-                    (incidencias.length ? '\nINCIDENCIAS:\n' + incidencias.map(n => `- ${n.producto}: ${INCIDENCIAS[n.tipo]}${n.detalle ? ' — ' + n.detalle : ''}`).join('\n') : '') + (obs ? '\nObs.: ' + obs : '') + (ingresaStock ? `\nIngresado al stock de ${central}.` : '');
-                const unidades = det.reduce((t, d) => t + d.cantidad, 0);
+                    (incidencias.length ? '\nINCIDENCIAS:\n' + incidencias.map(n => `- ${n.producto}: ${INCIDENCIAS[n.tipo]}${n.detalle ? ' — ' + n.detalle : ''}`).join('\n') : '') + (obs ? '\nObs.: ' + obs : '') + (ingresaStock ? `\nIngresado al stock de ${central}.` : ''); };
+                const ids = activos.map((k, n) => idDe(n)), unidades = allDet.reduce((t, d) => t + d.cantidad, 0), hayInc = activos.some(k => porKey.get(k).incidencias.length);
+                const textoCorreo = activos.map((k, n) => textoDe(k, ids[n])).join('\n\n'), tituloCorreo = (hayInc ? 'Recepción con incidencias' : 'Recepción') + (activos.length > 1 ? ` de ${activos.length} memos` : ` en ${(cols.find(c => c.key === activos[0]) || {}).centro}`);
                 const prog = progresoRecepcion(o, ['Validando la recepción…']);
+                const recNuevas = [];
                 try {
                 const fGuia = (q('#r-file').files || [])[0];
-                await recepcionConStock(oc, { provDoc: (docLeido && docLeido.empresa) || '', extras, baseN, onPaso: prog.paso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar: q('#r-correo').checked, ingresaStock, central, texto, titulo: incidencias.length ? `Recepción con incidencias en ${col.centro}` : `Recepción en ${col.centro}` });
-                if (ingresaStock) await aprenderNombres(oc, det);
-                else { const ex = extras.map(l => ({ i: oc.lineas.indexOf(l), insumoName: l.descripcion })).filter(d => d.i >= 0); if (ex.length) await aprenderNombres(oc, ex); }
-                if (fGuia) { prog.paso('Guardando la guía en la orden…'); await guardarFile(oc.id, fGuia, 'Guía de despacho ' + recId); }
+                for (let n = 0; n < activos.length; n++) {
+                    const k = activos[n], g = porKey.get(k), col = cols.find(c => c.key === k), ultimo = n === activos.length - 1;
+                    if (activos.length > 1) prog.paso(`Memo ${col.memo} (${n + 1} de ${activos.length})…`);
+                    await recepcionConStock(oc, { provDoc: (docLeido && docLeido.empresa) || '', extras: n === 0 ? extras : [], baseN, onPaso: prog.paso, recId: ids[n], hora, key: k, det: g.det, incidencias: g.incidencias, guia, fecha, obs, notificar: ultimo && q('#r-correo').checked, ingresaStock, central, texto: textoDe(k, ids[n]), titulo: tituloCorreo, textoCorreo });
+                    if (ingresaStock) await aprenderNombres(oc, g.det);
+                    else if (n === 0) { const ex = extras.map(l => ({ i: oc.lineas.indexOf(l), insumoName: l.descripcion })).filter(d => d.i >= 0); if (ex.length) await aprenderNombres(oc, ex); }
+                    recNuevas.push({ recId: ids[n], fecha, hora, guia: guia || '', columna: k, unidades: g.det.reduce((t, d) => t + d.cantidad, 0), usuario: usuario(), ingresoAStock: !!ingresaStock, bodega: ingresaStock ? central : '', detalle: g.det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad })) });
+                    oc.lineas = aplicarRecepcion(oc, k, g.det, [], null, ingresaStock).lineas;   // la copia local queda al día para el siguiente memo
+                }
+                if (fGuia) { prog.paso('Guardando la guía en la orden…'); await guardarFile(oc.id, fGuia, 'Guía de despacho ' + ids.join(' + ')); }
                 } catch (err) { prog.error(err); throw err; }
-                prog.listo(`Listo: ${recId} · ${unidades} unidades${ingresaStock ? ` en ${central}` : ''}. Quedó registrada en Auditoría y en los informes contable y disponible.`);
+                prog.listo(`Listo: ${ids.join(' + ')} · ${unidades} unidades${ingresaStock ? ` en ${central}` : ''}. Quedó registrada en Auditoría y en los informes contable y disponible.`);
                 await new Promise(r => setTimeout(r, 1400));
                 try {
-                    const recNueva = { recId, fecha, hora, guia: guia || '', columna: key, unidades, usuario: usuario(), ingresoAStock: !!ingresaStock, bodega: ingresaStock ? central : '', detalle: det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad })) };
-                    const ocDoc = { ...oc, lineas: aplicarRecepcion(oc, key, det, [], null, ingresaStock).lineas };
-                    if (window.SAR_RecepConf) setTimeout(() => window.SAR_RecepConf.ofrecer({ oc: ocDoc, rec: recNueva, toast, usuario: usuario(), guardarArchivo, eliminarCategoria: eliminarArchivosCategoria }), 300);
+                    const ocDoc = { ...oc };
+                    if (window.SAR_RecepConf && recNuevas[0]) setTimeout(() => window.SAR_RecepConf.ofrecer({ oc: ocDoc, rec: recNuevas[0], toast, usuario: usuario(), guardarArchivo, eliminarCategoria: eliminarArchivosCategoria }), 300);
                 } catch (e) { /* los documentos se pueden descargar después desde la lista de recepciones */ }
-                const quedan = pendientesDe({ ...oc, lineas: aplicarRecepcion(oc, key, det, [], null, ingresaStock).lineas }).reduce((t, x) => t + x.pendiente, 0);
+                const quedan = pendientesDe(oc).reduce((t, x) => t + x.pendiente, 0);
                 if (quedan > 0) toast('Recepción parcial', `Quedan ${quedan} unidades por recibir de esta orden. Las verás en "Pendiente de recibir" de la orden y en la campana.`, 'info');
                 else toast('Orden completa', 'Ya se recibió todo lo pedido para SAR en esta orden.', 'success');
                 if (window.SAR_Pendientes && window.SAR_Pendientes.refrescar) window.SAR_Pendientes.refrescar();
                 if (ingresaStock && typeof window.loadFirstPage === 'function') window.loadFirstPage();   // Existencias al día
-                toast('Recepción cargada', ingresaStock ? `${recId}: ${unidades} unidades ingresadas a ${central}. Registrada en los informes contable y disponible (Auditoría). Entrégalas a los centros desde Actas de entrega.` : `${recId}: se actualizó lo recibido.`, 'success');
+                toast('Recepción cargada', ingresaStock ? `${ids.join(' + ')}: ${unidades} unidades ingresadas a ${central}. Registrada en los informes contable y disponible (Auditoría). Entrégalas a los centros desde Actas de entrega.` : `${ids.join(' + ')}: se actualizó lo recibido.`, 'success');
             }, { ancho: true, ok: 'Guardar recepción' });
+        const keysSel = () => { const k = [...ov.querySelectorAll('.r-mc')].filter(c => c.checked).map(c => c.dataset.key); return k.length ? k : [cols[0].key]; };
+        const sincronizarMemo = () => { const sel = ov.querySelector('#r-col'); if (sel) sel.value = keysSel()[0]; const t = ov.querySelector('#r-mc-todos'); if (t) t.checked = [...ov.querySelectorAll('.r-mc')].every(c => c.checked); };
         const pintar = () => {
-            const key = ov.querySelector('#r-col').value, st = ov.querySelector('#r-stock').checked, lv = ov.querySelector('#r-lv').checked;
+            const keys = keysSel(), st = ov.querySelector('#r-stock').checked, lv = ov.querySelector('#r-lv').checked;
             ov.querySelector('#r-lineas').innerHTML = '<div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Pedido</th><th>Recibido</th><th>Pendiente</th><th>Llega ahora</th>' + (st ? '<th>Producto en inventario</th>' + (lv ? '<th>Lote</th><th>Vence</th>' : '') : '') + '<th>Incidencia</th></tr></thead><tbody>' +
-                oc.lineas.map((l, i) => { const p = num(l.dist && l.dist[key]), ya = num(l.recibido && l.recibido[key]), pe = Math.max(0, p - ya); return (p || l.agregada) ? `<tr data-i="${i}" data-pe="${pe}"${l.agregada && !p ? ' data-nuevo="1"' : ''}><td class="r-prod" data-l="Producto">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(l.descripcion, { codigo: l.codigoMP, candidata: true }) : ''}${esc(l.descripcion)}${l.codigoMP ? `<small class="soc-id">ID ${esc(l.codigoMP)}</small>` : ''}</td><td data-l="Pedido">${p}</td><td data-l="Recibido">${ya}</td><td data-l="Pendiente"><strong>${pe}</strong></td><td class="r-celda" data-l="Llega ahora"><input type="number" min="0" max="${pe}" class="r-c" value="" aria-label="Unidades que llegaron"><button type="button" class="btn btn-outline btn-sm r-ok" title="Llegó completo"${pe ? '' : ' disabled'}>✔ ${pe || 'listo'}</button></td>` +
+                keys.map((key, kn) => (keys.length > 1 ? `<tr class="r-mh"><td colspan="9">${esc((cols.find(c => c.key === key) || {}).centro || '')} · memo ${esc((cols.find(c => c.key === key) || {}).memo || '')}${(cols.find(c => c.key === key) || {}).cdp ? ' · CDP ' + esc(cols.find(c => c.key === key).cdp) : ''}</td></tr>` : '') + oc.lineas.map((l, i) => { const p = num(l.dist && l.dist[key]), ya = num(l.recibido && l.recibido[key]), pe = Math.max(0, p - ya); return (p || (l.agregada && kn === 0)) ? `<tr data-i="${i}" data-k="${esc(key)}" data-pe="${pe}"${l.agregada && !p ? ' data-nuevo="1"' : ''}><td class="r-prod" data-l="Producto">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(l.descripcion, { codigo: l.codigoMP, candidata: true }) : ''}${esc(l.descripcion)}${l.codigoMP ? `<small class="soc-id">ID ${esc(l.codigoMP)}</small>` : ''}</td><td data-l="Pedido">${p}</td><td data-l="Recibido">${ya}</td><td data-l="Pendiente"><strong>${pe}</strong></td><td class="r-celda" data-l="Llega ahora"><input type="number" min="0" max="${pe}" class="r-c" value="" aria-label="Unidades que llegaron"><button type="button" class="btn btn-outline btn-sm r-ok" title="Llegó completo"${pe ? '' : ' disabled'}>✔ ${pe || 'listo'}</button></td>` +
                     (st ? `<td data-l="Producto en inventario"><input class="r-n" list="r-inv" aria-label="Producto en inventario" value="${esc(l.insumoName || ((catalogo.get(catId(l)) || {}).insumoName) || l.descripcion)}"></td>` + (lv ? `<td data-l="Lote"><input class="r-l" aria-label="Lote" placeholder="S/L"></td><td data-l="Vence"><input type="date" class="r-v" aria-label="Fecha de vencimiento"></td>` : '') : '') +
-                    `<td data-l="Incidencia"><select class="r-t" aria-label="Incidencia"><option value="">Sin incidencia</option>${Object.entries(INCIDENCIAS).map(([k, t]) => `<option value="${k}">${esc(t)}</option>`).join('')}</select><input class="r-td" aria-label="Detalle de la incidencia" placeholder="Detalle"></td></tr>` : ''; }).join('') + '</tbody></table></div>';
+                    `<td data-l="Incidencia"><select class="r-t" aria-label="Incidencia"><option value="">Sin incidencia</option>${Object.entries(INCIDENCIAS).map(([k, t]) => `<option value="${k}">${esc(t)}</option>`).join('')}</select><input class="r-td" aria-label="Detalle de la incidencia" placeholder="Detalle"></td></tr>` : ''; }).join('')).join('') + '</tbody></table></div>';
         };
         ov.querySelector('#r-add').addEventListener('click', () => { const f = ov.querySelector('#r-add-f'); f.hidden = !f.hidden; if (!f.hidden) ov.querySelector('#ra-n').focus(); });
         if (window.SAR_Sugerir) window.SAR_Sugerir.enlazar(ov.querySelector('#ra-n'), () => [...nombresInv.map(n => ({ nombre: n, codigo: '', nota: 'inventario' })), ...[...catalogo.values()].map(c => ({ nombre: String(c.descripcion || c.insumoName || '').toUpperCase(), codigo: c.codigoMP ? String(c.codigoMP) : '', nota: 'catálogo' })).filter(x => x.nombre)], (x) => { const c = ov.querySelector('#ra-c'); if (c && x.codigo && !c.value) c.value = x.codigo; });
@@ -1566,9 +1582,9 @@
             const dl = ov.querySelector('#r-inv'); if (dl) dl.innerHTML = nombresAuto().map(n => `<option value="${esc(n)}">`).join('');
             const w = ov.querySelector('#r-stock-w'); if (w && w.lastChild) w.lastChild.textContent = ` Ingresar lo recibido al stock de ${central} (así se descuenta al entregarlo por acta)`;
         });
-        ov.querySelector('#r-col').addEventListener('change', () => { pintar(); resumen(); }); ov.querySelector('#r-stock').addEventListener('change', () => { pintar(); resumen(); }); ov.querySelector('#r-lv').addEventListener('change', () => { pintar(); resumen(); });
-        const sel = ov.querySelector('#r-col'); const iPropia = cols.findIndex(c => c.centro === CENTRO_PROPIO); if (iPropia > 0) sel.selectedIndex = iPropia;
-        pintar(); resumen();
+        ov.querySelectorAll('.r-mc').forEach(c => c.addEventListener('change', () => { sincronizarMemo(); pintar(); resumen(); })); { const t = ov.querySelector('#r-mc-todos'); if (t) t.addEventListener('change', () => { ov.querySelectorAll('.r-mc').forEach(c => { c.checked = t.checked; }); sincronizarMemo(); pintar(); resumen(); }); } ov.querySelector('#r-stock').addEventListener('change', () => { pintar(); resumen(); }); ov.querySelector('#r-lv').addEventListener('change', () => { pintar(); resumen(); });
+        const sel = ov.querySelector('#r-col'); const iPropia = cols.findIndex(c => c.centro === CENTRO_PROPIO); if (iPropia > 0) { sel.selectedIndex = iPropia; ov.querySelectorAll('.r-mc').forEach((c, n) => { c.checked = n === iPropia; }); }
+        sincronizarMemo(); pintar(); resumen();
         cargaInv.then(() => {
             const dl = ov.querySelector('#r-inv'); if (dl) dl.innerHTML = nombresAuto().map(n => `<option value="${esc(n)}">`).join('');
             const sel = ov.querySelector('#r-dest'); if (sel) { const opts = [...new Set([central, ...bodegasLista])].sort((a, b) => (/central/i.test(b) - /central/i.test(a)) || a.localeCompare(b, 'es')); sel.innerHTML = opts.map(b => `<option${b === central ? ' selected' : ''}>${esc(b)}</option>`).join(''); }

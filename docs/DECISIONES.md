@@ -1226,3 +1226,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.233 Eliminar una orden ingresada por error (v21.179)
 - Botón «Eliminar orden» al pie del detalle de la orden, solo administrador. Solo permite eliminar órdenes **sin recepciones** (no hay stock que revertir); si ya hubo recepciones hay que anularlas primero. Pide escribir el N° de la orden para confirmar, borra sus archivos y la orden. Los eventos de la bitácora no se pueden borrar por reglas de Firestore (quedan huérfanos, sin efecto). El catálogo de productos y las fotos creadas por la orden se conservan.
+
+## 4.234 Recibir mercadería con varios memos en una sola operación (v21.180)
+- «Recibir mercadería» ahora tiene casillas por memo/CDP (con «Seleccionar todos»): se marcan los memos que llegan juntos y la tabla muestra cada memo en su bloque. Se completa **una sola vez** la guía, la fecha, la bodega, la observación y el archivo de la guía.
+- Internamente se registra un REC por cada memo (REC-…-03, -04, …) con la misma guía y fecha, para que cada memo conserve su propio pendiente, su anulación y su stock; el aviso por correo es uno solo, con el detalle de todos los memos. La guía subida queda guardada una vez, nombrada con todos los REC.
+- La recepción conforme (documento) se ofrece para el primer memo; los demás se pueden generar desde la lista de recepciones de la orden.

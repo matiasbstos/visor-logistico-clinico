@@ -38,6 +38,14 @@
     }
     return { lineas, convenio: c.id >= 0 };
   }
+  /** Puro: en qué distribuciones, centros y líneas aparece un insumo (por equivalente, descripción o ID). */
+  function buscarEnLista(lista, texto, tope) {
+    const q = norm(texto); if (q.length < 2) return []; const out = [];
+    (lista || []).forEach(d => { if (d.estado === 'archivada') return; (d.centros || []).forEach((c, ci) => (c.lineas || []).forEach((l, i) => {
+      if (out.length < (tope || 40) && norm([l.equivalente, l.descripcion, l.idCM].join(' ')).includes(q)) out.push({ distId: d.id, correlativo: d.correlativo || '', dist: d.nombre, ci, centro: c.nombre, i, nombre: (String(l.equivalente || '').trim() || String(l.descripcion || '').trim()), idCM: l.idCM || '', cantidad: num(l.cantidad), entregado: num(l.entregado) }); })); });
+    return out;
+  }
+  const resHTML = (res) => res.length ? res.map((r, k) => `<button type="button" class="dis-hit" data-k="${k}"><b>${esc(r.nombre)}</b><small>${esc(r.centro)} · ${esc(r.correlativo || r.dist)}${r.idCM ? ' · ID ' + esc(r.idCM) : ''} · pedido ${r.cantidad}</small></button>`).join('') : '<p class="act-hint">Ningún insumo coincide en las distribuciones.</p>';
   /** Nombre con que se trabaja un producto: el EQUIVALENTE; si falta, la descripción técnica. */
   const nombreDe = (l) => String(l.equivalente || '').trim() || String(l.descripcion || '').trim();
   const totalCentro = (ce) => (ce.lineas || []).reduce((s, l) => s + num(l.valor) * num(l.cantidad), 0);
@@ -52,7 +60,7 @@
     return filas;
   }
 
-  let ocs = [], lista = [], act = null, ci = 0, entMap = {}, stockIdx = null, nombresCat = new Map(), sucio = false;
+  let hitsLista = [], ocs = [], lista = [], act = null, ci = 0, entMap = {}, stockIdx = null, nombresCat = new Map(), sucio = false;
   const root = () => document.getElementById('dis-root');
 
   async function cargarStock() {
@@ -115,6 +123,7 @@
     const el = root(); if (!el) return; act = null;
     const vis = lista.filter(d => d.estado !== 'archivada');
     el.innerHTML = `<div class="dis-cab"><div><h2>Distribución a centros</h2><p class="act-hint">Reparte lo comprado entre los centros, descárgalo en Excel para confirmar y entrégalo con las actas.</p></div><div class="dis-acc"><button type="button" class="btn btn-primary" id="dis-nueva"><i class="ph-bold ph-plus"></i> Nueva distribución</button><label class="btn btn-outline" for="dis-imp"><i class="ph-bold ph-upload-simple"></i> Importar Excel</label><input type="file" id="dis-imp" accept=".xlsx,.xls" hidden></div></div>
+      ${vis.length ? `<div class="dis-busq"><input type="search" id="dis-bus" placeholder="Buscar un insumo (nombre o ID) y ver en qué centro y distribución está…" autocomplete="off"><div id="dis-res" class="dis-hits" hidden></div></div>` : ''}
       ${vis.length ? `<div class="dis-grid">${vis.map(d => `<article class="dis-card" data-id="${esc(d.id)}" tabindex="0" role="button"><b>${esc(d.nombre)}</b><small>${esc((MODOS.find(m => m[0] === d.modalidad) || [])[1] || '')}${d.correlativo ? ' · ' + esc(d.correlativo) : ''}${d.oc ? ' · OC ' + esc(d.oc) : ''}</small><span>${(d.centros || []).length} centro(s) · ${(d.centros || []).reduce((s, c) => s + (c.lineas || []).length, 0)} línea(s)</span><span class="dis-est">${esc((ESTADOS.find(e => e[0] === d.estado) || [])[1] || '')}</span></article>`).join('')}</div>` : '<p class="act-hint" style="padding:24px 0;">Aún no hay distribuciones. Crea una nueva o importa la planilla Excel de los centros.</p>'}`;
   }
   function stockHTML(l, i) { const s = stockDe(l), k = calcLinea(l, entMap[ci + ':' + i], (s || {}).central); return s ? `<b class="${s.central >= k.pend && k.pend > 0 ? 'dis-ok' : (s.central > 0 ? 'dis-par' : 'dis-no')}">${s.central}</b><small>en Central${s.otras ? ' · ' + s.otras + ' otras' : ''}</small><small>puede ${k.puede} · queda ${k.quedara}</small>` : `<small class="dis-no">sin stock en sistema</small><small>queda ${k.pend}</small>`; }
@@ -200,6 +209,7 @@
       const der = lineas.filter(o => o.x.on && cantDe(o));
       const nom = (l) => `<div class="dis-pnom"><span class="dis-pfoto">${fotoDe(l, true)}</span><div class="dis-ptx"><b>${esc(nombreDe(l))}</b>${(() => { const dd = l.equivalente && norm(l.descripcion) !== norm(l.equivalente) ? l.descripcion : ''; return (l.idCM || dd) ? `<small title="${esc(dd)}">${l.idCM ? 'ID ' + esc(l.idCM) : ''}${l.idCM && dd ? ' · ' : ''}${esc(dd)}</small>` : ''; })()}</div></div>`;
       body.innerHTML = `<div class="dis-psel"><label>Distribución<select id="dp-d">${vis.map(x => `<option value="${esc(x.id)}"${x.id === pDist ? ' selected' : ''}>${esc((x.correlativo ? x.correlativo + ' · ' : '') + x.nombre)}</option>`).join('')}</select></label></div>
+        <div class="dis-busq"><input type="search" id="dp-g" placeholder="Buscar un insumo en todas las distribuciones y centros…" autocomplete="off"><div id="dp-gres" class="dis-hits" hidden></div></div>
         <div class="dis-tabs dis-ptabs" role="tablist">${d.centros.map((c, k) => { const n = c.lineas.filter((l, i) => calc(k, l, i).pend > 0).length; return `<button type="button" role="tab" class="dis-tab${k === pCi ? ' on' : ''}" data-pc="${k}">${esc(c.nombre)}<small>${n}</small></button>`; }).join('')}</div>
         ${lineas.length && !lineas.some(o => o.k.puede > 0) && !der.length ? '<p class="dis-aviso"><i class="ph-bold ph-warning"></i> Ningún producto de este centro tiene stock en Bodega Central. Ingresa la recepción de la orden y vuelve aquí.</p>' : ''}
         <div class="dis-pgrid">
@@ -216,6 +226,8 @@
         <p class="act-hint">Lo que no agregues o entregues incompleto queda como pendiente del acta. El stock se descuenta al confirmar el acta firmada.</p>`;
       if (window.SAR_Imagenes) window.SAR_Imagenes.rellenar(body);
       const re = () => cargarPanel(body, true), $ = (s) => body.querySelector(s);
+      let hg = []; $('#dp-g').addEventListener('input', (e) => { const bx = $('#dp-gres'); hg = buscarEnLista(vis, e.target.value); bx.hidden = norm(e.target.value).length < 2; bx.innerHTML = resHTML(hg); });
+      $('#dp-gres').addEventListener('click', (e) => { const h = e.target.closest('.dis-hit'); if (!h) return; const r = hg[Number(h.dataset.k)]; if (!r) return; const mismo = r.distId === pDist; pDist = r.distId; pCi = r.ci; pBus = $('#dp-g').value; pSolo = false; if (mismo) re(); else cargarPanel(body); });
       $('#dp-d').addEventListener('change', (e) => { pDist = e.target.value; pCi = 0; cargarPanel(body); });
       body.querySelectorAll('[data-pc]').forEach(b => b.addEventListener('click', () => { pCi = Number(b.dataset.pc); re(); }));
       $('#dp-q').addEventListener('input', (e) => { pBus = e.target.value; const pos = e.target.selectionStart; re().then(() => { const n = body.querySelector('#dp-q'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } }); });
@@ -250,6 +262,7 @@
       const t = e.target, b = (s) => t.closest(s);
       try {
         if (b('#dis-nueva')) { const n = pedirTexto('Nombre de la distribución (ej: SDC 1122 · insumos de curación):', ''); if (!n) return; const m = window.confirm('¿Es una compra por CONVENIO MARCO?\n\nAceptar = Convenio Marco · Cancelar = No Marco') ? 'CONVENIO' : 'NO_MARCO'; act = await crear(n, m); ci = 0; entMap = {}; await guardar(true); await cargarOCs(); pintarDetalle(); }
+        else if (b('.dis-hit')) { const h = hitsLista[Number(b('.dis-hit').dataset.k)]; if (!h) return; act = JSON.parse(JSON.stringify(lista.find(d => d.id === h.distId))); ci = h.ci; if (!stockIdx) await cargarStock(); await cargarOCs(); entMap = await cargarEntregas(act.id); pintarDetalle(); const tr = root().querySelector(`tr[data-i="${h.i}"]`); if (tr) { tr.classList.add('dis-foco'); tr.scrollIntoView({ block: 'center' }); } }
         else if (b('.dis-card')) { act = JSON.parse(JSON.stringify(lista.find(d => d.id === b('.dis-card').dataset.id))); ci = 0; if (!stockIdx) await cargarStock(); await cargarOCs(); entMap = await cargarEntregas(act.id); pintarDetalle(); }
         else if (b('#dis-volver')) { if (sucio && !window.confirm('Hay cambios sin guardar. ¿Salir igual?')) return; await cargarLista(); pintarLista(); }
         else if (b('#dis-guardar')) { await guardar(); pintarDetalle(); }
@@ -263,6 +276,7 @@
         else if (b('#dis-entregar')) entregar();
       } catch (err) { toast('Distribución', (err && err.message) || String(err), 'error'); }
     });
+    el.addEventListener('input', (e) => { if (e.target.id !== 'dis-bus') return; const box = el.querySelector('#dis-res'); hitsLista = buscarEnLista(lista, e.target.value); box.hidden = norm(e.target.value).length < 2; box.innerHTML = resHTML(hitsLista); });
     el.addEventListener('change', (e) => {
       const t = e.target;
       if (t.id === 'dis-imp' && t.files[0]) { importar(t.files[0]); t.value = ''; return; }
@@ -287,6 +301,6 @@
     catch (e) { el.innerHTML = '<p class="act-err" style="padding:24px;">No se pudo cargar: ' + esc((e && e.message) || e) + '</p>'; }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', enlazar); else enlazar();
-  if (typeof module !== 'undefined' && module.exports) module.exports = { parsearHoja, filasHoja, totalCentro, num, calcLinea, correlativo };
+  if (typeof module !== 'undefined' && module.exports) module.exports = { buscarEnLista, parsearHoja, filasHoja, totalCentro, num, calcLinea, correlativo };
   window.SAR_Distribucion = { abrir, panelEn, parsearHoja, filasHoja };
 })(typeof window !== 'undefined' ? window : {}, typeof document !== 'undefined' ? document : { querySelectorAll: () => [], getElementById: () => null, readyState: 'complete', addEventListener() {} });

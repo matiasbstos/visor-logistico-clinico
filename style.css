@@ -6216,7 +6216,13 @@ body:not([data-user-role="superadmin"]) #menu-memo-flujo { display: none !import
 .dis-hgrp .dis-hit { grid-template-columns: minmax(0,1fr) auto; align-items: center; padding-left: 24px; } .dis-hgrp .dis-hit b { font-weight: 600; }
 /* v21.175 sugerencia de producto parecido y stock en otras bodegas */
 .dis-sug { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; color: #92400e; background: #fffbeb; border-radius: 8px; padding: 6px 8px; } .dis-sug .btn { white-space: normal; text-align: left; height: auto; min-height: 30px; } .dis-otra { color: #b45309; font-size: 11px; }
-/* v21.180 recepción con varios memos */
-.r-mcs { display: grid; gap: 6px; margin: 4px 0 10px; padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 10px; background: #f8fafc; } .r-mcs-t { font-weight: 600; font-size: 13px; } .r-mcs-t small { font-weight: 400; color: #64748b; }
-.r-mc-f, .r-mc-todos { display: flex; gap: 8px; align-items: center; font-size: 13px; font-weight: 500; } .r-mc-todos { color: var(--sar-blue); font-weight: 700; }
+/* v21.180 recepción con varios memos (rediseño v21.181) */
+.r-mcs { display: grid; gap: 10px; margin: 4px 0 12px; padding: 12px; border: 1px solid #e2e8f0; border-radius: 12px; background: #f8fafc; text-align: left; }
+.r-mcs-h { display: flex; justify-content: space-between; align-items: center; gap: 12px; } .r-mcs-t { font-weight: 700; font-size: 14px; color: var(--sar-blue); } .r-mcs-t small { display: block; font-weight: 400; color: #64748b; font-size: 12px; margin-top: 2px; }
+.r-mcs .r-mc-todos { display: inline-flex !important; flex-direction: row !important; align-items: center; gap: 6px; margin: 0; font-size: 13px; font-weight: 700; color: var(--sar-blue); cursor: pointer; white-space: nowrap; }
+.r-mcs-g { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 8px; }
+.r-mcs .r-mc-f { display: flex !important; flex-direction: row !important; align-items: center; justify-content: flex-start !important; gap: 10px; margin: 0; padding: 10px 12px; background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; cursor: pointer; text-align: left; transition: border-color .15s, background .15s; }
+.r-mcs .r-mc-f:hover { border-color: var(--sar-blue); } .r-mcs .r-mc-f:has(input:checked) { border-color: var(--sar-blue); background: #eff6ff; box-shadow: inset 3px 0 0 var(--sar-blue); }
+.r-mcs input[type=checkbox] { width: 18px; height: 18px; flex: 0 0 18px; margin: 0; accent-color: var(--sar-blue); }
+.r-mc-tx { display: grid; gap: 2px; min-width: 0; } .r-mc-tx b { font-size: 13px; font-weight: 700; color: #0f172a; } .r-mc-tx small { font-size: 12px; color: #64748b; overflow-wrap: anywhere; }
 .r-mh td { background: #eff6ff; color: var(--sar-blue); font-weight: 700; font-size: 12px; padding: 6px 10px; text-transform: uppercase; letter-spacing: .02em; }

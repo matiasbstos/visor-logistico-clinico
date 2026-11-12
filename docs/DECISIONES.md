@@ -1231,3 +1231,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - «Recibir mercadería» ahora tiene casillas por memo/CDP (con «Seleccionar todos»): se marcan los memos que llegan juntos y la tabla muestra cada memo en su bloque. Se completa **una sola vez** la guía, la fecha, la bodega, la observación y el archivo de la guía.
 - Internamente se registra un REC por cada memo (REC-…-03, -04, …) con la misma guía y fecha, para que cada memo conserve su propio pendiente, su anulación y su stock; el aviso por correo es uno solo, con el detalle de todos los memos. La guía subida queda guardada una vez, nombrada con todos los REC.
 - La recepción conforme (documento) se ofrece para el primer memo; los demás se pueden generar desde la lista de recepciones de la orden.
+
+## 4.235 Lista de memos de la recepción: tarjetas (v21.181)
+- La selección de memos pasa a tarjetas en cuadrícula (casilla a la izquierda, memo en negrita y CDP debajo; la marcada se resalta), con «Todos» arriba a la derecha. Se oculta el selector auxiliar «Memo principal» que se había colado en la pantalla.

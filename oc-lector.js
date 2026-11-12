@@ -334,12 +334,14 @@
         });
         if (!grupos.length) { r.avisos.push('No se leyó ningún memo en el encabezado del Excel.'); return r; }
         // fila de títulos (DESCRIPCION / VALOR NETO / CANTIDAD…)
-        const iTit = filas.findIndex((f, n) => n >= iCab && (f || []).some(c => /^(descripci|productos?$)/i.test(celda(c))));
+        const iTit = filas.findIndex((f, n) => n >= iCab && (f || []).some(c => /^(descripci|productos?$|detalle|insumos?$|art[ií]culos?$|[ií]tem$|nombre)/i.test(celda(c))));
         const tit = filas[iTit >= 0 ? iTit : iCab + 1] || [];
-        const cDesc = Math.max(0, tit.findIndex(c => /^(descripci|productos?$)/i.test(celda(c)))), cNeto = tit.findIndex(c => /valor\s*neto|precio/i.test(celda(c))), cTot = tit.findIndex(c => /cantidad\s*total/i.test(celda(c)));
+        const esCant = (i) => /^cant/i.test(celda(tit[i])), esTot = (i) => /^total/i.test(celda(tit[i]));
+        grupos.forEach(g => { g.idx = g.idx.map(i => esCant(i) ? i : (esTot(i) && esCant(i - 1)) ? i - 1 : esCant(i + 1) ? i + 1 : i); });
+        const cDesc = Math.max(0, tit.findIndex(c => /^(descripci|productos?$|detalle|insumos?$|art[ií]culos?$|[ií]tem$|nombre)/i.test(celda(c)))), cNeto = tit.findIndex(c => /valor\s*neto|precio|neto\s*unit|v\.?\s*unit/i.test(celda(c))), cTot = tit.findIndex(c => /cantidad\s*total/i.test(celda(c)));
         const num = (v) => typeof v === 'number' ? v : (Number(String(v == null ? '' : v).replace(/[^\d,.-]/g, '').replace(/\./g, '').replace(',', '.')) || 0);
         const ETQ = { NETO: 'neto', IVA: 'iva', TOTAL: 'total', PRESUPUESTO: 'presupuesto', SALDO: 'saldo' };
-        const pie = {}, pares = grupos.some(g => /^total$/i.test(celda(tit[g.idx[0] + 1]))), desp = pares ? 1 : 0, iPrim = Math.min(...grupos.map(g => g.idx[0]));   // formato «CANTIDAD | TOTAL» por memo: los montos del pie están en la columna TOTAL
+        const pie = {}, pares = grupos.some(g => esTot(g.idx[0] + 1)), desp = pares ? 1 : 0, iPrim = Math.min(...grupos.map(g => g.idx[0]));   // formato «CANTIDAD | TOTAL» por memo: los montos del pie están en la columna TOTAL
         for (let n = (iTit >= 0 ? iTit : iCab + 1) + 1; n < filas.length; n++) {
             const f = filas[n] || [], d = celda(f[cDesc]), e = ETQ[celda(f[cDesc + 1]).toUpperCase()] || ETQ[d.toUpperCase()] || (!d ? ETQ[(f.slice(0, iPrim).map(x => celda(x).toUpperCase()).find(x => ETQ[x]) || '')] : undefined);
             if (e && (!d || ETQ[d.toUpperCase()])) { pie[e] = f; continue; }

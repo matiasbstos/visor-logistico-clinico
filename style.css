@@ -6176,3 +6176,12 @@ body:not([data-user-role="superadmin"]) #menu-memo-flujo { display: none !import
 .dis-pt { width: 100%; border-collapse: collapse; font-size: 13px; } .dis-pt th { position: sticky; top: 0; z-index: 1; background: #f1f5f9; text-align: left; padding: 6px; font-size: 12px; } .dis-pt td { padding: 4px 6px; border-top: 1px solid #eef2f6; vertical-align: middle; }
 .dis-pfoto img, .dis-pfoto .img-ph { width: 44px; height: 44px; object-fit: contain; border-radius: 6px; } .dis-pnom { max-width: 320px; } .dis-pnom b { display: block; line-height: 1.2; } .dis-pnom small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #64748b; font-size: 11px; }
 .dis-pt input.dp-q { width: 64px; } .dis-pt .dis-hecho { opacity: .5; }
+/* v21.165 panel en dos columnas (lista | acta), sin cortes laterales */
+.act-dist-host { margin-bottom: 14px; } .dis-panel { min-width: 0; overflow: hidden; } .dis-pbody { min-width: 0; }
+.dis-pgrid { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 16px; align-items: start; } @media (max-width: 900px) { .dis-pgrid { grid-template-columns: minmax(0,1fr); } }
+.dis-pcol { min-width: 0; } .dis-plist { max-height: 48vh; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; } .dis-plist.dis-ppend { max-height: 20vh; }
+.dis-prow { display: grid; grid-template-columns: minmax(0,1fr) auto 64px auto; gap: 8px; align-items: center; padding: 6px 8px; border-top: 1px solid #eef2f6; } .dis-prow:first-child { border-top: 0; }
+.dis-prow-s { grid-template-columns: minmax(0,1fr) auto; }
+.dis-pnum { display: grid; gap: 2px; font-size: 11px; color: #475569; text-align: right; white-space: nowrap; }
+.dis-h5 { margin: 10px 0 4px; font-size: 12px; color: var(--sar-blue); text-transform: uppercase; } .dis-pder { max-height: 30vh; } #dp-armar { margin-top: 10px; width: 100%; }
+.dis-prow .dis-pnom { display: flex; gap: 8px; align-items: center; min-width: 0; max-width: none; } .dis-ptx { min-width: 0; } .dis-ptx b { display: block; line-height: 1.2; } .dis-ptx small { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; color: #64748b; font-size: 11px; }

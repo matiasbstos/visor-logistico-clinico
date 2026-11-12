@@ -1043,7 +1043,8 @@
             && lineas.every((l, i) => Object.values(cuadro0.dist[i] || {}).reduce((t, x) => t + num(x), 0) === num(l.cantidad))) ? cuadro0 : null;
         if (v.distrib && !cuadro) throw new Error('El cuadro de distribución no calza con los productos de la orden (revisa los avisos). Corrige las cantidades o quita el cuadro.');
         // v21.177: SAR puede tener VARIOS memos/CDP en el mismo cuadro (ej. memos 55, 37, 36 y 9): se conservan todos; solo se omiten los de otros centros.
-        const propias = cuadro && cuadro.columnas ? cuadro.columnas.filter(c => c.centro === CENTRO_PROPIO) : [], propia = propias[0] || null;
+        const propias = cuadro && cuadro.columnas ? cuadro.columnas.filter(c => Array.isArray(v.memosSel) ? v.memosSel.includes(c.key) : c.centro === CENTRO_PROPIO) : [], propia = propias.find(c => c.centro === CENTRO_PROPIO) || propias[0] || null;
+        if (cuadro && Array.isArray(v.memosSel) && !propias.length) throw new Error('Elige al menos un memo para cargar en la orden.');
         // v20.65: del cuadro solo importa lo que dice SAR; lo de otros centros se omite (queda anotado cuáles).
         let cuadroF = cuadro; const otrosCentros = [];
         if (cuadro && propias.length && cuadro.columnas.length > propias.length) {
@@ -1174,9 +1175,15 @@
                 const lineasOk = rev.lineas.filter(l => String(l.descripcion || '').trim() && num(l.cantidad) > 0);
                 const u = lineasOk.length ? window.SAR_Lector.unirDistribucion({ lineas: lineasOk, memos: memosDe(rev) }, d) : { avisos: ['Sube primero el PDF de la orden para cruzar los productos.'] };
                 const av = [...d.avisos, ...u.avisos];
+                const keys = d.columnas.map(c => c.key); if (!Array.isArray(rev.memosSel) || rev.memosSel.some(k => !keys.includes(k))) { const sar = d.columnas.filter(c => c.centro === CENTRO_PROPIO).map(c => c.key); rev.memosSel = sar.length ? sar : keys; }
+                const sel = rev.memosSel;
                 est.innerHTML = `<strong>Cuadro leído:</strong> ${d.columnas.length} columna(s) · ${d.lineas.length} producto(s)
-                    <div class="soc-tabla"><table><thead><tr><th>Memo</th><th>Centro</th><th>Financiamiento</th><th>CDP</th><th>Neto</th><th>Total</th></tr></thead><tbody>${d.columnas.map(c => `<tr><td>${esc(c.memo)}</td><td>${esc(c.centro)}</td><td>${esc(c.financiamiento)}</td><td>${esc(c.cdp)}</td><td>${peso(c.neto)}</td><td>${peso(c.total)}</td></tr>`).join('')}</tbody></table></div>
+                    <div class="soc-tabla"><table><thead><tr><th><label title="Seleccionar todos"><input type="checkbox" id="p-mc-todos"${sel.length === d.columnas.length ? ' checked' : ''}> Cargar</label></th><th>Memo</th><th>Centro</th><th>Financiamiento</th><th>CDP</th><th>Neto</th><th>Total</th></tr></thead><tbody>${d.columnas.map(c => `<tr><td><input type="checkbox" class="p-mc" data-key="${esc(c.key)}"${sel.includes(c.key) ? ' checked' : ''} aria-label="Cargar memo ${esc(c.memo)}"></td><td>${esc(c.memo)}</td><td>${esc(c.centro)}</td><td>${esc(c.financiamiento)}</td><td>${esc(c.cdp)}</td><td>${peso(c.neto)}</td><td>${peso(c.total)}</td></tr>`).join('')}</tbody></table></div>
                     ${av.length ? '<ul class="cierre-error">' + av.map(a => `<li>${esc(a)}</li>`).join('') + '</ul>' : ''}`;
+                const cajas = [...est.querySelectorAll('.p-mc')], todos = est.querySelector('#p-mc-todos');
+                const guardarSel = () => { rev.memosSel = cajas.filter(c => c.checked).map(c => c.dataset.key); if (todos) todos.checked = cajas.length > 0 && cajas.every(c => c.checked); };
+                cajas.forEach(c => c.addEventListener('change', guardarSel));
+                if (todos) todos.addEventListener('change', () => { cajas.forEach(c => { c.checked = todos.checked; }); guardarSel(); });
             }
         }
         q('#p-correo').addEventListener('change', () => { const c = window.SAR_Lector && window.SAR_Lector.extraerCorreo(q('#p-correo').value); if (!c) return; leerRev(ov); if (c.aceptarHoras) rev.aceptarHoras = c.aceptarHoras; if (c.entregaDias) rev.entregaDias = c.entregaDias; if (c.contraparte && !rev.contraparte) rev.contraparte = c.contraparte; if (c.horario && !rev.horario) rev.horario = c.horario; pintarRev([]); });

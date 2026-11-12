@@ -1220,3 +1220,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.231 Orden con varios memos de SAR: se guardan todos (v21.177)
 - Error: al ingresar la OC 1298355-948-CM26 («Recibir mercadería» solo mostraba el memo 55). Causa: al quitar los centros ajenos (v20.65) el ingreso se quedaba solo con la PRIMERA columna de SAR (`find`), perdiendo los memos 37, 36 y 9 que también son de SAR. Ahora se conservan todas las columnas de SAR (cada memo/CDP con sus cantidades) y solo se omiten las de otros centros (que quedan anotadas). Las órdenes ya ingresadas con este error deben ingresarse de nuevo.
+
+## 4.232 Al ingresar la orden se elige qué memos cargar (v21.178)
+- En el recuadro «Cuadro leído» cada memo tiene una casilla «Cargar» y un «seleccionar todos». Por defecto vienen marcados los de SAR (todos los que sean de SAR); se puede marcar cualquier otro. Los no marcados quedan anotados como «otros centros». Si no se marca ninguno, el ingreso avisa.

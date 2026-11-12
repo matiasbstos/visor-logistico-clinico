@@ -1249,3 +1249,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.239 Cruce orden ↔ cuadro con descripciones de distinto largo (v21.185)
 - La orden de Mercado Público trae descripciones largas («MOUSE INALAMBRICO CONVENCIONAL RESOLUCION DEL SENS…») y el cuadro nombres cortos («MOUSE INALAMBRICO»); el cruce exigía parecido ≥ 50 % y no calzaba nada. Ahora se mide qué parte de la descripción corta está contenida en la larga y se refuerza con el precio neto y la cantidad total; la asignación es global (primero los pares más seguros), así «Carrete 25 m» de la orden calza con «Carrete 20 m» del cuadro por precio y no se cruzan productos parecidos.
 - Prueba con las 18 líneas de la OC de insumos eléctricos (1298355-933-AG26).
+
+## 4.240 Existencias: los productos agotados ya no ensucian la lista (v21.186)
+- Verificado en producción (solo lectura): el acta AE-2026-0025 está CONFIRMADA con respaldo y `stockDescontado: true`; mouse, alargador y carrete quedaron en cantidad 0. No había descuadre: la fila seguía visible porque Existencias listaba también los productos con stock 0 (69 de 197 registros, todos de Bodega Central; ninguno con lotes con saldo).
+- El filtro de estado ahora parte en «Con stock» (oculta stock 0 sin sobregiro; si hay sobregiro sigue visible; al buscar por nombre/ID sí aparecen). Opciones nuevas: «Todos (incluye agotados)» y «Agotados». En la fila, el 0 dice «AGOTADO» en vez de «STOCK CRÍTICO».

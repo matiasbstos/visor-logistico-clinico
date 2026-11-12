@@ -3089,7 +3089,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (nz(cat) !== nz(catFilter)) return false;
                     }
                 }
-                if (statFilter !== 'all') {
+                // v21.186: por defecto no se muestran los productos agotados (stock 0 sin sobregiro): ya se entregaron todos y solo ensuciaban la lista; con la búsqueda sí aparecen
+                { const q0 = Number(data.physicalCount || data.quantity || data.cantidad || 0), sob = Number(data.sobregiro || 0);
+                  if (statFilter === 'conStock' && q0 <= 0 && !(sob > 0) && searchText.length < 2) return false;
+                  if (statFilter === 'agotado' && q0 > 0) return false; }
+                if (statFilter !== 'all' && statFilter !== 'conStock' && statFilter !== 'agotado') {
                     const qty = Number(data.physicalCount || data.quantity || data.cantidad || 0);
                     const min = Number(data.criticalStock || data.criticalLimit || data.stock_minimo || 50);
                     const isCrit = qty <= min;
@@ -3219,7 +3223,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 let codeClass = "text-primary";
 
                 if (isCritical && item.quantity <= 20) {
-                    quantityMarkup = `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;"><span class="badge-red-solid">${item.quantity}</span><span class="text-danger" style="font-size:8px;font-weight:700;">STOCK CRÍTICO</span></div>`;
+                    quantityMarkup = `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;"><span class="badge-red-solid">${item.quantity}</span><span class="text-danger" style="font-size:8px;font-weight:700;">${Number(item.quantity) <= 0 ? 'AGOTADO' : 'STOCK CRÍTICO'}</span></div>`;
                     codeClass = "text-danger";
                 } else if (isCritical) {
                     quantityMarkup = `<span class="badge-orange">${(item.quantity || 0).toLocaleString('en-US')}</span>`;

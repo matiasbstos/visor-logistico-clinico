@@ -1253,3 +1253,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.240 Existencias: los productos agotados ya no ensucian la lista (v21.186)
 - Verificado en producción (solo lectura): el acta AE-2026-0025 está CONFIRMADA con respaldo y `stockDescontado: true`; mouse, alargador y carrete quedaron en cantidad 0. No había descuadre: la fila seguía visible porque Existencias listaba también los productos con stock 0 (69 de 197 registros, todos de Bodega Central; ninguno con lotes con saldo).
 - El filtro de estado ahora parte en «Con stock» (oculta stock 0 sin sobregiro; si hay sobregiro sigue visible; al buscar por nombre/ID sí aparecen). Opciones nuevas: «Todos (incluye agotados)» y «Agotados». En la fila, el 0 dice «AGOTADO» en vez de «STOCK CRÍTICO».
+
+## 4.241 Confirmación con la marca y avance al mover entre bodegas (v21.187)
+- Nuevo `SAR_Progreso.confirmar({titulo, texto, lineas, si, no, peligro})` → Promise<boolean>: cuadro centrado con logo y colores del sitio (Esc o clic fuera cancelan), que reemplaza al `confirm()` del navegador («sarinventario.web.app says»). Primer uso: Transferencias entre bodegas, mostrando origen, destino y los productos con su cantidad.
+- Al confirmar, aparece la animación de avance con «Moviendo N de M: producto» y un ✔ al terminar; si algo no se pudo mover queda el detalle debajo. Quedan otros `confirm()` en el sistema por migrar a este cuadro.

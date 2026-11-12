@@ -6227,3 +6227,10 @@ body:not([data-user-role="superadmin"]) #menu-memo-flujo { display: none !import
 .r-mc-tx { display: grid; gap: 2px; min-width: 0; } .r-mc-tx b { font-size: 13px; font-weight: 700; color: #0f172a; } .r-mc-tx small { font-size: 12px; color: #64748b; overflow-wrap: anywhere; }
 .r-mh td { background: #eff6ff; color: var(--sar-blue); font-weight: 700; font-size: 12px; padding: 6px 10px; text-transform: uppercase; letter-spacing: .02em; }
 .pen-or td{background:#eef1f6;padding:6px 8px;font-size:.85rem;border-top:2px solid #c9d2e3}.pen-tag{display:inline-block;background:#1a3668;color:#fff;border-radius:10px;padding:1px 8px;font-size:.75rem;font-weight:600}
+/* Confirmación con la marca (v21.187) */
+.sar-conf{position:fixed;inset:0;background:rgba(15,23,42,.6);backdrop-filter:blur(2px);display:flex;align-items:center;justify-content:center;z-index:10002;padding:24px}
+.sar-conf__c{background:#fff;border-radius:var(--shape-card,8px 8px 8px 0);box-shadow:0 20px 50px rgba(15,23,42,.35);width:min(460px,94vw);padding:26px 28px 22px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px}
+.sar-conf__marca{width:56px;height:56px;border-radius:50%;background:var(--primary-light,#EEF2F9);display:grid;place-items:center}.sar-conf__marca img{width:34px;height:34px;object-fit:contain}
+.sar-conf__t{margin:2px 0 0;color:var(--primary,#1a3668);font-size:1.15rem}.sar-conf__x{margin:0;color:#475569}
+.sar-conf__l{list-style:none;margin:4px 0 0;padding:10px 12px;background:#f5f7fb;border-radius:6px;width:100%;text-align:left;font-size:.85rem;max-height:200px;overflow:auto;color:#1e293b}.sar-conf__l li{padding:3px 0;border-bottom:1px solid #e5eaf2}.sar-conf__l li:last-child{border:0}
+.sar-conf__b{display:flex;gap:10px;justify-content:center;margin-top:12px;width:100%}.sar-conf__b .btn{min-width:120px}

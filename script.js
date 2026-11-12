@@ -5503,6 +5503,27 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        // Lote del traspaso: si el producto tiene más de un lote con stock, hay que elegir de cuál se mueve
+        (function lotesTraspaso() {
+            const sel = document.getElementById('transfer-lote'), grp = document.getElementById('group-transfer-lote'), ins = document.getElementById('transfer-insumo-id'), modal = document.getElementById('modal-transferencia');
+            if (!sel || !grp || !ins || !modal) return;
+            const cargar = async () => {
+                sel.innerHTML = ''; sel.required = false; grp.style.display = 'none';
+                if (!ins.value) return;
+                try {
+                    const ds = await getDoc(doc(db, 'Insumos', ins.value)); if (!ds.exists()) return; const d = ds.data();
+                    let lotes = (Array.isArray(d.batches) ? d.batches : []).filter(b => (Number(b.quantity) || 0) > 0);
+                    if (!lotes.length && d.batch && (Number(d.quantity) || 0) > 0) lotes = [{ batch: d.batch, quantity: d.quantity, expirationDate: d.expirationDate || '' }];
+                    if (lotes.length < 2) return;
+                    lotes.sort(window.fefoCompare || (() => 0));
+                    sel.innerHTML = '<option value="" disabled selected>Elige el lote…</option><option value="AUTO">El que vence primero (automático)</option>' + lotes.map(b => `<option value="${window.escapeHTML(String(b.batch || 'S/L') + '|' + String(b.expirationDate || ''))}">Lote ${window.escapeHTML(String(b.batch || 'S/L'))}${b.expirationDate ? ' · vence ' + window.escapeHTML(String(b.expirationDate)) : ''} · ${Number(b.quantity) || 0} u.</option>`).join('');
+                    sel.required = true; grp.style.display = 'block';
+                } catch (_) { /* sin lotes: sigue el orden automático */ }
+            };
+            ins.addEventListener('change', cargar);
+            new MutationObserver(() => { if (modal.classList.contains('active')) setTimeout(cargar, 150); }).observe(modal, { attributes: true, attributeFilter: ['class'] });
+        })();
+
         // FORM: PROCESO DE TRASPASO / DISPENSACIÓN (UPSERT LOGIC)
         const formTransfer = document.getElementById('form-transferencia');
         if (formTransfer) {
@@ -5592,21 +5613,30 @@ document.addEventListener('DOMContentLoaded', () => {
                             currentBatches.push({ batch: dataActual.batch, quantity: Number(dataActual.quantity) || 0, expirationDate: dataActual.expirationDate || '' });
                         }
                         currentBatches.sort(window.fefoCompare);
+                        // Lote elegido a mano (si el producto tiene varios): solo se descuenta de ese lote
+                        const loteElegido = (document.getElementById('transfer-lote') || {}).value || '';
+                        const claveLote = (b) => String(b.batch || 'S/L') + '|' + String(b.expirationDate || '');
+                        let recorrer = currentBatches;
+                        if (loteElegido && loteElegido !== 'AUTO') {
+                            recorrer = currentBatches.filter(b => claveLote(b) === loteElegido);
+                            const dispo = recorrer.reduce((s, b) => s + (Number(b.quantity) || 0), 0);
+                            if (!recorrer.length || qtyToMove > dispo) throw new Error('El lote elegido solo tiene ' + dispo + ' unidad(es).');
+                        }
 
                         let qtyToReduce = qtyToMove;
                         const lotesMovidos = []; // trazabilidad real de lotes y vencimientos movidos
-                        for (let i = 0; i < currentBatches.length && qtyToReduce > 0; i++) {
-                            const available = Number(currentBatches[i].quantity) || 0;
+                        for (let i = 0; i < recorrer.length && qtyToReduce > 0; i++) {
+                            const available = Number(recorrer[i].quantity) || 0;
                             if (available > 0) {
                                 const usedQty = Math.min(available, qtyToReduce);
-                                currentBatches[i].quantity = available - usedQty;
+                                recorrer[i].quantity = available - usedQty;
                                 qtyToReduce -= usedQty;
                                 lotesMovidos.push({
-                                    batch: currentBatches[i].batch || 'S/L',
+                                    batch: recorrer[i].batch || 'S/L',
                                     used: usedQty,
-                                    expirationDate: currentBatches[i].expirationDate || '',
-                                    ...(currentBatches[i].codigoLote ? { codigoLote: currentBatches[i].codigoLote } : {}),
-                                    ...(currentBatches[i].provider ? { provider: currentBatches[i].provider } : {})
+                                    expirationDate: recorrer[i].expirationDate || '',
+                                    ...(recorrer[i].codigoLote ? { codigoLote: recorrer[i].codigoLote } : {}),
+                                    ...(recorrer[i].provider ? { provider: recorrer[i].provider } : {})
                                 });
                             }
                         }
@@ -5691,7 +5721,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } catch (err) {
                     console.error("Transfer Error:", err);
                     const em = String((err && err.message) || '');
-                    const conocido = em.includes('Stock insuficiente') || em.includes('CUARENTENA') || em.includes('no existe');
+                    const conocido = em.includes('Stock insuficiente') || em.includes('lote elegido') || em.includes('CUARENTENA') || em.includes('no existe');
                     showToast('Error', conocido ? em : 'Fallo en la sincronización del traspaso. No se movió stock.', 'error');
                 }
             });

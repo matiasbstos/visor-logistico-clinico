@@ -444,6 +444,40 @@
             img.onerror = () => { URL.revokeObjectURL(url); mal(new Error('No se pudo leer la imagen.')); }; img.src = url;
         });
     }
+    /** Busca fotos de los productos que no tienen (catálogo + inventario). Las halladas quedan «por confirmar». Máx. 40 por vez. */
+    async function buscarFotosFaltantes(onPaso, tope) {
+        const f = fs(), IM = window.SAR_Imagenes; if (!IM) return { buscados: 0, encontrados: 0, pendientes: 0 };
+        await cargarConfig(); await IM.cargar(true).catch(() => {});
+        const cat = await cargarCatalogo(), nd = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+        const cola = [], vistos = new Set();
+        const sinFoto = (c) => !c.imagen && !c.imagenMP && !c.fotoEstado;
+        cat.forEach(c => { if (sinFoto(c) && !vistos.has(c.id)) { vistos.add(c.id); cola.push({ id: c.id, nombre: c.insumoName || c.descripcion, desc: c.descripcion || c.insumoName, codigo: c.codigoMP || '', nuevo: false }); } });
+        try {
+            const sn = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(5000))); const porNombre = new Set();
+            sn.forEach(d => { const x = d.data(), nombre = String(x.name || '').trim(); if (!nombre || porNombre.has(nd(nombre)) || x.provisional) return; porNombre.add(nd(nombre));
+                if (IM.buscar(nombre, x.codigoMP)) return;
+                const id = catId({ codigoMP: x.codigoMP, descripcion: nombre }); if (!id || vistos.has(id)) return;
+                const ya = cat.get(id); if (ya && !sinFoto(ya)) return;
+                vistos.add(id); cola.push({ id, nombre, desc: nombre, codigo: x.codigoMP || '', nuevo: !ya, tieneNombre: !!(ya && ya.insumoName) }); });
+        } catch (e) { /* sin inventario */ }
+        const lote = cola.slice(0, tope || 40); let enc = 0, i = 0;
+        for (const p of lote) {
+            i++; let foto = null;
+            try {
+                if (p.codigo) { const r = await IM.buscarFoto(p.codigo, configCorreo); if (r.archivo) foto = { imagenMP: r.archivo, fotoEstado: 'por_confirmar', fotoTitulo: '' }; }
+                else { const r = await IM.buscarPorDescripcion(p.desc, configCorreo); if (r && r.archivo) foto = { imagenMP: r.archivo, fotoEstado: 'por_confirmar', fotoTitulo: r.titulo || '' }; }
+            } catch (e) { /* sigue con el siguiente */ }
+            if (foto) enc++;
+            try {
+                const base = { actualizado: f.serverTimestamp(), ...(foto || {}) };
+                if (p.nuevo) { base.descripcion = p.desc; base.descripcion_lower = String(p.desc).toLowerCase(); base.codigoMP = p.codigo; base.insumoName = p.nombre; base.sinOrden = true; }
+                else if (!p.tieneNombre && p.nombre && !cat.get(p.id)?.insumoName) base.insumoName = p.nombre;
+                if (foto || p.nuevo) await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), p.id), base, { merge: true });
+            } catch (e) { /* noop */ }
+            if (onPaso) onPaso(`${i} de ${lote.length} · ${String(p.nombre).slice(0, 55)} → ${foto ? '✔ foto hallada (por confirmar)' : '✖ sin foto'}`);
+        }
+        return { buscados: lote.length, encontrados: enc, pendientes: Math.max(0, cola.length - lote.length) };
+    }
     async function formCatalogo() {
         if (window.SAR_Imagenes) await window.SAR_Imagenes.cargar(true).catch(() => {});
         const items = [...(await cargarCatalogo()).values()].sort((a, b) => String(a.descripcion || '').localeCompare(String(b.descripcion || '')));
@@ -1674,5 +1708,5 @@ function fotoPorDescripcion(desc) {   // busca por descripcion en todas las tien
         ov.querySelector('#c-copiar').addEventListener('click', async () => { try { await navigator.clipboard.writeText(SCRIPT_GAS); toast('Copiado', 'Código copiado.', 'success'); } catch (e) { ov.querySelector('#c-script').select(); } });
     }
 
-    window.SAR_SeguimientoOC = { enHorarioCorreo, vaciarCola, abrirCuando, anularRecepcion, eliminarArchivosCategoria, eliminarArchivosActa, formCatalogo, registrarCatalogo, guardarArchivo, abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, cargarConfig, configurado: () => !!(configCorreo.webhookUrl && configCorreo.token), _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
+    window.SAR_SeguimientoOC = { buscarFotosFaltantes, enHorarioCorreo, vaciarCola, abrirCuando, anularRecepcion, eliminarArchivosCategoria, eliminarArchivosActa, formCatalogo, registrarCatalogo, guardarArchivo, abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, cargarConfig, configurado: () => !!(configCorreo.webhookUrl && configCorreo.token), _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
 })(window, document);

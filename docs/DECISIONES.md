@@ -1150,3 +1150,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.214 Crear bodega: se quitó el manejador falso que vaciaba el formulario (v21.160)
 - Había dos manejadores del formulario «Nueva Bodega»: uno antiguo de maqueta (mostraba «Bodega registrada» y hacía `reset()` sin guardar) y el real (CRUD BODEGAS). El antiguo corría primero y vaciaba los campos, así que el real leía datos vacíos y fallaba: parecía que se creaba y luego daba error. Se eliminó el antiguo; ahora solo guarda el real y avisa con su propio mensaje.
+
+## 4.215 Fotos faltantes desde el Catálogo, transferencias por lote y limpieza de la pantalla (v21.161)
+- **Catálogo de Insumos → «Buscar fotos que faltan»**: recorre los productos del catálogo sin foto y los productos del inventario que no tienen foto asociada (los crea en el catálogo con su nombre de inventario), y busca la foto por ID de Mercado Público o por descripción (hasta 40 por pulsación; si quedan más, avisa para volver a pulsar). Las halladas quedan «por confirmar» y se abre la lista de confirmación; al confirmarlas aparecen en todas las pantallas que usan fotos (Existencias, actas, recepción, bodegas, catálogo), porque todas leen del mismo catálogo.
+- **Transferencias entre bodegas por lote**: en el menú Transferencias, un producto con más de un lote muestra un campo de cantidad por cada lote (parte en 0: hay que elegir de cuál se mueve). Un producto con un solo lote funciona como antes. El destino conserva lote y vencimiento.
+- **Traspaso desde Existencias (ventana «Transferencia de Stock»)**: si el producto tiene más de un lote con stock, pide elegir el lote (o «el que vence primero (automático)»); con uno elegido, solo descuenta de ese lote.
+- **Limpieza**: al salir de Transferencias o volver a entrar, se borran bodegas elegidas, productos marcados, cantidades y nota.

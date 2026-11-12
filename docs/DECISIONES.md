@@ -1191,3 +1191,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.222 Distribución: stock neto y entrega limitada al stock (v21.168)
 - Verificado el flujo: lo agregado al acta se descuenta del stock al confirmar el acta firmada (mismo flujo de actas manuales); lo no agregado o entregado incompleto queda como **pendiente** de la distribución (pedido − entregado) y no requiere ajuste manual: cuando llegue más stock (recepción de la OC) el panel lo ofrece solo en el siguiente acta.
 - El stock mostrado en el panel descuenta lo ya comprometido en actas de esta distribución aún sin confirmar (evita ofrecer dos veces lo mismo a dos centros). La cantidad a entregar no puede superar ese stock; sin stock, «Agregar» queda deshabilitado.
+
+## 4.223 Ajustes UX/UI del panel de distribución (v21.169)
+- Auditoría UX: columnas fijas por fila (nombre · pend/stock · cantidad 72 px · botón) sin solape; foto de 40 px con ícono si no hay; nombre a 13 px máx. 2 líneas con ID y descripción en una sola línea; centros en pestañas que saltan de línea; «Quedan pendientes» pasa a un desplegable resumen; «Armar acta» pegado al pie y deshabilitado sin productos; aviso cuando ningún producto del centro tiene stock; sin acento lateral ni numeración «1 ·/2 ·».

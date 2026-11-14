@@ -80,16 +80,6 @@
         } else cont.push(par(run('________________________________', { sz: 21 }), { jc: 'center', despues: 40 }));
         cont.push(par(run('Firma contraparte técnica', { sz: 21 }), { jc: 'center', despues: 120 }));
         cont.push(par(run('Nombre Contraparte Técnica: ' + (d.contraparte || ''), { sz: 21 }), { jc: 'center', despues: 0 }));
-        const tc = RC().timbreDe ? RC().timbreDe(oc, d) : null;   // timbre «RECEPCIÓN CONFORME» (v21.207)
-        if (tc) {
-            const xe = (t) => String(t == null ? '' : t).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-            const ra = (t, b, sz) => `<w:r><w:rPr>${b ? '<w:b/>' : ''}<w:color w:val="1C3D99"/><w:sz w:val="${sz}"/><w:szCs w:val="${sz}"/></w:rPr><w:t xml:space="preserve">${xe(t)}</w:t></w:r>`;
-            const pa = (r) => `<w:p><w:pPr><w:jc w:val="center"/><w:spacing w:before="0" w:after="20"/></w:pPr>${r}</w:p>`;
-            const bz = '<w:top w:val="double" w:sz="12" w:space="0" w:color="1C3D99"/><w:left w:val="double" w:sz="12" w:space="0" w:color="1C3D99"/><w:bottom w:val="double" w:sz="12" w:space="0" w:color="1C3D99"/><w:right w:val="double" w:sz="12" w:space="0" w:color="1C3D99"/>';
-            const dentro = pa(ra('RECEPCIÓN CONFORME', true, 22)) + pa(ra('SAR Elsa Romo Aravena', false, 15)) + pa(ra('Fecha: ' + fc(tc.fecha || d.fecha), true, 17)) + pa(ra((tc.tipoDoc === 'FACTURA' ? 'Factura' : 'Guía') + ' N° ' + (tc.numeroDoc || 's/n'), false, 17)) + (tc.recibe ? pa(ra('Recibe: ' + tc.recibe, false, 14)) : '');
-            cont.push(par('', { antes: 200, despues: 0 }));
-            cont.push(`<w:tbl><w:tblPr><w:tblW w:w="3000" w:type="dxa"/><w:jc w:val="right"/><w:tblBorders>${bz}</w:tblBorders><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="3000"/></w:tblGrid><w:tr>${A.celda(3000, dentro)}</w:tr></w:tbl>`);
-        }
         return cont;
     }
     async function docx(oc, rec, parcial) {

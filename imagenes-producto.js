@@ -31,6 +31,10 @@
         lista.forEach(c => {
             if (c.codigoMP && c.fotoEstado === 'por_confirmar' && c.imagenMP) candidatas.set(String(c.codigoMP), { codigo: String(c.codigoMP), imagen: '', archivo: c.imagenMP, pendiente: true });
             if (c.codigoMP && sinConfirmar(c)) descartados.add(String(c.codigoMP));
+            // Foto hallada automáticamente y aún «por confirmar»: se muestra igual (con la marca «por confirmar») para que el catálogo esté completo; las descartadas nunca (v21.198)
+            if (c.fotoEstado === 'por_confirmar' && c.imagenMP) { const p = { codigo: c.codigoMP ? String(c.codigoMP) : '', imagen: '', archivo: c.imagenMP, pendiente: true };
+                if (c.codigoMP && !porCodigo.has(String(c.codigoMP))) porCodigo.set(String(c.codigoMP), p);
+                [c.descripcion, c.insumoName].forEach(n => { if (n && !porNombre.has(norm(n))) porNombre.set(norm(n), p); }); return; }
             const e = entrada(c); if (!e.imagen && !e.archivo) return;
             if (c.codigoMP) porCodigo.set(String(c.codigoMP), e);
             [c.descripcion, c.insumoName].forEach(n => { if (n) porNombre.set(norm(n), e); });

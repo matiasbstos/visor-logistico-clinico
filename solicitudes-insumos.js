@@ -65,7 +65,7 @@
     const f = fs(); if (!cargado) await cargarBase();
     const c = {}, n = {};
     try { const sn = await f.getDocs(f.query(f.collection(db(), 'Catalogo_Productos'), f.limit(3000)));
-      sn.forEach(d => { const x = d.data(); if (x.fotoEstado === 'por_confirmar' || x.fotoEstado === 'descartada') return;
+      sn.forEach(d => { const x = d.data(); if (x.fotoEstado === 'descartada') return;
         const url = /^https?:/.test(x.imagen || '') ? x.imagen : '', arch = x.imagenMP || ''; if (!url && !arch) return;
         if (x.codigoMP && arch) c[String(x.codigoMP)] = arch;
         [x.descripcion, x.insumoName].forEach(t => { const k = norm(t); if (k) n[k] = url ? { i: url } : { a: arch }; }); }); } catch (e) { /* sin fotos */ }

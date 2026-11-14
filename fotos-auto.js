@@ -1,13 +1,13 @@
 /* ==========================================================================
    BÚSQUEDA AUTOMÁTICA DE FOTOS (v21.194)
-   Mientras alguien de bodega (admin/operador) tenga el visor abierto, cada hora entre las 8:00 y las 17:00 se buscan
+   Mientras alguien de bodega (admin/operador) tenga el visor abierto, cada 30 minutos entre las 8:00 y las 17:00 se buscan
    en segundo plano las fotos de los productos que no tienen (por código en la tienda de Convenio Marco o por descripción
-   con el Apps Script). Un solo equipo lo hace por hora: el turno se reserva en Contadores/fotos-auto.
-   Lo hallado queda «por confirmar» en Catálogo; al terminar se vuelve a publicar la lista para quienes piden insumos.
+   con el Apps Script). Un solo equipo lo hace cada vez: el turno se reserva en Contadores/fotos-auto.
+   Lo hallado se ve de inmediato en todo el sitio con la marca «por confirmar» y se confirma o descarta en Catálogo; al terminar se vuelve a publicar la lista para quienes piden insumos.
    ========================================================================== */
 (function (window, document) {
   'use strict';
-  const HORA_INI = 8, HORA_FIN = 17, CADA_MS = 55 * 60 * 1000, RONDAS = 6;
+  const HORA_INI = 8, HORA_FIN = 17, CADA_MS = 28 * 60 * 1000, RONDAS = 10;   // cada 30 min, hasta 400 productos por vez
   const fs = () => window.firebaseFirestore, db = () => window.firebaseDb;
   const usuario = () => { const a = window.firebaseAuth; return (a && a.currentUser && a.currentUser.email) || ''; };
   const esStaff = () => ['admin', 'superadmin', 'operador'].includes(String((document.body && document.body.getAttribute('data-user-role')) || '').toLowerCase());

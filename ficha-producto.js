@@ -58,14 +58,14 @@
   }
   function pintarFotos(el, cat, nombre, codigo) {
     const d = cat.data || {}, IM = window.SAR_Imagenes, extras = Array.isArray(d.fotosExtra) ? d.fotosExtra : [];
-    const prin = d.imagen ? `<img src="${esc(d.imagen)}" alt="">` : (d.imagenMP && d.fotoEstado !== 'descartada' && IM ? `<img src="${esc(IM.urlMP(d.imagenMP, 400))}" alt="" referrerpolicy="no-referrer">` : '');
+    const prin = d.imagen ? `<img src="${esc(d.imagen)}" alt="">` : (d.fotoEstado !== 'descartada' && d.imagenMP && IM ? `<img src="${esc(IM.urlMP(d.imagenMP, 400))}" alt="" referrerpolicy="no-referrer">` : (d.fotoEstado !== 'descartada' && d.imagenWeb ? `<img src="${esc(d.imagenWeb)}" alt="">` : ''));
     el.innerHTML = `<div class="fp-fotos">
         <figure class="fp-foto">${prin ? `<span class="prod-img prod-img--g${!d.imagen && d.fotoEstado === 'por_confirmar' ? ' prod-img--pend' : ''}" data-img-name="${esc(nombre)}">${prin}</span>` : '<span class="fp-vacia"><i class="ph-bold ph-image"></i></span>'}<figcaption>Caja / envase${!d.imagen && d.fotoEstado === 'por_confirmar' ? ' · <b>por confirmar</b>' : d.imagen ? ' · foto propia' : ''}</figcaption></figure>
         ${extras.map((x, i) => `<figure class="fp-foto"><span class="prod-img prod-img--g" data-img-name="${esc(nombre)}"><img src="${esc(x.img)}" alt="${esc(x.tipo)}"></span><figcaption>${esc(x.tipo === 'producto' ? 'Cómo es el producto' : x.tipo)} <button type="button" class="fp-quitar" data-q="${i}" aria-label="Quitar foto">✕</button></figcaption></figure>`).join('')}
       </div>
       <div class="fp-facc">
-        <label class="btn btn-primary btn-sm"><input type="file" accept="image/*" capture="environment" hidden data-f="caja"><i class="ph-bold ph-camera"></i> Foto de la caja</label>
-        <label class="btn btn-primary btn-sm"><input type="file" accept="image/*" capture="environment" hidden data-f="producto"><i class="ph-bold ph-camera"></i> Foto del producto (cómo es)</label>
+        <label class="btn btn-primary btn-sm"><input type="file" accept="image/*" capture="environment" hidden data-f="caja"><i class="ph-bold ph-camera"></i> ${prin ? 'Cambiar foto de la caja' : 'Foto de la caja'}</label>
+        <label class="btn btn-primary btn-sm"><input type="file" accept="image/*" capture="environment" hidden data-f="producto"><i class="ph-bold ph-camera"></i> ${extras.length ? 'Otra foto del producto' : 'Foto del producto (cómo es)'}</label>
         <button type="button" class="btn btn-secondary btn-sm" data-buscar="1"><i class="ph-bold ph-magnifying-glass"></i> Buscar en internet</button>
         ${!d.imagen && d.fotoEstado === 'por_confirmar' ? '<button type="button" class="btn btn-secondary btn-sm" data-conf="1">✔ Es correcta</button><button type="button" class="btn btn-secondary btn-sm" data-desc="1">✖ No es</button>' : ''}
       </div><div class="fp-cand"></div>`;
@@ -83,20 +83,36 @@
     if (bc) bc.onclick = async () => { await guardarCat(cat, nombre, codigo, { fotoEstado: 'confirmada' }); rehacer(); };
     if (bd) bd.onclick = async () => { await guardarCat(cat, nombre, codigo, { fotoEstado: 'descartada' }); rehacer(); };
     const bb = el.querySelector('[data-buscar]'); if (bb) bb.onclick = async () => {
-      const cand = el.querySelector('.fp-cand'); bb.disabled = true; cand.innerHTML = '<p class="fp-v">Buscando en la tienda de Convenio Marco por código y descripción (puede tardar 20–30 s)…</p>';
-      let r = null; try {
-        const f = fs(), cfgS = await f.getDoc(f.doc(f.collection(db(), 'Config_Correo'), 'principal')), cfg = cfgS.exists() ? cfgS.data() : {};
-        if (codigo && IM) { const x = await IM.buscarFoto(codigo, cfg); if (x && x.archivo) r = { archivo: x.archivo, titulo: 'Mismo código de Mercado Público' }; }
-        if (!r && IM) r = await IM.buscarPorDescripcion(nombre, cfg);
-      } catch (e) { /* sin resultado */ }
-      bb.disabled = false;
+      const cand = el.querySelector('.fp-cand'); bb.disabled = true; cand.innerHTML = '<p class="fp-v">Buscando en la tienda de Convenio Marco y en internet (la caja y el producto)… puede tardar 20–40 s.</p>';
       const google = `https://www.google.com/search?tbm=isch&q=${encodeURIComponent(nombre)}`;
-      cand.innerHTML = r && r.archivo
-        ? `<div class="fp-candc"><img src="${esc(IM.urlMP(r.archivo, 300))}" alt="" referrerpolicy="no-referrer"><div><b>¿Es este producto?</b><small>${esc(r.titulo || '')}</small><div class="fp-facc"><button type="button" class="btn btn-primary btn-sm" data-usar="1">Usar esta foto</button><button type="button" class="btn btn-secondary btn-sm" data-no="1">No es</button><a class="btn btn-secondary btn-sm" target="_blank" rel="noopener" href="${google}">Ver en Google Imágenes</a></div></div></div>`
-        : `<p class="fp-v">No la encontré en la tienda. Sácale una foto con los botones de arriba, o búscala en <a target="_blank" rel="noopener" href="${google}">Google Imágenes</a>.</p>`;
-      const u = cand.querySelector('[data-usar]'), n = cand.querySelector('[data-no]');
-      if (u) u.onclick = async () => { await guardarCat(cat, nombre, codigo, { imagenMP: r.archivo, fotoEstado: 'confirmada', fotoTitulo: r.titulo || '' }); rehacer(); };
-      if (n) n.onclick = () => { cand.innerHTML = `<p class="fp-v">Entendido. Sácale una foto con los botones de arriba.</p>`; };
+      // «el producto en sí»: la descripción sin palabras de envase (caja, unidades, x100…)
+      const qProd = String(nombre).replace(/\b(caja|cajas|unidad(es)?|und|uds?|envase|frasco|paquete|bolsa|display|blister|sobre)\b/gi, ' ').replace(/\bx\s*\d+\b/gi, ' ').replace(/\s+/g, ' ').trim();
+      let cfg = {}, cm = null, web = {}, errWeb = '';
+      try { const f = fs(), cs = await f.getDoc(f.doc(f.collection(db(), 'Config_Correo'), 'principal')); cfg = cs.exists() ? cs.data() : {}; } catch (e) { /* sin config */ }
+      await Promise.all([
+        (async () => { try { if (codigo && IM) { const x = await IM.buscarFoto(codigo, cfg); if (x && x.archivo) cm = { archivo: x.archivo, titulo: 'Convenio Marco · mismo código' }; } if (!cm && IM) { const x = await IM.buscarPorDescripcion(nombre, cfg); if (x && x.archivo) cm = { archivo: x.archivo, titulo: 'Convenio Marco · ' + (x.titulo || '') }; } } catch (e) { /* sin resultado */ } })(),
+        (async () => { try { web = await IM.buscarWeb([{ k: 'caja', q: nombre + ' caja', n: 6 }, { k: 'prod', q: qProd, n: 6 }], cfg); } catch (e) { errWeb = e.message; } })()
+      ]);
+      bb.disabled = false;
+      const opciones = []; if (cm) opciones.push({ src: IM.urlMP(cm.archivo, 300), titulo: cm.titulo, mp: cm.archivo, grupo: 'caja' });
+      (web.caja || []).forEach(x => opciones.push({ src: x.data, titulo: x.titulo, grupo: 'caja' })); (web.prod || []).forEach(x => opciones.push({ src: x.data, titulo: x.titulo, grupo: 'prod' }));
+      const grid = (g) => opciones.map((o, i) => o.grupo === g ? `<button type="button" class="fp-op" data-op="${i}" title="${esc(o.titulo)}"><img src="${esc(o.src)}" alt="" referrerpolicy="no-referrer"></button>` : '').join('');
+      cand.innerHTML = opciones.length
+        ? `<p class="fp-v">Toca una foto y elige si es la <b>caja</b> o el <b>producto</b>. Si ninguna sirve, sácale foto con los botones de arriba.</p>
+           ${grid('caja') ? `<h4 class="fp-sub">Caja / envase</h4><div class="fp-ops">${grid('caja')}</div>` : ''}${grid('prod') ? `<h4 class="fp-sub">El producto</h4><div class="fp-ops">${grid('prod')}</div>` : ''}
+           <div class="fp-elegir" hidden><img alt=""><div><small></small><div class="fp-facc"><button type="button" class="btn btn-primary btn-sm" data-como="caja">Usar como caja</button><button type="button" class="btn btn-primary btn-sm" data-como="producto">Usar como producto</button></div></div></div>
+           <p class="fp-v"><a target="_blank" rel="noopener" href="${google}">Ver más en Google Imágenes</a></p>`
+        : `<p class="fp-v">${errWeb === 'SCRIPT_ANTIGUO' || /buscarWeb|token/.test(errWeb) ? 'Para buscar en internet falta actualizar el script (Configurar correo → copiar código nuevo → nueva implementación). ' : 'No encontré fotos. '}Sácale una foto a la caja y al producto con los botones de arriba, o búscala en <a target="_blank" rel="noopener" href="${google}">Google Imágenes</a>.</p>`;
+      let sel = null; const panel = cand.querySelector('.fp-elegir');
+      cand.querySelectorAll('[data-op]').forEach(b => b.onclick = () => { sel = opciones[+b.dataset.op]; cand.querySelectorAll('.fp-op').forEach(x => x.classList.toggle('on', x === b)); panel.hidden = false; panel.querySelector('img').src = sel.src; panel.querySelector('small').textContent = sel.titulo || ''; });
+      cand.querySelectorAll('[data-como]').forEach(b => b.onclick = async () => {
+        if (!sel) return; b.disabled = true;
+        try {
+          if (b.dataset.como === 'caja') await guardarCat(cat, nombre, codigo, sel.mp ? { imagenMP: sel.mp, fotoEstado: 'confirmada', imagen: '', fotoTitulo: sel.titulo || '' } : { imagen: await reducir(await (await fetch(sel.src)).blob(), 320, 0.75), fotoEstado: 'confirmada', fotoFuente: 'internet', fotoTitulo: sel.titulo || '' });
+          else { if (extras.length >= 4) { toast('Fotos', 'Máximo 4 fotos del producto: quita una antes.', 'warning'); b.disabled = false; return; } const blob = sel.mp ? null : await (await fetch(sel.src)).blob(); if (!blob) { toast('Fotos', 'Esa foto es de la tienda: úsala como caja.', 'info'); b.disabled = false; return; } await guardarCat(cat, nombre, codigo, { fotosExtra: extras.concat([{ tipo: 'producto', img: await reducir(blob, 640, 0.7), fuente: 'internet', por: (window.firebaseAuth && window.firebaseAuth.currentUser || {}).email || '', en: new Date().toISOString() }]) }); }
+          rehacer(); if (window.SAR_Progreso && window.SAR_Progreso.exito) window.SAR_Progreso.exito({ titulo: 'Foto guardada', texto: esc(nombre) });
+        } catch (e) { toast('No se guardó la foto', e.message || String(e), 'error'); b.disabled = false; }
+      });
     };
     if (IM) IM.rellenar(el);
   }

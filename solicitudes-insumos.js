@@ -65,10 +65,15 @@
     const f = fs(); if (!cargado) await cargarBase();
     const c = {}, n = {};
     try { const sn = await f.getDocs(f.query(f.collection(db(), 'Catalogo_Productos'), f.limit(3000)));
-      sn.forEach(d => { const x = d.data(); if (x.fotoEstado === 'descartada') return;
-        const url = /^https?:/.test(x.imagen || '') ? x.imagen : '', arch = x.imagenMP || ''; if (!url && !arch) return;
-        if (x.codigoMP && arch) c[String(x.codigoMP)] = arch;
-        [x.descripcion, x.insumoName].forEach(t => { const k = norm(t); if (k) n[k] = url ? { i: url } : { a: arch }; }); }); } catch (e) { /* sin fotos */ }
+      const mini = (src) => new Promise(ok => { const im = new Image(); im.onload = () => { const k = Math.min(1, 96 / Math.max(im.width, im.height)), cv = document.createElement('canvas'); cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k); cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); try { ok(cv.toDataURL('image/jpeg', 0.6)); } catch (e) { ok(''); } }; im.onerror = () => ok(''); im.src = src; });
+    let peso = 0; const docs = []; sn.forEach(d => docs.push(d.data()));
+    for (const x of docs) { if (x.fotoEstado === 'descartada') continue;
+        const propia = x.imagen || x.imagenWeb || '', arch = x.imagenMP || ''; if (!propia && !arch) continue;
+        if (x.codigoMP && arch && !x.imagen) { c[String(x.codigoMP)] = arch; continue; }
+        // foto propia o de internet (guardada en el producto): miniatura de 96 px para que la lista pública no pase el límite de tamaño
+        let v = null; if (x.imagen && /^https?:/.test(x.imagen)) v = { i: x.imagen }; else if (propia && peso < 700000) { const m = await mini(propia); if (m) { v = { i: m }; peso += m.length; } } else if (arch) v = { a: arch };
+        if (v) [x.descripcion, x.insumoName].forEach(t => { const k = norm(t); if (k) n[k] = v; }); }
+    } catch (e) { /* sin fotos */ }
     const productos = {}; bodegas.forEach(b => { const l = listaDe(b); if (l.length) productos[b] = l.map(p => ({ n: p.nombre, i: p.id, ...(p.codigo ? { c: String(p.codigo) } : {}) })); });
     await f.setDoc(f.doc(f.collection(db(), COL), ID_PUB), { tipo: 'CATALOGO_PUBLICO', bodegas: Object.keys(productos).sort(), productos, fotos: { c, n }, actualizado: new Date().toISOString() });
     try { localStorage.setItem('si-pub', String(Date.now())); } catch (e) { /* sin almacenamiento */ }

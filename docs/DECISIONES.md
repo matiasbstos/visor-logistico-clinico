@@ -1282,3 +1282,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Indicador abajo a la derecha «N sin sincronizar» (rojo si hay algo para revisar) con el panel de detalle.
 - Cubre: **Transferencias entre bodegas** (camión/CAM → farmacia o transitoria) y **Ajuste de inventario** (el código AJU y el registro de gobernanza se generan al sincronizar). La nota del movimiento dice «hecho sin conexión el …».
 - Límite: lo que se ve en pantalla sin conexión es lo último descargado; los movimientos en cola no se restan de la vista hasta sincronizar. Las actas de entrega siguen necesitando conexión.
+
+## 4.246 Página propia para pedir insumos y app que abre sin internet (v21.192)
+- **Dos links, dos apps:** `https://sarinventario.web.app` = el visor completo (según el rol de quien entra; superadmin ve todo). `https://sarinventario.web.app/solicitar.html` = **solo «Pedir insumos»**: página aparte con cabecera SAR, sin menú ni ninguna otra función, aunque quien entre sea administrador. Se instala como app propia «Pedir insumos» (`manifest-solicitar.json`, id `solicitar`).
+- Inicio de sesión una sola vez por teléfono con la cuenta compartida (no se guardan claves en el código). Luego solo nombre y correo por solicitud. Muestra «Tus últimas solicitudes» con su estado (Nueva, En preparación, Lista para retirar…, o «Por enviar» si aún no hay internet).
+- Si una cuenta con rol Solicitante abre el visor completo, se la manda a `solicitar.html`.
+- **Service worker registrado** (no lo estaba: la app no abría sin internet desde cero). Instalación tolerante (un archivo que falle no tumba la instalación), guarda también el SDK de Firebase, los íconos y `solicitar.html`; sin red, cada página cae a su propia copia guardada (antes todo caía a index.html).

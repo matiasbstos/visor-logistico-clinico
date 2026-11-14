@@ -7325,6 +7325,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.body.setAttribute('data-user-role', 'transitoria');
                 } else if (userRole === 'solicitante') {
                     document.body.setAttribute('data-user-role', 'solicitante');
+                    window.location.replace('solicitar.html');   // quien solo pide insumos va a su página propia, sin el resto del sistema
                 } else if (userRole === 'enfermero' || userRole === 'enfermera') {
                     document.body.setAttribute('data-user-role', 'enfermero');
                 } else if (userRole === 'admin' || userRole === 'administrador' || userRole === 'global') {

@@ -242,16 +242,16 @@
   const EST_L = { pendiente: 'Pendiente', ok: 'Confirmado', parcial: 'Parcial', no_hay: 'No hay' };
   const chipL = (l) => { const e = l.estado || 'pendiente'; return `<span class="si-le si-le-${e}">${e === 'ok' ? '✔ ' + num(l.entregar) + ' confirmado' + (num(l.entregar) === 1 ? '' : 's') : e === 'parcial' ? `Parcial: ${num(l.entregar)} de ${l.cantidad}` : EST_L[e]}</span>`; };
   const fmtV = (v) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v || ''); return m ? `${m[3]}-${m[2]}-${m[1]}` : (v || '—'); };
-  let abiertoL = {};   // numero|i → mostrar lotes aunque ya esté decidida
+  let abiertoL = {}, sel = '';   // sel: solicitud abierta en el panel lateral ('' = la primera; null = cerrado)   // numero|i → mostrar lotes aunque ya esté decidida
 
   function pintarBandeja() {
     const r = rootBandeja(); if (!r) return;
     const ab = (s) => s.estado !== 'ENTREGADA' && s.estado !== 'ANULADA', vis = solicitudes.filter(s => filtro === 'TODAS' ? true : filtro === 'ABIERTAS' ? ab(s) : s.estado === filtro);
     const IM = window.SAR_Imagenes;
-    r.innerHTML = `<div class="si-wrap si-ancho"><div class="si-cab"><div><h2 class="si-t">Solicitudes de insumos</h2><p class="si-s">Revisa cada producto: foto, dónde hay y de qué lote sacar. Confirma o marca «No hay»; quien pidió lo ve en su teléfono.</p></div>
-      <div class="si-acc"><select id="si-fil" class="si-in">${[['ABIERTAS', 'Abiertas'], ['NUEVA', 'Nuevas'], ['PREPARACION', 'En preparación'], ['LISTA', 'Listas'], ['ENTREGADA', 'Entregadas'], ['TODAS', 'Todas']].map(([v, t]) => `<option value="${v}"${v === filtro ? ' selected' : ''}>${t}</option>`).join('')}</select>
-      <button type="button" class="btn btn-secondary" id="si-off" title="Guarda en el teléfono el inventario y las solicitudes para trabajar sin internet">Descargar para usar sin internet</button></div></div><p class="si-v" id="si-offm">${esc(localStorage.getItem('si-off') ? 'Última descarga: ' + new Date(localStorage.getItem('si-off')).toLocaleString('es-CL') : '')}</p>
-      ${vis.map(s => { const mover = (s.lineas || []).some(l => !l.movido && (l.seleccion || []).some(x => x.bodega !== s.bodega && x.qty > 0));
+    // «Costado»: en pantallas anchas la lista queda a la izquierda y el detalle se abre al lado, sin perder la lista
+    const costado = window.innerWidth >= 1000;
+    if (costado && (!sel || !vis.some(x => x.numero === sel)) && sel !== null) sel = vis.length ? vis[0].numero : '';
+    const cardHTML = (s) => { const mover = (s.lineas || []).some(l => !l.movido && (l.seleccion || []).some(x => x.bodega !== s.bodega && x.qty > 0));
         return `<article class="si-card" data-n="${esc(s.numero)}"><header><b>${esc(s.correlativo || s.numero)}</b>${s.correlativo ? '' : ' <small>(asignando N°…)</small>'}<span class="si-est si-e-${esc(s.estado)}">${esc(ESTADOS[s.estado] || s.estado)}</span></header>
         <p class="si-m">${esc(s.solicitante || s.requester)}${s.correo ? ` (<a href="mailto:${esc(s.correo)}">${esc(s.correo)}</a>)` : ''}${s.servicio ? ' · ' + esc(s.servicio) : ''} · pide a <b>${esc(s.bodega)}</b> · ${esc(new Date(s.creadoEn).toLocaleString('es-CL'))}</p>
         ${s.nota ? `<p class="si-m">Nota: ${esc(s.nota)}</p>` : ''}
@@ -261,7 +261,13 @@
             ${ab(s) && ver ? (cands.length ? `<table class="si-tb si-lt"><thead><tr><th>Dónde</th><th>Lote</th><th>Vence</th><th>Hay</th><th>Sacar</th></tr></thead><tbody>${cands.map((c, j) => `<tr><td>${esc(c.bodega)}${c.estante ? ' · ' + esc(c.estante) : ''}${c.bodega !== s.bodega ? ' <small class="si-mv">hay que traer</small>' : ''}</td><td>${esc(c.lote)}</td><td>${esc(fmtV(c.vence))}</td><td>${c.disp}</td><td><input type="number" min="0" max="${c.disp}" value="${pre[j]}" class="si-q-in" data-j="${j}" inputmode="numeric" aria-label="Cantidad a sacar del lote ${esc(c.lote)}"></td></tr>`).join('')}</tbody></table>` : '<p class="si-v">No está en el inventario.</p>')
               + `<div class="si-lb"><button type="button" class="btn btn-primary btn-sm" data-ok="${i}"${cands.length ? '' : ' disabled'}>Confirmar</button><button type="button" class="btn btn-secondary btn-sm" data-nh="${i}">No hay</button></div>`
               : (ab(s) ? `<div class="si-lb"><small>${(l.seleccion || []).filter(x => x.qty > 0).map(x => `${esc(x.lote)} · ${esc(x.bodega)}: ${x.qty}`).join(' · ')}</small><button type="button" class="btn btn-secondary btn-sm" data-ver="${i}">Cambiar</button></div>` : '')}</div>`; }).join('')}</div>
-        <footer>${mover && ab(s) ? `<button class="btn btn-primary" data-mv="1">Traer lo elegido a ${esc(s.bodega)}</button>` : ''}${s.estado === 'LISTA' ? '<button class="btn btn-primary" data-e="ENTREGADA">Marcar entregada</button>' : ''}${s.estado === 'PREPARACION' ? '<button class="btn btn-secondary" data-e="LISTA">Lista para retirar</button>' : ''}<button class="btn btn-secondary" data-c="1">Copiar para WhatsApp</button>${ab(s) ? '<button class="btn btn-secondary" data-e="ANULADA">Anular</button>' : ''}</footer></article>`; }).join('') || '<div class="home-empty">No hay solicitudes en este filtro.</div>'}</div>`;
+        <footer>${mover && ab(s) ? `<button class="btn btn-primary" data-mv="1">Traer lo elegido a ${esc(s.bodega)}</button>` : ''}${s.estado === 'LISTA' ? '<button class="btn btn-primary" data-e="ENTREGADA">Marcar entregada</button>' : ''}${s.estado === 'PREPARACION' ? '<button class="btn btn-secondary" data-e="LISTA">Lista para retirar</button>' : ''}<button class="btn btn-secondary" data-c="1">Copiar para WhatsApp</button>${ab(s) ? '<button class="btn btn-secondary" data-e="ANULADA">Anular</button>' : ''}</footer></article>`; };
+    r.innerHTML = `<div class="si-wrap si-ancho${costado ? ' si-wrap--costado' : ''}"><div class="si-cab"><div><h2 class="si-t">Solicitudes de insumos</h2><p class="si-s">Revisa cada producto: foto, dónde hay y de qué lote sacar. Confirma o marca «No hay»; quien pidió lo ve en su teléfono.</p></div>
+      <div class="si-acc"><select id="si-fil" class="si-in">${[['ABIERTAS', 'Abiertas'], ['NUEVA', 'Nuevas'], ['PREPARACION', 'En preparación'], ['LISTA', 'Listas'], ['ENTREGADA', 'Entregadas'], ['TODAS', 'Todas']].map(([v, t]) => `<option value="${v}"${v === filtro ? ' selected' : ''}>${t}</option>`).join('')}</select>
+      <button type="button" class="btn btn-secondary" id="si-off" title="Guarda en el teléfono el inventario y las solicitudes para trabajar sin internet">Descargar para usar sin internet</button></div></div><p class="si-v" id="si-offm">${esc(localStorage.getItem('si-off') ? 'Última descarga: ' + new Date(localStorage.getItem('si-off')).toLocaleString('es-CL') : '')}</p>
+      ${costado ? `<div class="si-costado"><div class="si-lsol" role="listbox" aria-label="Solicitudes">${vis.map(s => `<button type="button" role="option" class="si-fsol${s.numero === sel ? ' on' : ''}" data-sel="${esc(s.numero)}" aria-selected="${s.numero === sel}"><span><b>${esc(s.correlativo || s.numero)}</b><small>${esc(s.solicitante || '')}${s.servicio ? ' · ' + esc(s.servicio) : ''} · ${(s.lineas || []).length} prod.</small></span><span class="si-est si-e-${esc(s.estado)}">${esc(ESTADOS[s.estado] || s.estado)}</span></button>`).join('') || '<div class="home-empty">No hay solicitudes en este filtro.</div>'}</div>
+        <section class="si-panel" aria-live="polite">${vis.find(s => s.numero === sel) ? `<div class="si-pcab"><small>↑ ↓ recorre · Esc cierra</small><button type="button" class="si-pnav" data-nav="-1" aria-label="Anterior">▲</button><button type="button" class="si-pnav" data-nav="1" aria-label="Siguiente">▼</button><button type="button" class="si-pnav" data-cerrar="1" aria-label="Cerrar">✕</button></div>` + cardHTML(vis.find(s => s.numero === sel)) : '<div class="si-pvacio">Elige una solicitud de la lista para ver el detalle.</div>'}</section></div>`
+        : vis.map(cardHTML).join('') || '<div class="home-empty">No hay solicitudes en este filtro.</div>'}</div>`;
     if (IM) IM.rellenar(r);
   }
   /** Guarda el resultado de una línea (y pasa la solicitud a «En preparación» o «Lista» según corresponda). */
@@ -317,12 +323,26 @@
     } catch (e) { if (prog) prog.error(); toast('Descarga', 'No se pudo completar: ' + (e.message || e), 'error'); }
     pintarBandeja();
   }
+  function moverSel(d) {
+    const ab = (x) => x.estado !== 'ENTREGADA' && x.estado !== 'ANULADA', vis = solicitudes.filter(x => filtro === 'TODAS' ? true : filtro === 'ABIERTAS' ? ab(x) : x.estado === filtro);
+    if (!vis.length) return; const i = Math.max(0, vis.findIndex(x => x.numero === sel)); sel = vis[Math.min(vis.length - 1, Math.max(0, i + d))].numero; pintarBandeja();
+    const on = document.querySelector('.si-fsol.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+  }
+  if (typeof document.addEventListener === 'function') document.addEventListener('keydown', (e) => {
+    const r = rootBandeja(); if (!r || !r.offsetParent || window.innerWidth < 1000 || /INPUT|TEXTAREA|SELECT/.test((e.target && e.target.tagName) || '') || document.querySelector('.sar-conf, .fp-ov, .r-prog')) return;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); moverSel(e.key === 'ArrowDown' ? 1 : -1); }
+    else if (e.key === 'Escape' && sel) { sel = null; pintarBandeja(); }
+  });
+  if (typeof window.addEventListener === 'function') window.addEventListener('resize', () => { const r = rootBandeja(); if (r && r.offsetParent) { clearTimeout(window.__siRz); window.__siRz = setTimeout(pintarBandeja, 200); } });
   function enlazarBandeja() {
     const r = rootBandeja(); if (!r || r.dataset.ok) return; r.dataset.ok = '1';
     r.addEventListener('change', (e) => { if (e.target.id === 'si-fil') { filtro = e.target.value; pintarBandeja(); } });
     r.addEventListener('click', async (e) => {
       const b = e.target.closest('button'); if (!b) return; const card = b.closest('.si-card');
       if (b.id === 'si-off') return descargarOffline();
+      if (b.dataset.sel) { sel = b.dataset.sel; return pintarBandeja(); }
+      if (b.dataset.cerrar) { sel = null; return pintarBandeja(); }
+      if (b.dataset.nav) return moverSel(+b.dataset.nav);
       if (!card) return; const n = card.dataset.n;
       if (b.dataset.ok !== undefined) return decidirLinea(n, +b.dataset.ok, false, b.closest('.si-ln'));
       if (b.dataset.nh !== undefined) return decidirLinea(n, +b.dataset.nh, true, null);
@@ -372,6 +392,15 @@
       const txt = '\ufeff' + [CAB_INFORME, ...filasInforme(l), [], ['COMPROMETIDO POR SOLICITUDES (confirmado y no entregado)'], ['Producto', 'Bodega', 'Comprometido', 'Solicitudes'], ...comp.map(c => [c.nombre, c.bodega, c.qty, c.sols.join(', ')])].map(x => x.map(celda).join(';')).join('\r\n');
       const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([txt], { type: 'text/csv;charset=utf-8' })); a.download = `solicitudes-insumos-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
     };
+  }
+
+  // ---------------- aviso en la campana: solicitudes nuevas (solo bodega) ----------------
+  if (typeof module === 'undefined' && typeof document.addEventListener === 'function' && !window.SAR_SOLICITUD_PUBLICA) {
+    let n = 0; const t = setInterval(() => { n++; const u = usuario(); if (!(u && esGestor() && fs() && db()) && n < 90) return; clearInterval(t); if (!(u && esGestor())) return;
+      try { const f = fs(); f.onSnapshot(f.query(f.collection(db(), COL), f.where('estado', '==', 'NUEVA')), (sn) => { const l = []; sn.forEach(d => { if (d.data().tipo === TIPO) l.push(d.data()); }); window.SAR_SolicitudesNuevas = l.sort((a, b) => String(b.creadoEn).localeCompare(String(a.creadoEn)));
+        const b = document.getElementById('si-badge'); if (b) { b.textContent = l.length || ''; b.style.display = l.length ? '' : 'none'; }
+        if (l.length > (window.__solNuevasAntes || 0) && window.__solNuevasAntes !== undefined && typeof window.showToast === 'function') window.showToast('Solicitud de insumos nueva', `${l[0].solicitante || ''}${l[0].servicio ? ' · ' + l[0].servicio : ''}: ${(l[0].lineas || []).length} producto(s).`, 'info');
+        window.__solNuevasAntes = l.length; window.dispatchEvent(new Event('sar-avisos')); }, () => { /* sin permiso */ }); } catch (e) { /* sin conexión */ } }, 2000);
   }
 
   window.SAR_Solicitudes = { abrirPide, abrirBandeja, publicarCatalogo, numeroSolicitud, agregarLinea, textoPicking, infoLinea, lotesCandidatos, repartir, estadoLinea, comprometido, filasInforme, parecidos, CAB_INFORME, leerTodas, pintarAuditoria };

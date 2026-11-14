@@ -47,6 +47,8 @@
         }
       }
     } finally { procesando = false; pintarChip(); }
+    if (ok) { try { localStorage.setItem('sar-cola-ult', JSON.stringify({ en: new Date().toISOString(), ok })); } catch (e) { /* sin almacenamiento */ } }
+    window.dispatchEvent(new Event('sar-avisos'));
     if ((ok || err) && typeof window.showToast === 'function') window.showToast('Sincronización', `${ok} operación(es) hechas sin conexión ya aplicadas${err ? ` · ${err} para revisar` : ''}.`, err ? 'warning' : 'success');
     if (ok && typeof window.loadFirstPage === 'function') try { window.loadFirstPage(); } catch (e) { /* sin tabla */ }
     return { ok, error: err, quedan: pendientes().length };

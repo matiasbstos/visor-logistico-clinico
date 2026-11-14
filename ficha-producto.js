@@ -123,13 +123,17 @@
   const venceClase = (v) => { if (!v) return ''; const d = new Date(v), dias = (d - new Date()) / 864e5; return dias < 0 ? 'fp-venc' : dias < 90 ? 'fp-prox' : ''; };
   const comoTxt = (m) => [tipoTxt(m.type), m.document, m.provider ? 'Proveedor ' + m.provider : '', m.origin && !/^Inventario inicial$/i.test(m.origin) ? 'desde ' + m.origin : ''].filter(Boolean).map(esc).join(' · ');
 
-  async function abrir(p) {
-    const nombre = p.nombre || p.descripcion || '', codigo = p.codigo || p.codigoMP || '';
+  async function abrir(p, opc) {
+    const o = opc || {}, nombre = p.nombre || p.descripcion || '', codigo = p.codigo || p.codigoMP || '';
+    const lista = Array.isArray(o.lista) ? o.lista : null, idx = Number.isInteger(o.idx) ? o.idx : -1;
+    document.querySelectorAll('.fp-ov').forEach(x => x.remove());
     const ov = document.createElement('div'); ov.className = 'fp-ov'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', 'Ficha de ' + nombre);
-    ov.innerHTML = `<div class="fp-c"><button type="button" class="fp-x" aria-label="Cerrar">×</button><div class="fp-body">${window.SAR_Progreso ? window.SAR_Progreso.cargando('Buscando stock, lotes y movimientos…') : 'Cargando…'}</div></div>`;
+    if (o.sinAnim) ov.classList.add('fp-ov--quieto');
+    ov.innerHTML = `<div class="fp-c">${lista ? `<div class="fp-nav"><small>${idx + 1} de ${lista.length} · ↑ ↓ recorre · Esc cierra</small><button type="button" class="si-pnav" data-fnav="-1" aria-label="Anterior"${idx <= 0 ? ' disabled' : ''}>▲</button><button type="button" class="si-pnav" data-fnav="1" aria-label="Siguiente"${idx >= lista.length - 1 ? ' disabled' : ''}>▼</button></div>` : ''}<button type="button" class="fp-x" aria-label="Cerrar">×</button><div class="fp-body">${window.SAR_Progreso ? window.SAR_Progreso.cargando('Buscando stock, lotes y movimientos…') : 'Cargando…'}</div></div>`;
     const cerrar = () => { ov.remove(); document.removeEventListener('keydown', tecla, true); };
-    const tecla = (e) => { if (e.key === 'Escape' && !document.querySelector('.prod-zoom')) { e.stopPropagation(); cerrar(); } };
-    ov.addEventListener('click', (e) => { if (e.target === ov || e.target.closest('.fp-x')) cerrar(); });
+    const ir = (d) => { const j = idx + d; if (!lista || j < 0 || j >= lista.length) return; cerrar(); abrir(lista[j], { lista, idx: j, sinAnim: true }); };
+    const tecla = (e) => { if (document.querySelector('.prod-zoom') || /INPUT|TEXTAREA|SELECT/.test((e.target && e.target.tagName) || '')) return; if (e.key === 'Escape') { e.stopPropagation(); cerrar(); } else if (lista && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) { e.preventDefault(); e.stopPropagation(); ir(e.key === 'ArrowDown' ? 1 : -1); } };
+    ov.addEventListener('click', (e) => { const n = e.target.closest('[data-fnav]'); if (n) { ir(+n.dataset.fnav); return; } if (e.target === ov || e.target.closest('.fp-x')) cerrar(); });
     document.addEventListener('keydown', tecla, true); document.body.appendChild(ov);
     const cuerpo = ov.querySelector('.fp-body'), f = fs();
     try {

@@ -43,6 +43,8 @@
       }
       if (window.SAR_Solicitudes && window.SAR_Solicitudes.publicarCatalogo && partes === PARTES_STAFF) await window.SAR_Solicitudes.publicarCatalogo().catch(() => {});
       if (window.SAR_Imagenes) await window.SAR_Imagenes.cargar(true).catch(() => {});
+      if (partes === PARTES_STAFF) { try { const pc = await f.getDocs(f.query(f.collection(db(), 'Catalogo_Productos'), f.where('fotoEstado', '==', 'por_confirmar'), f.limit(2000))); window.SAR_FotosPorConfirmar = pc.size; } catch (e) { /* sin permiso */ } }
+      window.dispatchEvent(new Event('sar-avisos'));
       try { localStorage.setItem(CLAVE, new Date().toISOString()); } catch (e) { /* sin almacenamiento */ }
       if (o.aviso && window.showToast) window.showToast('Sincronizado', `${n} registros guardados en este equipo y cambios subidos.`, 'success');
     } finally { corriendo = false; pintarReposo(); }

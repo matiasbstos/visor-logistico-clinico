@@ -280,7 +280,8 @@
     function pintarCampana() {
         const b = document.getElementById('btn-notificaciones'); if (!b) return;
         const extra = window.SAR_AvisosCampana ? window.SAR_AvisosCampana.datosActuales() : { total: 0 };
-        const n = grupos.reduce((s, g) => s + g.listos, 0) + porRecibir.filter(o => o.parcial).length + extra.total;
+        const ax = window.SAR_AvisosCampana && window.SAR_AvisosCampana.accionExtra ? window.SAR_AvisosCampana.accionExtra() : { total: 0 };
+        const n = grupos.reduce((s, g) => s + g.listos, 0) + porRecibir.filter(o => o.parcial).length + extra.total + ax.total;
         let ins = b.querySelector('.noti-n'); if (!ins) { ins = document.createElement('span'); ins.className = 'noti-n'; b.appendChild(ins); }
         ins.textContent = n > 9 ? '9+' : String(n); ins.style.display = n ? '' : 'none';
         const antes = Number(b.dataset.n || 0); b.dataset.n = String(n); b.classList.toggle('noti-activa', n > 0);
@@ -294,15 +295,20 @@
         const con = grupos.filter(g => g.listos);
         const parc = porRecibir.filter(o => o.parcial);
         const bloqueRec = parc.length ? `<div class="noti-sec"><b>Por recibir (recepción parcial)</b>${parc.map(o => `<div class="noti-it"><b>OC ${esc(o.numeroOC)}</b> · ${esc(o.proveedor)}: faltan ${o.pendiente} un. (${o.lineas.length} producto(s))<small>${o.lineas.slice(0, 3).map(x => esc(String(x.producto).slice(0, 40)) + ' (' + x.pendiente + ')').join(' · ')}</small></div>`).join('')}</div>` : '';
-        const ext = window.SAR_AvisosCampana ? window.SAR_AvisosCampana.html(window.SAR_AvisosCampana.datosActuales()) : '';
-        p.innerHTML = `<strong class="noti-tit"><i class="ph-fill ph-bell-ringing"></i> Avisos</strong>${ext}${bloqueRec}${con.length ? con.map(g => `<div class="noti-it"><b>${esc(g.centro)}</b>: hay stock para entregar ${g.listos} de ${g.items.length} producto(s) pendiente(s)
-            <small>${g.items.filter(x => x.entregable > 0).slice(0, 3).map(x => esc(x.nombre.slice(0, 40)) + ' (' + x.entregable + ')').join(' · ')}</small></div>`).join('') : (parc.length ? '' : '<p class="act-hint">Sin avisos por ahora.</p>')}
-            <button type="button" class="btn btn-outline btn-sm" id="noti-ir">Ver pendientes por entregar</button>`;
+        const AC = window.SAR_AvisosCampana, ext = AC ? AC.html(AC.datosActuales()) : '', ax = AC && AC.accionExtra ? AC.accionExtra() : null, auto = AC && AC.automatico ? AC.automatico() : [];
+        const entregas = con.length ? `<div class="noti-sec2"><div class="noti-h"><i style="background:var(--sar-green)"></i><b>Hay stock para entregar</b><span>${con.length}</span></div>${con.map(g => `<div class="noti-it"><b>${esc(g.centro)}</b>: ${g.listos} de ${g.items.length} producto(s) pendiente(s)<small>${g.items.filter(x => x.entregable > 0).slice(0, 3).map(x => esc(x.nombre.slice(0, 40)) + ' (' + x.entregable + ')').join(' · ')}</small></div>`).join('')}<button type="button" class="noti-ver" data-ir="view-pendientes-entrega">Ver pendientes por entregar</button></div>` : '';
+        const accion = (ax ? AC.htmlAccionExtra(ax) : '') + ext + bloqueRec + entregas;
+        const nAcc = (accion.match(/class="noti-it"/g) || []).length;
+        p.innerHTML = `<div class="noti-cab"><strong class="noti-tit"><i class="ph-fill ph-bell-ringing"></i> Avisos</strong></div>
+            <div class="noti-tabs" role="tablist"><button type="button" role="tab" class="on" data-tab="acc" aria-selected="true">Necesitan tu acción <span>${nAcc}</span></button><button type="button" role="tab" data-tab="auto" aria-selected="false">Automático <span>${auto.length}</span></button></div>
+            <div class="noti-pane" data-p="acc">${accion || '<p class="act-hint">Nada pendiente: todo al día.</p>'}</div>
+            <div class="noti-pane" data-p="auto" hidden>${AC && AC.htmlAutomatico ? AC.htmlAutomatico(auto) : ''}</div>`;
+        p.querySelectorAll('.noti-tabs button').forEach(b => b.addEventListener('click', () => { p.querySelectorAll('.noti-tabs button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', String(x === b)); }); p.querySelectorAll('.noti-pane').forEach(x => { x.hidden = x.dataset.p !== b.dataset.tab; }); }));
         document.body.appendChild(p);
-        p.querySelector('#noti-ir').addEventListener('click', () => { p.remove(); window.location.hash = 'view-pendientes-entrega'; });
-        p.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => { const v = b.dataset.ir; p.remove(); window.location.hash = v; }));
+        p.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => { const v = b.dataset.ir; p.remove(); if (v === '#cola') { if (window.SAR_Cola) window.SAR_Cola.abrirPanel(); return; } if (v === '#catalogo') { const c = document.querySelector('[data-erp-panel="erp-panel-catalogo"], [data-go-erp="erp-panel-catalogo"]'); if (c) c.click(); return; } window.location.hash = v; }));
         setTimeout(() => document.addEventListener('click', function cerrar(e) { if (!p.contains(e.target) && !e.target.closest('#btn-notificaciones')) { p.remove(); document.removeEventListener('click', cerrar); } }), 0);
     }
+    if (typeof window.addEventListener === 'function') window.addEventListener('sar-avisos', () => { try { pintarCampana(); } catch (e) { /* sin campana */ } });
     function iniciar() {
         const b = document.getElementById('btn-notificaciones'); if (b) b.addEventListener('click', () => { if (!cargado) traer().then(abrirPanel).catch(() => abrirPanel()); else abrirPanel(); });
         const ok = () => ['admin', 'administrador', 'global', 'superadmin', 'operador'].includes(rol()) && window.firebaseDb && window.firebaseAuth && window.firebaseAuth.currentUser;

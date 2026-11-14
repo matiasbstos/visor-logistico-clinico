@@ -6326,3 +6326,29 @@ body[data-user-role="solicitante"] .superadmin-only { display: none !important; 
 .si-manbox{display:flex;flex-direction:column;gap:8px;background:#fff;border:1px dashed #cbd5e1;border-radius:10px;padding:12px}.si-manbox small{color:#64748b}
 .si-fbtn{display:inline-flex;align-items:center;gap:8px;cursor:pointer;flex:1;justify-content:center}.si-fbtn img{width:36px;height:36px;object-fit:cover;border-radius:6px}
 .si-lfoto{width:40px;height:40px;object-fit:cover;border-radius:6px;flex:none}.si-lista--sug{max-height:220px}
+/* Avisos: «Necesitan tu acción» / «Automático» (v21.202) */
+.noti-tabs{display:flex;gap:4px;background:#eef1f6;border-radius:10px;padding:4px;margin:8px 0 10px}.noti-tabs button{flex:1;border:0;background:transparent;padding:8px 6px;border-radius:8px;font:inherit;font-size:.8rem;font-weight:600;color:#475569;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px}
+.noti-tabs button.on{background:#fff;color:var(--primary,#1a3668);box-shadow:0 1px 3px rgba(15,23,42,.12)}.noti-tabs button span{background:#cbd5e1;color:#1e293b;border-radius:10px;padding:0 7px;font-size:.72rem}.noti-tabs button.on span{background:var(--primary,#1a3668);color:#fff}
+.noti-auto{display:flex;gap:10px;align-items:flex-start;padding:10px 4px;border-bottom:1px solid #eef1f6}.noti-auto i{color:var(--brand-green-ink,#4C7A0F);font-size:18px;margin-top:2px}.noti-auto div{display:flex;flex-direction:column;gap:2px}.noti-auto b{font-size:.85rem;color:#1e293b}.noti-auto small{color:#64748b;font-size:.78rem}
+/* «Costado»: lista + detalle al lado (v21.202) */
+.si-wrap--costado{max-width:1400px}
+.si-costado{display:grid;grid-template-columns:minmax(280px,360px) 1fr;gap:16px;align-items:start}
+.si-lsol{display:flex;flex-direction:column;gap:6px;max-height:calc(100vh - 230px);overflow:auto;position:sticky;top:12px;padding-right:4px}
+.si-fsol{display:flex;justify-content:space-between;align-items:center;gap:8px;text-align:left;padding:10px 12px;border:1px solid #e2e8f0;border-radius:8px;background:#fff;cursor:pointer;font:inherit}
+.si-fsol span:first-child{display:flex;flex-direction:column;gap:2px;min-width:0}.si-fsol small{color:#64748b;font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.si-fsol.on{border-color:var(--primary,#1a3668);background:#f0f4fb;box-shadow:inset 3px 0 0 var(--brand-green,#8cc63f)}
+.si-panel{animation:siEntra .25s ease-out}.si-panel .si-card{margin:0}
+@keyframes siEntra{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:none}}
+.si-pcab{display:flex;align-items:center;gap:6px;justify-content:flex-end;margin-bottom:6px}.si-pcab small{color:#64748b;margin-right:auto}
+.si-pnav{width:32px;height:32px;border:1px solid #cbd5e1;background:#fff;border-radius:8px;cursor:pointer;color:#334155}
+.si-pvacio{border:2px dashed #cbd5e1;border-radius:10px;padding:40px;text-align:center;color:#64748b}
+@media (prefers-reduced-motion:reduce){.si-panel{animation:none}}
+.fp-nav{display:flex;align-items:center;gap:6px;margin:-6px 44px 10px 0}.fp-nav small{color:#64748b;margin-right:auto}.fp-nav .si-pnav:disabled{opacity:.35;cursor:default}
+/* Ficha en panel lateral en pantallas anchas («Costado», v21.202): el catálogo sigue a la vista */
+@media (min-width:1000px){
+  .fp-ov{justify-content:flex-end;align-items:stretch;padding:0;background:rgba(15,23,42,.28)}
+  .fp-c{width:min(760px,58vw);border-radius:0;max-height:100vh;overflow:auto;box-shadow:-12px 0 40px rgba(15,23,42,.25);animation:fpEntra .28s cubic-bezier(.2,.8,.2,1)}
+  .fp-ov--quieto .fp-c{animation:none}
+}
+@keyframes fpEntra{from{transform:translateX(60px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.fp-c{animation:none !important}}

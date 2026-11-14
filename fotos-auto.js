@@ -32,6 +32,7 @@
     try {
       for (let i = 1; i <= RONDAS; i++) { r = await window.SAR_SeguimientoOC.buscarFotosFaltantes((t) => bg && bg.paso(`Ronda ${i} · ${t}`), 40); tot += r.buscados; enc += r.encontrados; if (!r.pendientes || !r.buscados) break; }
       const f = fs(); await f.setDoc(f.doc(f.collection(db(), 'Contadores'), 'fotos-auto'), { ultimo: new Date().toISOString(), por: usuario(), buscados: tot, encontrados: enc, quedan: r.pendientes || 0 }, { merge: true }).catch(() => {});
+      try { localStorage.setItem('sar-fotos-ult', JSON.stringify({ en: new Date().toISOString(), tot, enc })); } catch (e) { /* sin almacenamiento */ } window.dispatchEvent(new Event('sar-avisos'));
       if (bg) bg.listo(tot ? `${enc} foto(s) nueva(s) de ${tot} buscadas${enc ? ' · confírmalas en Catálogo' : ''}` : 'Todos los productos ya tienen foto');
       if (enc && typeof window.showToast === 'function') window.showToast('Fotos encontradas', `${enc} foto(s) nueva(s) quedaron por confirmar en Catálogo.`, 'info');
       if (window.SAR_Solicitudes && window.SAR_Solicitudes.publicarCatalogo) window.SAR_Solicitudes.publicarCatalogo(true).catch(() => {});

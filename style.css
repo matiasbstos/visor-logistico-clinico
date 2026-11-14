@@ -6270,3 +6270,7 @@ body[data-user-role="solicitante"] .superadmin-only { display: none !important; 
 .fp-res{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px}.fp-res div{background:#f5f7fb;border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}.fp-res span{font-size:.75rem;color:#64748b}.fp-res small{color:#475569;font-size:.78rem}
 @media(max-width:640px){.fp-res{grid-template-columns:1fr}.fp-cab .prod-img{width:96px;height:96px}}
 .cv-cob{font-size:.85rem;color:#334155;background:#eef1f6;border-radius:12px;padding:4px 10px}
+/* Trabajo sin conexión (v21.191) */
+.cola-chip{position:fixed;right:16px;bottom:16px;z-index:9999;display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:24px;border:0;background:#92400e;color:#fff;font-weight:700;font-size:.85rem;box-shadow:0 8px 24px rgba(15,23,42,.3);cursor:pointer}
+.cola-chip--err{background:#b91c1c}.cola-gira{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+.cola-pan{width:min(560px,94vw)}.cola-pan li small{color:#64748b}.cola-e{color:#b91c1c}.cola-pan li .btn{margin-top:4px}

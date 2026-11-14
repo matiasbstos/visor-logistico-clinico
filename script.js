@@ -977,6 +977,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (window.SAR_Gobernanza) {
                             const r = await window.SAR_Gobernanza.pedirMotivo('Motivo del ajuste', `${window.escapeHTML(insumoNombre)}: ${stockActual} → ${nuevoStock}.`);
                             if (!r) return;
+                            if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) {   // sin internet: el ajuste queda en el teléfono y se aplica al volver la conexión, con el stock de ese momento
+                                window.SAR_Cola.encolar({ tipo: 'ajuste', titulo: `Ajuste ${cantidadParsed > 0 ? '+' : ''}${cantidadParsed} · ${insumoNombre}`, datos: { docId, nombre: insumoNombre, cantidad: cantidadParsed, justificacion: `[${r.motivo}${r.nota ? ' - ' + r.nota : ''}] ${justificacion}`, motivo: r.motivo, nota: r.nota, directo: isSuperAdmin, en: Date.now() } });
+                                return window.showAlertCenter('Guardado sin conexión', `El ajuste de ${insumoNombre} (${cantidadParsed > 0 ? '+' : ''}${cantidadParsed}) quedó en este teléfono y se aplicará solo al volver internet.`);
+                            }
                             codigoGob = await window.SAR_Gobernanza.codigo('AJU');
                             justificacionFinal = `[${r.motivo}${r.nota ? ' - ' + r.nota : ''}] ${justificacion}`;
                             if (isSuperAdmin) window.SAR_Gobernanza.registrar({ nombre: insumoNombre, delta: cantidadParsed, codigo: codigoGob, motivo: r.motivo, nota: r.nota, origen: 'AJUSTE', antes: { cantidad: stockActual }, despues: { cantidad: nuevoStock }, insumoId: docId }).catch(() => {});

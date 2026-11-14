@@ -139,7 +139,8 @@
       else if (b.dataset.x !== undefined) { lineas.splice(+b.dataset.x, 1); pintarPide(); }
       else if (b.id === 'si-env') enviar();
     });
-    window.addEventListener('online', estadoRed); window.addEventListener('offline', estadoRed);
+    window.addEventListener('online', () => { estadoRed(); if (publica()) { cargado = false; cargarBase().then(pintarPide).catch(() => {}); } });   // al volver internet: lista y estados al día
+    window.addEventListener('offline', estadoRed);
   }
   async function abrirPide() {
     const r = rootPide(); if (!r) return; enlazarPide();

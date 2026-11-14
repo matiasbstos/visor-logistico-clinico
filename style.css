@@ -6283,3 +6283,7 @@ body[data-user-role="solicitante"] .superadmin-only { display: none !important; 
 .si-mia{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px}.si-mia summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none}.si-mia summary::-webkit-details-marker{display:none}
 .si-mia-l{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 0;border-top:1px solid #eef1f6;font-size:.88rem}
 @media(max-width:560px){.si-lt th:nth-child(3),.si-lt td:nth-child(3){display:none}}
+/* Estado de sincronización en la insignia de nube (v21.196) */
+.status-badge--sin{background:#fef3c7 !important;color:#92400e !important;border-color:#fcd34d !important}
+.status-badge--bajando{background:#dbeafe !important;color:#1e40af !important;border-color:#93c5fd !important}
+.status-badge--bajando i{animation:spin 1.2s linear infinite}

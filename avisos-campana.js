@@ -44,13 +44,14 @@
   const haceTxt = (iso) => { if (!iso) return ''; const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000); return m < 1 ? 'recién' : m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.round(m / 60)} h` : `hace ${Math.round(m / 1440)} d`; };
   /** Lo que necesita a una persona y no está en calcular(): solicitudes nuevas, operaciones sin conexión para revisar, fotos por confirmar. */
   function accionExtra() {
-    const sols = window.SAR_SolicitudesNuevas || [], cola = window.SAR_Cola ? window.SAR_Cola.pendientes().filter(x => x.estado === 'error') : [], fp = Number(window.SAR_FotosPorConfirmar || 0);
-    return { sols, cola, fp, total: sols.length + cola.length + (fp ? 1 : 0) };
+    const sols = window.SAR_SolicitudesNuevas || [], cola = window.SAR_Cola ? window.SAR_Cola.pendientes().filter(x => x.estado === 'error') : [], fp = Number(window.SAR_FotosPorConfirmar || 0), sf = Number(window.SAR_SinFoto || 0);
+    return { sols, cola, fp, sf, total: sols.length + cola.length + (fp ? 1 : 0) + (sf ? 1 : 0) };
   }
   function htmlAccionExtra(x) {
     return seccion('var(--sar-red)', 'Solicitudes de insumos nuevas', x.sols.map(s => '<b>' + esc(s.correlativo || s.numero) + '</b> <small>' + esc(s.solicitante || '') + (s.servicio ? ' · ' + esc(s.servicio) : '') + ' · ' + (s.lineas || []).length + ' producto(s) · ' + esc(haceTxt(s.creadoEn)) + '</small>'), 'Ver solicitudes', 'view-solicitudes-insumos') +
       seccion('var(--sar-orange)', 'Hecho sin conexión: para revisar', x.cola.map(o => '<b>' + esc(o.titulo) + '</b> <small>' + esc(o.error || '') + '</small>'), 'Ver detalle', '#cola') +
-      (x.fp ? seccion('var(--sar-yellow)', 'Fotos por confirmar', ['<b>' + x.fp + ' foto(s)</b> <small>halladas automáticamente: confírmalas o descártalas en la ficha de cada producto</small>'], 'Ir al catálogo', '#catalogo') : '');
+      (x.fp ? seccion('var(--sar-yellow)', 'Fotos por confirmar', ['<b>' + x.fp + ' foto(s)</b> <small>halladas automáticamente: confírmalas o descártalas en la ficha de cada producto</small>'], 'Ir al catálogo', '#catalogo') : '') +
+      (x.sf ? seccion('var(--sar-orange)', 'Productos sin fotografía', ['<b>' + x.sf + ' producto(s)</b> <small>a los que la búsqueda automática aún no les encuentra la foto de la caja o del producto: búscala a mano o sácale foto</small>'], 'Ver productos sin fotografía', '#sinfoto') : '');
   }
   /** Lo que el sistema ya hizo solo (informativo). */
   function automatico() {

@@ -455,7 +455,8 @@
         await cargarConfig(); await IM.cargar(true).catch(() => {});
         const cat = await cargarCatalogo(), nd = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
         const cola = [], vistos = new Set();
-        const sinFoto = (c) => !c.imagen && !c.imagenMP && !c.fotoEstado;
+        const reciente = (c) => c.fotoIntento && (Date.now() - new Date(c.fotoIntento).getTime()) < 7 * 864e5;   // ya se buscó hace menos de 7 días y no había: no se repite en cada ronda
+        const sinFoto = (c) => !c.imagen && !c.imagenMP && !c.fotoEstado && !reciente(c);
         cat.forEach(c => { if (sinFoto(c) && !vistos.has(c.id)) { vistos.add(c.id); cola.push({ id: c.id, nombre: c.insumoName || c.descripcion, desc: c.descripcion || c.insumoName, codigo: c.codigoMP || '', nuevo: false }); } });
         try {
             const sn = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(5000))); const porNombre = new Set();
@@ -482,7 +483,8 @@
                 const base = { actualizado: f.serverTimestamp(), ...(foto || {}) };
                 if (p.nuevo) { base.descripcion = p.desc; base.descripcion_lower = String(p.desc).toLowerCase(); base.codigoMP = p.codigo; base.insumoName = p.nombre; base.sinOrden = true; }
                 else if (!p.tieneNombre && p.nombre && !cat.get(p.id)?.insumoName) base.insumoName = p.nombre;
-                if (foto || p.nuevo) await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), p.id), base, { merge: true });
+                if (!foto) base.fotoIntento = new Date().toISOString();
+                await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), p.id), base, { merge: true });
             } catch (e) { /* noop */ }
             if (onPaso) onPaso(`${i} de ${lote.length} · ${String(p.nombre).slice(0, 55)} → ${foto ? '✔ foto hallada (por confirmar)' : '✖ sin foto'}`);
         }

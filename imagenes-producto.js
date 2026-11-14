@@ -120,5 +120,11 @@
     document.addEventListener('click', (e) => { const im = e.target && e.target.closest && e.target.closest('.prod-img img'); if (im) { e.preventDefault(); e.stopPropagation(); ampliar(im); } }, true);
     let t = null;
     if (typeof MutationObserver !== 'undefined') new MutationObserver(() => { if (!listo) return; clearTimeout(t); t = setTimeout(() => rellenar(), 250); }).observe(document.documentElement, { childList: true, subtree: true });
-    window.SAR_Imagenes = { buscarFoto, buscarPorDescripcion, buscarConCandidata, ampliar, cargar, thumb, buscar, src, imgHTML, rellenar, archivoPara, urlMP, recargar: () => cargar(true) };
+    /** Suma un índice liviano {c: {código: archivo}, n: {nombre: {a: archivo} | {i: url}}} (lo usa quien pide insumos, que no lee el catálogo). */
+    function sumarIndice(ix) {
+        if (!ix) return; Object.keys(ix.c || {}).forEach(cod => { if (!porCodigo.has(cod)) porCodigo.set(cod, { codigo: cod, imagen: '', archivo: ix.c[cod] }); });
+        Object.keys(ix.n || {}).forEach(k => { if (!porNombre.has(k)) { const v = ix.n[k] || {}; porNombre.set(k, { codigo: '', imagen: v.i || '', archivo: v.a || '' }); } });
+        listo = true;
+    }
+    window.SAR_Imagenes = { sumarIndice, buscarFoto, buscarPorDescripcion, buscarConCandidata, ampliar, cargar, thumb, buscar, src, imgHTML, rellenar, archivoPara, urlMP, recargar: () => cargar(true) };
 })(window, document);

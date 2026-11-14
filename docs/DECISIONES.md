@@ -1288,3 +1288,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Inicio de sesión una sola vez por teléfono con la cuenta compartida (no se guardan claves en el código). Luego solo nombre y correo por solicitud. Muestra «Tus últimas solicitudes» con su estado (Nueva, En preparación, Lista para retirar…, o «Por enviar» si aún no hay internet).
 - Si una cuenta con rol Solicitante abre el visor completo, se la manda a `solicitar.html`.
 - **Service worker registrado** (no lo estaba: la app no abría sin internet desde cero). Instalación tolerante (un archivo que falle no tumba la instalación), guarda también el SDK de Firebase, los íconos y `solicitar.html`; sin red, cada página cae a su propia copia guardada (antes todo caía a index.html).
+
+## 4.247 Pedir insumos sin cuenta: solo nombre y correo (v21.193)
+- `solicitar.html` ya no pide cuenta ni clave: entra con **inicio de sesión anónimo** de Firebase (automático, una vez por teléfono) y la persona solo escribe nombre y correo en cada solicitud. Cabecera con el logo de Visor y «SAR Elsa Romo» (sin mención a la Corporación).
+- Nueva colección `Solicitudes_Insumos` con reglas propias: quien pide solo **crea** su solicitud (estado NUEVA, `uid` propio, nombre/correo y 1–80 líneas) y lee las suyas y `catalogo-publico`; bodega (staff) ve todas, cambia estado y publica. Ya no se mezcla con `Solicitudes_Ajuste` (la bandeja sigue mostrando las antiguas de ahí).
+- `catalogo-publico`: bodega lo publica al abrir «Solicitudes recibidas» (cada 6 h) o «Descargar para usar sin internet»: bodegas, nombres de productos por bodega **sin stock** y fotos confirmadas. Reemplaza al índice de fotos de 4.244.
+- **Requiere (lado usuario):** 1) Firebase → Authentication → Método de acceso → **Anónimo: habilitar**. 2) Firestore → Reglas: agregar el bloque `Solicitudes_Insumos` de `firestore.rules` y **Publicar**. Mientras falte, la página dice «Aún no disponible».

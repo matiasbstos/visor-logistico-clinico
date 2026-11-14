@@ -159,6 +159,24 @@ service cloud.firestore {
        allow read, write: if isAdmin();
     }
 
+    // PEDIR INSUMOS SIN CUENTA (v21.193): solicitar.html entra con inicio de sesión ANÓNIMO.
+    // Quien pide solo puede crear su solicitud (estado NUEVA, a su nombre) y leer las suyas y la lista pública de productos.
+    // Bodega (staff) las ve todas, cambia el estado y publica la lista (catalogo-publico).
+    match /Solicitudes_Insumos/{id} {
+      allow read: if isStaff()
+        || (request.auth != null && (id == 'catalogo-publico' || resource.data.uid == request.auth.uid));
+      allow create: if isStaff()
+        || (request.auth != null
+            && request.resource.data.tipo == 'SOLICITUD_INSUMOS'
+            && request.resource.data.estado == 'NUEVA'
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.lineas is list && request.resource.data.lineas.size() > 0 && request.resource.data.lineas.size() <= 80
+            && request.resource.data.solicitante is string && request.resource.data.solicitante.size() <= 120
+            && request.resource.data.correo is string && request.resource.data.correo.size() <= 120);
+      allow update: if isStaff();
+      allow delete: if isAdmin();
+    }
+
     match /Solicitudes_Ajuste/{id} {
        allow read, write: if hasRole();
     }

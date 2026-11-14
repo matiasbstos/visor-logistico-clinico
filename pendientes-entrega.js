@@ -305,7 +305,8 @@
             <div class="noti-pane" data-p="auto" hidden>${AC && AC.htmlAutomatico ? AC.htmlAutomatico(auto) : ''}</div>`;
         p.querySelectorAll('.noti-tabs button').forEach(b => b.addEventListener('click', () => { p.querySelectorAll('.noti-tabs button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', String(x === b)); }); p.querySelectorAll('.noti-pane').forEach(x => { x.hidden = x.dataset.p !== b.dataset.tab; }); }));
         document.body.appendChild(p);
-        p.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => { const v = b.dataset.ir; p.remove(); if (v === '#cola') { if (window.SAR_Cola) window.SAR_Cola.abrirPanel(); return; } if (v === '#catalogo') { const c = document.querySelector('[data-erp-panel="erp-panel-catalogo"], [data-go-erp="erp-panel-catalogo"]'); if (c) c.click(); return; } window.location.hash = v; }));
+        p.querySelectorAll('[data-ir]').forEach(b => b.addEventListener('click', () => { const v = b.dataset.ir; p.remove(); if (v === '#cola') { if (window.SAR_Cola) window.SAR_Cola.abrirPanel(); return; } if (v === '#sinfoto' && window.SAR_CatalogoVista) window.SAR_CatalogoVista.verSinFoto();
+            if (v === '#catalogo' || v === '#sinfoto') { const c = document.querySelector('[data-erp-panel="erp-panel-catalogo"], [data-go-erp="erp-panel-catalogo"]'); if (c) c.click(); return; } window.location.hash = v; }));
         setTimeout(() => document.addEventListener('click', function cerrar(e) { if (!p.contains(e.target) && !e.target.closest('#btn-notificaciones')) { p.remove(); document.removeEventListener('click', cerrar); } }), 0);
     }
     if (typeof window.addEventListener === 'function') window.addEventListener('sar-avisos', () => { try { pintarCampana(); } catch (e) { /* sin campana */ } });

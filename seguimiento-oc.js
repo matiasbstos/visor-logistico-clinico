@@ -458,10 +458,11 @@
         await cargarConfig(); await IM.cargar(true).catch(() => {});
         const cat = await cargarCatalogo(), nd = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
         const cola = [], vistos = new Set();
-        const reciente = (c) => c.fotoIntento && (Date.now() - new Date(c.fotoIntento).getTime()) < 7 * 864e5;   // ya se buscó hace menos de 7 días y no había: no se repite en cada ronda
+        const REINTENTO = 2 * 864e5;   // v21.204: lo que no se encontró se vuelve a buscar a los 2 días (antes 7)
+        const reciente = (c) => c.fotoIntento && (Date.now() - new Date(c.fotoIntento).getTime()) < REINTENTO;
         const sinFoto = (c) => !c.imagen && !c.imagenMP && !c.imagenWeb && !c.fotoEstado && !reciente(c);
         // v21.203: cada producto lleva DOS fotos: la caja/envase y cómo es el producto. Falta la del producto si no hay ninguna en fotosExtra.
-        const recienteProd = (c) => c.fotoProdIntento && (Date.now() - new Date(c.fotoProdIntento).getTime()) < 7 * 864e5;
+        const recienteProd = (c) => c.fotoProdIntento && (Date.now() - new Date(c.fotoProdIntento).getTime()) < REINTENTO;
         const sinProd = (c) => !(Array.isArray(c.fotosExtra) && c.fotosExtra.some(x => x.tipo === 'producto')) && !c.fotoProdDescartada && !recienteProd(c);
         cat.forEach(c => { const nc = sinFoto(c), np = sinProd(c); if ((nc || np) && !vistos.has(c.id)) { vistos.add(c.id); cola.push({ id: c.id, nombre: c.insumoName || c.descripcion, desc: c.descripcion || c.insumoName, codigo: c.codigoMP || '', nuevo: false, caja: nc, prod: np, extras: c.fotosExtra || [] }); } });
         try {
@@ -1774,32 +1775,59 @@ function imagenesWeb(q, n) {   // busca la descripcion en imagenes de internet (
   return out;
 }`;
 
+    /** v21.204: la configuración del script vive en Configuración → «Script y correo» (antes en un modal de Seguimiento de OC). */
     function formConfig() {
-        const c = configCorreo;
-        const ov = modal('Configurar correo', `
-            <p class="cierre-hint">El envío automático usa un Google Apps Script con tu cuenta de Gmail (gratis, sin plan Blaze). Pasos: 1) abre script.google.com, 2) pega el código de abajo, 3) cambia la clave, 4) Implementar → Nueva implementación → Aplicación web (ejecutar como "Yo", acceso "Cualquier persona"), 5) pega aquí la URL y la misma clave.</p>
-            <div class="soc-dest-fijos"><b>Quién recibe cada correo</b><br>
-                <span>Recepción de mercadería:</span> ${DESTINO_RECEPCION.map(esc).join(', ')}<br>
-                <span>Recepción conforme:</span> Para ${((window.SAR_RecepcionConforme && window.SAR_RecepcionConforme.DESTINATARIOS_BASE.to) || []).map(esc).join(', ')} · Cc ${((window.SAR_RecepcionConforme && window.SAR_RecepcionConforme.DESTINATARIOS_BASE.cc) || []).map(esc).join(', ')}</div>
-            <textarea id="c-script" rows="9" readonly style="font-family:monospace;font-size:11px">${esc(SCRIPT_GAS)}</textarea>
-            <button type="button" class="btn btn-outline btn-sm" id="c-copiar">Copiar código</button>
-            <label>URL de la aplicación web<input type="text" id="c-url" value="${esc(c.webhookUrl || '')}" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></label>
-            <label>Clave (la misma del script)<input type="text" id="c-token" value="${esc(c.token || '')}" autocomplete="off"></label>
-            <label>Lista base de destinatarios (separados por coma)<input type="text" id="c-base" value="${esc((c.destinatariosBase || []).join(', '))}"></label>
-            <label>Feriados adicionales (AAAA-MM-DD, separados por coma)<input type="text" id="c-fer" value="${esc((c.feriadosExtra || []).join(', '))}" placeholder="Cargados 2026 y los hábiles de 2027"></label>`,
-            async (o) => {
-                const lst = (s) => s.split(/[,\s;]+/).map(x => x.trim()).filter(Boolean);
-                const base = lst(o.querySelector('#c-base').value).map(x => x.toLowerCase()), fer = lst(o.querySelector('#c-fer').value);
-                if (base.some(x => !emailValido(x))) { toast('Correo no válido', 'Revisa la lista base.', 'warning'); return false; }
-                if (fer.some(x => !/^\d{4}-\d{2}-\d{2}$/.test(x))) { toast('Fecha no válida', 'Usa el formato AAAA-MM-DD.', 'warning'); return false; }
-                const nueva = { webhookUrl: o.querySelector('#c-url').value.trim(), token: o.querySelector('#c-token').value.trim(), destinatariosBase: base, feriadosExtra: fer };
-                await fs().setDoc(fs().doc(fs().collection(db(), 'Config_Correo'), 'principal'), nueva, { merge: true });
-                configCorreo = { ...configCorreo, ...nueva }; setFeriadosExtra(fer);
-                toast('Guardado', 'Configuración de correo actualizada.', 'success');
-                if (ocActual) pintarDetalle();
-            });
-        ov.querySelector('#c-copiar').addEventListener('click', async () => { try { await navigator.clipboard.writeText(SCRIPT_GAS); toast('Copiado', 'Código copiado.', 'success'); } catch (e) { ov.querySelector('#c-script').select(); } });
+        window.location.hash = 'view-configuracion';
+        setTimeout(() => { const t = document.querySelector('.config-tab[data-tab="script"]'); if (t) t.click(); }, 350);
     }
+    async function pantallaConfig(el) {
+        if (!el) return; await cargarConfig(); const c = configCorreo;
+        el.innerHTML = `<div class="cfg-scr">
+          <h3>Script de Google (Apps Script)</h3>
+          <p class="cierre-hint">Un solo script hace todo esto: <b>envía los correos</b> (actas, recepciones, órdenes), <b>lee fotos de cajas y guías/facturas</b> (lote y vencimiento), <b>busca fotos</b> de productos en Convenio Marco y <b>en internet</b> (caja y producto).</p>
+          <ol class="cfg-pasos"><li>Copia el código con el botón de abajo.</li><li>Abre <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a>, entra a tu proyecto, borra el código anterior y pega este.</li><li>En la línea <code>const TOKEN = …</code> deja <b>la misma clave</b> que tienes abajo.</li><li><b>Implementar → Administrar implementaciones → Editar (lápiz) → Versión: Nueva versión → Implementar</b>. Así la URL no cambia.</li><li>Vuelve aquí y aprieta <b>Probar conexión</b>.</li></ol>
+          <div class="cfg-fila"><button type="button" class="btn btn-primary btn-sm" id="c-copiar"><i class="ph-bold ph-copy"></i> Copiar código del script</button><button type="button" class="btn btn-secondary btn-sm" id="c-ver">Ver código</button><button type="button" class="btn btn-secondary btn-sm" id="c-probar"><i class="ph-bold ph-plugs-connected"></i> Probar conexión</button></div>
+          <div id="c-diag"></div>
+          <textarea id="c-script" rows="12" readonly hidden style="font-family:monospace;font-size:11px;width:100%">${esc(SCRIPT_GAS)}</textarea>
+          <h3>Conexión</h3>
+          <label class="cfg-l">URL de la aplicación web<input class="form-control" type="text" id="c-url" value="${esc(c.webhookUrl || '')}" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off"></label>
+          <label class="cfg-l">Clave (la misma del script)<input class="form-control" type="password" id="c-token" value="${esc(c.token || '')}" autocomplete="off"><button type="button" class="btn btn-secondary btn-sm" id="c-vertok">Mostrar</button></label>
+          <h3>Correos</h3>
+          <div class="soc-dest-fijos"><b>Quién recibe cada correo</b><br><span>Recepción de mercadería:</span> ${DESTINO_RECEPCION.map(esc).join(', ')}<br><span>Recepción conforme:</span> Para ${((window.SAR_RecepcionConforme && window.SAR_RecepcionConforme.DESTINATARIOS_BASE.to) || []).map(esc).join(', ')}</div>
+          <label class="cfg-l">Lista base de destinatarios (separados por coma)<input class="form-control" type="text" id="c-base" value="${esc((c.destinatariosBase || []).join(', '))}"></label>
+          <label class="cfg-l">Feriados adicionales (AAAA-MM-DD, separados por coma)<input class="form-control" type="text" id="c-fer" value="${esc((c.feriadosExtra || []).join(', '))}" placeholder="Cargados 2026 y los hábiles de 2027"></label>
+          <div class="cfg-fila"><button type="button" class="btn btn-primary" id="c-guardar"><i class="ph ph-floppy-disk"></i> Guardar</button></div></div>`;
+        const $ = (q) => el.querySelector(q);
+        $('#c-copiar').onclick = async () => { try { await navigator.clipboard.writeText(SCRIPT_GAS); toast('Copiado', 'Código del script copiado. Pégalo en script.google.com.', 'success'); } catch (e) { $('#c-script').hidden = false; $('#c-script').select(); } };
+        $('#c-ver').onclick = () => { $('#c-script').hidden = !$('#c-script').hidden; };
+        $('#c-vertok').onclick = () => { const t = $('#c-token'); t.type = t.type === 'password' ? 'text' : 'password'; $('#c-vertok').textContent = t.type === 'password' ? 'Mostrar' : 'Ocultar'; };
+        $('#c-guardar').onclick = async () => {
+            const lst = (x) => x.split(/[,\s;]+/).map(y => y.trim()).filter(Boolean);
+            const base = lst($('#c-base').value).map(x => x.toLowerCase()), fer = lst($('#c-fer').value);
+            if (base.some(x => !emailValido(x))) { toast('Correo no válido', 'Revisa la lista base.', 'warning'); return; }
+            if (fer.some(x => !/^\d{4}-\d{2}-\d{2}$/.test(x))) { toast('Fecha no válida', 'Usa el formato AAAA-MM-DD.', 'warning'); return; }
+            const nueva = { webhookUrl: $('#c-url').value.trim(), token: $('#c-token').value.trim(), destinatariosBase: base, feriadosExtra: fer };
+            try { await fs().setDoc(fs().doc(fs().collection(db(), 'Config_Correo'), 'principal'), nueva, { merge: true }); configCorreo = { ...configCorreo, ...nueva }; setFeriadosExtra(fer);
+                if (window.SAR_Progreso && window.SAR_Progreso.exito) window.SAR_Progreso.exito({ titulo: 'Configuración guardada' }); else toast('Guardado', 'Configuración actualizada.', 'success'); }
+            catch (e) { toast('No se guardó', e.message || String(e), 'error'); }
+        };
+        $('#c-probar').onclick = async () => {
+            const d = $('#c-diag'), url = $('#c-url').value.trim(), token = $('#c-token').value.trim(); if (!url || !token) { d.innerHTML = '<p class="cfg-mal">Falta la URL o la clave.</p>'; return; }
+            d.innerHTML = '<p class="cierre-hint">Probando… (hasta 30 s)</p>';
+            const llamar = async (cuerpo) => { const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ token, ...cuerpo }) }); return r.json(); };
+            const fila = (ok, t, s2) => `<li class="${ok ? 'cfg-ok' : 'cfg-mal'}">${ok ? '✔' : '✖'} <b>${t}</b>${s2 ? ' · ' + s2 : ''}</li>`;
+            let out = '';
+            try { const j = await llamar({ accion: 'imagenes', codigos: [] }); out += fila(j.ok, 'Conexión y clave', j.ok ? 'el script responde' : (j.error === 'token' ? 'la clave no coincide con la del script' : esc(j.error || 'respuesta no válida')));
+                if (j.ok) { const w = await llamar({ accion: 'buscarWeb', items: [{ k: 'a', q: 'guante nitrilo caja', n: 1 }] }); out += fila(!!(w.ok && w.fotos), 'Búsqueda de fotos en internet', w.ok && w.fotos ? ((w.fotos.a || []).length ? 'funciona' : 'responde, pero no trajo resultados ahora') : 'el script es una versión antigua: cópialo de nuevo y crea una nueva versión'); } }
+            catch (e) { out += fila(false, 'Conexión', 'no se pudo llegar al script (' + esc(e.message || e) + '). Revisa la URL y que esté implementado para «Cualquier persona».'); }
+            d.innerHTML = `<ul class="cfg-diag">${out}</ul>`;
+        };
+    }
+    if (typeof document.addEventListener === 'function') document.addEventListener('click', (e) => {
+        const t = e.target.closest && e.target.closest('.config-tab'); if (!t) return;
+        const form = document.getElementById('form-config-global'); if (form) form.style.display = t.dataset.tab === 'script' ? 'none' : '';
+        if (t.dataset.tab === 'script') setTimeout(() => pantallaConfig(document.getElementById('cfg-script')), 0);
+    });
 
     window.SAR_SeguimientoOC = { buscarFotosFaltantes, enHorarioCorreo, vaciarCola, abrirCuando, anularRecepcion, eliminarArchivosCategoria, eliminarArchivosActa, formCatalogo, registrarCatalogo, guardarArchivo, abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, cargarConfig, configurado: () => !!(configCorreo.webhookUrl && configCorreo.token), _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
 })(window, document);

@@ -39,7 +39,7 @@
       if (window.SAR_Cola) { badge('bajando', 'Subiendo lo hecho sin conexión…'); await window.SAR_Cola.procesar().catch(() => {}); }
       for (const [col, txt, lim, ord] of partes) {
         badge('bajando', `Descargando ${txt} (${++k}/${partes.length})`);
-        try { const q = ord ? f.query(f.collection(db(), col), f.orderBy(ord, 'desc'), f.limit(lim)) : f.query(f.collection(db(), col), f.limit(lim)); const sn = await f.getDocs(q); n += sn.size; } catch (e) { /* sin permiso para esa colección: sigue */ }
+        try { const q = ord ? f.query(f.collection(db(), col), f.orderBy(ord, 'desc'), f.limit(lim)) : f.query(f.collection(db(), col), f.limit(lim)); const sn = await f.getDocs(q); n += sn.size; if (col === 'Catalogo_Productos' && window.SAR_CatalogoVista && window.SAR_CatalogoVista.faltaFoto) { let k2 = 0; sn.forEach(d => { if (window.SAR_CatalogoVista.faltaFoto(d.data())) k2++; }); window.SAR_SinFoto = k2; } } catch (e) { /* sin permiso para esa colección: sigue */ }
       }
       if (window.SAR_Solicitudes && window.SAR_Solicitudes.publicarCatalogo && partes === PARTES_STAFF) await window.SAR_Solicitudes.publicarCatalogo().catch(() => {});
       if (window.SAR_Imagenes) await window.SAR_Imagenes.cargar(true).catch(() => {});

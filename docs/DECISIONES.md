@@ -1344,3 +1344,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - **Ficha de producto** en escritorio: panel lateral desde la derecha con el catálogo visible detrás; desde el Catálogo, ▲▼/flechas pasan al producto anterior/siguiente («N de M»).
 - **Campana de Avisos** con dos pestañas: **Necesitan tu acción** (solicitudes nuevas, hecho sin conexión para revisar, fotos por confirmar, vencidos/por vencer, bajo mínimo, préstamos, errores, recepciones parciales, stock para entregar) y **Automático** (última sincronización, resultado de la búsqueda de fotos, operaciones sin conexión aplicadas). Las solicitudes nuevas se vigilan en tiempo real para bodega (contador del menú, campana y aviso emergente).
 - «Trasluz» (comparador de capturas) se descartó para el sitio: es herramienta de revisión de diseño.
+
+## 4.257 Cada producto con dos fotos: caja y producto (v21.203)
+- La búsqueda automática (cada 30 min, catálogo «Buscar fotos que faltan», distribución y al ingresar una orden) ya no elige una u otra: busca **la caja/envase** (Convenio Marco → internet) **y cómo es el producto** (internet, descripción sin palabras de envase) para cada producto, incluidos los que ya tenían foto de caja. La del producto queda en `fotosExtra` con `porConfirmar: true` (marca «?»).
+- Al ingresar una orden de compra, después de registrar el catálogo se buscan en segundo plano las dos fotos de sus productos (primero en la cola).
+- Ficha: la foto del producto por confirmar trae ✔ (confirmar) y ✕ (no es: se quita y no se vuelve a buscar sola); si falta, se muestra el espacio «Cómo es el producto · falta». Lo no hallado se reintenta a los 7 días (`fotoProdIntento`).

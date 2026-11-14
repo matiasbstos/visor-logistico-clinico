@@ -1301,3 +1301,6 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - **Quien pide** ve en «Tus últimas solicitudes» el estado de cada producto (Pendiente, ✔ N confirmados, Parcial N de M, No hay) y el estado general; botón «Actualizar».
 - **solicitar.html**: debajo del formulario, instrucciones ilustradas para dejar la página como app en **Android** (Chrome ⋮ → Agregar a pantalla de inicio) e **iPhone** (Abrir en Safari → Compartir → Agregar a inicio); se abre la pestaña del teléfono que se usa, botón «Instalar ahora» cuando Android lo permite, y se ocultan una vez instalada.
 - **Fotos automáticas** (`fotos-auto.js`): mientras alguien de bodega tenga el visor abierto, cada hora entre 8:00 y 17:00 busca hasta 240 fotos faltantes en segundo plano (por código o descripción). Un solo equipo por hora (turno en `Contadores/fotos-auto`). Lo hallado queda por confirmar en Catálogo y se republica la lista de quien pide.
+
+## 4.249 Instrucciones de instalación desplegables (v21.195)
+- En `solicitar.html` las instrucciones pasan de pestañas a dos desplegables cerrados: «Cómo instalar en Android» y «Cómo instalar en iPhone». Se tocan para ver los pasos ilustrados y se vuelven a tocar para ocultarlos.

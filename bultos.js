@@ -34,6 +34,11 @@
     const t = Math.max(0, Math.floor(num(total))), p = Math.max(1, Math.floor(num(porCaja))); if (!t) return [];
     const out = []; for (let r = t; r > 0; r -= p) out.push(Math.min(p, r)); return out;
   }
+  /** Reparte el total en N cajas contadas (lo más parejo posible): 2200 en 10 → 10 × 220; 105 en 10 → 5 × 11 y 5 × 10. */
+  function repartirEnCajas(total, cajas) {
+    const t = Math.max(0, Math.floor(num(total))), c = Math.max(0, Math.floor(num(cajas))); if (!t || !c) return [];
+    const n = Math.min(c, t), base = Math.floor(t / n), resto = t % n; return Array.from({ length: n }, (_, i) => base + (i < resto ? 1 : 0));
+  }
   /** Folio ↔ código de barras (solo dígitos, Code 128 C): BUL-2026-000123 ↔ 2026000123. */
   const digitos = (folio) => String(folio || '').replace(/\D/g, '');
   /** Lo que se lee (QR con URL, texto del folio o dígitos de la pistola) → folio. */
@@ -107,12 +112,12 @@
   }
   /** Crea los bultos de un grupo (mismo producto, lote y vencimiento) con folios correlativos reservados de una vez. */
   async function crear(g) {
-    const cajas = repartirCajas(g.total, g.porCaja); if (!cajas.length) throw new Error('Indica el total de unidades y cuántas vienen por caja.');
+    const cajas = num(g.cajas) > 0 ? repartirEnCajas(g.total, g.cajas) : repartirCajas(g.total, g.porCaja); if (!cajas.length) throw new Error('Indica el total de unidades y cuántas cajas son (o cuántas vienen por caja).');
     if (cajas.length > 300) throw new Error('Son más de 300 cajas: revisa las unidades por caja.');
     const f = fs(), anio = new Date().getFullYear(), rc = f.doc(f.collection(db(), 'Contadores'), 'correlativo-bultos-' + anio);
     const ini = await f.runTransaction(db(), async (tx) => { const s = await tx.get(rc), v = s.exists() ? num(s.data().valor) : 0; tx.set(rc, { valor: v + cajas.length, actualizado: new Date().toISOString() }); return v + 1; });
     const ahora = new Date().toISOString(), grupo = `BUL-${anio}-${String(ini).padStart(6, '0')}`;
-    const lista = cajas.map((q, i) => ({ tipo: 'bulto', folio: `BUL-${anio}-${String(ini + i).padStart(6, '0')}`, grupo, n: i + 1, de: cajas.length, contenido: q, inicial: q, porCaja: num(g.porCaja), totalGrupo: cajas.reduce((s, x) => s + x, 0), estado: 'CERRADA',
+    const lista = cajas.map((q, i) => ({ tipo: 'bulto', folio: `BUL-${anio}-${String(ini + i).padStart(6, '0')}`, grupo, n: i + 1, de: cajas.length, contenido: q, inicial: q, porCaja: num(g.cajas) > 0 ? Math.max(...cajas) : num(g.porCaja), totalGrupo: cajas.reduce((s, x) => s + x, 0), estado: 'CERRADA',
       nombre: g.nombre, insumoId: g.insumoId || '', codigoMP: g.codigoMP || '', bodega: g.bodega || '', lote: g.lote || 'S/L', vence: g.vence || '', proveedor: g.proveedor || '', oc: g.oc || '', rec: g.rec || '', fechaRecepcion: g.fechaRecepcion || hoyISO(), creadoEn: ahora, creadoPor: usuario(), historial: [{ accion: 'CREADO', por: usuario(), en: ahora }] }));
     for (const b of lista) await f.setDoc(ref(b.folio), b);
     return lista;
@@ -278,10 +283,26 @@
       if (si) etiquetar({ lineas: o.lineas });
     }, 1000);
   }
+  /** Al terminar una recepción: los productos con cajas contadas generan sus etiquetas solas (un PDF con todas);
+      los que quedaron sin cajas se ofrecen para etiquetar después. */
+  async function desdeRecepcion(o) {
+    const con = (o.lineas || []).filter(l => num(l.cajas) > 0 && num(l.total) > 0), sin = (o.lineas || []).filter(l => !(num(l.cajas) > 0) && num(l.total) > 0);
+    if (con.length) {
+      const bg = window.SAR_Progreso && window.SAR_Progreso.segundoPlano ? window.SAR_Progreso.segundoPlano('Etiquetas de bultos') : null, todas = [];
+      try {
+        for (const [k, l] of con.entries()) { if (bg) bg.paso(`${k + 1} de ${con.length}: ${String(l.nombre).slice(0, 40)} (${l.cajas} cajas)`); todas.push(...await crear(l)); }
+        if (bg) bg.listo(`${todas.length} etiqueta(s) creadas: ${todas[0].folio}${todas.length > 1 ? ' a ' + todas[todas.length - 1].folio : ''}`);
+        const P = window.SAR_Progreso, ok = P && P.confirmar ? await P.confirmar({ titulo: `${todas.length} etiqueta${todas.length === 1 ? '' : 's'} lista${todas.length === 1 ? '' : 's'}`, texto: `Una por caja de la recepción <b>${esc(o.rec || '')}</b>.`, lineas: con.map(l => `${esc(l.nombre)} · <b>${l.cajas}</b> caja(s) · ${num(l.total)} u.`), si: 'Imprimir ahora', no: 'Después' }) : true;
+        if (ok) await pdf(todas, `bultos-${String(o.rec || '').replace(/[^A-Za-z0-9-]+/g, '_')}.pdf`);
+        else toast('Etiquetas guardadas', 'Las puedes imprimir cuando quieras en Bultos y etiquetas → Crear etiquetas → Reimprimir.', 'info');
+      } catch (e) { if (bg) bg.error(e.message || String(e)); toast('Etiquetas', e.message || String(e), 'error'); }
+    }
+    if (sin.length) ofrecerRecepcion({ rec: o.rec, lineas: sin });
+  }
   /** Al abrir el visor desde el QR de una etiqueta (#bulto=BUL-…). */
   function revisarHash() { const m = /bulto=([A-Z0-9-]+)/i.exec(window.location.hash || ''); if (!m) return; const folio = folioDe(m[1]); history.replaceState(null, '', window.location.pathname + '#view-bultos'); let k = 0; const t = setInterval(() => { k++; if (!(usuario() && fs() && db()) && k < 60) return; clearInterval(t); escanear('ver').then(ov => { const i = ov && ov.querySelector('#bu-in'); if (i) { i.value = folio; ov.querySelector('#bu-ok').click(); } }); }, 1000); }
   if (typeof module === 'undefined' && typeof window.addEventListener === 'function') { window.addEventListener('hashchange', revisarHash); if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', revisarHash); else revisarHash(); }
 
-  window.SAR_Bultos = { cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
+  window.SAR_Bultos = { desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_Bultos;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null, addEventListener() {} });

@@ -82,5 +82,18 @@
             const ok = d.querySelector('[data-r="1"]'); if (ok) ok.focus();
         });
     }
-    window.SAR_Progreso = { confirmar, iniciar, correr, cargando, segundoPlano };
+    /** Animación de «guardado» con la marca de Visor: hexágono que se arma y un ✓ que se dibuja. SAR_Progreso.exito({titulo, texto, ms}) → Promise. */
+    const HEX = '<svg class="sar-ok__svg" viewBox="0 0 200 200" aria-hidden="true"><polygon class="sar-ok__hex" points="100,12 176.2,56 176.2,144 100,188 23.8,144 23.8,56"/><path class="sar-ok__chk" d="M62 102 l26 26 l52 -56"/><circle class="sar-ok__pt" cx="146" cy="146" r="11"/></svg>';
+    function exito(o) {
+        o = o || {};
+        return new Promise(res => {
+            const d = document.createElement('div'); d.className = 'sar-ok'; d.setAttribute('role', 'status'); d.setAttribute('aria-live', 'polite');
+            d.innerHTML = `<div class="sar-ok__c">${HEX}<strong>${esc(o.titulo || 'Guardado')}</strong>${o.texto ? `<span>${o.texto}</span>` : ''}</div>`;
+            const fin = () => { if (!d.isConnected) return; d.classList.add('sar-ok--fuera'); setTimeout(() => { d.remove(); res(); }, 250); };
+            d.addEventListener('click', fin); document.body.appendChild(d);
+            try { if (window.SAR_Sonidos) window.SAR_Sonidos.tocar('ok'); } catch (e) { /* sin sonido */ }
+            setTimeout(fin, o.ms || 1900);
+        });
+    }
+    window.SAR_Progreso = { exito, confirmar, iniciar, correr, cargando, segundoPlano };
 })(window, document);

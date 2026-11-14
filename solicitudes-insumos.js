@@ -9,7 +9,9 @@
 (function (window, document) {
   'use strict';
   const fs = () => window.firebaseFirestore, db = () => window.firebaseDb;
-  const COL = 'Solicitudes_Ajuste', TIPO = 'SOLICITUD_INSUMOS';
+  const COL_ANT = 'Solicitudes_Ajuste', COL = 'Solicitudes_Insumos', TIPO = 'SOLICITUD_INSUMOS', ID_PUB = 'catalogo-publico';
+  // Página pública (solicitar.html, sin cuenta): no puede leer el inventario; usa el catálogo público que publica bodega.
+  const publica = () => !!window.SAR_SOLICITUD_PUBLICA;
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const num = (v) => Number(v) || 0;
   const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -42,6 +44,12 @@
   // ---------------- datos ----------------
   let insumos = [], bodegas = [], cargado = false;
   async function cargarBase() {
+    if (publica()) {
+      const f = fs(), d = await f.getDoc(f.doc(f.collection(db(), COL), ID_PUB)); if (!d.exists()) throw new Error('Bodega aún no publica la lista de productos.');
+      const x = d.data(); bodegas = x.bodegas || []; insumos = []; Object.keys(x.productos || {}).forEach(b => (x.productos[b] || []).forEach(p => insumos.push({ id: p.i || '', name: p.n, location: b, codigoMP: p.c || '' })));
+      if (window.SAR_Imagenes && window.SAR_Imagenes.sumarIndice && x.fotos) window.SAR_Imagenes.sumarIndice(x.fotos);
+      cargado = true; return;
+    }
     const f = fs(), a = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(3000))), l = []; a.forEach(d => l.push({ id: d.id, ...d.data() })); insumos = l;
     try { const b = await f.getDocs(f.collection(db(), 'Bodegas')), n = []; b.forEach(d => n.push((d.data().nombre || d.data().name || d.id))); bodegas = n.filter(Boolean).sort(); } catch (e) { bodegas = []; }
     if (!bodegas.length) bodegas = [...new Set(insumos.map(i => i.location).filter(Boolean))].sort();
@@ -49,23 +57,21 @@
   }
   const listaDe = (bodega) => { const m = new Map(); insumos.filter(i => i.location === bodega && i.status !== 'CUARENTENA').forEach(i => { const k = norm(i.name); if (k && !m.has(k)) m.set(k, { nombre: i.name, id: i.id, codigo: i.codigoMP || '' }); }); return [...m.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')); };
 
-  // ---------------- índice de fotos para quien pide ----------------
-  // El catálogo (con las fotos) solo lo lee el personal de bodega. Al abrir la bandeja, bodega publica un índice liviano
-  // (código → archivo de la tienda, nombre → archivo/URL) en Solicitudes_Ajuste/indice-fotos, que sí puede leer quien pide.
-  const ID_INDICE = 'indice-fotos';
-  async function publicarIndiceFotos(forzar) {
-    try { const ult = Number(localStorage.getItem('si-idx') || 0); if (!forzar && Date.now() - ult < 6 * 3600e3) return; } catch (e) { /* sigue */ }
-    const f = fs(), sn = await f.getDocs(f.query(f.collection(db(), 'Catalogo_Productos'), f.limit(3000))), c = {}, n = {};
-    sn.forEach(d => { const x = d.data(); if (x.fotoEstado === 'por_confirmar' || x.fotoEstado === 'descartada') return;
-      const url = /^https?:/.test(x.imagen || '') ? x.imagen : '', arch = x.imagenMP || ''; if (!url && !arch) return;
-      if (x.codigoMP && arch) c[String(x.codigoMP)] = arch;
-      [x.descripcion, x.insumoName].forEach(t => { const k = norm(t); if (k) n[k] = url ? { i: url } : { a: arch }; }); });
-    await f.setDoc(f.doc(f.collection(db(), COL), ID_INDICE), { tipo: 'INDICE_FOTOS', c, n, actualizado: new Date().toISOString() });
-    try { localStorage.setItem('si-idx', String(Date.now())); } catch (e) { /* sin almacenamiento */ }
-  }
-  async function leerIndiceFotos() {
-    const f = fs(), d = await f.getDoc(f.doc(f.collection(db(), COL), ID_INDICE)); if (!d.exists() || !window.SAR_Imagenes || !window.SAR_Imagenes.sumarIndice) return;
-    window.SAR_Imagenes.sumarIndice(d.data()); const r = rootPide(); if (r) window.SAR_Imagenes.rellenar(r);
+  // ---------------- catálogo público para quien pide ----------------
+  // Quien pide sin cuenta no puede leer Insumos ni el Catálogo. Al abrir la bandeja (cada 6 h) o «Descargar para usar sin internet»,
+  // bodega publica en Solicitudes_Insumos/catalogo-publico: bodegas, nombres de productos por bodega (SIN stock) y fotos confirmadas.
+  async function publicarCatalogo(forzar) {
+    try { const ult = Number(localStorage.getItem('si-pub') || 0); if (!forzar && Date.now() - ult < 6 * 3600e3) return; } catch (e) { /* sigue */ }
+    const f = fs(); if (!cargado) await cargarBase();
+    const c = {}, n = {};
+    try { const sn = await f.getDocs(f.query(f.collection(db(), 'Catalogo_Productos'), f.limit(3000)));
+      sn.forEach(d => { const x = d.data(); if (x.fotoEstado === 'por_confirmar' || x.fotoEstado === 'descartada') return;
+        const url = /^https?:/.test(x.imagen || '') ? x.imagen : '', arch = x.imagenMP || ''; if (!url && !arch) return;
+        if (x.codigoMP && arch) c[String(x.codigoMP)] = arch;
+        [x.descripcion, x.insumoName].forEach(t => { const k = norm(t); if (k) n[k] = url ? { i: url } : { a: arch }; }); }); } catch (e) { /* sin fotos */ }
+    const productos = {}; bodegas.forEach(b => { const l = listaDe(b); if (l.length) productos[b] = l.map(p => ({ n: p.nombre, i: p.id, ...(p.codigo ? { c: String(p.codigo) } : {}) })); });
+    await f.setDoc(f.doc(f.collection(db(), COL), ID_PUB), { tipo: 'CATALOGO_PUBLICO', bodegas: Object.keys(productos).sort(), productos, fotos: { c, n }, actualizado: new Date().toISOString() });
+    try { localStorage.setItem('si-pub', String(Date.now())); } catch (e) { /* sin almacenamiento */ }
   }
 
   // ---------------- pantalla de quien pide ----------------
@@ -93,7 +99,7 @@
   async function pintarMias() {
     const el = document.getElementById('si-mias'); if (!el) return; let l = [];
     try { l = JSON.parse(localStorage.getItem('si-mias') || '[]'); } catch (e) { l = []; } if (!l.length) { el.innerHTML = ''; return; }
-    const f = fs(), filas = await Promise.all(l.slice(0, 6).map(async (n) => { try { const d = await f.getDoc(f.doc(f.collection(db(), COL), n)); return d.exists() ? d.data() : { numero: n, estado: 'POR_ENVIAR' }; } catch (e) { return { numero: n, estado: 'POR_ENVIAR' }; } }));
+    const f = fs(), filas = await Promise.all(l.slice(0, 6).map(async (n) => { try { let d = await f.getDoc(f.doc(f.collection(db(), COL), n)); if (!d.exists() && !publica()) d = await f.getDoc(f.doc(f.collection(db(), COL_ANT), n)).catch(() => d); return d.exists() ? d.data() : { numero: n, estado: 'POR_ENVIAR' }; } catch (e) { return { numero: n, estado: 'POR_ENVIAR' }; } }));
     el.innerHTML = `<h3 class="si-h">Tus últimas solicitudes</h3><div class="si-car">${filas.map(x => `<div class="si-fila"><span class="si-fn"><b>${esc(x.numero)}</b><br><small>${esc(x.bodega || '')}${x.lineas ? ' · ' + x.lineas.length + ' producto(s)' : ''}</small></span><span class="si-est si-e-${esc(x.estado)}">${esc(x.estado === 'POR_ENVIAR' ? 'Por enviar (sin internet)' : (ESTADOS[x.estado] || x.estado))}</span></div>`).join('')}</div>`;
   }
   function estadoRed() { const e = document.getElementById('si-red'); if (e) e.textContent = navigator.onLine === false ? 'Sin internet: se guardará en este teléfono y se enviará sola al volver la conexión.' : ''; }
@@ -107,7 +113,7 @@
     try { localStorage.setItem('si-yo', JSON.stringify({ n: form.solicitante.trim(), c: form.correo.trim(), s: form.servicio.trim() })); } catch (e) { /* sin almacenamiento */ }
     enviando = true; pintarPide();
     const ahora = new Date(), numero = numeroSolicitud(ahora), f = fs();
-    const data = { tipo: TIPO, numero, estado: 'NUEVA', requester: usuario(), solicitante: form.solicitante.trim(), correo: form.correo.trim().toLowerCase(), servicio: form.servicio.trim(), bodega: bodegaSel, nota: form.nota.trim(), lineas: lineas.map(l => ({ ...l })), creadoEn: ahora.toISOString(), historial: [{ estado: 'NUEVA', por: usuario(), en: ahora.toISOString() }] };
+    const au = window.firebaseAuth && window.firebaseAuth.currentUser, data = { tipo: TIPO, numero, estado: 'NUEVA', uid: (au && au.uid) || '', requester: (au && au.email) || form.correo.trim().toLowerCase(), solicitante: form.solicitante.trim(), correo: form.correo.trim().toLowerCase(), servicio: form.servicio.trim(), bodega: bodegaSel, nota: form.nota.trim(), lineas: lineas.map(l => ({ ...l })), creadoEn: ahora.toISOString(), historial: [{ estado: 'NUEVA', por: usuario(), en: ahora.toISOString() }] };
     const p = f.setDoc(f.doc(f.collection(db(), COL), numero), data);
     const r = await Promise.race([p.then(() => 'ok'), new Promise(res => setTimeout(() => res('cola'), 2500))]).catch(e => 'error:' + (e.message || e));
     enviando = false;
@@ -136,7 +142,7 @@
   async function abrirPide() {
     const r = rootPide(); if (!r) return; enlazarPide();
     try { const y = JSON.parse(localStorage.getItem('si-yo') || 'null'); if (y && !form.solicitante) { form.solicitante = y.n || ''; form.correo = y.c || ''; form.servicio = y.s || ''; } } catch (e) { /* sin almacenamiento */ }
-    if (window.SAR_Imagenes) { window.SAR_Imagenes.cargar().catch(() => {}); leerIndiceFotos().catch(() => {}); }
+    if (window.SAR_Imagenes && !publica()) window.SAR_Imagenes.cargar().catch(() => {});
     if (!cargado) { r.innerHTML = window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando la lista de productos…') : 'Cargando…'; try { await cargarBase(); } catch (e) { r.innerHTML = '<div class="home-empty">No pude cargar la lista. Si no tienes internet, ábrela una vez con conexión para dejarla guardada.</div>'; return; } }
     pintarPide();
   }
@@ -160,15 +166,15 @@
     const f = fs(), s = solicitudes.find(x => x.numero === n); if (!s) return;
     if (e === 'ANULADA' && !confirm('¿Anular esta solicitud?')) return;
     const hist = (s.historial || []).concat([{ estado: e, por: usuario(), en: new Date().toISOString() }]);
-    try { await Promise.race([f.updateDoc(f.doc(f.collection(db(), COL), n), { estado: e, historial: hist }), new Promise(res => setTimeout(res, 2500))]); toast('Solicitud', `${n}: ${ESTADOS[e]}.`, 'success'); } catch (err) { toast('No se pudo', err.message || String(err), 'error'); }
+    try { await Promise.race([f.updateDoc(f.doc(f.collection(db(), s._col || COL), n), { estado: e, historial: hist }), new Promise(res => setTimeout(res, 2500))]); toast('Solicitud', `${n}: ${ESTADOS[e]}.`, 'success'); } catch (err) { toast('No se pudo', err.message || String(err), 'error'); }
   }
   async function descargarOffline() {
     const f = fs(), btn = document.getElementById('si-off'), m = document.getElementById('si-offm'); if (btn) btn.disabled = true;
     const prog = window.SAR_Progreso ? window.SAR_Progreso.iniciar('Descargando para usar sin internet…', []) : null;
     try {
-      const partes = [['Insumos', 'Insumos'], ['Bodegas', 'Bodegas'], ['Asignaciones_Ubicacion', 'Ubicaciones'], ['Catalogo_Productos', 'Catálogo'], [COL, 'Solicitudes']]; let n = 0, k = 0;
+      const partes = [['Insumos', 'Insumos'], ['Bodegas', 'Bodegas'], ['Asignaciones_Ubicacion', 'Ubicaciones'], ['Catalogo_Productos', 'Catálogo'], [COL, 'Solicitudes'], [COL_ANT, 'Solicitudes anteriores']]; let n = 0, k = 0;
       for (const [c, t] of partes) { if (prog) prog.paso(`Descargando ${t} (${++k} de ${partes.length})`); const sn = await f.getDocs(f.query(f.collection(db(), c), f.limit(3000))); n += sn.size; }
-      await publicarIndiceFotos(true).catch(() => {}); await cargarBase(); localStorage.setItem('si-off', new Date().toISOString());
+      await cargarBase(); await publicarCatalogo(true).catch(() => {}); localStorage.setItem('si-off', new Date().toISOString());
       if (prog) prog.listo(`Listo: ${n} registros guardados en este teléfono`, { aviso: false });
     } catch (e) { if (prog) prog.error(); toast('Descarga', 'No se pudo completar: ' + (e.message || e), 'error'); }
     pintarBandeja();
@@ -187,10 +193,12 @@
   async function abrirBandeja() {
     const r = rootBandeja(); if (!r) return; enlazarBandeja();
     if (!cargado) { r.innerHTML = window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando solicitudes…') : 'Cargando…'; try { await cargarBase(); } catch (e) { /* con lo guardado */ } }
-    publicarIndiceFotos().catch(() => { /* sin catálogo: quien pide verá solo las fotos por código */ });
-    if (desuscribir) { try { desuscribir(); } catch (e) { /* ya cerrada */ } }
-    const f = fs();
-    desuscribir = f.onSnapshot(f.query(f.collection(db(), COL), f.where('tipo', '==', TIPO)), (sn) => { const l = []; sn.forEach(d => l.push(d.data())); solicitudes = l.sort((a, b) => String(b.creadoEn).localeCompare(String(a.creadoEn))); pintarBandeja(); const nu = solicitudes.filter(s => s.estado === 'NUEVA').length; const ins = document.getElementById('si-badge'); if (ins) { ins.textContent = nu || ''; ins.style.display = nu ? '' : 'none'; } }, (e) => { r.innerHTML = `<div class="home-empty">No pude leer las solicitudes (${esc(e.message || 'error')}).</div>`; });
+    publicarCatalogo().catch((e) => console.warn('[Solicitudes] catálogo público no publicado:', e && e.message));
+    if (desuscribir) { try { desuscribir(); } catch (e) { /* ya cerradas */ } }
+    const f = fs(), por = { [COL]: [], [COL_ANT]: [] };
+    const juntar = () => { solicitudes = por[COL].concat(por[COL_ANT].filter(x => !por[COL].some(y => y.numero === x.numero))).sort((a, b) => String(b.creadoEn).localeCompare(String(a.creadoEn))); pintarBandeja(); const nu = solicitudes.filter(s => s.estado === 'NUEVA').length; const ins = document.getElementById('si-badge'); if (ins) { ins.textContent = nu || ''; ins.style.display = nu ? '' : 'none'; } };
+    const oir = (col) => f.onSnapshot(f.query(f.collection(db(), col), f.where('tipo', '==', TIPO)), (sn) => { const l = []; sn.forEach(d => l.push({ ...d.data(), _col: col })); por[col] = l; juntar(); }, () => { por[col] = []; juntar(); });
+    const u1 = oir(COL), u2 = oir(COL_ANT); desuscribir = () => { u1(); u2(); };
   }
 
   window.SAR_Solicitudes = { abrirPide, abrirBandeja, numeroSolicitud, agregarLinea, textoPicking, infoLinea };

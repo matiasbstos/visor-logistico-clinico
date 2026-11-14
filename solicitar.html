@@ -8,12 +8,12 @@
     <link rel="manifest" href="manifest-solicitar.json">
     <link rel="icon" href="assets/favicon-32.png">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-    <link rel="stylesheet" href="style.css?v=21.192">
+    <link rel="stylesheet" href="style.css?v=21.193">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body.sp { margin: 0; background: #f5f7fb; font-family: 'Outfit', system-ui, sans-serif; min-height: 100vh; }
         .sp-cab { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: #fff; border-bottom: 3px solid var(--brand-green, #8cc63f); box-shadow: 0 2px 8px rgba(15, 23, 42, .06); }
-        .sp-cab img { height: 34px; }
+        .sp-cab .sp-logo { height: 40px; width: auto; }
         .sp-cab div { flex: 1; line-height: 1.15; }
         .sp-cab b { color: var(--primary, #1a3668); font-size: 1rem; display: block; }
         .sp-cab small { color: #64748b; font-size: .75rem; }
@@ -29,16 +29,16 @@
     </style>
 </head>
 <body class="sp" data-user-role="solicitante">
-    <header class="sp-cab"><img src="assets/logo-sar.png" alt="SAR"><div><b>Pedir insumos</b><small>SAR Elsa Romo · Corp. Municipal de Melipilla</small></div><button type="button" class="sp-salir" id="sp-salir" hidden>Salir</button></header>
+    <header class="sp-cab"><img src="assets/logo/horizontal.svg" alt="Visor Logístico" class="sp-logo"><div><b>Pedir insumos</b><small>SAR Elsa Romo</small></div></header>
     <main id="sp-main"><div class="si-wrap"><p class="si-v">Cargando…</p></div></main>
     <div id="si-pide" hidden></div>
 
-    <script src="progreso.js?v=21.192"></script>
-    <script src="imagenes-producto.js?v=21.192"></script>
-    <script src="solicitudes-insumos.js?v=21.192"></script>
+    <script src="progreso.js?v=21.193"></script>
+    <script src="imagenes-producto.js?v=21.193"></script>
+    <script src="solicitudes-insumos.js?v=21.193"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
-        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
         import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, setDoc, getDoc, getDocs, updateDoc, query, where, limit, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
         // Configuración pública del proyecto (la misma del visor; no es una clave secreta).
         const app = initializeApp({ apiKey: "AIzaSyAyktOnoB-j7nX4-YZLa6B74wOBCbZvlsA", authDomain: "sarinventario.firebaseapp.com", projectId: "sarinventario", storageBucket: "sarinventario.firebasestorage.app", messagingSenderId: "358257655117", appId: "1:358257655117:web:b7f46ad97e94afa1324b04" });
@@ -46,24 +46,20 @@
         window.firebaseAuth = auth; window.firebaseDb = db;
         window.firebaseFirestore = { doc, collection, setDoc, getDoc, getDocs, updateDoc, query, where, limit, onSnapshot, serverTimestamp };
         window.showToast = (t, m, tipo) => { const d = document.createElement('div'); d.className = 'sp-toast ' + (tipo || ''); d.innerHTML = `<b>${t}</b><br>${m || ''}`; document.body.appendChild(d); setTimeout(() => d.remove(), 4500); };
-        const main = document.getElementById('sp-main'), pide = document.getElementById('si-pide'), salir = document.getElementById('sp-salir');
-        function login(err) {
-            pide.hidden = true; salir.hidden = true;
-            main.innerHTML = `<form class="sp-login" id="sp-f"><h1>Pedir insumos a bodega</h1><p>Inicia sesión <b>una sola vez</b> en este teléfono con la cuenta que te entregó bodega. Después solo escribes tu nombre y correo en cada solicitud.</p>
-                <label class="si-l">Cuenta<input class="si-in" id="sp-u" type="email" autocomplete="username" inputmode="email" required></label>
-                <label class="si-l">Clave<input class="si-in" id="sp-c" type="password" autocomplete="current-password" required></label>
-                <p class="sp-err" id="sp-e">${err || ''}</p><button class="btn btn-primary" type="submit">Entrar</button></form>`;
-            document.getElementById('sp-f').addEventListener('submit', async (e) => {
-                e.preventDefault(); const b = e.target.querySelector('button'); b.disabled = true; b.textContent = 'Entrando…';
-                try { await signInWithEmailAndPassword(auth, document.getElementById('sp-u').value.trim(), document.getElementById('sp-c').value); }
-                catch (er) { login(/network|offline/i.test(er.code || '') ? 'Sin internet: la primera vez necesitas conexión.' : 'Cuenta o clave incorrecta.'); }
-            });
-        }
-        salir.addEventListener('click', async () => { if (confirm('¿Cerrar la sesión en este teléfono? Para volver a pedir habrá que ingresar la cuenta otra vez.')) await signOut(auth); });
-        onAuthStateChanged(auth, (u) => {
-            if (!u) return login();
-            main.innerHTML = ''; main.appendChild(pide); pide.hidden = false; salir.hidden = false;
-            window.SAR_Solicitudes.abrirPide();
+        window.SAR_SOLICITUD_PUBLICA = true;   // sin cuenta: lista pública de productos y solicitudes a su nombre
+        const main = document.getElementById('sp-main'), pide = document.getElementById('si-pide');
+        const aviso = (t, m) => { pide.hidden = true; main.innerHTML = `<div class="sp-login"><h1>${t}</h1><p>${m}</p><button class="btn btn-primary" type="button" onclick="location.reload()">Reintentar</button></div>`; };
+        let entrando = false;
+        onAuthStateChanged(auth, async (u) => {
+            if (u) { main.innerHTML = ''; main.appendChild(pide); pide.hidden = false; window.SAR_Solicitudes.abrirPide(); return; }
+            if (entrando) return; entrando = true;
+            try { await signInAnonymously(auth); }   // sin cuenta ni clave: el teléfono queda identificado solo para ver SUS solicitudes
+            catch (e) {
+                const c = String(e.code || '');
+                if (/network|offline/i.test(c)) aviso('Sin internet', 'La primera vez se necesita conexión para dejar la página lista en este teléfono. Después funciona sin internet.');
+                else if (/operation-not-allowed|admin-restricted/i.test(c)) aviso('Aún no disponible', 'Bodega todavía no activa el acceso sin cuenta. Avísale a bodega.');
+                else aviso('No se pudo abrir', 'Intenta de nuevo en un momento. (' + c + ')');
+            }
         });
         if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
     </script>

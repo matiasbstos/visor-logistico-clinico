@@ -80,7 +80,7 @@
   }
 
   // ---------------- pantalla de quien pide ----------------
-  let bodegaSel = '', lineas = [], busca = '', form = { solicitante: '', correo: '', servicio: '', nota: '' }, enviando = false, editando = null, misDatos = {};
+  let bodegaSel = '', lineas = [], busca = '', form = { solicitante: '', correo: '', servicio: '', nota: '' }, manual = { nombre: '', cantidad: 1, foto: '' }, enviando = false, editando = null, misDatos = {};
   const rootPide = () => document.getElementById('si-pide');
   function pintarPide() {
     const r = rootPide(); if (!r) return;
@@ -93,13 +93,34 @@
       <div class="si-dos"><label class="si-l">Servicio / unidad<input id="si-ser" class="si-in" value="${esc(form.servicio)}" placeholder="Ej: Box 3, Urgencia"></label><span></span></div>
       ${bodegaSel ? `<label class="si-l">Buscar en la lista de la bodega<input id="si-bus" class="si-in" value="${esc(busca)}" placeholder="Escribe parte del nombre…" autocomplete="off"></label>
       <div class="si-lista">${vis.map(x => `<button type="button" class="si-p" data-add="${esc(x.nombre)}" data-id="${esc(x.id)}">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}<span>${esc(x.nombre)}</span><b>+</b></button>`).join('') || '<p class="si-v">No hay coincidencias: escríbelo abajo.</p>'}${lista.length > vis.length && !q ? `<p class="si-v">Mostrando ${vis.length} de ${lista.length}: usa el buscador.</p>` : ''}</div>` : ''}
-      <div class="si-man"><input id="si-mt" class="si-in" placeholder="¿No está? Escribe el producto" ><input id="si-mc" class="si-in si-cn" type="number" min="1" value="1" inputmode="numeric"><button type="button" class="btn btn-secondary" id="si-ma">Agregar</button></div>
+      <div class="si-manbox"><b>¿No está en la lista?</b><small>Escribe el <b>nombre completo</b> (marca, medida, tamaño) y <b>saca una foto</b> del producto: así bodega sabe exactamente qué es.</small>
+        <div class="si-man"><input id="si-mt" class="si-in" placeholder="Ej: Catéter venoso periférico 22G con alas" value="${esc(manual.nombre)}" autocomplete="off"><input id="si-mc" class="si-in si-cn" type="number" min="1" value="${manual.cantidad}" inputmode="numeric" aria-label="Cantidad"></div>
+        <div id="si-sug"></div>
+        <div class="si-man"><label class="btn btn-secondary si-fbtn"><input type="file" accept="image/*" capture="environment" hidden id="si-mf">${manual.foto ? '<img src="' + manual.foto + '" alt="">Cambiar foto' : '📷 Sacar foto del producto'}</label><button type="button" class="btn btn-primary" id="si-ma">Agregar</button></div>
+      </div>
       <h3 class="si-h">Tu solicitud (${lineas.length})</h3>
-      <div class="si-car">${lineas.map((l, i) => `<div class="si-fila"><span class="si-fn">${esc(l.nombre)}${l.manual ? ' <em>escrito a mano</em>' : ''}</span><span class="si-q"><button type="button" data-m="${i}">−</button><b>${l.cantidad}</b><button type="button" data-p="${i}">+</button></span><button type="button" class="si-x" data-x="${i}" aria-label="Quitar">✕</button></div>`).join('') || '<p class="si-v">Aún no agregas nada.</p>'}</div>
+      <div class="si-car">${lineas.map((l, i) => `<div class="si-fila">${l.foto ? `<img class="si-lfoto" src="${l.foto}" alt="">` : ''}<span class="si-fn">${esc(l.nombre)}${l.manual ? ' <em>escrito a mano</em>' : ''}</span><span class="si-q"><button type="button" data-m="${i}">−</button><b>${l.cantidad}</b><button type="button" data-p="${i}">+</button></span><button type="button" class="si-x" data-x="${i}" aria-label="Quitar">✕</button></div>`).join('') || '<p class="si-v">Aún no agregas nada.</p>'}</div>
       <label class="si-l">Nota (opcional)<input id="si-not" class="si-in" value="${esc(form.nota)}" placeholder="Ej: urgente para hoy"></label>
       <button type="button" class="btn btn-primary si-env" id="si-env"${enviando ? ' disabled' : ''}>${editando ? 'Guardar cambios' : 'Enviar solicitud'}</button>
       <p class="si-v" id="si-red"></p><div id="si-mias"></div></div>`;
-    estadoRed(); if (window.SAR_Imagenes) window.SAR_Imagenes.rellenar(r); pintarMias();
+    estadoRed(); if (window.SAR_Imagenes) window.SAR_Imagenes.rellenar(r); pintarSug(); pintarMias();
+  }
+  /** «¿Es alguno de estos?»: productos de la lista parecidos a lo que se escribe a mano (en la bodega elegida y en las demás). */
+  function parecidos(texto, lista, max) {
+    const t = norm(texto).split(' ').filter(w => w.length > 2); if (!t.length) return [];
+    return lista.map(p => { const n = norm(p.nombre); return { p, sc: t.filter(w => n.includes(w)).length / t.length }; }).filter(x => x.sc >= 0.5).sort((a, b) => b.sc - a.sc).slice(0, max || 5).map(x => x.p);
+  }
+  function pintarSug() {
+    const el = document.getElementById('si-sug'); if (!el) return; const txt = manual.nombre || '';
+    const todos = []; const vistos = new Set(); (bodegaSel ? [bodegaSel].concat(bodegas.filter(b => b !== bodegaSel)) : bodegas).forEach(b => listaDe(b).forEach(p => { const k = norm(p.nombre); if (!vistos.has(k)) { vistos.add(k); todos.push(p); } }));
+    const l = txt.trim().length >= 3 ? parecidos(txt, todos, 5) : [];
+    el.innerHTML = l.length ? `<p class="si-v">¿Es alguno de estos? Tócalo para agregarlo:</p><div class="si-lista si-lista--sug">${l.map(x => `<button type="button" class="si-p" data-sug="${esc(x.nombre)}" data-id="${esc(x.id)}">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}<span>${esc(x.nombre)}</span><b>+</b></button>`).join('')}</div>` : '';
+    if (window.SAR_Imagenes) window.SAR_Imagenes.rellenar(el);
+  }
+  function reducirFoto(file, max) {
+    return new Promise((ok, mal) => { const img = new Image(), url = URL.createObjectURL(file);
+      img.onload = () => { const k = Math.min(1, max / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url); ok(c.toDataURL('image/jpeg', 0.7)); };
+      img.onerror = () => { URL.revokeObjectURL(url); mal(new Error('No se pudo leer la foto.')); }; img.src = url; });
   }
   /** Las últimas solicitudes hechas desde este teléfono y en qué estado van (bodega las va moviendo). */
   async function pintarMias() {
@@ -115,7 +136,7 @@
   function editar(n) {
     const x = misDatos[n]; if (!x || x.estado !== 'NUEVA') { toast('Solicitud', 'Bodega ya empezó a prepararla: no se puede cambiar.', 'warning'); return; }
     editando = { numero: n, col: x._col || COL, ver: x.correlativo || n, historial: x.historial || [] };
-    bodegaSel = x.bodega || ''; lineas = (x.lineas || []).map(l => ({ nombre: l.nombre, cantidad: l.cantidad, manual: !!l.manual, ...(l.insumoId ? { insumoId: l.insumoId } : {}) }));
+    bodegaSel = x.bodega || ''; lineas = (x.lineas || []).map(l => ({ nombre: l.nombre, cantidad: l.cantidad, manual: !!l.manual, ...(l.insumoId ? { insumoId: l.insumoId } : {}), ...(l.foto ? { foto: l.foto } : {}) }));
     form.nota = x.nota || ''; form.servicio = x.servicio || form.servicio; busca = ''; pintarPide(); window.scrollTo && window.scrollTo(0, 0);
   }
   function estadoRed() { const e = document.getElementById('si-red'); if (e) e.textContent = navigator.onLine === false ? 'Sin internet: se guardará en este teléfono y se enviará sola al volver la conexión.' : ''; }
@@ -154,11 +175,22 @@
   function enlazarPide() {
     const r = rootPide(); if (!r || r.dataset.ok) return; r.dataset.ok = '1';
     r.addEventListener('change', (e) => { if (e.target.id === 'si-bod') { leerCampos(); bodegaSel = e.target.value; busca = ''; pintarPide(); } });
-    r.addEventListener('input', (e) => { if (e.target.id === 'si-bus') { busca = e.target.value; const p = e.target.selectionStart; leerCampos(); pintarPide(); const b = document.getElementById('si-bus'); if (b) { b.focus(); b.setSelectionRange(p, p); } } });
+    r.addEventListener('change', async (e) => { if (e.target.id !== 'si-mf') return; const fl = e.target.files && e.target.files[0]; if (!fl) return;
+      try { manual.foto = await reducirFoto(fl, 480); const t = document.getElementById('si-mt'), c = document.getElementById('si-mc'); if (t) manual.nombre = t.value; if (c) manual.cantidad = Math.max(1, Math.floor(num(c.value) || 1)); leerCampos(); pintarPide(); }
+      catch (er) { toast('Foto', er.message || 'No se pudo leer la foto.', 'error'); } });
+    r.addEventListener('input', (e) => { if (e.target.id === 'si-mt') { manual.nombre = e.target.value; pintarSug(); return; }
+      if (e.target.id === 'si-bus') { busca = e.target.value; const p = e.target.selectionStart; leerCampos(); pintarPide(); const b = document.getElementById('si-bus'); if (b) { b.focus(); b.setSelectionRange(p, p); } } });
     r.addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b) return; leerCampos();
       if (b.dataset.add) { agregarLinea(lineas, { nombre: b.dataset.add, cantidad: 1 }); if (lineas.length) { const l = lineas.find(x => norm(x.nombre) === norm(b.dataset.add)); if (l && b.dataset.id) l.insumoId = b.dataset.id; } pintarPide(); }
-      else if (b.id === 'si-ma') { const t = document.getElementById('si-mt'), c = document.getElementById('si-mc'); if (t && t.value.trim()) { agregarLinea(lineas, { nombre: t.value, cantidad: c ? c.value : 1, manual: true }); pintarPide(); } }
+      else if (b.id === 'si-ma') {
+        const t = document.getElementById('si-mt'), c = document.getElementById('si-mc'); manual.nombre = t ? t.value : manual.nombre; manual.cantidad = Math.max(1, Math.floor(num(c && c.value) || 1));
+        const nom = manual.nombre.trim();
+        if (nom.split(/\s+/).length < 2 || nom.length < 8) { toast('Nombre completo', 'Escribe el nombre completo del producto (qué es, medida o tamaño).', 'warning'); return; }
+        if (!manual.foto) { toast('Falta la foto', 'Saca una foto del producto para que bodega sepa exactamente qué es.', 'warning'); return; }
+        lineas.push({ nombre: nom, cantidad: manual.cantidad, manual: true, foto: manual.foto }); manual = { nombre: '', cantidad: 1, foto: '' }; pintarPide();
+      }
+      else if (b.dataset.sug) { agregarLinea(lineas, { nombre: b.dataset.sug, cantidad: manual.cantidad || 1 }); const l = lineas.find(x => norm(x.nombre) === norm(b.dataset.sug)); if (l && b.dataset.id) l.insumoId = b.dataset.id; manual = { nombre: '', cantidad: 1, foto: '' }; pintarPide(); }
       else if (b.dataset.p !== undefined) { lineas[+b.dataset.p].cantidad++; pintarPide(); }
       else if (b.dataset.m !== undefined) { const l = lineas[+b.dataset.m]; l.cantidad = Math.max(1, l.cantidad - 1); pintarPide(); }
       else if (b.dataset.x !== undefined) { lineas.splice(+b.dataset.x, 1); pintarPide(); }
@@ -225,7 +257,7 @@
         ${s.nota ? `<p class="si-m">Nota: ${esc(s.nota)}</p>` : ''}
         <div class="si-lns">${(s.lineas || []).map((l, i) => { const cands = lotesCandidatos(l, insumos, s.bodega), decid = l.estado && l.estado !== 'pendiente', ver = !decid || abiertoL[s.numero + '|' + i] || !ab(s) && false;
           const pre = (l.seleccion && l.seleccion.length) ? cands.map(c => { const x = l.seleccion.find(y => y.insumoId === c.insumoId && y.clave === c.clave); return x ? x.qty : 0; }) : repartir(cands, l.cantidad), hay = cands.reduce((t, c) => t + c.disp, 0);
-          return `<div class="si-ln${decid ? ' si-ln--ok' : ''}" data-i="${i}"><div class="si-lh">${IM ? IM.thumb(l.nombre, { codigo: (insumos.find(x => x.id === l.insumoId) || {}).codigoMP || '' }) : ''}<div class="si-ln-t"><b>${esc(l.nombre)}</b>${l.manual ? ' <em>escrito a mano</em>' : ''}<small>Pide <b>${l.cantidad}</b> · hay ${hay} en total${l.movido ? ' · traído a ' + esc(s.bodega) : ''}</small></div>${chipL(l)}</div>
+          return `<div class="si-ln${decid ? ' si-ln--ok' : ''}" data-i="${i}"><div class="si-lh">${l.foto ? `<span class="prod-img"><img src="${l.foto}" alt="${esc(l.nombre)}"></span>` : IM ? IM.thumb(l.nombre, { codigo: (insumos.find(x => x.id === l.insumoId) || {}).codigoMP || '' }) : ''}<div class="si-ln-t"><b>${esc(l.nombre)}</b>${l.manual ? ' <em>escrito a mano</em>' : ''}<small>Pide <b>${l.cantidad}</b> · hay ${hay} en total${l.movido ? ' · traído a ' + esc(s.bodega) : ''}</small></div>${chipL(l)}</div>
             ${ab(s) && ver ? (cands.length ? `<table class="si-tb si-lt"><thead><tr><th>Dónde</th><th>Lote</th><th>Vence</th><th>Hay</th><th>Sacar</th></tr></thead><tbody>${cands.map((c, j) => `<tr><td>${esc(c.bodega)}${c.estante ? ' · ' + esc(c.estante) : ''}${c.bodega !== s.bodega ? ' <small class="si-mv">hay que traer</small>' : ''}</td><td>${esc(c.lote)}</td><td>${esc(fmtV(c.vence))}</td><td>${c.disp}</td><td><input type="number" min="0" max="${c.disp}" value="${pre[j]}" class="si-q-in" data-j="${j}" inputmode="numeric" aria-label="Cantidad a sacar del lote ${esc(c.lote)}"></td></tr>`).join('')}</tbody></table>` : '<p class="si-v">No está en el inventario.</p>')
               + `<div class="si-lb"><button type="button" class="btn btn-primary btn-sm" data-ok="${i}"${cands.length ? '' : ' disabled'}>Confirmar</button><button type="button" class="btn btn-secondary btn-sm" data-nh="${i}">No hay</button></div>`
               : (ab(s) ? `<div class="si-lb"><small>${(l.seleccion || []).filter(x => x.qty > 0).map(x => `${esc(x.lote)} · ${esc(x.bodega)}: ${x.qty}`).join(' · ')}</small><button type="button" class="btn btn-secondary btn-sm" data-ver="${i}">Cambiar</button></div>` : '')}</div>`; }).join('')}</div>
@@ -342,6 +374,6 @@
     };
   }
 
-  window.SAR_Solicitudes = { abrirPide, abrirBandeja, publicarCatalogo, numeroSolicitud, agregarLinea, textoPicking, infoLinea, lotesCandidatos, repartir, estadoLinea, comprometido, filasInforme, CAB_INFORME, leerTodas, pintarAuditoria };
+  window.SAR_Solicitudes = { abrirPide, abrirBandeja, publicarCatalogo, numeroSolicitud, agregarLinea, textoPicking, infoLinea, lotesCandidatos, repartir, estadoLinea, comprometido, filasInforme, parecidos, CAB_INFORME, leerTodas, pintarAuditoria };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_Solicitudes;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null });

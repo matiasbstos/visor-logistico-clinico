@@ -6274,3 +6274,12 @@ body[data-user-role="solicitante"] .superadmin-only { display: none !important; 
 .cola-chip{position:fixed;right:16px;bottom:16px;z-index:9999;display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:24px;border:0;background:#92400e;color:#fff;font-weight:700;font-size:.85rem;box-shadow:0 8px 24px rgba(15,23,42,.3);cursor:pointer}
 .cola-chip--err{background:#b91c1c}.cola-gira{animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
 .cola-pan{width:min(560px,94vw)}.cola-pan li small{color:#64748b}.cola-e{color:#b91c1c}.cola-pan li .btn{margin-top:4px}
+/* Checklist de solicitudes (v21.194) */
+.si-lns{display:flex;flex-direction:column;gap:8px}.si-ln{border:1px solid #e2e8f0;border-radius:8px;padding:10px;background:#fff}.si-ln--ok{background:#f8fafc}
+.si-lh{display:flex;align-items:center;gap:10px}.si-lh .prod-img{width:56px;height:56px;flex:none}.si-ln-t{flex:1;display:flex;flex-direction:column;gap:2px;font-size:.9rem}.si-ln-t small{color:#64748b}.si-ln-t em{color:#b45309;font-size:.75rem;font-style:normal}
+.si-le{padding:3px 10px;border-radius:12px;font-size:.75rem;font-weight:700;white-space:nowrap;background:#e2e8f0;color:#334155}.si-le-ok{background:#dcfce7;color:#166534}.si-le-parcial{background:#fef3c7;color:#92400e}.si-le-no_hay{background:#fee2e2;color:#991b1b}
+.si-lt{margin-top:8px}.si-q-in{width:72px;padding:6px 8px;border:1px solid #cbd5e1;border-radius:6px;font-size:.95rem}.si-mv{color:#1e40af;font-weight:600}
+.si-lb{display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:8px;flex-wrap:wrap}.si-lb small{flex:1;color:#475569}
+.si-mia{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px}.si-mia summary{display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none}.si-mia summary::-webkit-details-marker{display:none}
+.si-mia-l{display:flex;justify-content:space-between;gap:8px;align-items:center;padding:6px 0;border-top:1px solid #eef1f6;font-size:.88rem}
+@media(max-width:560px){.si-lt th:nth-child(3),.si-lt td:nth-child(3){display:none}}

@@ -1304,3 +1304,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 
 ## 4.249 Instrucciones de instalación desplegables (v21.195)
 - En `solicitar.html` las instrucciones pasan de pestañas a dos desplegables cerrados: «Cómo instalar en Android» y «Cómo instalar en iPhone». Se tocan para ver los pasos ilustrados y se vuelven a tocar para ocultarlos.
+
+## 4.250 Datos locales siempre al día: bajar y subir solo (v21.196)
+- `sync-local.js` (`SAR_Sync`): al abrir el visor, al volver internet y cada 30 minutos con conexión, **sube** lo hecho sin conexión (cola de transferencias/ajustes; el resto lo sube Firestore solo) y **descarga** a la caché del equipo: inventario, bodegas, ubicaciones, catálogo, solicitudes, actas, órdenes, distribuciones/contadores, centros y los 3.000 movimientos más recientes (staff; otros roles solo inventario, bodegas y ubicaciones). También republica la lista de quien pide.
+- La insignia de arriba ahora es real: «Nube actualizada · 16:40», «Sin conexión · datos de las 16:40» (amarillo) o «Descargando Inventario (1/10)…» (azul). Tocarla sincroniza en el momento.
+- Service worker: las **fotos de productos** (tienda de Convenio Marco) se guardan en una caché propia que sobrevive a las versiones, para verlas sin internet.
+- `solicitar.html`: al volver internet recarga la lista de productos y el estado de las solicitudes.

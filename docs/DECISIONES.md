@@ -1323,3 +1323,8 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Pedido del usuario: catálogo completo con foto. Las fotos halladas automáticamente (por código o por descripción vía Apps Script) **se muestran de inmediato en todo el sitio** (Existencias, Catálogo, ficha, actas, solicitudes, lista de quien pide) con la marca naranja «?» de por confirmar; se confirman o descartan en Catálogo → las descartadas no se muestran nunca. Cambia la regla de v20.85 (antes no se mostraban hasta confirmar).
 - Búsqueda automática cada **30 minutos** entre 8:00 y 17:00 (antes cada hora), hasta 400 productos por vez, mientras haya un equipo de bodega con el visor abierto. Lo no hallado se reintenta a los 7 días.
 - Estado al 14-11-2026: 175 productos en catálogo; 48 con foto confirmada, 71 por confirmar (antes ocultas), 56 sin foto.
+
+## 4.253 Fotos desde la ficha: cámara, búsqueda y foto del producto (v21.199)
+- Ficha de producto → sección **Fotos**: «Foto de la caja» (cámara del teléfono; queda como foto principal propia, 320 px), «Foto del producto (cómo es)» (p. ej. el catéter fuera de la caja; hasta 4 fotos extra de 640 px en `fotosExtra` del catálogo, se pueden quitar), «Buscar en internet» (tienda de Convenio Marco por código y por descripción; muestra la candidata con «Usar esta foto» / «No es» y enlace a Google Imágenes; si no hay, invita a sacarle foto) y, para fotos automáticas, «✔ Es correcta» / «✖ No es».
+- Si el producto no estaba en el catálogo, se crea al guardar la primera foto.
+- Reglas: se entregó al usuario el archivo conciliado (`firestore.rules` del repo = su archivo + la regla de modificación de solicitudes de 4.251); las fotos no requieren reglas nuevas.

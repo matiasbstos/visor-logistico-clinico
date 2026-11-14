@@ -1533,6 +1533,7 @@
                 await new Promise(r => setTimeout(r, 1400));
                 try {
                     const ocDoc = { ...oc };
+                    if (window.SAR_Bultos && ingresaStock) window.SAR_Bultos.ofrecerRecepcion({ rec: ids.join(' + '), lineas: allDet.map(d => ({ nombre: d.insumoName || oc.lineas[d.i].descripcion, codigoMP: oc.lineas[d.i].codigoMP || '', total: d.cantidad, lote: d.lote || 'S/L', vence: d.vence || '', bodega: central, proveedor: oc.proveedor || '', oc: oc.numeroOC || '', rec: ids.join(' + '), fechaRecepcion: fecha || hoyISO() })) });   // v21.205: etiqueta por caja
                     if (window.SAR_RecepConf && recNuevas[0]) setTimeout(() => window.SAR_RecepConf.ofrecer({ oc: ocDoc, rec: recNuevas[0], toast, usuario: usuario(), guardarArchivo, eliminarCategoria: eliminarArchivosCategoria }), 300);
                 } catch (e) { /* los documentos se pueden descargar después desde la lista de recepciones */ }
                 const quedan = pendientesDe(oc).reduce((t, x) => t + x.pendiente, 0);

@@ -2053,6 +2053,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'view-transitoria': 'Bodega transitoria',
             'view-sustituciones': 'Cuadre de sustituciones',
             'view-solicitud-insumos': 'Solicitud de insumos',
+            'view-bultos': 'Bultos y etiquetas',
             'view-solicitudes-insumos': 'Solicitudes recibidas',
             'view-bitacora-oc': 'Bitácora de órdenes',
             'view-duplicados': 'Revisar productos parecidos',
@@ -2097,7 +2098,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // Control de acceso por rol (espejo de las reglas CSS del menú; la barrera real son las reglas de Firestore)
             const VISTAS_BLOQUEADAS = {
                 enfermero: ['view-historial', 'view-ajustes', 'view-compras', 'view-informes', 'view-bodegas',
-                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-compras-agiles', 'view-ingreso-rapido', 'view-pendientes-entrega', 'view-distribucion-centros', 'view-transitoria', 'view-sustituciones', 'view-solicitudes-insumos', 'view-bitacora-oc', 'view-duplicados', 'view-actas-entrega', 'view-auditoria', 'view-oxigeno', 'view-errores'],
+                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-compras-agiles', 'view-ingreso-rapido', 'view-pendientes-entrega', 'view-distribucion-centros', 'view-transitoria', 'view-sustituciones', 'view-solicitudes-insumos', 'view-bultos', 'view-bitacora-oc', 'view-duplicados', 'view-actas-entrega', 'view-auditoria', 'view-oxigeno', 'view-errores'],
                 operador: ['view-compras', 'view-usuarios', 'view-configuracion', 'view-errores']
             };
             const rolActual = String(document.body.dataset.userRole || '').toLowerCase();
@@ -2171,6 +2172,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (window.SAR_Duplicados) window.SAR_Duplicados.abrir();
                 } else if (hash === 'view-bitacora-oc') {
                     if (window.SAR_Bitacora) window.SAR_Bitacora.abrir();
+                } else if (hash === 'view-bultos') {
+                    if (window.SAR_Bultos) window.SAR_Bultos.abrir();
                 } else if (hash === 'view-solicitud-insumos') {
                     if (window.SAR_Solicitudes) window.SAR_Solicitudes.abrirPide();
                 } else if (hash === 'view-solicitudes-insumos') {

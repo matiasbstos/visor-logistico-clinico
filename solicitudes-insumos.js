@@ -86,8 +86,15 @@
       <div class="si-car">${lineas.map((l, i) => `<div class="si-fila"><span class="si-fn">${esc(l.nombre)}${l.manual ? ' <em>escrito a mano</em>' : ''}</span><span class="si-q"><button type="button" data-m="${i}">−</button><b>${l.cantidad}</b><button type="button" data-p="${i}">+</button></span><button type="button" class="si-x" data-x="${i}" aria-label="Quitar">✕</button></div>`).join('') || '<p class="si-v">Aún no agregas nada.</p>'}</div>
       <label class="si-l">Nota (opcional)<input id="si-not" class="si-in" value="${esc(form.nota)}" placeholder="Ej: urgente para hoy"></label>
       <button type="button" class="btn btn-primary si-env" id="si-env"${enviando ? ' disabled' : ''}>Enviar solicitud</button>
-      <p class="si-v" id="si-red"></p></div>`;
-    estadoRed(); if (window.SAR_Imagenes) window.SAR_Imagenes.rellenar(r);
+      <p class="si-v" id="si-red"></p><div id="si-mias"></div></div>`;
+    estadoRed(); if (window.SAR_Imagenes) window.SAR_Imagenes.rellenar(r); pintarMias();
+  }
+  /** Las últimas solicitudes hechas desde este teléfono y en qué estado van (bodega las va moviendo). */
+  async function pintarMias() {
+    const el = document.getElementById('si-mias'); if (!el) return; let l = [];
+    try { l = JSON.parse(localStorage.getItem('si-mias') || '[]'); } catch (e) { l = []; } if (!l.length) { el.innerHTML = ''; return; }
+    const f = fs(), filas = await Promise.all(l.slice(0, 6).map(async (n) => { try { const d = await f.getDoc(f.doc(f.collection(db(), COL), n)); return d.exists() ? d.data() : { numero: n, estado: 'POR_ENVIAR' }; } catch (e) { return { numero: n, estado: 'POR_ENVIAR' }; } }));
+    el.innerHTML = `<h3 class="si-h">Tus últimas solicitudes</h3><div class="si-car">${filas.map(x => `<div class="si-fila"><span class="si-fn"><b>${esc(x.numero)}</b><br><small>${esc(x.bodega || '')}${x.lineas ? ' · ' + x.lineas.length + ' producto(s)' : ''}</small></span><span class="si-est si-e-${esc(x.estado)}">${esc(x.estado === 'POR_ENVIAR' ? 'Por enviar (sin internet)' : (ESTADOS[x.estado] || x.estado))}</span></div>`).join('')}</div>`;
   }
   function estadoRed() { const e = document.getElementById('si-red'); if (e) e.textContent = navigator.onLine === false ? 'Sin internet: se guardará en este teléfono y se enviará sola al volver la conexión.' : ''; }
   function leerCampos() { const g = (id) => { const e = document.getElementById(id); return e ? e.value : null; }; const n = g('si-nom'), s = g('si-ser'), o = g('si-not'), c = g('si-cor'); if (c !== null) form.correo = c; if (n !== null) form.solicitante = n; if (s !== null) form.servicio = s; if (o !== null) form.nota = o; }
@@ -106,6 +113,7 @@
     enviando = false;
     if (String(r).startsWith('error')) { toast('No se envió', String(r).slice(6) || 'Revisa tu conexión e intenta de nuevo.', 'error'); pintarPide(); return; }
     p.catch(() => { /* se reintenta sola al volver internet */ });
+    try { const m = JSON.parse(localStorage.getItem('si-mias') || '[]'); m.unshift(numero); localStorage.setItem('si-mias', JSON.stringify(m.slice(0, 20))); } catch (e) { /* sin almacenamiento */ }
     lineas = []; busca = ''; form.nota = ''; bodegaSel = ''; pintarPide();
     const r2 = rootPide(); if (r2) r2.insertAdjacentHTML('afterbegin', `<div class="si-ok"><b>${r === 'ok' ? 'Solicitud enviada' : 'Solicitud guardada en el teléfono'}</b><br>${numero}${r === 'ok' ? '' : ' · se enviará sola cuando haya internet.'}</div>`);
     window.scrollTo && window.scrollTo(0, 0);

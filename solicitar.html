@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Pedir insumos · SAR</title>
+    <meta name="theme-color" content="#1A3668">
+    <link rel="manifest" href="manifest-solicitar.json">
+    <link rel="icon" href="assets/favicon-32.png">
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+    <link rel="stylesheet" href="style.css?v=21.192">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body.sp { margin: 0; background: #f5f7fb; font-family: 'Outfit', system-ui, sans-serif; min-height: 100vh; }
+        .sp-cab { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: #fff; border-bottom: 3px solid var(--brand-green, #8cc63f); box-shadow: 0 2px 8px rgba(15, 23, 42, .06); }
+        .sp-cab img { height: 34px; }
+        .sp-cab div { flex: 1; line-height: 1.15; }
+        .sp-cab b { color: var(--primary, #1a3668); font-size: 1rem; display: block; }
+        .sp-cab small { color: #64748b; font-size: .75rem; }
+        .sp-salir { border: 1px solid #cbd5e1; background: #fff; border-radius: 8px; padding: 6px 10px; font-size: .8rem; color: #334155; cursor: pointer; }
+        .sp-login { max-width: 420px; margin: 8vh auto 0; padding: 24px; background: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(15, 23, 42, .1); display: flex; flex-direction: column; gap: 12px; }
+        .sp-login h1 { margin: 0; color: var(--primary, #1a3668); font-size: 1.3rem; }
+        .sp-login p { margin: 0; color: #64748b; font-size: .9rem; }
+        .sp-login .btn { min-height: 48px; font-size: 1rem; }
+        .sp-err { color: #b91c1c; font-size: .85rem; min-height: 1em; }
+        .sp-toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 10000; background: #1a3668; color: #fff; padding: 12px 16px; border-radius: 12px; box-shadow: 0 10px 30px rgba(15, 23, 42, .3); max-width: 92vw; font-size: .9rem; }
+        .sp-toast.warning { background: #92400e; } .sp-toast.error { background: #b91c1c; } .sp-toast.success { background: #166534; }
+        .sp-mias { max-width: 720px; margin: 0 auto 32px; padding: 0 16px; }
+    </style>
+</head>
+<body class="sp" data-user-role="solicitante">
+    <header class="sp-cab"><img src="assets/logo-sar.png" alt="SAR"><div><b>Pedir insumos</b><small>SAR Elsa Romo · Corp. Municipal de Melipilla</small></div><button type="button" class="sp-salir" id="sp-salir" hidden>Salir</button></header>
+    <main id="sp-main"><div class="si-wrap"><p class="si-v">Cargando…</p></div></main>
+    <div id="si-pide" hidden></div>
+
+    <script src="progreso.js?v=21.192"></script>
+    <script src="imagenes-producto.js?v=21.192"></script>
+    <script src="solicitudes-insumos.js?v=21.192"></script>
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+        import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, setDoc, getDoc, getDocs, updateDoc, query, where, limit, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+        // Configuración pública del proyecto (la misma del visor; no es una clave secreta).
+        const app = initializeApp({ apiKey: "AIzaSyAyktOnoB-j7nX4-YZLa6B74wOBCbZvlsA", authDomain: "sarinventario.firebaseapp.com", projectId: "sarinventario", storageBucket: "sarinventario.firebasestorage.app", messagingSenderId: "358257655117", appId: "1:358257655117:web:b7f46ad97e94afa1324b04" });
+        const auth = getAuth(app), db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
+        window.firebaseAuth = auth; window.firebaseDb = db;
+        window.firebaseFirestore = { doc, collection, setDoc, getDoc, getDocs, updateDoc, query, where, limit, onSnapshot, serverTimestamp };
+        window.showToast = (t, m, tipo) => { const d = document.createElement('div'); d.className = 'sp-toast ' + (tipo || ''); d.innerHTML = `<b>${t}</b><br>${m || ''}`; document.body.appendChild(d); setTimeout(() => d.remove(), 4500); };
+        const main = document.getElementById('sp-main'), pide = document.getElementById('si-pide'), salir = document.getElementById('sp-salir');
+        function login(err) {
+            pide.hidden = true; salir.hidden = true;
+            main.innerHTML = `<form class="sp-login" id="sp-f"><h1>Pedir insumos a bodega</h1><p>Inicia sesión <b>una sola vez</b> en este teléfono con la cuenta que te entregó bodega. Después solo escribes tu nombre y correo en cada solicitud.</p>
+                <label class="si-l">Cuenta<input class="si-in" id="sp-u" type="email" autocomplete="username" inputmode="email" required></label>
+                <label class="si-l">Clave<input class="si-in" id="sp-c" type="password" autocomplete="current-password" required></label>
+                <p class="sp-err" id="sp-e">${err || ''}</p><button class="btn btn-primary" type="submit">Entrar</button></form>`;
+            document.getElementById('sp-f').addEventListener('submit', async (e) => {
+                e.preventDefault(); const b = e.target.querySelector('button'); b.disabled = true; b.textContent = 'Entrando…';
+                try { await signInWithEmailAndPassword(auth, document.getElementById('sp-u').value.trim(), document.getElementById('sp-c').value); }
+                catch (er) { login(/network|offline/i.test(er.code || '') ? 'Sin internet: la primera vez necesitas conexión.' : 'Cuenta o clave incorrecta.'); }
+            });
+        }
+        salir.addEventListener('click', async () => { if (confirm('¿Cerrar la sesión en este teléfono? Para volver a pedir habrá que ingresar la cuenta otra vez.')) await signOut(auth); });
+        onAuthStateChanged(auth, (u) => {
+            if (!u) return login();
+            main.innerHTML = ''; main.appendChild(pide); pide.hidden = false; salir.hidden = false;
+            window.SAR_Solicitudes.abrirPide();
+        });
+        if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));
+    </script>
+</body>
+</html>

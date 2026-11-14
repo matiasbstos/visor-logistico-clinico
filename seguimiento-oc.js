@@ -755,7 +755,7 @@
             brg.disabled = true;
             window.SAR_RecepcionConforme.regenerar({ oc: ocActual, toast, guardarArchivo, centroPropio: CENTRO_PROPIO, usuario: usuario() }).catch(e => toast('No se pudo regenerar', e.message || String(e), 'error')).finally(() => { brg.disabled = false; });
         });
-        const bco = q('#soc-conforme'); if (bco) bco.addEventListener('click', () => { if (window.SAR_RecepcionConforme) window.SAR_RecepcionConforme.abrir({ oc: ocActual, modal, toast, enviarCorreo, guardarArchivo, config: configCorreo, usuario: usuario(), fmtFecha, peso, totalesPorCentro, centroPropio: CENTRO_PROPIO }); });
+        const bco = q('#soc-conforme'); if (bco) bco.addEventListener('click', () => { if (window.SAR_RecepcionConforme) window.SAR_RecepcionConforme.abrir({ oc: ocActual, modal, toast, enviarCorreo, guardarArchivo, eliminarCategoria: eliminarArchivosCategoria, config: configCorreo, usuario: usuario(), fmtFecha, peso, totalesPorCentro, centroPropio: CENTRO_PROPIO }); });
         root().querySelectorAll('[data-acta]').forEach(b => b.addEventListener('click', () => formActaCentro(b.dataset.acta)));
         const ac = q('#soc-acepta'); if (ac) ac.addEventListener('click', formAceptacion);
         root().querySelectorAll('[data-resolver]').forEach(b => b.addEventListener('click', () => formResolver(b.dataset.resolver)));

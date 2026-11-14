@@ -146,9 +146,26 @@
         else page.drawLine({ start: { x: 190, y: H - yf }, end: { x: 420, y: H - yf }, thickness: 0.8, color: negro });
         centrar('Firma contraparte técnica', 10.5, false, yf + 24, 0, W);
         centrar('Nombre Contraparte Técnica: ' + (d.contraparte || CONTRAPARTE_BASE), 10.5, false, yf + 46, 0, W);
+        // Timbre «RECEPCIÓN CONFORME» (v21.207): solo cuando la recepción conforme ya está registrada; así se distingue del acta que sale al recibir (que lleva solo la firma de la contraparte técnica).
+        const tc = timbreDe(oc, d);
+        if (tc) {
+            const azul = rgb(0.11, 0.24, 0.6), x0 = MR - 142, x1 = MR + 6, yt = yf - 52, yb = yt + 74;
+            [[2.2, 0], [0.8, 3.2]].forEach(([g, m]) => page.drawRectangle({ x: x0 + m, y: H - yb + m, width: x1 - x0 - m * 2, height: yb - yt - m * 2, borderColor: azul, borderWidth: g }));
+            const TA = (s, yy, size, bold) => { const fnt = bold ? FB : F, t = seguro(fnt, s); page.drawText(t, { x: (x0 + x1 - fnt.widthOfTextAtSize(t, size)) / 2, y: H - yy, size, font: fnt, color: azul }); };
+            TA('RECEPCIÓN CONFORME', yt + 16, 10.5, true); TA('SAR Elsa Romo Aravena', yt + 28, 7.5, false);
+            TA('Fecha: ' + fechaCorta(tc.fecha || d.fecha), yt + 41, 8.5, true);
+            TA((tc.tipoDoc === 'FACTURA' ? 'Factura' : 'Guía') + ' N° ' + (tc.numeroDoc || 's/n'), yt + 53, 8.5, false);
+            if (tc.recibe) TA('Recibe: ' + String(tc.recibe).slice(0, 34), yt + 65, 7, false);
+        }
         return await doc.save();
     }
 
+    /** Datos del timbre de recepción conforme: los del formulario (al registrarla) o los ya guardados en la orden. */
+    function timbreDe(oc, d) {
+        if (d && d.timbreConforme) return d.timbreConforme;
+        const rc = oc && oc.recepcionConforme; if (!rc || d.sinTimbre) return null;
+        return { fecha: rc.fecha, tipoDoc: rc.tipoDoc, numeroDoc: rc.numeroDoc, recibe: rc.recibe || '' };
+    }
     const aBase64 = (bytes) => { let s = ''; const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes); for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode.apply(null, u.subarray(i, i + 0x8000)); return btoa(s); };
 
     /** Encabezado por defecto del acta según Total/Parcial (editable por el usuario). */
@@ -204,6 +221,7 @@
             o.querySelector('#rc-error').innerHTML = err.map(e => `<div>${esc(e)}</div>`).join('');
             if (err.length) return false;
             const PDFLib = await cargarPDFLib(); const logoBytes = await cargarLogo(); const firmaBytes = await cargarFirma();
+            d.timbreConforme = { fecha: d.fecha, tipoDoc: d.tipoDoc, numeroDoc: d.numeroDoc, recibe: d.firmaNombre };
             const acta = await generarActaPDF(oc, d, centro, { PDFLib, logoBytes, firmaBytes });
             const guia = new Uint8Array(await d.archivo.arrayBuffer());
             const adj = [{ name: nombreActa(oc), mime: 'application/pdf', base64: aBase64(acta) }, { name: nombreAdjunto(d.tipoDoc, d.numeroDoc), mime: 'application/pdf', base64: aBase64(guia) }];
@@ -219,6 +237,10 @@
             const textoEv = `Recepción conforme registrada (${d.tipoDoc === 'FACTURA' ? 'factura' : 'guía'} N° ${d.numeroDoc})${d.parcial ? ', parcial' : ''}. Correo: ${correo.estado}${correo.detalle ? ' — ' + correo.detalle : ''}.`;
             const ocRef = fs().doc(fs().collection(db(), 'Seguimiento_OC'), oc.id);
             await fs().updateDoc(ocRef, { recepcionConforme: { fecha: d.fecha, por: ctx.usuario, recibe: d.firmaNombre, tipoDoc: d.tipoDoc, numeroDoc: d.numeroDoc, parcial: d.parcial, observaciones: d.observaciones, encabezado: d.encabezado, lineas: d.lineas, correo: resumen } });
+            // v21.207: los documentos de cada recepción (REC-…) se rehacen ya con el timbre «RECEPCIÓN CONFORME»
+            try { const rcN = { fecha: d.fecha, recibe: d.firmaNombre, tipoDoc: d.tipoDoc, numeroDoc: d.numeroDoc, parcial: d.parcial }, R = window.SAR_RecepConf;
+                if (R && R.guardarEnOrden) for (const rec of (oc.recepciones || []).filter(r => !r.anulada)) await R.guardarEnOrden({ oc: { ...oc, recepcionConforme: rcN }, rec, guardarArchivo: ctx.guardarArchivo, eliminarCategoria: ctx.eliminarCategoria }); }
+            catch (e) { /* el acta principal ya quedó con timbre */ }
             await fs().setDoc(fs().doc(fs().collection(db(), 'Seguimiento_OC', oc.id, 'Eventos')), { tipo: 'CONFORME', texto: textoEv, autor: ctx.usuario, fecha: fs().serverTimestamp(), correo: { estado: correo.estado, destinatarios: [...(correo.destinatarios || []), ...(correo.cc || [])], detalle: correo.detalle || '' } });
             if (correo.estado === 'enviado') toast('Correo enviado', `Acta y ${d.tipoDoc === 'FACTURA' ? 'factura' : 'guía'} enviadas a ${(correo.destinatarios || []).length + (correo.cc || []).length} destinatario(s).`, 'success');
             else if (correo.estado === 'programado') toast('Correo programado', correo.detalle, 'info');
@@ -288,5 +310,5 @@
         });
     }
 
-    window.SAR_RecepcionConforme = { cargarPDFLib, cargarLogo, cargarFirma, bajar, fechaCorta, CONTRAPARTE_BASE, FIRMA_BASE, editar, regenerar, abrir, nombreAdjunto, nombreActa, lineasActa, validar, armarCorreo, generarActaPDF, DESTINATARIOS_BASE };
+    window.SAR_RecepcionConforme = { timbreDe, cargarPDFLib, cargarLogo, cargarFirma, bajar, fechaCorta, CONTRAPARTE_BASE, FIRMA_BASE, editar, regenerar, abrir, nombreAdjunto, nombreActa, lineasActa, validar, armarCorreo, generarActaPDF, DESTINATARIOS_BASE };
 })(window, document);

@@ -1363,3 +1363,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - **Contar por bultos** (pistolear): caja **cerrada suma sola** su contenido; **abierta pregunta cuánto queda** (± y Enter; decisión del usuario); vacía no suma; la misma caja no se cuenta dos veces. Resumen por producto/lote/bodega contra el stock del sistema (en rojo si no cuadra) y «Guardar conteo» (`Contadores/conteo-bultos-<fecha>`). No ajusta stock solo.
 - QR con `qrcode-generator` 1.4.4 (cdnjs, carga diferida; guardado en el service worker para usar sin internet).
 - v21.206: el logo de la etiqueta de bulto va como JPEG chico (la primera versión pesaba ~2 MB por etiqueta; ahora KB). QR verificado: se genera y se decodifica con la cámara (html5-qrcode) a la URL del bulto.
+
+## 4.260 Timbre «RECEPCIÓN CONFORME» en el acta (v21.207)
+- El acta que sale al **recibir** la mercadería lleva solo la firma y timbre de la contraparte técnica. Cuando se **registra la recepción conforme**, el acta (y la que se rehace, edita o descarga después, en PDF y Word) lleva además un **timbre azul de doble borde «RECEPCIÓN CONFORME · SAR Elsa Romo Aravena · Fecha · Guía/Factura N° · Recibe»** a la derecha de la firma. Así se distingue a simple vista un acta de recepción de una ya conforme.
+- Al registrar la recepción conforme se rehacen también los documentos de cada recepción (REC-…) guardados en la orden, reemplazando los anteriores (antes faltaba `eliminarCategoria` en ese contexto).

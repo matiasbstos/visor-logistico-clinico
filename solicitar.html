@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest-solicitar.json">
     <link rel="icon" href="assets/favicon-32.png">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-    <link rel="stylesheet" href="style.css?v=21.196">
+    <link rel="stylesheet" href="style.css?v=21.197">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body.sp { margin: 0; background: #f5f7fb; font-family: 'Outfit', system-ui, sans-serif; min-height: 100vh; }
@@ -62,6 +62,8 @@
     </style>
 </head>
 <body class="sp" data-user-role="solicitante">
+    <div class="sar-splash" id="sar-splash" aria-hidden="true"><svg viewBox="0 0 200 200"><polygon class="sp-hex" points="100,12 176.2,56 176.2,144 100,188 23.8,144 23.8,56"/><path class="sp-cruz" d="M88 62h24v26h26v24h-26v26H88v-26H62V88h26z"/><circle class="sp-pt" cx="146" cy="146" r="11"/></svg><b>VISOR</b><small>PEDIR INSUMOS</small></div>
+    <script>(function () { var t0 = Date.now(), s = document.getElementById('sar-splash'); window.SAR_SplashFin = function () { if (!s || s.dataset.fin) return; s.dataset.fin = '1'; setTimeout(function () { s.classList.add('fuera'); setTimeout(function () { s.remove(); }, 400); }, Math.max(0, 1800 - (Date.now() - t0))); }; setTimeout(window.SAR_SplashFin, 5000); })();</script>
     <header class="sp-cab"><img src="assets/logo/horizontal.svg" alt="Visor Logístico" class="sp-logo"><div><b>Pedir insumos</b><small>SAR Elsa Romo</small></div></header>
     <main id="sp-main"><div class="si-wrap"><p class="si-v">Cargando…</p></div></main>
     <div id="si-pide" hidden></div>
@@ -93,9 +95,9 @@
             bi.addEventListener('click', async () => { if (!evt) return; evt.prompt(); await evt.userChoice.catch(() => {}); evt = null; bi.hidden = true; });
         })();
     </script>
-    <script src="progreso.js?v=21.196"></script>
-    <script src="imagenes-producto.js?v=21.196"></script>
-    <script src="solicitudes-insumos.js?v=21.196"></script>
+    <script src="progreso.js?v=21.197"></script>
+    <script src="imagenes-producto.js?v=21.197"></script>
+    <script src="solicitudes-insumos.js?v=21.197"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
@@ -108,10 +110,10 @@
         window.showToast = (t, m, tipo) => { const d = document.createElement('div'); d.className = 'sp-toast ' + (tipo || ''); d.innerHTML = `<b>${t}</b><br>${m || ''}`; document.body.appendChild(d); setTimeout(() => d.remove(), 4500); };
         window.SAR_SOLICITUD_PUBLICA = true;   // sin cuenta: lista pública de productos y solicitudes a su nombre
         const main = document.getElementById('sp-main'), pide = document.getElementById('si-pide');
-        const aviso = (t, m) => { pide.hidden = true; main.innerHTML = `<div class="sp-login"><h1>${t}</h1><p>${m}</p><button class="btn btn-primary" type="button" onclick="location.reload()">Reintentar</button></div>`; };
+        const aviso = (t, m) => { window.SAR_SplashFin && window.SAR_SplashFin(); pide.hidden = true; main.innerHTML = `<div class="sp-login"><h1>${t}</h1><p>${m}</p><button class="btn btn-primary" type="button" onclick="location.reload()">Reintentar</button></div>`; };
         let entrando = false;
         onAuthStateChanged(auth, async (u) => {
-            if (u) { main.innerHTML = ''; main.appendChild(pide); pide.hidden = false; window.SAR_Solicitudes.abrirPide(); return; }
+            if (u) { main.innerHTML = ''; main.appendChild(pide); pide.hidden = false; window.SAR_Solicitudes.abrirPide().finally(() => window.SAR_SplashFin && window.SAR_SplashFin()); return; }
             if (entrando) return; entrando = true;
             try { await signInAnonymously(auth); }   // sin cuenta ni clave: el teléfono queda identificado solo para ver SUS solicitudes
             catch (e) {

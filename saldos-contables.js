@@ -68,7 +68,9 @@
         const porRec = (extra && extra.porRecibir) || [], grp = (extra && extra.grupos) || [];
         const secRec = porRec.length ? [[], ['PENDIENTE DE RECIBIR (órdenes abiertas con mercadería por llegar)'], ['Orden', 'Proveedor', 'Producto', 'ID producto', 'Pedido', 'Recibido', 'Falta recibir', 'Tipo'], ...porRec.flatMap(o => o.lineas.map(l => [o.numeroOC, o.proveedor, l.producto, l.codigoMP, l.pedido, l.recibido, l.pendiente, o.parcial ? 'Recepción parcial' : 'Sin recibir']))] : [];
         const secEnt = grp.length ? [[], ['PENDIENTE DE ENTREGA A CENTROS (según actas de entrega)'], ['Centro', 'Producto', 'ID producto', 'Pendiente', 'Disponible en stock', 'Se puede entregar'], ...grp.flatMap(g => g.items.map(p => [g.centro, p.nombre, p.codigo || '', p.pendiente, p.disponible, p.entregable]))] : [];
-        return '﻿' + [cab, ...l, tot, ...rec, ...secRec, ...secEnt].map(x => x.map(celda).join(';')).join('\r\n');
+        const sols = (extra && extra.solicitudes) || [], S = window.SAR_Solicitudes;
+        const secSol = sols.length && S ? [[], ['SOLICITUDES DE INSUMOS'], S.CAB_INFORME, ...S.filasInforme(sols), [], ['COMPROMETIDO POR SOLICITUDES (confirmado y no entregado)'], ['Producto', 'Bodega', 'Comprometido', 'Solicitudes'], ...S.comprometido(sols).map(c => [c.nombre, c.bodega, c.qty, c.sols.join(', ')])] : [];
+        return '﻿' + [cab, ...l, tot, ...rec, ...secRec, ...secEnt, ...secSol].map(x => x.map(celda).join(';')).join('\r\n');
     }
     async function descargar(tipo) {
         const f = fs();
@@ -81,7 +83,7 @@
             let porRecibir = [], grupos = []; try { if (window.SAR_Pendientes) { const dd = await window.SAR_Pendientes.datos(); porRecibir = dd.porRecibir; grupos = dd.grupos; } } catch (e) { /* el informe sale sin estas secciones */ }
             if (!todas.length && !(recs || []).length) { toast('Informe', 'No hay datos para exportar.', 'warning'); return; }
             const hoy = new Date().toISOString().slice(0, 10);
-            const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv(tipo, { filas: todas, recs: recs || [], porRecibir, grupos })], { type: 'text/csv;charset=utf-8' }));
+            const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv(tipo, { filas: todas, recs: recs || [], porRecibir, grupos, solicitudes: window.SAR_Solicitudes ? await window.SAR_Solicitudes.leerTodas().catch(() => []) : [] })], { type: 'text/csv;charset=utf-8' }));
             a.download = `Informe_${tipo}_${hoy}.csv`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
         } catch (e) { toast('Informe', 'No se pudo generar: ' + e.message, 'error'); }
     }
@@ -225,7 +227,7 @@
         ${cargando ? (window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando el informe…') : 'Cargando el informe…') : !vis.length ? '<p class="act-hint">Sin insumos para mostrar.</p>' : `
         <div class="sal-tabla"><div class="sal-fila sal-cab"><span>Insumo</span><span>Disponible</span><span>En sistema</span><span>Sobregiro</span><span>Bodega</span><span>Estado</span><span></span></div>
         ${vis.slice(0, 400).map(x => `<div class="sal-fila"><span class="sal-n">${esc(x.nombre)}<small>${x.codigo ? 'ID ' + esc(x.codigo) + ' · ' : (x.provisional ? 'sin ID · ' : '')}${x.actas.length ? esc(actasTxt(x)) : ''}</small></span><span><b>${x.disp}</b></span><span>${x.q}</span><span class="${x.sg > 0 ? 'act-sin' : ''}">${x.sg}</span><span>${esc(x.bodega)}</span><span><i class="sal-e sal-e--${x.estado}">${ETIQ[x.estado]}</i></span><span>${x.estado === 'LISTO' ? `<button type="button" class="btn btn-outline sal-q" data-id="${esc(x.id)}">Cuadrar</button>` : ''}${x.provisional && !x.codigo ? `<button type="button" class="btn btn-outline sal-id" data-id="${esc(x.id)}" data-n="${esc(x.nombre)}">Asignar ID</button>` : ''}</span></div>`).join('')}</div>${vis.length > 400 ? '<p class="act-hint">Se muestran 400; el informe Excel incluye todos.</p>' : ''}`}`;
-        const oxiD = '<div id="oxi-aud-d"></div>', oxiC = '<div id="oxi-aud-c"></div>';
+        const oxiD = '<div id="oxi-aud-d"></div><div id="sol-aud-d" class="sol-aud"></div>', oxiC = '<div id="oxi-aud-c"></div><div id="sol-aud-c" class="sol-aud"></div>';
         const conta = `
         <p class="act-hint"><b>Contable</b> es la historia completa de un producto, como un libro: cuándo llegó, a qué bodega, cuándo se movió o salió, ajustes, ediciones y recepciones, cada línea con su motivo y código.</p>
         <div class="sal-barra"><input type="search" id="aud-q" class="form-control" placeholder="Producto o ID de Mercado Público…" value="${esc(contQ)}" autocomplete="off" aria-label="Buscar producto"></div><div id="aud-sug" class="vp-sug"></div>
@@ -233,6 +235,7 @@
         <div id="rec-aud"></div><div id="gob-aud"></div>${oxiC}`;
         r.innerHTML = `<div class="page-header mb-24"><div class="page-title"><h2>Auditoría</h2><p>Dos informes: lo que hay disponible y la historia contable de cada insumo.</p></div></div>${tabs}${tab === 'disp' ? disp + oxiD : conta}`;
         if (window.SAR_OxiCiclos) window.SAR_OxiCiclos[tab === 'disp' ? 'pintarDisponible' : 'pintarContable'](r.querySelector(tab === 'disp' ? '#oxi-aud-d' : '#oxi-aud-c'));
+        if (window.SAR_Solicitudes && window.SAR_Solicitudes.pintarAuditoria) window.SAR_Solicitudes.pintarAuditoria(r.querySelector(tab === 'disp' ? '#sol-aud-d' : '#sol-aud-c'), tab === 'disp' ? 'disp' : 'cont').catch(() => {});
         r.querySelectorAll('.aud-tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; pintar(); }));
         if (tab === 'cont') {
             pintarRec(); if (window.SAR_Gobernanza) window.SAR_Gobernanza.pintarLista(r.querySelector('#gob-aud'));

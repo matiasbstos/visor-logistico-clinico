@@ -1338,3 +1338,9 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 ## 4.255 Pedir un producto que no está en la lista: nombre completo, sugerencias y foto obligatoria (v21.201)
 - En «¿No está en la lista?» quien pide escribe el **nombre completo** (mín. 2 palabras y 8 letras) y mientras escribe ve «¿Es alguno de estos?» con los productos parecidos (de la bodega elegida y de las demás, con foto) para agregarlo con un toque.
 - Si no es ninguno, **debe sacar una foto** del producto (cámara del teléfono, 480 px) para poder agregarlo. La foto viaja en la línea de la solicitud y bodega la ve en «Solicitudes recibidas».
+
+## 4.256 «Costado» y avisos separados por acción (v21.202; referencias de video Moxen «Costado» y MiseFlow)
+- **Solicitudes recibidas** (pantalla ≥ 1000 px): lista compacta a la izquierda (N°, quién, servicio, cantidad de productos, estado) y el detalle completo a la derecha, que entra deslizándose; ▲▼ o flechas del teclado recorren, Esc o ✕ cierra. En el teléfono siguen las tarjetas una bajo otra.
+- **Ficha de producto** en escritorio: panel lateral desde la derecha con el catálogo visible detrás; desde el Catálogo, ▲▼/flechas pasan al producto anterior/siguiente («N de M»).
+- **Campana de Avisos** con dos pestañas: **Necesitan tu acción** (solicitudes nuevas, hecho sin conexión para revisar, fotos por confirmar, vencidos/por vencer, bajo mínimo, préstamos, errores, recepciones parciales, stock para entregar) y **Automático** (última sincronización, resultado de la búsqueda de fotos, operaciones sin conexión aplicadas). Las solicitudes nuevas se vigilan en tiempo real para bodega (contador del menú, campana y aviso emergente).
+- «Trasluz» (comparador de capturas) se descartó para el sitio: es herramienta de revisión de diseño.

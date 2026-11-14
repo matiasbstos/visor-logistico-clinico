@@ -32,7 +32,7 @@
             if (c.codigoMP && c.fotoEstado === 'por_confirmar' && c.imagenMP) candidatas.set(String(c.codigoMP), { codigo: String(c.codigoMP), imagen: '', archivo: c.imagenMP, pendiente: true });
             if (c.codigoMP && sinConfirmar(c)) descartados.add(String(c.codigoMP));
             // Foto hallada automáticamente y aún «por confirmar»: se muestra igual (con la marca «por confirmar») para que el catálogo esté completo; las descartadas nunca (v21.198)
-            if (c.fotoEstado === 'por_confirmar' && c.imagenMP) { const p = { codigo: c.codigoMP ? String(c.codigoMP) : '', imagen: '', archivo: c.imagenMP, pendiente: true };
+            if (c.fotoEstado === 'por_confirmar' && !c.imagen && (c.imagenMP || c.imagenWeb)) { const p = { codigo: c.codigoMP ? String(c.codigoMP) : '', imagen: c.imagenWeb && !c.imagenMP ? c.imagenWeb : '', archivo: c.imagenMP || '', pendiente: true };
                 if (c.codigoMP && !porCodigo.has(String(c.codigoMP))) porCodigo.set(String(c.codigoMP), p);
                 [c.descripcion, c.insumoName].forEach(n => { if (n && !porNombre.has(norm(n))) porNombre.set(norm(n), p); }); return; }
             const e = entrada(c); if (!e.imagen && !e.archivo) return;
@@ -99,6 +99,12 @@
         const r = await fetch(cfg.webhookUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ token: cfg.token, accion: 'porDescripcion', items: [{ k: 'a', q: String(desc) }] }) });
         const j = await r.json(); return (j && j.ok && j.fotos && j.fotos.a) || null;
     }
+    /** Busca imágenes en internet (Apps Script → buscador de imágenes). items: [{k, q, n}] → {k: [{titulo, url, data}]} (data = miniatura lista para guardar). */
+    async function buscarWeb(items, cfg) {
+        if (!(cfg && cfg.webhookUrl && cfg.token)) throw new Error('SIN_SCRIPT');
+        const r = await fetch(cfg.webhookUrl, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ token: cfg.token, accion: 'buscarWeb', items }) });
+        const j = await r.json(); if (!(j && j.ok && j.fotos)) throw new Error(j && j.error ? String(j.error) : 'SCRIPT_ANTIGUO'); return j.fotos;
+    }
     const archivoPara = async (codigo, cfg) => (await buscarFoto(codigo, cfg)).archivo;
     /** Sin Apps Script: prueba los nombres de archivo habituales (código−7, con o sin _1) cargando la imagen. */
     function probar(url) { return new Promise(ok => { const im = new Image(); im.onload = () => ok(im.naturalWidth > 20); im.onerror = () => ok(false); im.src = url; }); }
@@ -130,5 +136,5 @@
         Object.keys(ix.n || {}).forEach(k => { if (!porNombre.has(k)) { const v = ix.n[k] || {}; porNombre.set(k, { codigo: '', imagen: v.i || '', archivo: v.a || '' }); } });
         listo = true;
     }
-    window.SAR_Imagenes = { sumarIndice, buscarFoto, buscarPorDescripcion, buscarConCandidata, ampliar, cargar, thumb, buscar, src, imgHTML, rellenar, archivoPara, urlMP, recargar: () => cargar(true) };
+    window.SAR_Imagenes = { buscarWeb, sumarIndice, buscarFoto, buscarPorDescripcion, buscarConCandidata, ampliar, cargar, thumb, buscar, src, imgHTML, rellenar, archivoPara, urlMP, recargar: () => cargar(true) };
 })(window, document);

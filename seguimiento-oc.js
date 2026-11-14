@@ -478,6 +478,10 @@
                 if (p.codigo) { const r = await IM.buscarFoto(p.codigo, configCorreo); if (r.archivo) foto = { imagenMP: r.archivo, fotoEstado: 'por_confirmar', fotoTitulo: '' }; }
                 else { const r = await IM.buscarPorDescripcion(p.desc, configCorreo); if (r && r.archivo) foto = { imagenMP: r.archivo, fotoEstado: 'por_confirmar', fotoTitulo: r.titulo || '' }; }
             } catch (e) { /* sigue con el siguiente */ }
+            if (!foto) {   // no está en Convenio Marco: se busca en internet por la descripción (v21.200; requiere el script actualizado)
+                try { const w = await IM.buscarWeb([{ k: 'a', q: String(p.desc || p.nombre).slice(0, 140), n: 1 }], configCorreo), x = w && w.a && w.a[0];
+                    if (x && x.data) { const b = await (await fetch(x.data)).blob(); foto = { imagenWeb: await reducirImagen(b), fotoEstado: 'por_confirmar', fotoTitulo: x.titulo || '', fotoFuente: 'internet' }; } } catch (e) { /* script antiguo o sin resultado */ }
+            }
             if (foto) enc++;
             try {
                 const base = { actualizado: f.serverTimestamp(), ...(foto || {}) };
@@ -1628,6 +1632,7 @@ function doPost(e) {
     if (d.token !== TOKEN) return salida({ ok: false, error: 'token' });
     if (d.accion === 'foto') return salida(leerFotos(d.fotos));
     if (d.accion === 'documento') return salida(leerDocumento(d.paginas));
+    if (d.accion === 'buscarWeb') { const o = {}; (d.items || []).slice(0, 4).forEach(it => { o[it.k] = imagenesWeb(it.q, Math.min(Number(it.n) || 6, 8)); }); return salida({ ok: true, fotos: o }); }
     if (d.accion === 'porDescripcion') { const o = {}; (d.items || []).slice(0, 25).forEach(it => { o[it.k] = fotoPorDescripcion(it.q); }); return salida({ ok: true, fotos: o }); }
     if (d.accion === 'imagenes') {   // foto de producto en la tienda de Convenio Marco (por el código entre paréntesis)
       const out = {}; (d.codigos || []).slice(0, 60).forEach(c => { out[c] = imagenDe(String(c).replace(/\\D/g, '')); });
@@ -1732,6 +1737,26 @@ function fotoPorDescripcion(desc) {   // busca por descripcion en todas las tien
   if (mejor && mejor.puntaje < 0.6) mejor = null;
   cache.put(k, mejor ? JSON.stringify(mejor) : '', 21600);
   return mejor;
+}
+function imagenesWeb(q, n) {   // busca la descripcion en imagenes de internet (Bing) y devuelve miniaturas listas para guardar (v21.200)
+  const cache = CacheService.getScriptCache(), k = 'web:' + Utilities.base64Encode(String(q)).slice(0, 200), g = cache.get(k);
+  if (g) return JSON.parse(g);
+  const out = [];
+  try {
+    const h = UrlFetchApp.fetch('https://www.bing.com/images/search?form=HDRSC2&first=1&q=' + encodeURIComponent(q), { muteHttpExceptions: true, followRedirects: true, headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36', 'Accept-Language': 'es-CL,es;q=0.9' } }).getContentText();
+    const re = /\\sm="(\\{[^"]*\\})"/g; let m;
+    while ((m = re.exec(h)) && out.length < n) {
+      try {
+        const j = JSON.parse(m[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&'));
+        if (!j.turl) continue;
+        const r = UrlFetchApp.fetch(j.turl, { muteHttpExceptions: true }); if (r.getResponseCode() !== 200) continue;
+        const b = r.getBlob(), mime = b.getContentType() || 'image/jpeg'; if (!/^image\\//.test(mime)) continue;
+        out.push({ titulo: String(j.t || '').slice(0, 140), url: String(j.murl || ''), pagina: String(j.purl || ''), data: 'data:' + mime + ';base64,' + Utilities.base64Encode(b.getBytes()) });
+      } catch (e2) { /* sigue con la siguiente */ }
+    }
+  } catch (e) { /* sin resultado */ }
+  try { cache.put(k, JSON.stringify(out), 21600); } catch (e3) { /* muy grande para la cache */ }
+  return out;
 }`;
 
     function formConfig() {

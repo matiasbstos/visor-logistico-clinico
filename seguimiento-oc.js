@@ -427,7 +427,9 @@
     /** Registra los productos en el catálogo y busca sus fotos SIN detener el ingreso: avanza en segundo plano con la insignia de arriba y avisa al terminar. */
     function catalogoEnSegundoPlano(oc) {
         const bg = window.SAR_Progreso && window.SAR_Progreso.segundoPlano ? window.SAR_Progreso.segundoPlano('Fotos de la orden ' + (oc.numeroOC || '')) : null;
-        registrarCatalogo(oc, bg ? (t) => bg.paso(t) : undefined).then(() => { if (bg) bg.listo(`Catálogo y fotos de la orden ${oc.numeroOC || ''} listos: confírmalas en Catálogo`); if (window.SAR_Imagenes) window.SAR_Imagenes.cargar(true).catch(() => {}); }).catch(e => { if (bg) bg.error((e && e.message) || String(e)); });
+        registrarCatalogo(oc, bg ? (t) => bg.paso(t) : undefined)
+            .then(() => buscarFotosFaltantes(bg ? (t) => bg.paso('Caja y producto · ' + t) : undefined, 40, (oc.lineas || []).map(l => ({ nombre: l.descripcion, codigo: l.codigoMP || '' }))).catch(() => {}))   // v21.203: llegan las dos fotos (caja y producto)
+            .then(() => { if (bg) bg.listo(`Catálogo y fotos de la orden ${oc.numeroOC || ''} listos: confírmalas en Catálogo`); if (window.SAR_Imagenes) window.SAR_Imagenes.cargar(true).catch(() => {}); }).catch(e => { if (bg) bg.error((e && e.message) || String(e)); });
     }
     async function aprenderNombres(oc, det) {
         const f = fs();
@@ -442,10 +444,11 @@
         return m;
     }
     /** Reduce la foto a ~220 px (JPEG) para guardarla dentro del producto. */
-    function reducirImagen(file) {
+    function reducirImagen(file, max) {
+        const lado = max || 220;
         return new Promise((ok, mal) => {
             const img = new Image(), url = URL.createObjectURL(file);
-            img.onload = () => { const k = Math.min(1, 220 / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url); ok(c.toDataURL('image/jpeg', 0.8)); };
+            img.onload = () => { const k = Math.min(1, lado / Math.max(img.width, img.height)), c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k); c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url); ok(c.toDataURL('image/jpeg', 0.8)); };
             img.onerror = () => { URL.revokeObjectURL(url); mal(new Error('No se pudo leer la imagen.')); }; img.src = url;
         });
     }
@@ -456,41 +459,53 @@
         const cat = await cargarCatalogo(), nd = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
         const cola = [], vistos = new Set();
         const reciente = (c) => c.fotoIntento && (Date.now() - new Date(c.fotoIntento).getTime()) < 7 * 864e5;   // ya se buscó hace menos de 7 días y no había: no se repite en cada ronda
-        const sinFoto = (c) => !c.imagen && !c.imagenMP && !c.fotoEstado && !reciente(c);
-        cat.forEach(c => { if (sinFoto(c) && !vistos.has(c.id)) { vistos.add(c.id); cola.push({ id: c.id, nombre: c.insumoName || c.descripcion, desc: c.descripcion || c.insumoName, codigo: c.codigoMP || '', nuevo: false }); } });
+        const sinFoto = (c) => !c.imagen && !c.imagenMP && !c.imagenWeb && !c.fotoEstado && !reciente(c);
+        // v21.203: cada producto lleva DOS fotos: la caja/envase y cómo es el producto. Falta la del producto si no hay ninguna en fotosExtra.
+        const recienteProd = (c) => c.fotoProdIntento && (Date.now() - new Date(c.fotoProdIntento).getTime()) < 7 * 864e5;
+        const sinProd = (c) => !(Array.isArray(c.fotosExtra) && c.fotosExtra.some(x => x.tipo === 'producto')) && !c.fotoProdDescartada && !recienteProd(c);
+        cat.forEach(c => { const nc = sinFoto(c), np = sinProd(c); if ((nc || np) && !vistos.has(c.id)) { vistos.add(c.id); cola.push({ id: c.id, nombre: c.insumoName || c.descripcion, desc: c.descripcion || c.insumoName, codigo: c.codigoMP || '', nuevo: false, caja: nc, prod: np, extras: c.fotosExtra || [] }); } });
         try {
             const sn = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(5000))); const porNombre = new Set();
             sn.forEach(d => { const x = d.data(), nombre = String(x.name || '').trim(); if (!nombre || porNombre.has(nd(nombre)) || x.provisional) return; porNombre.add(nd(nombre));
-                if (IM.buscar(nombre, x.codigoMP)) return;
                 const id = catId({ codigoMP: x.codigoMP, descripcion: nombre }); if (!id || vistos.has(id)) return;
-                const ya = cat.get(id); if (ya && !sinFoto(ya)) return;
-                vistos.add(id); cola.push({ id, nombre, desc: nombre, codigo: x.codigoMP || '', nuevo: !ya, tieneNombre: !!(ya && ya.insumoName) }); });
+                const ya = cat.get(id); if (ya) return;   // ya está en el catálogo: se revisó arriba
+                const tieneCaja = !!IM.buscar(nombre, x.codigoMP);
+                vistos.add(id); cola.push({ id, nombre, desc: nombre, codigo: x.codigoMP || '', nuevo: true, tieneNombre: false, caja: !tieneCaja, prod: true, extras: [] }); });
         } catch (e) { /* sin inventario */ }
         (extras || []).forEach(x => {   // productos de una distribución a centros (equivalente + ID Convenio Marco)
-            const nombre = String(x.nombre || '').trim(); if (!nombre || IM.buscar(nombre, x.codigo) || (IM.buscarConCandidata && IM.buscarConCandidata(nombre, x.codigo))) return;
-            const id = catId({ codigoMP: x.codigo, descripcion: nombre }); if (!id || vistos.has(id)) return; const ya = cat.get(id); if (ya && !sinFoto(ya)) return;
-            vistos.add(id); cola.unshift({ id, nombre, desc: nombre, codigo: x.codigo || '', nuevo: !ya, tieneNombre: !!(ya && ya.insumoName) });
+            const nombre = String(x.nombre || '').trim(); if (!nombre) return;
+            const id = catId({ codigoMP: x.codigo, descripcion: nombre }); if (!id) return; const ya = cat.get(id);
+            if (vistos.has(id)) { const k = cola.findIndex(c => c.id === id); if (k > 0) cola.unshift(cola.splice(k, 1)[0]); return; }   // ya en cola: pasa adelante
+            const tieneCaja = !!(IM.buscar(nombre, x.codigo) || (IM.buscarConCandidata && IM.buscarConCandidata(nombre, x.codigo)));
+            if (ya && !sinFoto(ya) && !sinProd(ya)) return;
+            vistos.add(id); cola.unshift({ id, nombre, desc: nombre, codigo: x.codigo || '', nuevo: !ya, tieneNombre: !!(ya && ya.insumoName), caja: ya ? sinFoto(ya) : !tieneCaja, prod: !ya || sinProd(ya), extras: (ya && ya.fotosExtra) || [] });
         });
         const lote = cola.slice(0, tope || 40); let enc = 0, i = 0;
         for (const p of lote) {
-            i++; let foto = null;
-            try {
+            i++; let foto = null, prodFoto = null;
+            if (p.caja !== false) try {
                 if (p.codigo) { const r = await IM.buscarFoto(p.codigo, configCorreo); if (r.archivo) foto = { imagenMP: r.archivo, fotoEstado: 'por_confirmar', fotoTitulo: '' }; }
                 else { const r = await IM.buscarPorDescripcion(p.desc, configCorreo); if (r && r.archivo) foto = { imagenMP: r.archivo, fotoEstado: 'por_confirmar', fotoTitulo: r.titulo || '' }; }
             } catch (e) { /* sigue con el siguiente */ }
-            if (!foto) {   // no está en Convenio Marco: se busca en internet por la descripción (v21.200; requiere el script actualizado)
+            if (!foto && p.caja !== false) {   // no está en Convenio Marco: se busca en internet por la descripción (v21.200; requiere el script actualizado)
                 try { const w = await IM.buscarWeb([{ k: 'a', q: String(p.desc || p.nombre).slice(0, 140), n: 1 }], configCorreo), x = w && w.a && w.a[0];
                     if (x && x.data) { const b = await (await fetch(x.data)).blob(); foto = { imagenWeb: await reducirImagen(b), fotoEstado: 'por_confirmar', fotoTitulo: x.titulo || '', fotoFuente: 'internet' }; } } catch (e) { /* script antiguo o sin resultado */ }
             }
-            if (foto) enc++;
+            if (p.prod) {   // cómo es el producto: la descripción sin palabras de envase, en internet
+                const q = String(p.desc || p.nombre).replace(/\b(caja|cajas|unidad(es)?|und|uds?|envase|frasco|paquete|bolsa|display|blister|sobre)\b/gi, ' ').replace(/\bx\s*\d+\b/gi, ' ').replace(/\s+/g, ' ').trim().slice(0, 140);
+                try { const w = await IM.buscarWeb([{ k: 'p', q, n: 1 }], configCorreo), x = w && w.p && w.p[0];
+                    if (x && x.data) { const b = await (await fetch(x.data)).blob(); prodFoto = { tipo: 'producto', img: await reducirImagen(b, 480), fuente: 'internet', titulo: x.titulo || '', porConfirmar: true, en: new Date().toISOString() }; } } catch (e) { /* script antiguo o sin resultado */ }
+            }
+            if (foto || prodFoto) enc++;
             try {
                 const base = { actualizado: f.serverTimestamp(), ...(foto || {}) };
+                if (prodFoto) base.fotosExtra = (p.extras || []).concat([prodFoto]); else if (p.prod) base.fotoProdIntento = new Date().toISOString();
                 if (p.nuevo) { base.descripcion = p.desc; base.descripcion_lower = String(p.desc).toLowerCase(); base.codigoMP = p.codigo; base.insumoName = p.nombre; base.sinOrden = true; }
                 else if (!p.tieneNombre && p.nombre && !cat.get(p.id)?.insumoName) base.insumoName = p.nombre;
-                if (!foto) base.fotoIntento = new Date().toISOString();
+                if (!foto && p.caja !== false) base.fotoIntento = new Date().toISOString();
                 await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), p.id), base, { merge: true });
             } catch (e) { /* noop */ }
-            if (onPaso) onPaso(`${i} de ${lote.length} · ${String(p.nombre).slice(0, 55)} → ${foto ? '✔ foto hallada (por confirmar)' : '✖ sin foto'}`);
+            if (onPaso) onPaso(`${i} de ${lote.length} · ${String(p.nombre).slice(0, 55)} → ${[p.caja !== false ? (foto ? '✔ caja' : '✖ caja') : '', p.prod ? (prodFoto ? '✔ producto' : '✖ producto') : ''].filter(Boolean).join(' · ')}`);
         }
         return { buscados: lote.length, encontrados: enc, pendientes: Math.max(0, cola.length - lote.length) };
     }

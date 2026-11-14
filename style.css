@@ -6352,3 +6352,4 @@ body[data-user-role="solicitante"] .superadmin-only { display: none !important; 
 }
 @keyframes fpEntra{from{transform:translateX(60px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion:reduce){.fp-c{animation:none !important}}
+.fp-ok{border:0;background:#dcfce7;color:#166534;border-radius:50%;width:22px;height:22px;cursor:pointer;font-weight:700}

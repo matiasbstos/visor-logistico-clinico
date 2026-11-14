@@ -61,7 +61,8 @@
     const prin = d.imagen ? `<img src="${esc(d.imagen)}" alt="">` : (d.fotoEstado !== 'descartada' && d.imagenMP && IM ? `<img src="${esc(IM.urlMP(d.imagenMP, 400))}" alt="" referrerpolicy="no-referrer">` : (d.fotoEstado !== 'descartada' && d.imagenWeb ? `<img src="${esc(d.imagenWeb)}" alt="">` : ''));
     el.innerHTML = `<div class="fp-fotos">
         <figure class="fp-foto">${prin ? `<span class="prod-img prod-img--g${!d.imagen && d.fotoEstado === 'por_confirmar' ? ' prod-img--pend' : ''}" data-img-name="${esc(nombre)}">${prin}</span>` : '<span class="fp-vacia"><i class="ph-bold ph-image"></i></span>'}<figcaption>Caja / envase${!d.imagen && d.fotoEstado === 'por_confirmar' ? ' · <b>por confirmar</b>' : d.imagen ? ' · foto propia' : ''}</figcaption></figure>
-        ${extras.map((x, i) => `<figure class="fp-foto"><span class="prod-img prod-img--g" data-img-name="${esc(nombre)}"><img src="${esc(x.img)}" alt="${esc(x.tipo)}"></span><figcaption>${esc(x.tipo === 'producto' ? 'Cómo es el producto' : x.tipo)} <button type="button" class="fp-quitar" data-q="${i}" aria-label="Quitar foto">✕</button></figcaption></figure>`).join('')}
+        ${extras.map((x, i) => `<figure class="fp-foto"><span class="prod-img prod-img--g${x.porConfirmar ? ' prod-img--pend' : ''}" data-img-name="${esc(nombre)}"><img src="${esc(x.img)}" alt="${esc(x.tipo)}"></span><figcaption>${esc(x.tipo === 'producto' ? 'Cómo es el producto' : x.tipo)}${x.porConfirmar ? ' · <b>por confirmar</b> <button type="button" class="fp-ok" data-pc="' + i + '" aria-label="Es correcta">✔</button>' : ''} <button type="button" class="fp-quitar" data-q="${i}" aria-label="${x.porConfirmar ? 'No es: quitar' : 'Quitar foto'}">✕</button></figcaption></figure>`).join('')}
+        ${extras.some(x => x.tipo === 'producto') ? '' : '<figure class="fp-foto"><span class="fp-vacia"><i class="ph-bold ph-package"></i></span><figcaption>Cómo es el producto · falta</figcaption></figure>'}
       </div>
       <div class="fp-facc">
         <label class="btn btn-primary btn-sm"><input type="file" accept="image/*" capture="environment" hidden data-f="caja"><i class="ph-bold ph-camera"></i> ${prin ? 'Cambiar foto de la caja' : 'Foto de la caja'}</label>
@@ -78,7 +79,9 @@
         rehacer(); if (window.SAR_Progreso && window.SAR_Progreso.exito) window.SAR_Progreso.exito({ titulo: 'Foto guardada', texto: esc(nombre) });
       } catch (e) { toast('No se guardó la foto', e.message || String(e), 'error'); }
     }));
-    el.querySelectorAll('[data-q]').forEach(b => b.addEventListener('click', async () => { if (!confirm('¿Quitar esta foto?')) return; const l = extras.slice(); l.splice(+b.dataset.q, 1); await guardarCat(cat, nombre, codigo, { fotosExtra: l }).catch(e => toast('No se pudo', e.message, 'error')); rehacer(); }));
+    el.querySelectorAll('[data-q]').forEach(b => b.addEventListener('click', async () => { const x = extras[+b.dataset.q]; if (!x.porConfirmar && !confirm('¿Quitar esta foto?')) return; const l = extras.slice(); l.splice(+b.dataset.q, 1);
+      await guardarCat(cat, nombre, codigo, { fotosExtra: l, ...(x.porConfirmar && !l.some(y => y.tipo === 'producto') ? { fotoProdDescartada: true } : {}) }).catch(e => toast('No se pudo', e.message, 'error')); rehacer(); }));
+    el.querySelectorAll('[data-pc]').forEach(b => b.addEventListener('click', async () => { const l = extras.map((x, i) => i === +b.dataset.pc ? { ...x, porConfirmar: false } : x); await guardarCat(cat, nombre, codigo, { fotosExtra: l }).catch(e => toast('No se pudo', e.message, 'error')); rehacer(); }));
     const bc = el.querySelector('[data-conf]'), bd = el.querySelector('[data-desc]');
     if (bc) bc.onclick = async () => { await guardarCat(cat, nombre, codigo, { fotoEstado: 'confirmada' }); rehacer(); };
     if (bd) bd.onclick = async () => { await guardarCat(cat, nombre, codigo, { fotoEstado: 'descartada' }); rehacer(); };

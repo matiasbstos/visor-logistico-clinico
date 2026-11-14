@@ -169,6 +169,7 @@ window.escapeHTML = function (str) {
 
 const ROLES_SISTEMA = [
     { id: 'transitoria', label: 'Solo Bodega transitoria (conteo)' },
+    { id: 'solicitante', label: 'Solicitante (solo pide insumos)' },
     { id: 'enfermero', label: 'Enfermero (Gestión de Bandejas)' },
     { id: 'operador', label: 'Administrador de Bodega' },
     { id: 'administrador', label: 'Administrador (Inventario)' },
@@ -2047,6 +2048,8 @@ document.addEventListener('DOMContentLoaded', () => {
             'view-pendientes-entrega': 'Pendientes por entregar',
             'view-transitoria': 'Bodega transitoria',
             'view-sustituciones': 'Cuadre de sustituciones',
+            'view-solicitud-insumos': 'Solicitud de insumos',
+            'view-solicitudes-insumos': 'Solicitudes recibidas',
             'view-bitacora-oc': 'Bitácora de órdenes',
             'view-duplicados': 'Revisar productos parecidos',
             'view-errores': 'Directorio',
@@ -2090,11 +2093,16 @@ document.addEventListener('DOMContentLoaded', () => {
             // Control de acceso por rol (espejo de las reglas CSS del menú; la barrera real son las reglas de Firestore)
             const VISTAS_BLOQUEADAS = {
                 enfermero: ['view-historial', 'view-ajustes', 'view-compras', 'view-informes', 'view-bodegas',
-                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-compras-agiles', 'view-ingreso-rapido', 'view-pendientes-entrega', 'view-distribucion-centros', 'view-transitoria', 'view-sustituciones', 'view-bitacora-oc', 'view-duplicados', 'view-actas-entrega', 'view-auditoria', 'view-oxigeno', 'view-errores'],
+                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-compras-agiles', 'view-ingreso-rapido', 'view-pendientes-entrega', 'view-distribucion-centros', 'view-transitoria', 'view-sustituciones', 'view-solicitudes-insumos', 'view-bitacora-oc', 'view-duplicados', 'view-actas-entrega', 'view-auditoria', 'view-oxigeno', 'view-errores'],
                 operador: ['view-compras', 'view-usuarios', 'view-configuracion', 'view-errores']
             };
             const rolActual = String(document.body.dataset.userRole || '').toLowerCase();
             // Rol «transitoria»: solo puede ver la Bodega transitoria (cualquier otra vista la devuelve ahí)
+            if (rolActual === 'solicitante' && hash !== 'view-solicitud-insumos') {
+                hash = 'view-solicitud-insumos';
+                if (window.location.hash !== '#view-solicitud-insumos') window.location.hash = 'view-solicitud-insumos';
+                targetItem = document.querySelector('.sidebar .menu-item[data-target="view-solicitud-insumos"]');
+            }
             if (rolActual === 'transitoria' && hash !== 'view-transitoria') {
                 hash = 'view-transitoria';
                 if (window.location.hash !== '#view-transitoria') window.location.hash = 'view-transitoria';
@@ -2159,6 +2167,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (window.SAR_Duplicados) window.SAR_Duplicados.abrir();
                 } else if (hash === 'view-bitacora-oc') {
                     if (window.SAR_Bitacora) window.SAR_Bitacora.abrir();
+                } else if (hash === 'view-solicitud-insumos') {
+                    if (window.SAR_Solicitudes) window.SAR_Solicitudes.abrirPide();
+                } else if (hash === 'view-solicitudes-insumos') {
+                    if (window.SAR_Solicitudes) window.SAR_Solicitudes.abrirBandeja();
                 } else if (hash === 'view-sustituciones') {
                     if (window.SAR_Sustituciones) window.SAR_Sustituciones.abrir();
                 } else if (hash === 'view-ingreso-rapido') {
@@ -7307,6 +7319,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.body.setAttribute('data-user-role', 'operador');
                 } else if (userRole === 'transitoria') {
                     document.body.setAttribute('data-user-role', 'transitoria');
+                } else if (userRole === 'solicitante') {
+                    document.body.setAttribute('data-user-role', 'solicitante');
                 } else if (userRole === 'enfermero' || userRole === 'enfermera') {
                     document.body.setAttribute('data-user-role', 'enfermero');
                 } else if (userRole === 'admin' || userRole === 'administrador' || userRole === 'global') {

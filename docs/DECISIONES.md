@@ -1334,3 +1334,7 @@ Registrado para retomarlo cuando haya sistema; aún NO implementado.
 - Ficha → «Buscar en internet»: Convenio Marco (código y descripción) + internet en paralelo, en dos grupos: **Caja / envase** (descripción + «caja») y **El producto** (descripción sin palabras de envase). Se toca una foto y se elige «Usar como caja» o «Usar como producto»; si ninguna sirve, se toma con la cámara. Botones de cámara dicen «Cambiar foto de la caja» / «Otra foto del producto» cuando ya hay.
 - Búsqueda automática (cada 30 min): si no está en Convenio Marco, toma la primera foto de internet como `imagenWeb` «por confirmar» (visible con «?»). Así el catálogo apunta al 100 %.
 - Lista pública de quien pide: las fotos propias o de internet (guardadas en el producto) van como miniatura de 96 px (tope ~700 KB) para no pasar el límite de Firestore.
+
+## 4.255 Pedir un producto que no está en la lista: nombre completo, sugerencias y foto obligatoria (v21.201)
+- En «¿No está en la lista?» quien pide escribe el **nombre completo** (mín. 2 palabras y 8 letras) y mientras escribe ve «¿Es alguno de estos?» con los productos parecidos (de la bodega elegida y de las demás, con foto) para agregarlo con un toque.
+- Si no es ninguno, **debe sacar una foto** del producto (cámara del teléfono, 480 px) para poder agregarlo. La foto viaja en la línea de la solicitud y bodega la ve en «Solicitudes recibidas».

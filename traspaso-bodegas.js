@@ -115,6 +115,12 @@
     const P = window.SAR_Progreso;
     const sigue = P && P.confirmar ? await P.confirmar({ titulo: `¿Mover ${sel.length} producto${sel.length === 1 ? '' : 's'}?`, texto: `De <b>${esc(desde)}</b> a <b>${esc(hasta)}</b>.`, lineas: sel.slice(0, 8).map(s => `${esc(s.name)} · <b>${s.qty}</b> u.`).concat(sel.length > 8 ? [`y ${sel.length - 8} más…`] : []), si: 'Mover', no: 'Cancelar' }) : window.confirm(`¿Mover ${sel.length} producto(s) de «${desde}» a «${hasta}»?`);
     if (!sigue) return;
+    if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) {   // sin internet: queda en el teléfono y se aplica al volver la conexión
+      sel.forEach(s => window.SAR_Cola.encolar({ tipo: 'traspaso', titulo: `Mover ${s.qty} · ${s.name}: ${desde} → ${hasta}`, datos: { id: s.id, desde, hasta, lotes: s.lotes.map(l => ({ clave: l.clave, qty: l.qty })), nota, en: Date.now() } }));
+      ['tb-desde', 'tb-hasta', 'tb-nota', 'tb-buscar'].forEach(id => { const x = document.getElementById(id); if (x) x.value = ''; }); items = []; pintar();
+      const o3 = document.getElementById('tb-res'); if (o3) o3.innerHTML = `<div class="tb-res"><p class="tb-ok"><b>Sin conexión: ${sel.length} movimiento(s) guardado(s) en este teléfono.</b> Se aplicarán solos al volver internet (verás el aviso abajo a la derecha).</p></div>`;
+      t('Guardado sin conexión', `${sel.length} movimiento(s) quedan por sincronizar.`, 'warning'); return;
+    }
     const btn = document.getElementById('tb-ir'); btn.disabled = true; const ok = [], mal2 = [];
     const prog = P && P.iniciar ? P.iniciar('Moviendo productos…', []) : null;
     for (const [n, s] of sel.entries()) { if (prog) prog.paso(`Moviendo ${n + 1} de ${sel.length}: ${String(s.name).slice(0, 48)}`); try { await moverUno(s.id, desde, hasta, s.lotes.map(l => ({ clave: l.clave, qty: l.qty })), nota); ok.push(s); } catch (e) { mal2.push({ ...s, err: (e && e.message) || String(e) }); } }
@@ -141,5 +147,5 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
   if (typeof module !== 'undefined' && module.exports) module.exports = { sacarFEFO, sacarLotes, juntarLotes };
-  window.SAR_Traspaso = { abrir, sacarFEFO, sacarLotes, juntarLotes };
+  window.SAR_Traspaso = { moverUno, abrir, sacarFEFO, sacarLotes, juntarLotes };
 })(typeof window !== 'undefined' ? window : {}, typeof document !== 'undefined' ? document : {});

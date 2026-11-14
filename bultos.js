@@ -60,7 +60,7 @@
   let logoPNG = null;
   function cargarLogo() {
     if (logoPNG) return Promise.resolve(logoPNG);
-    return new Promise(ok => { const im = new Image(); im.onload = () => { try { const c = document.createElement('canvas'); c.width = 1280; c.height = 400; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height); logoPNG = { d: c.toDataURL('image/png'), r: 640 / 200 }; ok(logoPNG); } catch (e) { ok(null); } }; im.onerror = () => ok(null); im.src = 'assets/logo/horizontal.svg'; });
+    return new Promise(ok => { const im = new Image(); im.onload = () => { try { const c = document.createElement('canvas'); c.width = 560; c.height = 175; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height); logoPNG = { d: c.toDataURL('image/jpeg', 0.92), r: 640 / 200 }; ok(logoPNG); } catch (e) { ok(null); } }; im.onerror = () => ok(null); im.src = 'assets/logo/horizontal.svg'; });
   }
 
   // ---------------- etiqueta PDF 100×60 (página completa) ----------------
@@ -72,7 +72,7 @@
       if (k) d.addPage([100, 60], 'landscape');
       d.setTextColor(0); d.setDrawColor(0);
       // cabecera: logo + BULTO n/N
-      if (logo) d.addImage(logo.d, 'PNG', 2.5, 2, 22, 22 / logo.r);
+      if (logo) d.addImage(logo.d, 'JPEG', 2.5, 2, 22, 22 / logo.r, 'logo', 'FAST');
       d.setFont('helvetica', 'bold'); d.setFontSize(7); d.text('BULTO', 63, 4.6, { align: 'right' }); d.setFontSize(16); d.text(`${b.n} / ${b.de}`, 63, 10.2, { align: 'right' });
       d.setLineWidth(0.35); d.line(2.5, 11.8, 64, 11.8);
       // producto

@@ -48,20 +48,46 @@
     return arr;
   }
 
-  async function moverUno(id, desde, hasta, sel, nota) {
-    const qty = sel.reduce((s, x) => s + x.qty, 0);
+  /** Marca de una solicitud dentro de la MISMA transacción del movimiento (v21.212): el grupo (producto+lote) queda
+   *  anotado en la línea; si ya estaba, no se mueve de nuevo (dos sesiones, dos pestañas o un reintento no duplican).
+   *  marca = { numero, i, grupo, campo: 'movidos'|'recibidos', transito? } */
+  async function leerMarca(tx, F, D, marca) {
+    if (!marca || !marca.numero) return null; const ref = F.doc(D, 'Solicitudes_Insumos', marca.numero), sn = await tx.get(ref);
+    if (!sn.exists()) throw new Error('La solicitud ya no existe.');
+    const lin = (sn.data().lineas || []).map(x => ({ ...x })), l = lin[marca.i];
+    if (!l || (marca.nombre && norm(l.nombre) !== norm(marca.nombre))) throw new Error('La solicitud cambió: actualiza y vuelve a intentar.');
+    if ((l[marca.campo] || []).includes(marca.grupo)) throw Object.assign(new Error('Ya estaba hecho.'), { ya: true });
+    return { ref, lin, l };
+  }
+  function escribirMarca(tx, F, m, marca, extra) {
+    if (!m) return; m.l[marca.campo] = (m.l[marca.campo] || []).concat([marca.grupo]);
+    if (extra && extra.transitoId) m.l.transito = { ...(m.l.transito || {}), [marca.grupo]: extra.transitoId };
+    tx.update(m.ref, { lineas: m.lin, actualizadoEn: new Date().toISOString() });
+  }
+  /** Destino: mismo producto en la bodega de llegada, nunca un registro en CUARENTENA. Primero por nombre exacto,
+   *  después por código (como antes de v21.212, sin leer toda la bodega); si el id de respaldo está en cuarentena, otro id. */
+  async function buscarDestino(F, D, d0, hasta) {
+    const libre = (q) => (q.docs || []).find(x => x.data().status !== 'CUARENTENA');
+    let x = libre(await F.getDocs(F.query(F.collection(D, 'Insumos'), F.where('name', '==', d0.name), F.where('location', '==', hasta), F.limit(10))));
+    if (!x && d0.codigoMP) x = libre(await F.getDocs(F.query(F.collection(D, 'Insumos'), F.where('codigoMP', '==', d0.codigoMP), F.where('location', '==', hasta), F.limit(10))));
+    if (x) return x.ref;
+    const base = `tras_${slug(d0.name)}__${slug(hasta)}`; let ref = F.doc(D, 'Insumos', base);
+    for (let n = 2; n < 6; n++) { const sn = await F.getDoc(ref); if (!sn.exists() || sn.data().status !== 'CUARENTENA') break; ref = F.doc(D, 'Insumos', `${base}_${n}`); }
+    return ref;
+  }
+  async function moverUno(id, desde, hasta, sel, nota, marca) {
+    sel = sel.map(x => ({ ...x, qty: Math.max(0, Math.floor(num(x.qty))) })); const qty = sel.reduce((s, x) => s + x.qty, 0);
+    if (!(qty > 0)) throw new Error('Cantidad inválida.');
     const F = fs(), D = db();
     const refO = F.doc(D, 'Insumos', id);
     const snap = await F.getDoc(refO); if (!snap.exists()) throw new Error('El producto ya no existe.');
-    const d0 = snap.data();
-    let refD;
-    let q = await F.getDocs(F.query(F.collection(D, 'Insumos'), F.where('name', '==', d0.name), F.where('location', '==', hasta), F.limit(1)));
-    if (q.empty && d0.codigoMP) q = await F.getDocs(F.query(F.collection(D, 'Insumos'), F.where('codigoMP', '==', d0.codigoMP), F.where('location', '==', hasta), F.limit(1)));
-    refD = !q.empty ? q.docs[0].ref : F.doc(D, 'Insumos', `tras_${slug(d0.name)}__${slug(hasta)}`);
-    const refH = F.doc(F.collection(D, 'Historial_Movimientos'));
+    const d0 = snap.data(), refD = await buscarDestino(F, D, d0, hasta);
+    // idMov (cola sin conexión): el movimiento usa ese id; si ya existe, la operación ya se aplicó (otra pestaña o reintento)
+    const refH = marca && marca.idMov ? F.doc(D, 'Historial_Movimientos', marca.idMov) : F.doc(F.collection(D, 'Historial_Movimientos'));
     await F.runTransaction(D, async (tx) => {
       const o = await tx.get(refO); if (!o.exists()) throw new Error('El producto ya no existe.');
-      const d = o.data(); const sd = await tx.get(refD);
+      const d = o.data(); const sd = await tx.get(refD); const m = await leerMarca(tx, F, D, marca);
+      if (marca && marca.idMov) { const h = await tx.get(refH); if (h.exists()) throw Object.assign(new Error('Ya estaba hecho.'), { ya: true }); }
       if (d.status === 'CUARENTENA') throw new Error('En CUARENTENA: no se puede mover.');
       if (qty > num(d.quantity)) throw new Error('Stock insuficiente.');
       const { lotes, movidos } = sacarLotes(d, sel);
@@ -71,10 +97,27 @@
         tx.update(refD, { quantity: fin, isCritical: fin <= lim, batches: juntarLotes(lotesDe(dd), movidos), updatedAt: F.serverTimestamp() });
       } else {
         const lim = num(d.criticalLimit || d.stock_minimo || 50), nuevos = juntarLotes([], movidos), prox = [...nuevos].sort(window.fefoCompare || (() => 0))[0];
-        const base = { ...d }; delete base.sobregiro; delete base.sobregiroDetalle; delete base.provisional;
-        tx.set(refD, { ...base, location: hasta, quantity: qty, isCritical: qty <= lim, criticalLimit: lim, batches: nuevos, batch: prox ? prox.batch : (d.batch || ''), expirationDate: prox && prox.expirationDate ? prox.expirationDate : (d.expirationDate || ''), updatedAt: F.serverTimestamp() });
+        const base = { ...d }; delete base.sobregiro; delete base.sobregiroDetalle; delete base.provisional; delete base.bodegaId; delete base.ubicacionEstante; delete base.status;
+        tx.set(refD, { ...base, location: hasta, bodegaNombre: hasta, quantity: qty, isCritical: qty <= lim, criticalLimit: lim, batches: nuevos, batch: prox ? prox.batch : (d.batch || ''), expirationDate: prox && prox.expirationDate ? prox.expirationDate : (d.expirationDate || ''), updatedAt: F.serverTimestamp() });
       }
-      tx.set(refH, { insumoName: d.name, quantity: qty, type: 'traspaso', user: ((window.firebaseAuth || window.auth || {}).currentUser || {}).email || 'Usuario', date: F.serverTimestamp(), document: `TRASP-${String(desde).substring(0, 3)}-${String(hasta).substring(0, 3)}`, batch: movidos.length === 1 ? movidos[0].batch : 'MULTI-LOTE', origin: desde, dest: hasta, lotes: movidos, idInsumoOrigen: id, idInsumoDestino: refD.id, ...(nota ? { nota } : {}) });
+      tx.set(refH, { insumoName: d.name, quantity: qty, type: 'traspaso', user: ((window.firebaseAuth || window.auth || {}).currentUser || {}).email || 'Usuario', date: F.serverTimestamp(), document: `TRASP-${String(desde).substring(0, 3)}-${String(hasta).substring(0, 3)}`, batch: movidos.length === 1 ? movidos[0].batch : 'MULTI-LOTE', origin: desde, dest: hasta, lotes: movidos, idInsumoOrigen: id, idInsumoDestino: refD.id, ...(nota ? { nota } : {}), ...(marca && marca.numero ? { solicitud: marca.numero } : {}) });
+      escribirMarca(tx, F, m, marca, { transitoId: marca && marca.transito ? refD.id : '' });
+    });
+    return { destinoId: refD.id };
+  }
+  /** Salida por lote elegido (pedidos que se consumen y no van a una bodega de uso): descuenta y deja el movimiento. */
+  async function salidaUno(id, desde, sel, nota, marca) {
+    sel = sel.map(x => ({ ...x, qty: Math.max(0, Math.floor(num(x.qty))) })); const qty = sel.reduce((s, x) => s + x.qty, 0);
+    if (!(qty > 0)) throw new Error('Cantidad inválida.');
+    const F = fs(), D = db(), refO = F.doc(D, 'Insumos', id), refH = F.doc(F.collection(D, 'Historial_Movimientos'));
+    await F.runTransaction(D, async (tx) => {
+      const o = await tx.get(refO); if (!o.exists()) throw new Error('El producto ya no existe.'); const m = await leerMarca(tx, F, D, marca);
+      const d = o.data(); if (d.status === 'CUARENTENA') throw new Error('En CUARENTENA: no se puede entregar.');
+      if (qty > num(d.quantity)) throw new Error('Stock insuficiente.');
+      const { lotes, movidos } = sacarLotes(d, sel);
+      tx.update(refO, { quantity: num(d.quantity) - qty, batches: lotes, updatedAt: F.serverTimestamp() });
+      tx.set(refH, { insumoName: d.name, quantity: qty, type: 'SALIDA_SOLICITUD', user: ((window.firebaseAuth || window.auth || {}).currentUser || {}).email || 'Usuario', date: F.serverTimestamp(), document: marca ? marca.numero : 'SALIDA', batch: movidos.length === 1 ? movidos[0].batch : 'MULTI-LOTE', origin: desde, lotes: movidos, idInsumoOrigen: id, ...(nota ? { nota, observacion: nota } : {}), ...(marca ? { solicitud: marca.numero } : {}) });
+      escribirMarca(tx, F, m, marca);
     });
   }
 
@@ -147,5 +190,5 @@
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
   if (typeof module !== 'undefined' && module.exports) module.exports = { sacarFEFO, sacarLotes, juntarLotes };
-  window.SAR_Traspaso = { moverUno, abrir, sacarFEFO, sacarLotes, juntarLotes };
+  window.SAR_Traspaso = { moverUno, salidaUno, abrir, sacarFEFO, sacarLotes, juntarLotes };
 })(typeof window !== 'undefined' ? window : {}, typeof document !== 'undefined' ? document : {});

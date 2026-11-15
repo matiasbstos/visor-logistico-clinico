@@ -35,14 +35,43 @@
   const PASOS = ['NUEVA', 'PREPARACION', 'LISTA', 'ENTREGADA'], AV_EST = { NUEVA: 'enviada', PREPARACION: 'procesando', LISTA: 'procesada', ENTREGADA: 'cerrada', ANULADA: 'anulada' };
   function recorridoHTML(estado) {
     if (estado === 'ANULADA') return '<div class="si-rec si-rec--anulada"><span class="si-rec-p on">Anulada</span></div>';
-    const k = Math.max(0, PASOS.indexOf(estado === 'POR_ENVIAR' ? 'NUEVA' : estado));
+    const k = estado === 'ENTREGADA' ? PASOS.length : Math.max(0, PASOS.indexOf(estado === 'POR_ENVIAR' ? 'NUEVA' : estado));   // cerrada: todos los pasos hechos, nada late
     return `<ol class="si-rec" aria-label="Estado: ${esc(ESTADOS[estado] || 'Por enviar')}">${PASOS.map((p, i) => `<li class="si-rec-p${i < k ? ' hecho' : i === k ? ' on' : ''}"><i aria-hidden="true"></i><span>${ESTADOS[p]}</span></li>`).join('')}</ol>`;
   }
   const avisar = (o) => { const P = window.SAR_Progreso; if (P && P.aviso) P.aviso(o); else toast(o.titulo, o.texto || '', 'info'); };
 
+  // ---------------- datos que vienen de Firestore: se limpian antes de mostrarlos o usarlos (v21.212) ----------------
+  // Quien pide escribe sin cuenta: nada de lo que manda se pinta sin escapar, los números se fuerzan a enteros y las
+  // decisiones de bodega (estado de línea, lotes, movido…) en una solicitud aún «Enviada» se descartan: solo bodega las escribe.
+  const FOTO_OK = /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/;
+  const ent = (v, max) => Math.max(0, Math.min(max || 1e6, Math.floor(num(v))));
+  const CAMPOS_BODEGA = ['estado', 'entregar', 'seleccion', 'movido', 'movidos', 'recibido', 'recibidos', 'transito', 'asociado', 'asociadoPor', 'insumoIdOrig', 'revisadoPor', 'revisadoEn', 'grupos'];
+  function limpiarSol(x, id) {
+    if (!x || typeof x !== 'object') return x; const s = { ...x }; if (id) s.numero = id;
+    const nueva = s.estado === 'NUEVA';
+    s.lineas = (Array.isArray(s.lineas) ? s.lineas : []).slice(0, 200).map(l0 => { const l = { ...(l0 && typeof l0 === 'object' ? l0 : {}) };
+      if (nueva && !l.soloConteo) CAMPOS_BODEGA.forEach(k => { delete l[k]; });
+      l.nombre = String(l.nombre || '').slice(0, 300); l.cantidad = ent(l.cantidad); if ('entregar' in l) l.entregar = ent(l.entregar); if ('reiterado' in l) l.reiterado = ent(l.reiterado, 365);
+      l.foto = FOTO_OK.test(String(l.foto || '')) ? l.foto : ''; if (!l.foto) delete l.foto;
+      if (l.estado && !['pendiente', 'ok', 'parcial', 'no_hay'].includes(l.estado)) delete l.estado;
+      if (Array.isArray(l.seleccion)) l.seleccion = l.seleccion.map(z => ({ ...z, qty: ent(z.qty), lote: String(z.lote || ''), bodega: String(z.bodega || ''), clave: String(z.clave || ''), vence: String(z.vence || ''), insumoId: String(z.insumoId || '') })); else delete l.seleccion;
+      return l; });
+    ['solicitante', 'correo', 'servicio', 'nota', 'bodega', 'requester'].forEach(k => { if (k in s) s[k] = String(s[k] == null ? '' : s[k]).slice(0, 300); });
+    if (s.correlativo && !/^SOL-\d{4}-\d{4,6}$/.test(String(s.correlativo))) delete s.correlativo;
+    if (!ESTADOS[s.estado]) s.estado = 'NUEVA';
+    if (s.conteo && typeof s.conteo === 'object') { const c = { ...s.conteo };
+      c.items = (Array.isArray(c.items) ? c.items : []).slice(0, 500).map(i => ({ k: String(i.k || ''), n: String(i.n || '').slice(0, 300), sis: ent(i.sis), obj: ent(i.obj), contado: ent(i.contado), ...(i.recontado !== undefined ? { recontado: ent(i.recontado) } : {}) }));
+      ['descontado', 'sobrantes'].forEach(k => { c[k] = (Array.isArray(c[k]) ? c[k] : []).map(z => ({ nombre: String(z.nombre || ''), sistema: ent(z.sistema), contado: ent(z.contado), usado: ent(z.usado), sobrante: ent(z.sobrante) })); });
+      if (nueva && c.estado && !['reconteo', 'recontado', 'aplicado'].includes(c.estado)) delete c.estado;
+      c.reconteo = (Array.isArray(c.reconteo) ? c.reconteo : []).map(String); s.conteo = c; }
+    return s;
+  }
+
   // ---------------- lógica pura ----------------
   /** Código de la solicitud: SI-AAAAMMDD-HHMM-XXX (se calcula en el teléfono, sirve sin internet). */
-  function numeroSolicitud(d, azar) { const p = (n) => String(n).padStart(2, '0'); return `SI-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}-${String(azar || Math.floor(Math.random() * 1000)).padStart(3, '0')}`; }
+  function numeroSolicitud(d, azar) { const p = (n) => String(n).padStart(2, '0'); return `SI-${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}-${azar !== undefined ? String(azar).padStart(3, '0') : String(azarSeguro()).padStart(6, '0')}`; }
+  /** 6 dígitos al azar (antes 3: dos teléfonos en el mismo minuto podían chocar y la segunda se perdía). */
+  function azarSeguro() { try { const a = new Uint32Array(1); crypto.getRandomValues(a); return a[0] % 1000000; } catch (e) { return Math.floor(Math.random() * 1000000); } }
   /** Agrega o suma una línea; las líneas manuales se juntan por nombre. */
   function agregarLinea(lineas, n) { const k = norm(n.nombre); if (!k) return lineas; const x = lineas.find(l => norm(l.nombre) === k && !!l.manual === !!n.manual); if (x) x.cantidad += Math.max(1, Math.floor(num(n.cantidad) || 1)); else lineas.push({ nombre: String(n.nombre).trim(), cantidad: Math.max(1, Math.floor(num(n.cantidad) || 1)), manual: !!n.manual }); return lineas; }
   /** Texto para pegar en WhatsApp / picking. */
@@ -70,7 +99,7 @@
       cargado = true; return;
     }
     const f = fs(), a = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(3000))), l = []; a.forEach(d => l.push({ id: d.id, ...d.data() })); insumos = l;
-    try { const b = await f.getDocs(f.collection(db(), 'Bodegas')), n = []; transitoriasStaff = []; b.forEach(d => { const nm = d.data().nombre || d.data().name || d.id; n.push(nm); if (d.data().type === 'transitoria') transitoriasStaff.push(nm); }); bodegas = n.filter(Boolean).sort(); } catch (e) { bodegas = []; }
+    try { const b = await f.getDocs(f.collection(db(), 'Bodegas')), n = []; destinosStaff = {}; b.forEach(d => { const x = d.data(), nm = x.nombre || x.name || d.id; n.push(nm); if (x.type === 'transitoria') { const ped = x.pedidos !== undefined ? x.pedidos : 'medico'; if (ped && !destinosStaff[ped]) destinosStaff[ped] = nm; } }); bodegas = n.filter(Boolean).sort(); } catch (e) { bodegas = []; }
     if (!bodegas.length) bodegas = [...new Set(insumos.map(i => i.location).filter(Boolean))].sort();
     cargado = true;
   }
@@ -81,7 +110,7 @@
   // bodega publica en Solicitudes_Insumos/catalogo-publico: bodegas, nombres de productos por bodega (SIN stock) y fotos confirmadas.
   async function publicarCatalogo(forzar) {
     try { const ult = Number(localStorage.getItem('si-pub') || 0); if (!forzar && Date.now() - ult < 6 * 3600e3) return; } catch (e) { /* sigue */ }
-    const f = fs(); if (!cargado) await cargarBase();
+    const f = fs(); if (!cargado || forzar) await cargarBase();   // forzar: relee Bodegas (destinos por tipo recién cambiados)
     const c = {}, n = {};
     try { const sn = await f.getDocs(f.query(f.collection(db(), 'Catalogo_Productos'), f.limit(3000)));
       const mini = (src) => new Promise(ok => { const im = new Image(); im.onload = () => { const k = Math.min(1, 96 / Math.max(im.width, im.height)), cv = document.createElement('canvas'); cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k); cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); try { ok(cv.toDataURL('image/jpeg', 0.6)); } catch (e) { ok(''); } }; im.onerror = () => ok(''); im.src = src; });
@@ -94,7 +123,7 @@
         if (v) [x.descripcion, x.insumoName].forEach(t => { const k = norm(t); if (k) n[k] = v; }); }
     } catch (e) { /* sin fotos */ }
     const productos = {}; bodegas.forEach(b => { const l = listaDe(b); if (l.length) productos[b] = l.map(p => ({ n: p.nombre, i: p.id, ...(p.codigo ? { c: String(p.codigo) } : {}), ...(p.tipo !== 'medico' ? { t: p.tipo } : {}) })); });
-    await f.setDoc(f.doc(f.collection(db(), COL), ID_PUB), { tipo: 'CATALOGO_PUBLICO', bodegas: Object.keys(productos).sort(), productos, fotos: { c, n }, ...(window.SAR_Transitoria && window.SAR_Transitoria.bloquePublico ? { transitoria: await window.SAR_Transitoria.bloquePublico().catch(() => null) } : {}), actualizado: new Date().toISOString() });
+    await f.setDoc(f.doc(f.collection(db(), COL), ID_PUB), { tipo: 'CATALOGO_PUBLICO', bodegas: Object.keys(productos).sort(), productos, fotos: { c, n }, destinos: destinosStaff, actualizado: new Date().toISOString() });
     try { localStorage.setItem('si-pub', String(Date.now())); } catch (e) { /* sin almacenamiento */ }
   }
 
@@ -113,10 +142,19 @@
     pintarMias();
   }
   const quienHTML = () => `<div class="si-quien"><span>Pidiendo como <b>${esc(form.solicitante)}</b><small>${esc(form.correo)}</small></span><button type="button" class="btn btn-secondary btn-sm" id="si-q-x">Cambiar</button></div>`;
+  // Sesión con usuario: solo para quien hace inventario de una bodega de uso (rol transitoria). Quien solo pide no la necesita.
+  let sesForm = false, sesEntrando = false;
+  function sesionHTML() {
+    const S = window.SAR_Sesion; if (!S) return ''; const u = S.usuario();
+    if (u) return `<div class="si-ses"><span>Sesión de <b>${esc(u)}</b>${window.SAR_Rol ? ' · ' + esc(window.SAR_Rol) : ''}</span><button type="button" class="btn btn-secondary btn-sm" id="si-ses-x">Cerrar sesión</button></div>`;
+    if (!sesForm) return '<button type="button" class="si-ses-link" id="si-ses-in">¿Haces el inventario de una bodega? Ingresa con tu usuario</button>';
+    return `<form class="si-ses-f" id="si-ses-f" autocomplete="on"><b>Ingresar con tu usuario</b><label class="si-l">Correo<input id="si-ses-c" class="si-in" type="email" autocomplete="username" inputmode="email" required></label><label class="si-l">Contraseña<input id="si-ses-p" class="si-in" type="password" autocomplete="current-password" required></label>
+      <div class="si-lb"><button type="button" class="btn btn-secondary btn-sm" id="si-ses-cancel">Cancelar</button><button type="submit" class="btn btn-primary btn-sm"${sesEntrando ? ' disabled' : ''}>${sesEntrando ? 'Ingresando…' : 'Ingresar'}</button></div></form>`;
+  }
   function pintarCategorias(r) {
     r.innerHTML = `<div class="si-wrap">${quienHTML()}<h2 class="si-t">¿Qué necesitas pedir?</h2><p class="si-s">Elige el tipo de insumo y después busca los productos que necesitas.</p>
       <div class="si-cats">${CATS.map(c => `<button type="button" class="si-cat si-cat--${c.k}" data-cat="${c.k}"><span class="si-cat-ic">${c.ic}</span><span class="si-cat-tx"><b>${c.t}</b><small>${c.s}</small></span><i aria-hidden="true">›</i></button>`).join('')}</div>
-      <div id="si-inv"></div><div id="si-mias"></div></div>`;
+      <div id="si-inv"></div><div id="si-ses">${sesionHTML()}</div><div id="si-mias"></div></div>`;
     if (window.SAR_InvMovil) window.SAR_InvMovil.boton(document.getElementById('si-inv'));
     pintarMias();
   }
@@ -128,8 +166,9 @@
   function buscarEn(lista, texto) { const t = norm(texto).split(' ').filter(Boolean); if (!t.length) return []; return lista.filter(p => { const n = norm(p.nombre); return t.every(w => n.includes(w)); }).sort((x, y) => (norm(y.nombre).startsWith(t[0]) ? 1 : 0) - (norm(x.nombre).startsWith(t[0]) ? 1 : 0)); }
   /** Bodega a la que va la solicitud: la que tiene más de los productos pedidos; si son todos a mano, la que tiene más productos de ese tipo. */
   /** Bodega transitoria (destino de los insumos médicos que se piden): del catálogo público o de Bodegas. */
-  let transitoriasStaff = [];
-  function transitoriaNombre() { const t = window.SAR_CatalogoPublico && window.SAR_CatalogoPublico.transitoria; const b = t && (t.bodegas || [])[0]; return (b && b.bodega) || transitoriasStaff[0] || ''; }
+  let destinosStaff = {};
+  /** Bodega de uso que recibe los pedidos de ese tipo (transitoria → médicos, bodega de aseo, de oficina). Vacío = se entrega como salida. */
+  function destinoDe(cat) { const d = (window.SAR_CatalogoPublico && window.SAR_CatalogoPublico.destinos) || destinosStaff; return (d && d[cat]) || ''; }
   function bodegaAuto() {
     const c = {}; lineas.forEach(l => { const i = l.insumoId && insumos.find(x => x.id === l.insumoId) || insumos.find(x => norm(x.name) === norm(l.nombre)); if (i && i.location) c[i.location] = (c[i.location] || 0) + 1; });
     const top = Object.keys(c).sort((x, y) => c[y] - c[x])[0]; if (top) return top;
@@ -147,13 +186,13 @@
       ${quienHTML()}
       <div class="si-dos"><label class="si-l">Servicio / unidad<input id="si-ser" class="si-in" value="${esc(form.servicio)}" placeholder="Ej: Box 3, Urgencia"></label><span></span></div>
       <div class="si-busca">${manualAbierto ? '' : `<label class="si-l">Agregar producto<input id="si-bus" class="si-in" value="${esc(busca)}" placeholder="Escribe las primeras palabras… (${esc((cat || CATS[0]).ej.replace(/^Ej: /, 'ej: '))})" autocomplete="off" enterkeyhint="search"></label><div id="si-res"></div>`}
-        ${manualAbierto ? `<div class="si-manbox"><div class="si-cab"><b>Agregar a mano</b><button type="button" class="btn btn-secondary btn-sm" id="si-man-x">Volver a buscar</button></div><small>Escribe el <b>nombre completo</b> (qué es, marca, medida o tamaño) y <b>saca una foto</b> del producto: así bodega sabe exactamente qué es.</small>
+        ${manualAbierto ? `<div class="si-manbox"><div class="si-cab"><b>Agregar a mano</b><button type="button" class="btn btn-secondary btn-sm" id="si-man-x">Volver a buscar</button></div><small>Escribe el <b>nombre completo</b> (qué es, marca, medida o tamaño). Si puedes, <b>agrega una foto</b> (cámara o galería): de la caja, la etiqueta o uno igual. Si no tienes cómo, describe para qué se usa.</small>
           <div class="si-man"><input id="si-mt" class="si-in" placeholder="${esc((cat || CATS[0]).ej)}" value="${esc(manual.nombre)}" autocomplete="off"><input id="si-mc" class="si-in si-cn" type="number" min="1" value="${manual.cantidad}" inputmode="numeric" aria-label="Cantidad"></div>
           <div id="si-sug"></div>
-          <div class="si-man"><label class="btn btn-secondary si-fbtn${manual.foto ? ' si-fbtn--ok' : ''}"><input type="file" accept="image/*" capture="environment" hidden id="si-mf">${manual.foto ? '<img src="' + manual.foto + '" alt="">Cambiar foto' : IC_CAM + 'Sacar foto del producto'}</label><button type="button" class="btn btn-primary" id="si-ma">Agregar</button></div>
+          <div class="si-man"><label class="btn btn-secondary si-fbtn${manual.foto ? ' si-fbtn--ok' : ''}"><input type="file" accept="image/*" hidden id="si-mf">${manual.foto ? '<img src="' + manual.foto + '" alt="">Cambiar foto' : IC_CAM + 'Foto (opcional)'}</label><button type="button" class="btn btn-primary" id="si-ma">Agregar</button></div>
         </div>` : ''}</div>
       <h3 class="si-h">Tu solicitud (${lineas.length})</h3>
-      <div class="si-car">${lineas.map((l, i) => `<div class="si-fila">${l.foto ? `<img class="si-lfoto" src="${l.foto}" alt="">` : ''}<span class="si-fn">${esc(l.nombre)}${l.manual ? ' <em>escrito a mano</em>' : ''}</span><span class="si-q"><button type="button" data-m="${i}">−</button><b>${l.cantidad}</b><button type="button" data-p="${i}">+</button></span><button type="button" class="si-x" data-x="${i}" aria-label="Quitar">✕</button></div>`).join('') || '<p class="si-v">Aún no agregas nada.</p>'}</div>
+      <div class="si-car">${lineas.map((l, i) => `<div class="si-fila">${l.foto ? `<img class="si-lfoto" src="${l.foto}" alt="">` : ''}<span class="si-fn">${esc(l.nombre)}${l.manual ? ' <em>escrito a mano</em>' : ''}</span><span class="si-q"><button type="button" data-m="${i}" aria-label="Uno menos">−</button><input class="si-qn" type="number" min="1" inputmode="numeric" value="${l.cantidad}" data-qn="${i}" aria-label="Cantidad de ${esc(l.nombre)}"><button type="button" data-p="${i}" aria-label="Uno más">+</button></span><button type="button" class="si-x" data-x="${i}" aria-label="Quitar">✕</button></div>`).join('') || '<p class="si-v">Aún no agregas nada.</p>'}</div>
       <label class="si-l">Nota (opcional)<input id="si-not" class="si-in" value="${esc(form.nota)}" placeholder="Ej: urgente para hoy"></label>
       <button type="button" class="btn btn-primary si-env" id="si-env"${enviando ? ' disabled' : ''}>${editando ? 'Guardar cambios' : 'Enviar solicitud'}</button>
       <p class="si-v" id="si-red"></p><div id="si-mias"></div></div>`;
@@ -189,21 +228,25 @@
   /** Las últimas solicitudes hechas desde este teléfono y en qué estado van (bodega las va moviendo). */
   /** Lo que bodega no tenía (no hay / parcial), para que quien pidió lo vea de un vistazo. */
   function resumenNoHay(x) { const l = (x.lineas || []).filter(y => !y.soloConteo && (y.estado === 'no_hay' || y.estado === 'parcial')); if (!l.length || x.estado === 'NUEVA') return ''; return `<p class="si-nohay"><b>No disponible:</b> ${l.map(y => `${esc(y.nombre)} (${y.estado === 'no_hay' ? y.cantidad : y.cantidad - num(y.entregar)} u.)`).join(' · ')}</p>`; }
-  const miaHTML = (x, k) => `<details class="si-mia"${k === 0 ? ' open' : ''}><summary><span class="si-fn"><b>${esc(x.correlativo || x.numero)}</b>${x.correlativo ? '' : ' <small>(provisional)</small>'}<br><small>${esc(x.bodega || '')}${x.creadoEn ? ' · ' + esc(new Date(x.creadoEn).toLocaleString('es-CL')) : ''}</small></span><span class="si-est si-e-${esc(x.estado)}">${esc(x.estado === 'POR_ENVIAR' || x._pend ? 'Por enviar (sin internet)' : (ESTADOS[x.estado] || x.estado))}</span></summary>${recorridoHTML(x._pend ? 'POR_ENVIAR' : x.estado)}${resumenNoHay(x)}
-      ${x.conteo ? `<div class="si-mia-l"><span>Inventario ${x.conteo.bodega ? esc(x.conteo.bodega) : ''}</span><span class="si-le si-le-${x.conteo.estado === 'aplicado' ? 'ok' : 'pendiente'}">${x.conteo.estado === 'aplicado' ? '✔ Cuadrado' : x.conteo.estado ? 'Bodega lo revisa' : 'Por cuadrar'}</span></div>` : ''}${(x.lineas || []).filter(l => !l.soloConteo).map(l => `<div class="si-mia-l"><span>${esc(l.nombre)} × ${l.cantidad}${num(l.reiterado) > 1 ? ' <em class="si-reit">sigue faltando</em>' : ''}</span>${chipL(l)}</div>`).join('')}${x.estado === 'NUEVA' && misDatos[x.numero] ? `<div class="si-lb"><small>Mientras bodega no empiece a prepararla puedes cambiarla.</small><button type="button" class="btn btn-primary btn-sm" data-mod="${esc(x.numero)}">Modificar</button></div>` : ''}</details>`;
+  const miaHTML = (x, k) => `<details class="si-mia"${k === 0 ? ' open' : ''}><summary><span class="si-fn"><b>${x.correlativo ? esc(x.correlativo) : 'N° oficial en camino'}</b><br><small>${esc(x.bodega || '')}${x.creadoEn ? ' · ' + esc(new Date(x.creadoEn).toLocaleString('es-CL')) : ''}</small></span><span class="si-est si-e-${esc(x.estado)}">${esc(x.estado === 'POR_ENVIAR' || x._pend ? 'Por enviar (sin internet)' : (ESTADOS[x.estado] || x.estado))}</span></summary>${recorridoHTML(x._pend ? 'POR_ENVIAR' : x.estado)}${resumenNoHay(x)}
+      ${x.conteo ? `<div class="si-mia-l"><span>Inventario ${x.conteo.bodega ? esc(x.conteo.bodega) : ''}</span><span class="si-le si-le-${x.conteo.estado === 'aplicado' ? 'ok' : x.conteo.estado === 'reconteo' ? 'parcial' : 'pendiente'}">${x.conteo.estado === 'aplicado' ? '✔ Aceptado por bodega' : x.conteo.estado === 'reconteo' ? 'Recontar: bodega lo pidió' : x.conteo.estado === 'recontado' ? 'Reconteo enviado' : 'Bodega lo revisa'}</span></div>` : ''}${(x.lineas || []).filter(l => !l.soloConteo).map(l => `<div class="si-mia-l"><span>${esc(l.nombre)} × ${l.cantidad}${num(l.reiterado) > 1 ? ' <em class="si-reit">sigue faltando</em>' : ''}</span>${chipL(l)}</div>`).join('')}${x.estado === 'LISTA' && esRepo(x) && /transitoria/i.test(String(window.SAR_Rol || '')) ? (x.recibidoSolicitado ? '<p class="si-v">Marcaste recibido: bodega lo registra en un momento.</p>' : `<div class="si-lb"><small>¿Ya llegó a ${esc(x.bodega)}?</small><button type="button" class="btn btn-primary btn-sm" data-recibi="${esc(x.numero)}">Recibido</button></div>`) : ''}${x.estado === 'NUEVA' && !x.conteo && misDatos[x.numero] ? `<div class="si-lb"><small>Mientras bodega no empiece a prepararla puedes cambiarla.</small><button type="button" class="btn btn-primary btn-sm" data-mod="${esc(x.numero)}">Modificar</button></div>` : ''}</details>`;
   // Quien pide (página pública): sus solicitudes en vivo (solo las de este teléfono), buscador y aviso cuando cambian de estado (v21.211)
-  let misSub = null, misLista = [], misQ = '';
+  let misSub = null, misLista = [], misQ = '', misUid = '';
+  /** Al entrar o salir con usuario cambia el uid: se vuelve a escuchar lo de esa cuenta. */
+  function reiniciarMias() { if (typeof misSub === 'function') { try { misSub(); } catch (e) { /* ya cerrada */ } } misSub = null; misLista = []; misDatos = {}; }
+  if (typeof window.addEventListener === 'function') window.addEventListener('sar-rol', () => { const au = window.firebaseAuth && window.firebaseAuth.currentUser; if (!au || au.uid !== misUid) reiniciarMias(); });
   const TXT_AV = { PREPARACION: 'Bodega la está revisando.', LISTA: 'Bodega ya preparó tus productos. Revisa el detalle.', ENTREGADA: 'Solicitud cerrada: entregada.', ANULADA: 'Bodega la anuló.' };
   function vigilarMias() {
     if (misSub) return true; const f = fs(), au = window.firebaseAuth && window.firebaseAuth.currentUser; if (!au || !f.onSnapshot) return false;
     try {
-      misSub = f.onSnapshot(f.query(f.collection(db(), COL), f.where('uid', '==', au.uid)), (sn) => {
-        const l = []; sn.forEach(d => { if (d.data().tipo === TIPO) l.push({ ...d.data(), _col: COL, _pend: !!(d.metadata && d.metadata.hasPendingWrites && !d.data().correlativo) }); });
+      misUid = au.uid;   // con metadatos: al confirmar el servidor, «Por enviar» cambia solo (v21.212)
+      misSub = f.onSnapshot(f.query(f.collection(db(), COL), f.where('uid', '==', au.uid)), { includeMetadataChanges: true }, (sn) => {
+        const l = []; sn.forEach(d => { if (d.data().tipo === TIPO) l.push({ ...limpiarSol(d.data(), d.id), _col: COL, _pend: !!(d.metadata && d.metadata.hasPendingWrites) }); });
         misLista = l.sort((a, b) => String(b.creadoEn).localeCompare(String(a.creadoEn))); misDatos = {}; misLista.forEach(x => { misDatos[x.numero] = x; });
         let vistos = {}; try { vistos = JSON.parse(localStorage.getItem('si-estados') || '{}'); } catch (e) { vistos = {}; }
         misLista.forEach(x => { const antes = vistos[x.numero]; if (antes && antes !== x.estado && TXT_AV[x.estado]) avisar({ titulo: `Solicitud ${x.correlativo || x.numero} ${String(ESTADOS[x.estado]).toLowerCase()}`, texto: TXT_AV[x.estado], estado: AV_EST[x.estado], boton: 'Ver', alTocar: () => { misQ = x.correlativo || x.numero; pintarMiasLista(); const e = document.getElementById('si-mias'); if (e) e.scrollIntoView({ behavior: 'smooth' }); } }); vistos[x.numero] = x.estado; });
         try { localStorage.setItem('si-estados', JSON.stringify(vistos)); } catch (e) { /* sin almacenamiento */ }
-        pintarMiasLista();
+        pintarMiasLista(); if (window.SAR_InvMovil) { const e = document.getElementById('si-inv'); if (e) window.SAR_InvMovil.boton(e); }
       }, () => { misSub = null; });
       return true;
     } catch (e) { misSub = null; return false; }
@@ -216,13 +259,15 @@
     const l = misLista.filter(x => coincideSol(x, misQ)).slice(0, misQ ? 30 : 8);
     const c = el.querySelector('#si-mias-l'); c.innerHTML = l.map((x, k) => miaHTML(x, misQ ? 0 : k)).join('') || '<p class="si-v">No encontré solicitudes con eso.</p>';
     c.querySelectorAll('[data-mod]').forEach(b => b.onclick = () => editar(b.dataset.mod));
+    c.querySelectorAll('[data-recibi]').forEach(b => b.onclick = async () => { const x = misDatos[b.dataset.recibi]; if (!x) return; const P = window.SAR_Progreso, ok = P && P.confirmar ? await P.confirmar({ titulo: '¿Llegó todo?', texto: `${esc(x.correlativo || x.numero)} a ${esc(x.bodega)}.`, lineas: (x.lineas || []).filter(l => !l.soloConteo && num(l.entregar) > 0).map(l => `${esc(l.asociado || l.nombre)} · <b>${num(l.entregar)}</b>`), si: 'Recibido' }) : confirm('¿Recibido?'); if (!ok) return;
+      b.disabled = true; const f = fs(), ahora = new Date().toISOString(), yo = (window.firebaseAuth && window.firebaseAuth.currentUser && window.firebaseAuth.currentUser.email) || form.correo; try { const sn = await f.getDoc(f.doc(f.collection(db(), COL), x.numero)); await f.updateDoc(f.doc(f.collection(db(), COL), x.numero), { recibidoSolicitado: { por: yo, en: ahora }, historial: (sn.data().historial || []).concat([{ estado: 'LISTA', por: yo, en: ahora, nota: 'Recibido en ' + x.bodega }]) }); avisar({ titulo: 'Recibido', texto: 'Bodega lo registra en tu bodega en un momento.', estado: 'cerrada' }); } catch (e) { b.disabled = false; toast('No se pudo', esc(e.message || e), 'error'); } });
   }
   async function pintarMias() {
     const el = document.getElementById('si-mias'); if (!el) return;
     if (publica() && vigilarMias()) { pintarMiasLista(); return; }
     let l = [];
     try { l = JSON.parse(localStorage.getItem('si-mias') || '[]'); } catch (e) { l = []; } if (!l.length) { el.innerHTML = ''; return; }
-    const f = fs(); misDatos = {}; const filas = await Promise.all(l.slice(0, 6).map(async (n) => { try { let d = await f.getDoc(f.doc(f.collection(db(), COL), n)); if (!d.exists() && !publica()) d = await f.getDoc(f.doc(f.collection(db(), COL_ANT), n)).catch(() => d); if (d.exists()) { const x = { ...d.data(), _col: d.ref && d.ref.parent ? d.ref.parent.id : COL }; misDatos[n] = x; return x; } return { numero: n, estado: 'POR_ENVIAR' }; } catch (e) { return { numero: n, estado: 'POR_ENVIAR' }; } }));
+    const f = fs(); misDatos = {}; const filas = await Promise.all(l.slice(0, 6).map(async (n) => { try { let d = await f.getDoc(f.doc(f.collection(db(), COL), n)); if (!d.exists() && !publica()) d = await f.getDoc(f.doc(f.collection(db(), COL_ANT), n)).catch(() => d); if (d.exists()) { const x = { ...limpiarSol(d.data(), d.id), _col: d.ref && d.ref.parent ? d.ref.parent.id : COL }; misDatos[n] = x; return x; } return { numero: n, estado: 'POR_ENVIAR' }; } catch (e) { return { numero: n, estado: 'POR_ENVIAR' }; } }));
     el.innerHTML = `<div class="si-cab"><h3 class="si-h">Tus últimas solicitudes</h3><button type="button" class="btn btn-secondary btn-sm" id="si-mias-act">Actualizar</button></div><div class="si-car">${filas.map(miaHTML).join('')}</div>`;
     el.querySelectorAll('[data-mod]').forEach(b => b.onclick = () => editar(b.dataset.mod));
     const ac = document.getElementById('si-mias-act'); if (ac) ac.onclick = () => pintarMias();
@@ -253,7 +298,7 @@
       if (window.SAR_Progreso && window.SAR_Progreso.exito) window.SAR_Progreso.exito({ titulo: r === 'ok' ? 'Cambios guardados' : 'Guardado en el teléfono', texto: esc(ed.ver) + (r === 'ok' ? '' : '<br>Se enviará solo al volver internet.') });
       return;
     }
-    const ahora = new Date(), numero = numeroSolicitud(ahora), f = fs(); const bt = catSel === 'medico' ? transitoriaNombre() : ''; bodegaSel = bt || bodegaAuto();
+    const ahora = new Date(), numero = numeroSolicitud(ahora), f = fs(); const bt = destinoDe(catSel); bodegaSel = bt || bodegaAuto();
     const au = window.firebaseAuth && window.firebaseAuth.currentUser, data = { tipo: TIPO, numero, estado: 'NUEVA', uid: (au && au.uid) || '', requester: (au && au.email) || form.correo.trim().toLowerCase(), solicitante: form.solicitante.trim(), correo: form.correo.trim().toLowerCase(), servicio: form.servicio.trim(), bodega: bodegaSel, ...(bt ? { destino: 'transitoria' } : {}), ...(catDe(catSel) ? { categoria: catSel } : {}), nota: form.nota.trim(), lineas: lineas.map(l => ({ ...l })), creadoEn: ahora.toISOString(), historial: [{ estado: 'NUEVA', por: usuario(), en: ahora.toISOString() }] };
     const p = f.setDoc(f.doc(f.collection(db(), COL), numero), data);
     const r = await Promise.race([p.then(() => 'ok'), new Promise(res => setTimeout(() => res('cola'), 2500))]).catch(e => 'error:' + (e.message || e));
@@ -263,7 +308,7 @@
     try { const m = JSON.parse(localStorage.getItem('si-mias') || '[]'); m.unshift(numero); localStorage.setItem('si-mias', JSON.stringify(m.slice(0, 20))); } catch (e) { /* sin almacenamiento */ }
     lineas = []; busca = ''; form.nota = ''; bodegaSel = ''; catSel = ''; manualAbierto = false; pintarPide();
     if (window.SAR_Progreso && window.SAR_Progreso.exito) window.SAR_Progreso.exito({ titulo: r === 'ok' ? 'Solicitud enviada' : 'Guardada en el teléfono', texto: r === 'ok' ? 'Bodega ya la puede ver. Abajo verás cómo avanza.' : 'Se enviará sola cuando haya internet.' });
-    const r2 = rootPide(); if (r2) r2.insertAdjacentHTML('afterbegin', `<div class="si-ok"><b>${r === 'ok' ? 'Solicitud enviada' : 'Solicitud guardada en el teléfono'}</b><br>${numero}${r === 'ok' ? '' : ' · se enviará sola cuando haya internet.'}</div>`);
+    const r2 = rootPide(); if (r2) r2.insertAdjacentHTML('afterbegin', `<div class="si-ok"><b>${r === 'ok' ? 'Solicitud enviada' : 'Solicitud guardada en el teléfono'}</b><br>${r === 'ok' ? 'Bodega le asigna el N° oficial (SOL-…) al recibirla. La ves abajo en «Tus solicitudes».' : 'Se enviará sola cuando haya internet.'}</div>`);
     window.scrollTo && window.scrollTo(0, 0);
   }
   async function cambiarCategoria() {
@@ -280,17 +325,23 @@
       catch (er) { toast('Foto', er.message || 'No se pudo leer la foto.', 'error'); } });
     r.addEventListener('input', (e) => { if (e.target.id === 'si-mt') { manual.nombre = e.target.value; pintarSug(); return; }
       if (e.target.id === 'si-bus') { busca = e.target.value; pintarRes(); }
-      if (e.target.id === 'si-mq') { misQ = e.target.value; pintarMiasLista(); } });
+      if (e.target.id === 'si-mq') { misQ = e.target.value; pintarMiasLista(); }
+      if (e.target.dataset && e.target.dataset.qn !== undefined) { const l = lineas[+e.target.dataset.qn]; if (l) l.cantidad = Math.max(1, Math.min(9999, Math.floor(num(e.target.value) || 1))); } });
+    r.addEventListener('submit', async (e) => { if (e.target.id !== 'si-ses-f') return; e.preventDefault(); const c = document.getElementById('si-ses-c'), p = document.getElementById('si-ses-p'); if (!window.SAR_Sesion || sesEntrando) return;
+      sesEntrando = true; const correo = c.value, clave = p.value; const btn = e.target.querySelector('[type=submit]'); if (btn) { btn.disabled = true; btn.textContent = 'Ingresando…'; }
+      try { await window.SAR_Sesion.entrar(correo, clave); sesForm = false; toast('Sesión iniciada', 'Ya puedes hacer inventario.', 'success'); }
+      catch (er) { const m = String(er && er.code || ''); toast('No se pudo ingresar', /wrong-password|invalid-credential|user-not-found|invalid-email/.test(m) ? 'Correo o contraseña incorrectos.' : /network/.test(m) ? 'Sin internet: para ingresar se necesita conexión.' : m === 'pendientes' ? esc(er.message) : 'Intenta de nuevo (' + esc(m) + ').', 'error'); }
+      sesEntrando = false; pintarPide(); });
     r.addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b) return; leerCampos();
-      if (b.dataset.add) { agregarLinea(lineas, { nombre: b.dataset.add, cantidad: 1 }); if (lineas.length) { const l = lineas.find(x => norm(x.nombre) === norm(b.dataset.add)); if (l && b.dataset.id) l.insumoId = b.dataset.id; } busca = ''; pintarPide(); toast('Agregado', esc(b.dataset.add), 'success'); }
+      if (b.dataset.add) { agregarLinea(lineas, { nombre: b.dataset.add, cantidad: 1 }); if (lineas.length) { const l = lineas.find(x => norm(x.nombre) === norm(b.dataset.add)); if (l && b.dataset.id) l.insumoId = b.dataset.id; } busca = ''; pintarPide(); const sb = document.getElementById('si-bus'); if (sb) sb.focus({ preventScroll: true }); toast('Agregado', esc(b.dataset.add), 'success'); }
       else if (b.id === 'si-noesta') { manualAbierto = true; manual.nombre = manual.nombre || busca.trim(); busca = ''; pintarPide(); const t = document.getElementById('si-mt'); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); } }
       else if (b.id === 'si-man-x') { manualAbierto = false; manual = { nombre: '', cantidad: 1, foto: '' }; pintarPide(); const t = document.getElementById('si-bus'); if (t) t.focus(); }
       else if (b.id === 'si-ma') {
         const t = document.getElementById('si-mt'), c = document.getElementById('si-mc'); manual.nombre = t ? t.value : manual.nombre; manual.cantidad = Math.max(1, Math.floor(num(c && c.value) || 1));
         const nom = manual.nombre.trim();
         if (nom.split(/\s+/).length < 2 || nom.length < 8) { toast('Nombre completo', 'Escribe el nombre completo del producto (qué es, medida o tamaño).', 'warning'); return; }
-        if (!manual.foto) { toast('Falta la foto', 'Saca una foto del producto para que bodega sepa exactamente qué es.', 'warning'); return; }
+        if (!manual.foto && (nom.split(/\s+/).length < 3 || nom.length < 15)) { toast('Más detalle', 'Sin foto, describe un poco más: qué es, marca, medida o para qué se usa.', 'warning'); return; }
         lineas.push({ nombre: nom, cantidad: manual.cantidad, manual: true, foto: manual.foto }); manual = { nombre: '', cantidad: 1, foto: '' }; manualAbierto = false; pintarPide();
       }
       else if (b.dataset.sug) { agregarLinea(lineas, { nombre: b.dataset.sug, cantidad: manual.cantidad || 1 }); const l = lineas.find(x => norm(x.nombre) === norm(b.dataset.sug)); if (l && b.dataset.id) l.insumoId = b.dataset.id; manual = { nombre: '', cantidad: 1, foto: '' }; manualAbierto = false; pintarPide(); }
@@ -302,11 +353,14 @@
         if (nn.split(/\s+/).length < 2) { toast('Tu nombre', 'Escribe tu nombre y apellido.', 'warning'); return; } if (!correoOk(cc)) { toast('Tu correo', 'Escribe un correo válido (ej: nombre@cormumel.cl).', 'warning'); return; }
         form.solicitante = nn; form.correo = cc; cambiandoQuien = false; try { const y = JSON.parse(localStorage.getItem('si-yo') || '{}'); localStorage.setItem('si-yo', JSON.stringify({ ...y, n: nn, c: cc })); } catch (e) { /* sin almacenamiento */ } pintarPide(); }
       else if (b.id === 'si-q-x') { cambiandoQuien = true; pintarPide(); }
+      else if (b.id === 'si-ses-in') { sesForm = true; pintarPide(); const c = document.getElementById('si-ses-c'); if (c) c.focus(); }
+      else if (b.id === 'si-ses-cancel') { sesForm = false; pintarPide(); }
+      else if (b.id === 'si-ses-x') { if (window.SAR_Sesion) window.SAR_Sesion.salir().then(() => { sesForm = false; toast('Sesión cerrada', 'Sigues pudiendo pedir sin usuario.', 'info'); }); }
       else if (b.id === 'si-edit-x') { editando = null; lineas = []; bodegaSel = ''; catSel = ''; form.nota = ''; pintarPide(); }
       else if (b.dataset.cat) { catSel = b.dataset.cat; bodegaSel = ''; busca = ''; pintarPide(); window.scrollTo && window.scrollTo(0, 0); }
       else if (b.id === 'si-cat-x') { cambiarCategoria(); }
     });
-    window.addEventListener('online', () => { estadoRed(); if (publica()) { cargado = false; cargarBase().then(pintarPide).catch(() => {}); } });   // al volver internet: lista y estados al día
+    window.addEventListener('online', () => { estadoRed(); if (publica()) { cargado = false; cargarBase().then(() => { const a = document.activeElement; if (a && /INPUT|TEXTAREA/.test(a.tagName)) return; leerCampos(); pintarPide(); }).catch(() => {}); } });   // no borra lo que se está escribiendo   // al volver internet: lista y estados al día
     window.addEventListener('offline', estadoRed);
   }
   async function abrirPide() {
@@ -342,15 +396,26 @@
   /** Lotes con saldo de este producto en cualquier bodega. Primero la bodega a la que se pidió (no hay que mover), luego lo que vence antes. */
   function lotesCandidatos(l, lista, bodegaPedida, sinDestino) {
     const k = norm(l.asociado || l.nombre), out = [];
-    lista.filter(i => ((l.insumoId && i.id === l.insumoId) || norm(i.name) === k) && i.status !== 'CUARENTENA' && !(sinDestino && i.location === bodegaPedida)).forEach(i => lotesDeDoc(i).forEach(b => { const disp = num(b.quantity); if (disp > 0) out.push({ insumoId: i.id, bodega: i.location || '', estante: i.ubicacionEstante || '', clave: String(b.batch || 'S/L') + '|' + String(b.expirationDate || ''), lote: b.batch || 'S/L', vence: b.expirationDate || '', disp }); }));
+    lista.filter(i => ((l.insumoId && i.id === l.insumoId) || norm(i.name) === k) && i.status !== 'CUARENTENA' && i.location !== TRANSITO && !(sinDestino && i.location === bodegaPedida)).forEach(i => lotesDeDoc(i).forEach(b => { const disp = num(b.quantity); if (disp > 0) out.push({ insumoId: i.id, bodega: i.location || '', estante: i.ubicacionEstante || '', clave: String(b.batch || 'S/L') + '|' + String(b.expirationDate || ''), lote: b.batch || 'S/L', vence: b.expirationDate || '', disp }); }));
     return out.sort((a, b) => ((a.bodega === bodegaPedida ? 0 : 1) - (b.bodega === bodegaPedida ? 0 : 1)) || (a.vence || '9999').localeCompare(b.vence || '9999'));
   }
   /** Reparte lo pedido entre los lotes en ese orden. Devuelve [cantidad por lote]. */
   function repartir(cands, pide) { let falta = Math.max(0, num(pide)); return cands.map(c => { const q = Math.min(c.disp, falta); falta -= q; return q; }); }
   /** Estado de una línea según lo que bodega confirmó. */
   function estadoLinea(pide, entregar, noHay) { if (noHay) return 'no_hay'; const e = num(entregar); return e <= 0 ? 'pendiente' : e >= num(pide) ? 'ok' : 'parcial'; }
-  /** Reposición de la bodega transitoria: el stock sale de las OTRAS bodegas (nunca de la misma transitoria). */
+  /** Reposición de una bodega de uso (transitoria, aseo, oficina): el stock sale de las OTRAS bodegas, pasa por «En tránsito»
+   *  al procesar y entra a la bodega cuando se marca «Recibido» (v21.212). Lo demás se entrega como salida por lote. */
   const esRepo = (s) => s.origen === 'transitoria' || s.destino === 'transitoria';
+  const TRANSITO = 'En tránsito';
+  const grupoDe = (x) => `${x.insumoId}|${x.clave}`;
+  const gruposDe = (l) => (l.seleccion || []).filter(x => num(x.qty) > 0).map(grupoDe);
+  // l.movido === true: solicitud de una versión anterior (v21.211 o antes) ya traída a su bodega: cuenta como movida y recibida
+  const tocadaL = (l) => l.movido === true || (l.movidos || []).length > 0;
+  const movidaL = (l) => l.movido === true || l.estado === 'no_hay' || l.soloConteo || (gruposDe(l).length > 0 && gruposDe(l).every(k => (l.movidos || []).includes(k)));
+  const recibidaL = (l) => l.movido === true || !(l.movidos || []).length || (l.movidos || []).every(k => (l.recibidos || []).includes(k));
+  /** Solicitudes ya procesadas antes de v21.212 (sin marcas por lote): no se vuelve a mover nada; solo se pueden cerrar. */
+  const legado = (s) => (s.estado === 'LISTA' || s.estado === 'ENTREGADA') && !(s.lineas || []).some(l => Array.isArray(l.movidos)) && String(s.creadoEn || '') < '2026-11-16';
+  const ocupado = new Set();   // solicitudes procesándose en esta sesión: el botón queda bloqueado
   const candDe = (l, s) => lotesCandidatos(l, insumos, s.bodega, esRepo(s));
   const EST_L = { pendiente: 'Pendiente', ok: 'Confirmado', parcial: 'Parcial', no_hay: 'No hay' };
   const chipL = (l) => { const e = l.estado || 'pendiente'; return `<span class="si-le si-le-${e}">${e === 'ok' ? '✔ ' + num(l.entregar) + ' confirmado' + (num(l.entregar) === 1 ? '' : 's') : e === 'parcial' ? `Parcial: ${num(l.entregar)} de ${l.cantidad}` : EST_L[e]}</span>`; };
@@ -363,20 +428,25 @@
   async function cargarAlias() { try { const d = await fs().getDoc(fs().doc(fs().collection(db(), 'Contadores'), ALIAS_ID)); alias = d.exists() ? (d.data().items || {}) : {}; } catch (e) { alias = {}; } }
   async function asociar(n, i, nombreInv) {
     const s = solicitudes.find(x => x.numero === n); if (!s) return; const f = fs(), lin = (s.lineas || []).map(x => ({ ...x })), l = lin[i];
-    if (nombreInv) { const d = insumos.find(x => norm(x.name) === norm(nombreInv) && x.location === s.bodega) || insumos.find(x => norm(x.name) === norm(nombreInv)); lin[i] = { ...l, asociado: nombreInv, ...(d ? { insumoId: d.id } : {}), asociadoPor: usuario() }; }
-    else { const x = { ...l }; delete x.asociado; delete x.asociadoPor; if (x.manual) delete x.insumoId; lin[i] = x; }
+    if (tocadaL(l)) { toast('Ya movido', 'Este producto ya salió de su bodega: no se puede cambiar la asociación.', 'warning'); return; }
+    if (nombreInv) { const d = insumos.find(x => norm(x.name) === norm(nombreInv) && x.location !== s.bodega && x.location !== TRANSITO) || insumos.find(x => norm(x.name) === norm(nombreInv)); lin[i] = { ...l, asociado: nombreInv, ...(d ? { insumoId: d.id } : {}), insumoIdOrig: l.insumoIdOrig !== undefined ? l.insumoIdOrig : (l.insumoId || ''), asociadoPor: usuario() }; delete lin[i].estado; delete lin[i].seleccion; delete lin[i].entregar; }
+    else { const x = { ...l }; delete x.asociado; delete x.asociadoPor; if (x.insumoIdOrig) x.insumoId = x.insumoIdOrig; else delete x.insumoId; delete x.insumoIdOrig; delete x.estado; delete x.seleccion; delete x.entregar; lin[i] = x; }
     asoc = null; s.lineas = lin; pintarBandeja();
-    try { await Promise.race([f.updateDoc(f.doc(f.collection(db(), s._col || COL), n), { lineas: lin }), new Promise(r => setTimeout(r, 2500))]); } catch (e) { toast('No se guardó', e.message || String(e), 'error'); }
+    try { const c = await guardarLinea(s, i, lin[i], { nombreOrig: l.nombre }); Object.assign(s, c); pintarBandeja(); } catch (e) { toast('No se guardó', esc(e.message || String(e)), 'error'); return; }
     if (nombreInv && norm(l.nombre) !== norm(nombreInv)) { alias[norm(l.nombre)] = nombreInv; f.setDoc(f.doc(f.collection(db(), 'Contadores'), ALIAS_ID), { tipo: 'alias-solicitudes', items: alias, actualizado: new Date().toISOString() }).catch(() => {}); }
     toast('Asociado', nombreInv ? `Se moverá y descontará como «${esc(nombreInv)}».` : 'Asociación quitada.', 'success');
   }
+  const escritas = {};   // lo que bodega va escribiendo en «Sacar»: sobrevive a las actualizaciones en vivo
+  const revs = {};   // revisión de inventarios por solicitud
+  async function cargarRevision(s) { const ver = String((s.conteo || {}).recontadoEn || (s.conteo || {}).fin || ''); revs[s.numero] = { estado: 'cargando', ver }; try { const F = await window.SAR_Transitoria.revisar(s); const pre = new Set(F.filter(x => x.usado > 0 && x.alContar > 0 && x.usado / x.alContar >= 0.3).map(x => x.k)); revs[s.numero] = { estado: 'ok', filas: F, sel: pre, ver }; } catch (e) { revs[s.numero] = { estado: 'error', error: e.message || String(e), ver }; } pintarBandeja(); }
   let abiertoL = {}, sel = '';   // sel: solicitud abierta en el panel lateral ('' = la primera; null = cerrado)   // numero|i → mostrar lotes aunque ya esté decidida
 
   function pintarBandeja() {
     const r = rootBandeja(); if (!r) return;
     if (asoc) queueMicrotask(() => { const x = r.querySelector('.si-asoc-in'); if (x && document.activeElement !== x) { x.focus(); x.setSelectionRange(x.value.length, x.value.length); } });
     const ab = (s) => s.estado !== 'ENTREGADA' && s.estado !== 'ANULADA', vis = solicitudes.filter(s => (bq.trim() ? true : filtro === 'TODAS' ? true : filtro === 'ABIERTAS' ? ab(s) : s.estado === filtro) && coincideSol(s, bq));
-    if (bq) queueMicrotask(() => { const x = r.querySelector('#si-bq'); if (x && document.activeElement !== x && !asoc) { x.focus(); x.setSelectionRange(x.value.length, x.value.length); } });
+    const enfocado = document.activeElement && document.activeElement.id === 'si-bq';
+    if (enfocado) queueMicrotask(() => { const x = r.querySelector('#si-bq'); if (x) { x.focus(); x.setSelectionRange(x.value.length, x.value.length); } });
     const IM = window.SAR_Imagenes;
     // «Costado»: en pantallas anchas la lista queda a la izquierda y el detalle se abre al lado, sin perder la lista
     const costado = window.innerWidth >= 1000;
@@ -388,20 +458,34 @@
       return `<div class="si-asoc">${ali ? `<button type="button" class="btn btn-primary btn-sm" data-asocsi="${i}" data-nom="${esc(ali)}">¿Es «${esc(ali)}»? Asociar (ya lo asociaste antes)</button>` : ''}
         ${abierto ? `<input class="si-in si-asoc-in" data-i="${i}" value="${esc(asoc.q)}" placeholder="Buscar en el inventario (nombre del fabricante)…" autocomplete="off" aria-label="Buscar producto para asociar"><div class="si-asoc-res">${resAsoc(asoc.q)}</div>` : `<button type="button" class="btn btn-secondary btn-sm" data-asoc="${i}">Asociar a producto del inventario</button>`}</div>`; };
     const cuadreHTML = (s) => { const c = s.conteo, us = (c.descontado || []).reduce((t, x) => t + num(x.usado), 0);
-      if (c.estado === 'aplicado') return `<div class="si-cuadre si-cuadre--ok"><b>Inventario cuadrado</b> · se descontaron <b>${us}</b> u. usadas en ${(c.descontado || []).length} producto(s)${(c.sobrantes || []).length ? ` · sobran: ${c.sobrantes.map(x => esc(x.nombre) + ' +' + x.sobrante).join(', ')} (no se suman solos)` : ''}<details><summary>Ver detalle</summary>${(c.descontado || []).map(x => `<div>${esc(x.nombre)}: sistema ${x.sistema} · contado ${x.contado} · <b>usado ${x.usado}</b></div>`).join('') || 'Sin diferencias.'}</details></div>`;
-      if (!c.estado) return '<div class="si-cuadre">Cuadrando el inventario…</div>';
-      return `<div class="si-cuadre si-cuadre--mal"><b>El inventario no se cuadró solo:</b> ${esc(c.detalle || '')}<button type="button" class="btn btn-primary btn-sm" data-cuadrar="1">Cuadrar ahora</button></div>`; };
-    const cardHTML = (s) => { const mover = (s.lineas || []).some(l => !l.movido && (l.seleccion || []).some(x => x.bodega !== s.bodega && x.qty > 0));
+      if (c.estado === 'aplicado') return `<div class="si-cuadre si-cuadre--ok"><b>Inventario aceptado</b> · se descontaron <b>${us}</b> u. usadas en ${(c.descontado || []).length} producto(s)${c.aplicadoPor ? ' · ' + esc(c.aplicadoPor) : ''}${(c.sobrantes || []).length ? ` · sobran: ${c.sobrantes.map(x => esc(x.nombre) + ' +' + x.sobrante).join(', ')} (no se suman solos)` : ''}<details><summary>Ver detalle</summary>${(c.descontado || []).map(x => `<div>${esc(x.nombre)}: sistema ${x.sistema} · contado ${x.contado} · <b>usado ${x.usado}</b></div>`).join('') || 'Sin diferencias.'}</details></div>`;
+      if (c.estado === 'reconteo') return `<div class="si-cuadre si-cuadre--esp"><b>Reconteo pedido</b> de ${(c.reconteo || []).length} producto(s)${c.reconteoPedidoEn ? ' · ' + esc(new Date(c.reconteoPedidoEn).toLocaleString('es-CL')) : ''}. Cuando lo envíen, lo revisas aquí.</div>`;
+      const ver = String(c.recontadoEn || c.fin || ''); let rv = revs[s.numero]; if (rv && rv.ver !== ver) { delete revs[s.numero]; rv = null; }
+      if (!rv || rv.estado === 'cargando') { if (!rv) cargarRevision(s); return '<div class="si-cuadre">Calculando lo usado por producto…</div>'; }
+      if (rv.estado === 'error') return `<div class="si-cuadre si-cuadre--mal"><b>No pude revisar el inventario:</b> ${esc(rv.error)} <button type="button" class="btn btn-secondary btn-sm" data-rev="1">Reintentar</button></div>`;
+      const F = rv.filas, us2 = F.reduce((t, x) => t + x.usado, 0), dif = F.filter(x => x.usado > 0 || x.sobra > 0).length;
+      return `<div class="si-cuadre si-cuadre--rev"><b>Inventario por revisar${c.estado === 'recontado' ? ' · ya recontado' : ''}</b><small>Usado = lo que había al contar − lo contado. Lo que entró o salió de ${esc(s.bodega)} después del conteo ya está descontado del cálculo.</small>
+        <div class="fp-tw"><table class="si-tb si-rv"><thead><tr><th><span class="sr-only">Recontar</span></th><th>Producto</th><th title="Lo que había según el sistema al momento de contar">Sistema</th><th>Contó</th><th>Usado</th></tr></thead><tbody>${F.map(x => `<tr class="${x.usado > 0 ? 'si-rv-u' : x.sobra > 0 ? 'si-rv-s' : ''}"><td><input type="checkbox" class="si-rc" data-k="${esc(x.k)}"${rv.sel.has(x.k) ? ' checked' : ''} aria-label="Pedir reconteo de ${esc(x.nombre)}"></td><td>${esc(x.nombre)}${x.recontado ? ' <em class="si-tag">recontado</em>' : ''}${x.movPost ? ` <small>(${x.movPost > 0 ? '+' : ''}${x.movPost} movido después)</small>` : ''}</td><td>${x.alContar}</td><td>${x.contado}</td><td><b>${x.usado}</b>${x.sobra ? ` <small>sobran ${x.sobra}</small>` : ''}</td></tr>`).join('')}</tbody></table></div>
+        <div class="si-lb"><small>${us2} u. usadas · ${dif} con diferencia</small><button type="button" class="btn btn-secondary btn-sm" data-reconteo="1">Pedir reconteo (${rv.sel.size})</button><button type="button" class="btn btn-primary btn-sm" data-aceptar="1">Aceptar y descontar</button></div></div>`; };
+    const cardHTML = (s) => {
         return `<article class="si-card" data-n="${esc(s.numero)}"><header><b>${esc(s.correlativo || s.numero)}</b>${s.correlativo ? '' : ' <small>(asignando N°…)</small>'}<span class="si-est si-e-${esc(s.estado)}">${esc(ESTADOS[s.estado] || s.estado)}</span></header>
         <p class="si-m">${esc(s.solicitante || s.requester)}${s.correo ? ` (<a href="mailto:${esc(s.correo)}">${esc(s.correo)}</a>)` : ''}${s.servicio ? ' · ' + esc(s.servicio) : ''}${catDe(s.categoria) ? ' · <b>' + esc(catDe(s.categoria).t) + '</b>' : ''}${esRepo(s) ? ' · reponer <b>' + esc(s.bodega) + '</b>' : ' · pide a <b>' + esc(s.bodega) + '</b>'} · ${esc(new Date(s.creadoEn).toLocaleString('es-CL'))}</p>
         ${s.nota ? `<p class="si-m">Nota: ${esc(s.nota)}</p>` : ''}${s.conteo ? cuadreHTML(s) : ''}
-        <div class="si-lns">${(s.lineas || []).map((l, i) => { if (l.soloConteo) return ''; const cands = candDe(l, s), decid = l.estado && l.estado !== 'pendiente', ver = !decid || abiertoL[s.numero + '|' + i] || !ab(s) && false;
+        <div class="si-lns">${(s.lineas || []).map((l, i) => { if (l.soloConteo) return ''; const cands = candDe(l, s), decid = l.estado && l.estado !== 'pendiente', ver = (!decid || abiertoL[s.numero + '|' + i]) && !tocadaL(l) && !(s.conteo && s.conteo.estado !== 'aplicado');
           const pre = (l.seleccion && l.seleccion.length) ? cands.map(c => { const x = l.seleccion.find(y => y.insumoId === c.insumoId && y.clave === c.clave); return x ? x.qty : 0; }) : repartir(cands, l.cantidad), hay = cands.reduce((t, c) => t + c.disp, 0);
-          return `<div class="si-ln${decid ? ' si-ln--ok' : ''}" data-i="${i}"><div class="si-lh">${l.foto ? `<span class="prod-img"><img src="${l.foto}" alt="${esc(l.nombre)}"></span>` : IM ? IM.thumb(l.nombre, { codigo: (insumos.find(x => x.id === l.insumoId) || {}).codigoMP || '' }) : ''}<div class="si-ln-t"><b>${esc(l.nombre)}</b>${l.manual ? ' <em>escrito a mano</em>' : ''}${num(l.reiterado) > 1 ? ` <em class="si-reit">Sigue faltando · ${num(l.reiterado)}.º día</em>` : ''}<small>Pide <b>${l.cantidad}</b> · hay ${hay} en total${l.movido ? ' · traído a ' + esc(s.bodega) : ''}</small></div>${chipL(l)}</div>
-            ${ab(s) && ver ? (cands.length ? `<table class="si-tb si-lt"><thead><tr><th>Dónde</th><th>Lote</th><th>Vence</th><th>Hay</th><th>Sacar</th></tr></thead><tbody>${cands.map((c, j) => `<tr><td>${esc(c.bodega)}${c.estante ? ' · ' + esc(c.estante) : ''}${c.bodega !== s.bodega ? ' <small class="si-mv">hay que traer</small>' : ''}</td><td>${esc(c.lote)}</td><td>${esc(fmtV(c.vence))}</td><td>${c.disp}</td><td><input type="number" min="0" max="${c.disp}" value="${pre[j]}" class="si-q-in" data-j="${j}" inputmode="numeric" aria-label="Cantidad a sacar del lote ${esc(c.lote)}"></td></tr>`).join('')}</tbody></table>` : '<p class="si-v">No está en el inventario con ese nombre: asócialo al producto que corresponde.</p>') + asocHTML(s, l, i)
+          return `<div class="si-ln${decid ? ' si-ln--ok' : ''}" data-i="${i}"><div class="si-lh">${l.foto ? `<span class="prod-img"><img src="${l.foto}" alt="${esc(l.nombre)}"></span>` : IM ? IM.thumb(l.nombre, { codigo: (insumos.find(x => x.id === l.insumoId) || {}).codigoMP || '' }) : ''}<div class="si-ln-t"><b>${esc(l.nombre)}</b>${l.manual ? ' <em>escrito a mano</em>' : ''}${num(l.reiterado) > 1 ? ` <em class="si-reit">Sigue faltando · ${num(l.reiterado)}.º día</em>` : ''}<small>Pide <b>${l.cantidad}</b> · hay ${hay} en otras bodegas${tocadaL(l) ? (esRepo(s) ? (recibidaL(l) ? ' · <b>recibido en ' + esc(s.bodega) + '</b>' : ' · <b>en camino</b>') : ' · <b>entregado</b>') : ''}</small></div>${chipL(l)}</div>
+            ${ab(s) && ver ? (cands.length ? `<table class="si-tb si-lt"><thead><tr><th>Dónde</th><th>Lote</th><th>Vence</th><th>Hay</th><th>Sacar</th></tr></thead><tbody>${cands.map((c, j) => `<tr><td>${esc(c.bodega)}${c.estante ? ' · ' + esc(c.estante) : ''}</td><td>${esc(c.lote)}<small class="si-vm"> · vence ${esc(fmtV(c.vence))}</small></td><td>${esc(fmtV(c.vence))}</td><td>${c.disp}</td><td><input type="number" min="0" max="${c.disp}" value="${escritas[s.numero + '|' + i + '|' + c.insumoId + '|' + c.clave] !== undefined ? esc(escritas[s.numero + '|' + i + '|' + c.insumoId + '|' + c.clave]) : pre[j]}" class="si-q-in" data-j="${j}" data-g="${esc(s.numero + '|' + i + '|' + c.insumoId + '|' + c.clave)}" inputmode="numeric" aria-label="Cantidad a sacar del lote ${esc(c.lote)}"></td></tr>`).join('')}</tbody></table>` : '<p class="si-v">No está en el inventario con ese nombre: asócialo al producto que corresponde.</p>') + asocHTML(s, l, i)
               + `<div class="si-lb"><button type="button" class="btn btn-primary btn-sm" data-ok="${i}"${cands.length ? '' : ' disabled'}>Confirmar</button><button type="button" class="btn btn-secondary btn-sm" data-nh="${i}">No hay</button></div>`
-              : (ab(s) ? `<div class="si-lb"><small>${(l.seleccion || []).filter(x => x.qty > 0).map(x => `${esc(x.lote)} · ${esc(x.bodega)}: ${x.qty}`).join(' · ')}</small><button type="button" class="btn btn-secondary btn-sm" data-ver="${i}">Cambiar</button></div>` : '')}</div>`; }).join('')}</div>
-        ${recorridoHTML(s.estado)}<footer>${(s.estado === 'NUEVA' || s.estado === 'PREPARACION') ? (() => { const faltan = (s.lineas || []).filter(l => !l.soloConteo && (!l.estado || l.estado === 'pendiente')).length; return `<button class="btn btn-primary" data-procesar="1"${faltan ? ' disabled' : ''} title="${faltan ? 'Confirma o marca «No hay» en cada producto' : 'Mueve el stock y avisa a quien pidió'}">${faltan ? `Procesar (faltan ${faltan})` : (mover ? `Procesar: mover a ${esc(s.bodega)}` : 'Procesar solicitud')}</button>`; })() : ''}${mover && s.estado === 'LISTA' ? `<button class="btn btn-secondary" data-mv="1">Mover lo pendiente a ${esc(s.bodega)}</button>` : ''}${s.estado === 'LISTA' ? '<button class="btn btn-primary" data-e="ENTREGADA">Cerrar solicitud (entregada)</button>' : ''}<button class="btn btn-secondary" data-c="1">Copiar para WhatsApp</button>${ab(s) ? '<button class="btn btn-secondary" data-e="ANULADA">Anular</button>' : ''}</footer></article>`; };
+              : (ab(s) && !(s.conteo && s.conteo.estado !== 'aplicado') ? `<div class="si-lb"><small>${(l.seleccion || []).filter(x => x.qty > 0).map(x => `${esc(x.lote)} · ${esc(x.bodega)}: ${x.qty}`).join(' · ')}</small>${tocadaL(l) ? (movidaL(l) ? '' : `<button type="button" class="btn btn-secondary btn-sm" data-solomov="${i}" title="Un lote no se pudo mover: deja la línea solo con lo que sí salió">Quedarse con lo movido</button>`) : `<button type="button" class="btn btn-secondary btn-sm" data-ver="${i}">Cambiar</button>`}</div>` : '')}</div>`; }).join('')}</div>
+        ${recorridoHTML(s.estado)}<footer>${(() => { const L = (s.lineas || []).filter(l => !l.soloConteo), faltan = L.filter(l => !l.estado || l.estado === 'pendiente').length, inv = s.conteo && s.conteo.estado !== 'aplicado', busy = ocupado.has(s.numero), repo = esRepo(s);
+          const tocada = L.some(tocadaL), viejo = legado(s), todoMov = viejo || L.every(movidaL), todoRec = viejo || L.every(recibidaL); let h = '';
+          if (s.estado === 'NUEVA' || s.estado === 'PREPARACION') h += `<button class="btn btn-primary" data-procesar="1"${faltan || inv || busy ? ' disabled' : ''} title="${inv ? 'Primero acepta el inventario' : faltan ? 'Confirma o marca «No hay» en cada producto' : ''}">${busy ? 'Procesando…' : inv ? 'Procesar (acepta el inventario)' : faltan ? `Procesar (faltan ${faltan})` : repo ? `Procesar: enviar a ${esc(s.bodega)}` : 'Procesar: entregar'}</button>`;
+          if (s.estado === 'LISTA' && !todoMov) h += `<button class="btn btn-primary" data-procesar="1"${busy ? ' disabled' : ''}>Reintentar lo que no se movió</button>`;
+          if (s.estado === 'LISTA' && repo && todoMov && !todoRec) h += `<button class="btn btn-primary" data-recibir="1"${busy ? ' disabled' : ''}>${s.recibidoSolicitado ? 'Confirmar recibido (lo marcó ' + esc(s.recibidoSolicitado.por || 'la encargada') + ')' : `Marcar recibido en ${esc(s.bodega)}`}</button>`;
+          if (s.estado === 'LISTA' && (!repo || todoRec) && todoMov) h += '<button class="btn btn-primary" data-e="ENTREGADA">Cerrar solicitud (entregada)</button>';
+          h += '<button class="btn btn-secondary" data-c="1">Copiar para WhatsApp</button>';
+          if (ab(s) && !tocada) h += '<button class="btn btn-secondary si-peligro" data-e="ANULADA">Anular</button>';
+          return h; })()}</footer></article>`; };
     r.innerHTML = `<div class="si-wrap si-ancho${costado ? ' si-wrap--costado' : ''}"><div class="si-cab"><div><h2 class="si-t">Solicitudes de insumos</h2><p class="si-s">Revisa cada producto: foto, dónde hay y de qué lote sacar. Confirma o marca «No hay»; quien pidió lo ve en su teléfono.</p></div>
       <div class="si-acc"><input id="si-bq" class="si-in si-bq" type="search" value="${esc(bq)}" placeholder="Buscar N° (SOL-…), nombre, correo o producto" autocomplete="off" aria-label="Buscar solicitud"><select id="si-fil" class="si-in">${[['ABIERTAS', 'Abiertas'], ['NUEVA', 'Enviadas'], ['PREPARACION', 'Procesando'], ['LISTA', 'Procesadas'], ['ENTREGADA', 'Cerradas'], ['TODAS', 'Todas']].map(([v, t]) => `<option value="${v}"${v === filtro ? ' selected' : ''}>${t}</option>`).join('')}</select>
       <button type="button" class="btn btn-secondary" id="si-off" title="Guarda en el teléfono el inventario y las solicitudes para trabajar sin internet">Descargar para usar sin internet</button></div></div><p class="si-v" id="si-offm">${esc(localStorage.getItem('si-off') ? 'Última descarga: ' + new Date(localStorage.getItem('si-off')).toLocaleString('es-CL') : '')}</p>
@@ -411,59 +495,83 @@
     if (IM) IM.rellenar(r);
   }
   /** Guarda el resultado de una línea (y pasa la solicitud a «En preparación» o «Lista» según corresponda). */
+  /** Guarda UNA línea leyendo la solicitud en una transacción: no pisa las marcas de movimiento de las demás líneas
+   *  ni lo que otra sesión hizo entre medio. Sin internet (las transacciones no funcionan) guarda como antes. */
+  async function guardarLinea(s, i, nueva, opc) {
+    const f = fs(), ref = f.doc(f.collection(db(), s._col || COL), s.numero), ahora = new Date().toISOString();
+    const aplicar = (x) => { const L = (x.lineas || []).map(y => ({ ...y })), act = L[i]; if (!act || norm(act.nombre) !== norm((opc && opc.nombreOrig) || nueva.nombre)) throw new Error('La solicitud cambió: actualiza y vuelve a intentar.');
+      if (tocadaL(act) && !(opc && opc.permitirTocada)) throw new Error('Este producto ya salió de su bodega: no se puede cambiar.');
+      L[i] = { ...nueva, ...(act.movidos ? { movidos: act.movidos } : {}), ...(act.recibidos ? { recibidos: act.recibidos } : {}), ...(act.transito ? { transito: act.transito } : {}) };
+      const cambios = { lineas: L }; if (x.estado === 'NUEVA') { cambios.estado = 'PREPARACION'; cambios.historial = (x.historial || []).concat([{ estado: 'PREPARACION', por: usuario(), en: ahora }]); } return cambios; };
+    try { let c; await f.runTransaction(db(), async (tx) => { const sn = await tx.get(ref); if (!sn.exists()) throw new Error('La solicitud ya no existe.'); c = aplicar(sn.data()); tx.update(ref, c); }); return c; }
+    catch (e) { if (!/offline|unavailable|network|failed to get/i.test(String(e && (e.code || '') + ' ' + (e.message || '')))) throw e; const c = aplicar(s); await Promise.race([f.updateDoc(ref, c), new Promise(r => setTimeout(r, 2500))]); return c; }
+  }
+  /** Guarda el resultado de una línea (y pasa la solicitud a «Procesando»). */
   async function decidirLinea(n, i, noHay, cards) {
-    const f = fs(), s = solicitudes.find(x => x.numero === n); if (!s) return; const lin = (s.lineas || []).map(x => ({ ...x }));
-    const l = lin[i], cands = candDe(l, s);
+    const s = solicitudes.find(x => x.numero === n); if (!s) return; const l = (s.lineas || [])[i]; if (!l) return;
+    const cands = candDe(l, s); if (tocadaL(l)) { toast('Ya movido', 'Este producto ya salió de su bodega: no se puede cambiar.', 'warning'); return; }
     const qs = cards ? [...cards.querySelectorAll('.si-q-in')].map(x => Math.max(0, Math.floor(num(x.value)))) : [];
     const mal = cands.find((c, j) => qs[j] > c.disp); if (mal) { toast('Cantidad', `El lote ${mal.lote} solo tiene ${mal.disp}.`, 'warning'); return; }
     const sel = noHay ? [] : cands.map((c, j) => ({ insumoId: c.insumoId, bodega: c.bodega, clave: c.clave, lote: c.lote, vence: c.vence, qty: qs[j] || 0 })).filter(x => x.qty > 0);
     const entregar = sel.reduce((t, x) => t + x.qty, 0);
     if (!noHay && entregar <= 0) noHay = true;   // dejar todo en 0 = no tenemos: queda «No hay» en la solicitud
-    lin[i] = { ...l, estado: estadoLinea(l.cantidad, entregar, noHay), entregar, seleccion: sel, movido: false, revisadoPor: usuario(), revisadoEn: new Date().toISOString() };
-    const est = s.estado === 'NUEVA' ? 'PREPARACION' : s.estado;   // «Procesada» solo al tocar «Procesar» (mueve el stock)
-    const cambios = { lineas: lin }; if (est !== s.estado) { cambios.estado = est; cambios.historial = (s.historial || []).concat([{ estado: est, por: usuario(), en: new Date().toISOString() }]); }
-    delete abiertoL[n + '|' + i];
-    Object.assign(s, cambios); pintarBandeja();
-    try { await Promise.race([f.updateDoc(f.doc(f.collection(db(), s._col || COL), n), cambios), new Promise(res => setTimeout(res, 2500))]); }
-    catch (e) { toast('No se pudo guardar', e.message || String(e), 'error'); }
-    if (s.origen === 'transitoria' && window.SAR_Transitoria) window.SAR_Transitoria.refrescarPublico();
+    const nueva = { ...l, estado: estadoLinea(l.cantidad, entregar, noHay), entregar, seleccion: sel, revisadoPor: usuario(), revisadoEn: new Date().toISOString() }; delete nueva.movido;
+    Object.keys(escritas).forEach(k => { if (k.startsWith(n + '|' + i + '|')) delete escritas[k]; }); delete abiertoL[n + '|' + i];
+    try { const c = await guardarLinea(s, i, nueva); Object.assign(s, c); pintarBandeja(); }
+    catch (e) { toast('No se pudo guardar', esc(e.message || String(e)), 'error'); }
   }
-  /** Trae a la bodega pedida lo elegido de otras bodegas (transferencia normal; sin internet queda en la cola). */
-  async function traer(n, auto) {
-    const s = solicitudes.find(x => x.numero === n); if (!s || !window.SAR_Traspaso) return;
-    const mov = []; (s.lineas || []).forEach((l, i) => { if (l.movido) return; const g = {}; (l.seleccion || []).filter(x => x.bodega !== s.bodega && x.qty > 0).forEach(x => { const k = x.insumoId + '|' + x.bodega; (g[k] = g[k] || { i, nombre: l.nombre, id: x.insumoId, desde: x.bodega, lotes: [] }).lotes.push({ clave: x.clave, qty: x.qty }); }); Object.values(g).forEach(m => mov.push(m)); });
-    if (!mov.length) return true;
-    const P = window.SAR_Progreso, ok = auto ? true : P && P.confirmar ? await P.confirmar({ titulo: `¿Traer a ${s.bodega}?`, texto: `Para la solicitud <b>${esc(n)}</b>:`, lineas: mov.map(m => `${esc(m.nombre)} · <b>${m.lotes.reduce((t, x) => t + x.qty, 0)}</b> u. desde ${esc(m.desde)}`), si: 'Traer' }) : confirm('¿Traer lo elegido?');
-    if (!ok) return false;
-    const nota = `Solicitud ${s.correlativo || n}`, enLinea = !window.SAR_Cola || await window.SAR_Cola.hayConexion(), hechos = new Set(), prog = enLinea && P ? P.iniciar('Trayendo productos…', []) : null; let mal = 0;
-    for (const [k, m] of mov.entries()) {
-      if (prog) prog.paso(`${k + 1} de ${mov.length}: ${m.nombre}`);
-      try { if (enLinea) await window.SAR_Traspaso.moverUno(m.id, m.desde, s.bodega, m.lotes, nota); else window.SAR_Cola.encolar({ tipo: 'traspaso', titulo: `Mover ${m.lotes.reduce((t, x) => t + x.qty, 0)} · ${m.nombre}: ${m.desde} → ${s.bodega}`, datos: { id: m.id, desde: m.desde, hasta: s.bodega, lotes: m.lotes, nota, en: Date.now() } }); hechos.add(m.i); }
-      catch (e) { mal++; toast('No se movió', `${m.nombre}: ${e.message || e}`, 'error'); }
+  /** Línea con un lote movido y otro que falló: queda solo con lo que sí salió (lo demás se informa como no entregado). */
+  async function soloMovido(n, i) {
+    const s = solicitudes.find(x => x.numero === n), l = s && (s.lineas || [])[i]; if (!l) return;
+    const sel = (l.seleccion || []).filter(x => (l.movidos || []).includes(grupoDe(x))), e = sel.reduce((t, x) => t + num(x.qty), 0);
+    try { const c = await guardarLinea(s, i, { ...l, seleccion: sel, entregar: e, estado: estadoLinea(l.cantidad, e, e === 0), revisadoPor: usuario(), revisadoEn: new Date().toISOString() }, { permitirTocada: true }); Object.assign(s, c); pintarBandeja(); toast('Listo', 'La línea quedó con lo que sí se movió.', 'success'); }
+    catch (er) { toast('No se pudo', esc(er.message || er), 'error'); }
+  }
+  /** Procesar (v21.212): con todos los productos decididos y con internet, mueve cada lote elegido.
+   *  · Reposición de una bodega de uso: sale de su bodega y queda «En tránsito» hasta que se marque recibido.
+   *  · Pedido de una persona sin bodega de uso: salida por lote (se descuenta del stock).
+   *  Cada lote movido queda anotado en la línea dentro de la misma transacción: reintentar o procesar desde dos
+   *  sesiones nunca mueve dos veces. La solicitud pasa a «Procesada» solo si todo se movió. */
+  async function procesar(n, sDoc) {
+    const s = sDoc || solicitudes.find(x => x.numero === n); if (!s || ocupado.has(n)) return; const T = window.SAR_Traspaso, P = window.SAR_Progreso;
+    if (!T || !T.moverUno || !T.salidaUno) { toast('Procesar', 'El módulo de traspasos aún no carga. Espera un momento.', 'warning'); return; }
+    if (s.conteo && s.conteo.estado !== 'aplicado') { toast('Inventario', 'Primero acepta el inventario (o espera el reconteo).', 'warning'); return; }
+    if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) { toast('Sin internet', 'Procesar mueve stock y necesita conexión. Puedes ir confirmando productos; procesa cuando vuelva internet.', 'warning'); return; }
+    const repo = esRepo(s), tareas = [];
+    if (legado(s)) { toast('Procesar', 'Esta solicitud se procesó con la versión anterior: ciérrala directamente.', 'info'); return; }
+    (s.lineas || []).forEach((l, i) => { if (l.soloConteo || l.estado === 'no_hay' || l.movido === true) return; (l.seleccion || []).filter(x => num(x.qty) > 0 && !(l.movidos || []).includes(grupoDe(x))).forEach(x => tareas.push({ l, i, x })); });
+    const L = (s.lineas || []).filter(l => !l.soloConteo), ok = L.filter(l => l.estado === 'ok').length, par = L.filter(l => l.estado === 'parcial').length, nh = L.filter(l => l.estado === 'no_hay').length, u = tareas.reduce((t, z) => t + num(z.x.qty), 0);
+    if (!sDoc) { const si = P && P.confirmar ? await P.confirmar({ titulo: `¿Procesar ${esc(s.correlativo || n)}?`, texto: `Para <b>${esc(s.solicitante || s.requester)}</b>${s.servicio ? ' · ' + esc(s.servicio) : ''}.`, lineas: [`${ok} completo(s)${par ? ` · ${par} parcial(es)` : ''}${nh ? ` · ${nh} sin stock (quedan avisados)` : ''}`, u ? (repo ? `Salen <b>${u}</b> u. de su bodega y quedan <b>en camino</b> a ${esc(s.bodega)} hasta que se marquen recibidas.` : `Se entregan <b>${u}</b> u.: salen del stock por lote.`) : 'No hay nada que mover.', 'Quien pidió verá la solicitud como «Procesada».'], si: 'Procesar' }) : confirm('¿Procesar?'); if (!si) return; }
+    ocupado.add(n); pintarBandeja(); const nota = `Solicitud ${s.correlativo || n}`, prog = P && tareas.length ? P.iniciar('Procesando la solicitud…', []) : null; let mal = 0; const errs = [];
+    for (const [k, t] of tareas.entries()) {
+      if (prog) prog.paso(`${k + 1} de ${tareas.length}: ${t.l.asociado || t.l.nombre}`);
+      const marca = { numero: n, i: t.i, grupo: grupoDe(t.x), campo: 'movidos', nombre: t.l.nombre, transito: repo };
+      try { if (repo) await T.moverUno(t.x.insumoId, t.x.bodega, TRANSITO, [{ clave: t.x.clave, qty: num(t.x.qty) }], nota + ' · en camino a ' + s.bodega, marca); else await T.salidaUno(t.x.insumoId, t.x.bodega, [{ clave: t.x.clave, qty: num(t.x.qty) }], nota + ' · entregado a ' + (s.solicitante || '') + (s.servicio ? ' (' + s.servicio + ')' : ''), marca); }
+      catch (e) { if (!e.ya) { mal++; errs.push(`${t.l.nombre}: ${e.message || e}`); } }
     }
-    if (prog) { if (mal && !hechos.size) prog.error(); else prog.listo(`${hechos.size} producto(s) traídos a ${s.bodega}`, { aviso: false }); }
-    if (!enLinea) toast('Guardado sin conexión', 'Los movimientos se aplicarán solos al volver internet.', 'warning');
-    const lin = (s.lineas || []).map((l, i) => hechos.has(i) ? { ...l, movido: true } : l); s.lineas = lin; pintarBandeja();
-    const f = fs(); try { await Promise.race([f.updateDoc(f.doc(f.collection(db(), s._col || COL), n), { lineas: lin }), new Promise(res => setTimeout(res, 2500))]); } catch (e) { /* queda en pantalla */ }
-    if (enLinea) { try { await cargarBase(); pintarBandeja(); } catch (e) { /* sigue */ } }
-    if (s.origen === 'transitoria' && window.SAR_Transitoria) window.SAR_Transitoria.refrescarPublico();
-    return !mal;
+    try { const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), COL), n)), x = sn.exists() ? limpiarSol(sn.data(), n) : null;
+      if (x && (x.lineas || []).filter(l => !l.soloConteo).every(movidaL) && x.estado !== 'LISTA' && x.estado !== 'ENTREGADA') { const ahora = new Date().toISOString(); await f.updateDoc(f.doc(f.collection(db(), COL), n), { estado: 'LISTA', historial: (x.historial || []).concat([{ estado: 'LISTA', por: usuario(), en: ahora }]) }); } } catch (e) { mal++; errs.push(e.message || String(e)); }
+    ocupado.delete(n); if (prog) { if (mal) prog.error(); else prog.listo(repo ? `En camino a ${s.bodega}` : 'Entregado', { aviso: false }); }
+    try { await cargarBase(); } catch (e) { /* sigue */ } pintarBandeja();
+    if (mal) { toast('Procesar', `${mal} lote(s) no se movieron: ${esc(errs.slice(0, 2).join(' · '))}. Revisa y toca «Reintentar».`, 'error'); return; }
+    avisar({ titulo: `Solicitud ${s.correlativo || n} procesada`, texto: repo ? `${u} u. en camino a ${esc(s.bodega)}.` : `${esc(s.solicitante || '')} ya lo ve.`, estado: 'procesada' });
   }
-  /** Procesar: con todos los productos decididos, mueve de una vez el stock elegido a la bodega de la solicitud
-   *  (sale de la bodega de origen y entra a la de destino) y la deja «Procesada»; quien pidió lo ve al instante. */
-  async function procesar(n) {
-    const s = solicitudes.find(x => x.numero === n); if (!s) return; const L = (s.lineas || []).filter(l => !l.soloConteo);
-    const ok = L.filter(l => l.estado === 'ok').length, par = L.filter(l => l.estado === 'parcial').length, nh = L.filter(l => l.estado === 'no_hay').length;
-    const mv = L.reduce((t, l) => t + (l.movido ? 0 : (l.seleccion || []).filter(x => x.bodega !== s.bodega).reduce((a, x) => a + num(x.qty), 0)), 0);
-    const P = window.SAR_Progreso, si = P && P.confirmar ? await P.confirmar({ titulo: `¿Procesar ${esc(s.correlativo || n)}?`, texto: `Para <b>${esc(s.solicitante || s.requester)}</b>${s.servicio ? ' · ' + esc(s.servicio) : ''}.`, lineas: [`${ok} completo(s)${par ? ` · ${par} parcial(es)` : ''}${nh ? ` · ${nh} sin stock` : ''}`, mv ? `Se mueven <b>${mv}</b> u. a ${esc(s.bodega)} (salen de su bodega de origen).` : `Todo está en ${esc(s.bodega)}: no hay que mover.`, 'Quien pidió verá la solicitud como «Procesada».'], si: 'Procesar' }) : confirm('¿Procesar?');
-    if (!si) return;
-    const movio = await traer(n, true); if (movio === false) { toast('Procesar', 'Algún producto no se pudo mover: revisa y vuelve a intentar.', 'error'); return; }
-    await cambiarEstado(n, 'LISTA', true);
-    avisar({ titulo: `Solicitud ${s.correlativo || n} procesada`, texto: mv ? `Stock movido a ${esc(s.bodega)}. ${esc(s.solicitante || '')} ya lo ve.` : `${esc(s.solicitante || '')} ya lo ve.`, estado: 'procesada' });
+  /** Recibido: lo que está «En tránsito» de esta solicitud entra a la bodega de uso; con todo recibido, se cierra. */
+  async function recibir(n, sDoc) {
+    const s = sDoc || solicitudes.find(x => x.numero === n); if (!s || ocupado.has(n)) return; const T = window.SAR_Traspaso, P = window.SAR_Progreso;
+    if (!T || !T.moverUno) return; if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) { if (!sDoc) toast('Sin internet', 'Marcar recibido mueve stock y necesita conexión.', 'warning'); return; }
+    const tareas = []; (s.lineas || []).forEach((l, i) => (l.movidos || []).filter(g => !(l.recibidos || []).includes(g)).forEach(g => { const x = (l.seleccion || []).find(y => grupoDe(y) === g), tid = (l.transito || {})[g]; if (x && tid) tareas.push({ l, i, g, x, tid }); }));
+    if (!sDoc) { const si = P && P.confirmar ? await P.confirmar({ titulo: `¿Recibido en ${esc(s.bodega)}?`, texto: `${esc(s.correlativo || n)}: entra a ${esc(s.bodega)} lo que estaba en camino.`, lineas: tareas.map(t => `${esc(t.l.asociado || t.l.nombre)} · <b>${num(t.x.qty)}</b> u. · lote ${esc(t.x.lote)}`), si: 'Recibido' }) : confirm('¿Recibido?'); if (!si) return; }
+    ocupado.add(n); pintarBandeja(); let mal = 0; const nota = `Solicitud ${s.correlativo || n} · recibido`;
+    for (const t of tareas) { try { await T.moverUno(t.tid, TRANSITO, s.bodega, [{ clave: t.x.clave, qty: num(t.x.qty) }], nota, { numero: n, i: t.i, grupo: t.g, campo: 'recibidos', nombre: t.l.nombre }); } catch (e) { if (!e.ya) { mal++; toast('No se recibió', `${esc(t.l.nombre)}: ${esc(e.message || e)}`, 'error'); } } }
+    try { const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), COL), n)), x = sn.exists() ? limpiarSol(sn.data(), n) : null;
+      if (x && (x.lineas || []).every(recibidaL) && x.estado === 'LISTA') { const ahora = new Date().toISOString(); await f.updateDoc(f.doc(f.collection(db(), COL), n), { estado: 'ENTREGADA', recibidoEn: ahora, historial: (x.historial || []).concat([{ estado: 'ENTREGADA', por: usuario(), en: ahora, nota: 'Recibido en ' + s.bodega }]) }); } } catch (e) { mal++; }
+    ocupado.delete(n); try { await cargarBase(); } catch (e) { /* sigue */ } pintarBandeja();
+    if (!mal) avisar({ titulo: `Solicitud ${s.correlativo || n} cerrada`, texto: `Recibido en ${esc(s.bodega)}.`, estado: 'cerrada' });
   }
   async function cambiarEstado(n, e, callado) {
     const f = fs(), s = solicitudes.find(x => x.numero === n); if (!s) return;
-    if (e === 'ANULADA' && !confirm('¿Anular esta solicitud?')) return;
+    if (e === 'ANULADA') { if ((s.lineas || []).some(tocadaL)) { toast('Anular', 'Ya se movió stock de esta solicitud: no se puede anular.', 'warning'); return; } const P = window.SAR_Progreso, ok = P && P.confirmar ? await P.confirmar({ titulo: `¿Anular ${esc(s.correlativo || n)}?`, texto: 'Quien pidió la verá como «Anulada».', si: 'Anular' }) : confirm('¿Anular esta solicitud?'); if (!ok) return; }
     const hist = (s.historial || []).concat([{ estado: e, por: usuario(), en: new Date().toISOString() }]);
     try { await Promise.race([f.updateDoc(f.doc(f.collection(db(), s._col || COL), n), { estado: e, historial: hist }), new Promise(res => setTimeout(res, 2500))]); if (!callado) avisar({ titulo: `Solicitud ${s.correlativo || n} ${String(ESTADOS[e]).toLowerCase()}`, texto: esc(s.solicitante || ''), estado: AV_EST[e] }); } catch (err) { toast('No se pudo', err.message || String(err), 'error'); }
   }
@@ -489,10 +597,29 @@
     else if (e.key === 'Escape' && sel) { sel = null; pintarBandeja(); }
   });
   if (typeof window.addEventListener === 'function') window.addEventListener('resize', () => { const r = rootBandeja(); if (r && r.offsetParent) { clearTimeout(window.__siRz); window.__siRz = setTimeout(pintarBandeja, 200); } });
+  /** Aceptar (descuenta lo usado y ajusta lo que se pide) o pedir reconteo de los productos marcados. */
+  async function revisarAccion(n, aceptar, btn) {
+    const s = solicitudes.find(x => x.numero === n), rv = revs[n], T = window.SAR_Transitoria, P = window.SAR_Progreso; if (!s || !rv || rv.estado !== 'ok' || !T) return;
+    if (!aceptar) {
+      if (!rv.sel.size) { toast('Reconteo', 'Marca los productos que quieres que vuelvan a contar.', 'warning'); return; }
+      const ok = P && P.confirmar ? await P.confirmar({ titulo: '¿Pedir reconteo?', texto: `${esc(s.solicitante || '')} verá en su teléfono que debe volver a contar:`, lineas: rv.filas.filter(x => rv.sel.has(x.k)).map(x => `${esc(x.nombre)} (contó ${x.contado}, había ${x.alContar})`), si: 'Pedir reconteo' }) : confirm('¿Pedir reconteo?');
+      if (!ok) return; btn.disabled = true; try { await T.pedirReconteo(s, [...rv.sel]); delete revs[n]; avisar({ titulo: 'Reconteo pedido', texto: `${rv.sel.size} producto(s) a ${esc(s.solicitante || '')}.`, estado: 'procesando' }); } catch (e) { toast('No se pudo', esc(e.message || e), 'error'); btn.disabled = false; } return;
+    }
+    // lo que se pide = dotación − contado − lo que ya viene en camino o está pedido sin procesar para esa bodega (no se pide dos veces)
+    const pend = {}; solicitudes.filter(x => x.numero !== n && x.bodega === s.bodega && esRepo(x) && x.estado !== 'ANULADA' && x.estado !== 'ENTREGADA').forEach(x => (x.lineas || []).forEach(l => { if (l.soloConteo || l.estado === 'no_hay') return; const k = norm(l.asociado || l.nombre), q = l.estado ? (recibidaL(l) && tocadaL(l) ? 0 : num(l.entregar)) : num(l.cantidad); pend[k] = (pend[k] || 0) + q; }));
+    const viejas = new Map((s.lineas || []).filter(l => l.k).map(l => [l.k, l]));
+    let lineas = rv.filas.map(x => { const q = Math.max(0, x.objetivo - x.contado - (pend[norm(x.nombre)] || 0)); if (!q) return null; const v = viejas.get(x.k) || {}; return { nombre: x.nombre, cantidad: q, k: x.k, ...(v.insumoId ? { insumoId: v.insumoId } : {}), ...(v.reiterado ? { reiterado: v.reiterado } : {}) }; }).filter(Boolean);
+    const us = rv.filas.reduce((t, x) => t + x.usado, 0), pedidos = lineas.length;
+    if (!lineas.length) lineas = [{ nombre: 'Inventario completo: sin reposición', cantidad: 0, soloConteo: true }];
+    const ok = P && P.confirmar ? await P.confirmar({ titulo: '¿Aceptar el inventario?', texto: `${esc(s.bodega)} · ${esc(s.solicitante || '')}.`, lineas: [`Se descuentan <b>${us}</b> u. usadas (por lote, el que vence primero).`, pedidos ? `Quedan <b>${pedidos}</b> producto(s) para reponer${Object.keys(pend).length ? ' (ya restado lo que viene en camino)' : ''}.` : 'No hay nada que reponer.'], si: 'Aceptar y descontar' }) : confirm('¿Aceptar?');
+    if (!ok) return; btn.disabled = true;
+    try { await T.aceptarConteo(s, rv.filas, lineas); delete revs[n]; avisar({ titulo: 'Inventario aceptado', texto: `${us} u. descontadas · ${pedidos} producto(s) por reponer.`, estado: 'procesada' }); try { await cargarBase(); } catch (e) { /* sigue */ } pintarBandeja(); }
+    catch (e) { toast('No se aceptó', esc(e.message || e), 'error'); btn.disabled = false; }
+  }
   function enlazarBandeja() {
     const r = rootBandeja(); if (!r || r.dataset.ok) return; r.dataset.ok = '1';
-    r.addEventListener('change', (e) => { if (e.target.id === 'si-fil') { filtro = e.target.value; pintarBandeja(); } });
-    r.addEventListener('input', (e) => { if (e.target.id === 'si-bq') { bq = e.target.value; clearTimeout(window.__siBq); window.__siBq = setTimeout(pintarBandeja, 150); return; } if (!e.target.classList.contains('si-asoc-in') || !asoc) return; asoc.q = e.target.value; const res = e.target.parentElement.querySelector('.si-asoc-res'); if (res) res.innerHTML = resAsoc(asoc.q); });
+    r.addEventListener('change', (e) => { if (e.target.id === 'si-fil') { filtro = e.target.value; pintarBandeja(); return; } if (e.target.classList.contains('si-rc')) { const c = e.target.closest('.si-card'), rv = c && revs[c.dataset.n]; if (rv && rv.sel) { if (e.target.checked) rv.sel.add(e.target.dataset.k); else rv.sel.delete(e.target.dataset.k); pintarBandeja(); } } });
+    r.addEventListener('input', (e) => { if (e.target.classList.contains('si-q-in') && e.target.dataset.g) { escritas[e.target.dataset.g] = e.target.value; return; } if (e.target.id === 'si-bq') { bq = e.target.value; clearTimeout(window.__siBq); window.__siBq = setTimeout(pintarBandeja, 150); return; } if (!e.target.classList.contains('si-asoc-in') || !asoc) return; asoc.q = e.target.value; const res = e.target.parentElement.querySelector('.si-asoc-res'); if (res) res.innerHTML = resAsoc(asoc.q); });
     r.addEventListener('click', async (e) => {
       const b = e.target.closest('button'); if (!b) return; const card = b.closest('.si-card');
       if (b.id === 'si-off') return descargarOffline();
@@ -503,14 +630,14 @@
       if (b.dataset.ok !== undefined) return decidirLinea(n, +b.dataset.ok, false, b.closest('.si-ln'));
       if (b.dataset.nh !== undefined) return decidirLinea(n, +b.dataset.nh, true, null);
       if (b.dataset.ver !== undefined) { abiertoL[n + '|' + b.dataset.ver] = true; return pintarBandeja(); }
-      if (b.dataset.mv) return traer(n);
       if (b.dataset.procesar) return procesar(n);
+      if (b.dataset.solomov !== undefined) return soloMovido(n, +b.dataset.solomov);
+      if (b.dataset.recibir) return recibir(n);
+      if (b.dataset.rev) { const s = solicitudes.find(x => x.numero === n); if (s) cargarRevision(s); return; }
+      if (b.dataset.aceptar || b.dataset.reconteo) return revisarAccion(n, !!b.dataset.aceptar, b);
       if (b.dataset.asoc !== undefined) { asoc = { n, i: +b.dataset.asoc, q: '' }; pintarBandeja(); const x = r.querySelector('.si-asoc-in'); if (x) x.focus(); return; }
       if (b.dataset.asocsi !== undefined && b.dataset.nom) return asociar(n, +b.dataset.asocsi, b.dataset.nom);
       if (b.dataset.desasoc !== undefined) return asociar(n, +b.dataset.desasoc, '');
-      if (b.dataset.cuadrar) { const s = solicitudes.find(x => x.numero === n), T = window.SAR_Transitoria; if (!s || !T) return; b.disabled = true;
-        try { const f = fs(); await f.updateDoc(f.doc(f.collection(db(), COL), n), { 'conteo.estado': null }); const r = await T.aplicarRemoto({ ...s, conteo: { ...s.conteo, estado: null } }, { manual: true }); toast('Inventario', r && r.ok ? 'Cuadrado: se descontó lo usado.' : 'No se pudo cuadrar: revisa el detalle.', r && r.ok ? 'success' : 'error'); } catch (e) { toast('Inventario', e.message || String(e), 'error'); }
-        b.disabled = false; return; }
       if (b.dataset.e) return cambiarEstado(n, b.dataset.e);
       if (b.dataset.c) { const s = solicitudes.find(x => x.numero === n), t = textoPicking(s, (s.lineas || []).map(l => infoLinea(l, insumos, s.bodega))); try { await navigator.clipboard.writeText(t); toast('Copiado', 'Pégalo en WhatsApp.', 'success'); } catch (er) { window.prompt('Copia este texto:', t); } }
     });
@@ -523,7 +650,7 @@
     if (desuscribir) { try { desuscribir(); } catch (e) { /* ya cerradas */ } }
     const f = fs(), por = { [COL]: [], [COL_ANT]: [] };
     const juntar = () => { solicitudes = por[COL].concat(por[COL_ANT].filter(x => !por[COL].some(y => y.numero === x.numero))).sort((a, b) => String(b.creadoEn).localeCompare(String(a.creadoEn))); pintarBandeja(); asignarCorrelativos(); const nu = solicitudes.filter(s => s.estado === 'NUEVA').length; const ins = document.getElementById('si-badge'); if (ins) { ins.textContent = nu || ''; ins.style.display = nu ? '' : 'none'; } };
-    const oir = (col) => f.onSnapshot(f.query(f.collection(db(), col), f.where('tipo', '==', TIPO)), (sn) => { const l = []; sn.forEach(d => l.push({ ...d.data(), _col: col })); por[col] = l; juntar(); }, () => { por[col] = []; juntar(); });
+    const oir = (col) => f.onSnapshot(f.query(f.collection(db(), col), f.where('tipo', '==', TIPO)), (sn) => { const l = []; sn.forEach(d => l.push({ ...limpiarSol(d.data(), d.id), _col: col })); por[col] = l; juntar(); }, () => { por[col] = []; juntar(); });
     const u1 = oir(COL), u2 = oir(COL_ANT); desuscribir = () => { u1(); u2(); };
   }
 
@@ -541,7 +668,7 @@
     return out;
   }
   const CAB_INFORME = ['N° solicitud', 'Fecha', 'Solicitante', 'Correo', 'Servicio', 'Bodega pedida', 'Estado', 'Producto', 'Pedido', 'Confirmado', 'Estado del producto', 'Lotes elegidos'];
-  async function leerTodas() { const f = fs(), l = []; for (const c of [COL, COL_ANT]) { try { const sn = await f.getDocs(f.query(f.collection(db(), c), f.where('tipo', '==', TIPO))); sn.forEach(d => l.push({ ...d.data(), _col: c })); } catch (e) { /* sin permiso */ } } return l; }
+  async function leerTodas() { const f = fs(), l = []; for (const c of [COL, COL_ANT]) { try { const sn = await f.getDocs(f.query(f.collection(db(), c), f.where('tipo', '==', TIPO))); sn.forEach(d => l.push({ ...limpiarSol(d.data(), d.id), _col: c })); } catch (e) { /* sin permiso */ } } return l; }
   async function pintarAuditoria(el, tipo) {
     if (!el) return; el.innerHTML = window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando solicitudes…') : '';
     const l = await leerTodas(), comp = comprometido(l), ab = l.filter(s => s.estado !== 'ENTREGADA' && s.estado !== 'ANULADA'), ent = l.filter(s => s.estado === 'ENTREGADA');
@@ -558,23 +685,20 @@
     };
   }
 
-  // ---------------- inventario de bodega transitoria enviado desde el teléfono: se cuadra solo (v21.210) ----------------
-  const intentados = new Set();
-  function cuadrarLlegados(l) {
-    const T = window.SAR_Transitoria; if (!T || !T.aplicarRemoto) return;
-    l.filter(x => x.conteo && !x.conteo.estado && !intentados.has(x.numero)).forEach(x => { intentados.add(x.numero);
-      T.aplicarRemoto(x).then(r => { if (r && r.ok) toast('Inventario cuadrado', `${x.conteo.bodega || 'Bodega transitoria'}: se descontaron ${r.usado} u. usadas. La reposición está en la bandeja.`, 'success'); }).catch(() => { intentados.delete(x.numero); }); });
-  }
+  // ---------------- «Recibido» marcado por la encargada en su teléfono: la sesión de bodega mueve lo que estaba en camino (v21.212) ----------------
+  const recibiendo = new Set();
+  function recibirMarcados(l) { l.filter(x => x.recibidoSolicitado && x.estado === 'LISTA' && !recibiendo.has(x.numero) && (x.lineas || []).every(movidaL) && !(x.lineas || []).every(recibidaL)).forEach(x => { recibiendo.add(x.numero); recibir(x.numero, x).finally(() => setTimeout(() => recibiendo.delete(x.numero), 60000)); }); }
   // ---------------- aviso en la campana: solicitudes nuevas (solo bodega) ----------------
   if (typeof module === 'undefined' && typeof document.addEventListener === 'function' && !window.SAR_SOLICITUD_PUBLICA) {
     let n = 0; const t = setInterval(() => { n++; const u = usuario(); if (!(u && esGestor() && fs() && db()) && n < 90) return; clearInterval(t); if (!(u && esGestor())) return;
-      try { const f = fs(); f.onSnapshot(f.query(f.collection(db(), COL), f.where('estado', '==', 'NUEVA')), (sn) => { const l = []; sn.forEach(d => { if (d.data().tipo === TIPO) l.push({ ...d.data(), _col: COL }); }); cuadrarLlegados(l); asignarCorrelativos(l); window.SAR_SolicitudesNuevas = l.sort((a, b) => String(b.creadoEn).localeCompare(String(a.creadoEn)));
+      try { const f = fs(); f.onSnapshot(f.query(f.collection(db(), COL), f.where('estado', '==', 'NUEVA')), (sn) => { const l = []; sn.forEach(d => { if (d.data().tipo === TIPO) l.push({ ...limpiarSol(d.data(), d.id), _col: COL }); }); asignarCorrelativos(l); window.SAR_SolicitudesNuevas = l.sort((a, b) => String(b.creadoEn).localeCompare(String(a.creadoEn)));
         const b = document.getElementById('si-badge'); if (b) { b.textContent = l.length || ''; b.style.display = l.length ? '' : 'none'; }
-        if (l.length > (window.__solNuevasAntes || 0) && window.__solNuevasAntes !== undefined) avisar({ titulo: `Solicitud enviada${l[0].correlativo ? ' · ' + l[0].correlativo : ''}`, texto: `${esc(l[0].solicitante || '')}${l[0].servicio ? ' · ' + esc(l[0].servicio) : ''}: ${(l[0].lineas || []).filter(x => !x.soloConteo).length} producto(s).`, estado: 'enviada', boton: 'Ver solicitud', alTocar: () => { location.hash = 'view-solicitudes-insumos'; } });
-        window.__solNuevasAntes = l.length; window.dispatchEvent(new Event('sar-avisos')); }, () => { /* sin permiso */ }); } catch (e) { /* sin conexión */ } }, 2000);
+        if (l.length > (window.__solNuevasAntes || 0) && window.__solNuevasAntes !== undefined) avisar({ titulo: l[0].conteo ? `Inventario por revisar · ${esc(l[0].bodega || '')}` : `Solicitud enviada${l[0].correlativo ? ' · ' + l[0].correlativo : ''}`, texto: `${esc(l[0].solicitante || '')}${l[0].servicio ? ' · ' + esc(l[0].servicio) : ''}: ${(l[0].lineas || []).filter(x => !x.soloConteo).length} producto(s).`, estado: 'enviada', boton: 'Ver solicitud', alTocar: () => { location.hash = 'view-solicitudes-insumos'; } });
+        window.__solNuevasAntes = l.length; window.dispatchEvent(new Event('sar-avisos')); }, () => { /* sin permiso */ });
+        f.onSnapshot(f.query(f.collection(db(), COL), f.where('estado', '==', 'LISTA')), (sn) => { const l = []; sn.forEach(d => { if (d.data().tipo === TIPO) l.push({ ...limpiarSol(d.data(), d.id), _col: COL }); }); recibirMarcados(l); }, () => { /* sin permiso */ }); } catch (e) { /* sin conexión */ } }, 2000);
   }
 
   function recordarMia(n) { try { const m = JSON.parse(localStorage.getItem('si-mias') || '[]'); m.unshift(n); localStorage.setItem('si-mias', JSON.stringify(m.slice(0, 20))); } catch (e) { /* sin almacenamiento */ } }
-  window.SAR_Solicitudes = { repintar: () => pintarPide(), recordarMia, TIPO, COL, abrirPide, abrirBandeja, publicarCatalogo, numeroSolicitud, agregarLinea, textoPicking, infoLinea, lotesCandidatos, repartir, estadoLinea, comprometido, filasInforme, parecidos, CAB_INFORME, leerTodas, pintarAuditoria };
+  window.SAR_Solicitudes = { _prueba: { procesar, recibir, limpiarSol, movidaL, recibidaL, set solicitudes(v) { solicitudes = v; } }, repintar: () => pintarPide(), recordarMia, misSolicitudes: () => misLista.slice(), limpiarSol, TIPO, COL, abrirPide, abrirBandeja, publicarCatalogo, numeroSolicitud, agregarLinea, textoPicking, infoLinea, lotesCandidatos, repartir, estadoLinea, comprometido, filasInforme, parecidos, CAB_INFORME, leerTodas, pintarAuditoria };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_Solicitudes;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null });

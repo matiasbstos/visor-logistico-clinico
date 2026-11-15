@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest-solicitar.json">
     <link rel="icon" href="assets/favicon-32.png">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-    <link rel="stylesheet" href="style.css?v=21.211">
+    <link rel="stylesheet" href="style.css?v=21.212">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body.sp { margin: 0; background: #f5f7fb; font-family: 'Outfit', system-ui, sans-serif; min-height: 100vh; }
@@ -23,7 +23,9 @@
         .sp-login p { margin: 0; color: #64748b; font-size: .9rem; }
         .sp-login .btn { min-height: 48px; font-size: 1rem; }
         .sp-err { color: #b91c1c; font-size: .85rem; min-height: 1em; }
-        .sp-toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 10000; background: #1a3668; color: #fff; padding: 12px 16px; border-radius: 12px; box-shadow: 0 10px 30px rgba(15, 23, 42, .3); max-width: 92vw; font-size: .9rem; }
+        .sp-toasts { position: fixed; left: 16px; right: 16px; top: 12px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+        .sp-toast { pointer-events: auto; background: #1a3668; color: #fff; padding: 12px 16px; border-radius: 12px; box-shadow: 0 10px 30px rgba(15, 23, 42, .3); font-size: .9rem; display: flex; flex-direction: column; gap: 2px; animation: sp-t-in .3s ease-out; }
+        @keyframes sp-t-in { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
         .sp-toast.warning { background: #92400e; } .sp-toast.error { background: #b91c1c; } .sp-toast.success { background: #166534; }
         .sp-mias { max-width: 720px; margin: 0 auto 32px; padding: 0 16px; }
         .sp-inst { max-width: 720px; margin: 8px auto 40px; padding: 0 16px; }
@@ -95,28 +97,51 @@
             bi.addEventListener('click', async () => { if (!evt) return; evt.prompt(); await evt.userChoice.catch(() => {}); evt = null; bi.hidden = true; });
         })();
     </script>
-    <script src="progreso.js?v=21.211"></script>
-    <script src="imagenes-producto.js?v=21.211"></script>
-    <script src="solicitudes-insumos.js?v=21.211"></script>
-    <script src="inventario-movil.js?v=21.211"></script>
+    <script src="progreso.js?v=21.212"></script>
+    <script src="imagenes-producto.js?v=21.212"></script>
+    <script src="solicitudes-insumos.js?v=21.212"></script>
+    <script src="bodega-transitoria.js?v=21.212"></script>
+    <script src="inventario-movil.js?v=21.212"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
-        import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, setDoc, getDoc, getDocs, updateDoc, query, where, limit, onSnapshot, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
+        import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, setDoc, getDoc, getDocs, updateDoc, query, where, limit, onSnapshot, serverTimestamp, waitForPendingWrites, runTransaction } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
         // Configuración pública del proyecto (la misma del visor; no es una clave secreta).
         const app = initializeApp({ apiKey: "AIzaSyAyktOnoB-j7nX4-YZLa6B74wOBCbZvlsA", authDomain: "sarinventario.firebaseapp.com", projectId: "sarinventario", storageBucket: "sarinventario.firebasestorage.app", messagingSenderId: "358257655117", appId: "1:358257655117:web:b7f46ad97e94afa1324b04" });
         const auth = getAuth(app), db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
         window.firebaseAuth = auth; window.firebaseDb = db;
-        window.firebaseFirestore = { doc, collection, setDoc, getDoc, getDocs, updateDoc, query, where, limit, onSnapshot, serverTimestamp };
-        window.showToast = (t, m, tipo) => { const d = document.createElement('div'); d.className = 'sp-toast ' + (tipo || ''); d.innerHTML = `<b>${t}</b><br>${m || ''}`; document.body.appendChild(d); setTimeout(() => d.remove(), 4500); };
+        window.firebaseFirestore = { doc, collection, setDoc, getDoc, getDocs, updateDoc, query, where, limit, onSnapshot, serverTimestamp, runTransaction };
+        // Mensajes cortos arriba (bajo la cabecera), nunca sobre los botones de abajo; el texto puede traer <b> ya escapado por quien llama
+        window.showToast = (t, m, tipo) => { const pila = document.getElementById('sp-toasts') || Object.assign(document.body.appendChild(document.createElement('div')), { id: 'sp-toasts', className: 'sp-toasts' }); const d = document.createElement('div'); d.className = 'sp-toast ' + (tipo || ''); d.setAttribute('role', 'status'); const b = document.createElement('b'); b.textContent = String(t || ''); const p = document.createElement('span'); p.innerHTML = String(m || '').replace(/<(?!\/?b>)[^>]*>/g, ''); d.append(b, p); pila.prepend(d); while (pila.children.length > 2) pila.lastElementChild.remove(); setTimeout(() => d.remove(), 4500); };
         window.SAR_SOLICITUD_PUBLICA = true;   // sin cuenta: lista pública de productos y solicitudes a su nombre
         const main = document.getElementById('sp-main'), pide = document.getElementById('si-pide');
         const aviso = (t, m) => { window.SAR_SplashFin && window.SAR_SplashFin(); pide.hidden = true; main.innerHTML = `<div class="sp-login"><h1>${t}</h1><p>${m}</p><button class="btn btn-primary" type="button" onclick="location.reload()">Reintentar</button></div>`; };
         let entrando = false;
+        // Sesión con usuario (encargadas de bodegas de uso): rol desde Usuarios/<correo> o Usuarios/<uid>; sin cuenta = anónimo
+        window.SAR_Sesion = {
+            // Antes de cambiar de usuario se espera a que lo enviado sin internet llegue: al cambiar de cuenta, lo pendiente del usuario anterior no se enviaría
+            entrar: async (correo, clave) => {
+                if (navigator.onLine === false) throw Object.assign(new Error('sin internet'), { code: 'network' });
+                await Promise.race([waitForPendingWrites(db), new Promise((_, x) => setTimeout(() => x(Object.assign(new Error('Hay solicitudes de este teléfono que aún no se envían. Espera a tener buena señal e intenta de nuevo.'), { code: 'pendientes' })), 8000))]);
+                return signInWithEmailAndPassword(auth, String(correo || '').trim(), String(clave || ''));
+            },
+            salir: async () => { await Promise.race([waitForPendingWrites(db), new Promise(r => setTimeout(r, 8000))]); return signOut(auth); },
+            usuario: () => auth.currentUser && !auth.currentUser.isAnonymous ? (auth.currentUser.email || '') : ''
+        };
+        async function leerRol(u) {
+            if (!u || u.isAnonymous) return '';
+            for (const id of [u.email, u.uid].filter(Boolean)) { try { const d = await getDoc(doc(db, 'Usuarios', id)); if (d.exists()) return String(d.data().rol || d.data().role || ''); } catch (e) { /* sin permiso */ } }
+            return '';
+        }
         onAuthStateChanged(auth, async (u) => {
-            if (u) { main.innerHTML = ''; main.appendChild(pide); pide.hidden = false; window.SAR_Solicitudes.abrirPide().finally(() => window.SAR_SplashFin && window.SAR_SplashFin()); return; }
+            if (u) {
+                window.SAR_Rol = await leerRol(u); window.dispatchEvent(new Event('sar-rol'));
+                if (!pide.isConnected || pide.hidden) { main.innerHTML = ''; main.appendChild(pide); pide.hidden = false; }
+                window.SAR_Solicitudes.abrirPide().finally(() => window.SAR_SplashFin && window.SAR_SplashFin()); return;
+            }
+            window.SAR_Rol = '';
             if (entrando) return; entrando = true;
-            try { await signInAnonymously(auth); }   // sin cuenta ni clave: el teléfono queda identificado solo para ver SUS solicitudes
+            try { await signInAnonymously(auth); entrando = false; }   // sin cuenta ni clave: el teléfono queda identificado solo para ver SUS solicitudes
             catch (e) {
                 const c = String(e.code || '');
                 if (/network|offline/i.test(c)) aviso('Sin internet', 'La primera vez se necesita conexión para dejar la página lista en este teléfono. Después funciona sin internet.');

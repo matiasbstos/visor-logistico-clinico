@@ -1422,3 +1422,6 @@ Hallazgos de 4 agentes (UX, integridad de stock, seguridad, sin internet) y de u
 - Al tocar un producto del buscador se abre **«Cantidad» (− / número / +) y «Agregar»** (Enter también agrega). Antes se agregaba de a 1 y había que subir con +.
 - Productos que no aparecían (caso: sabanilla ingresada): la lista pública ahora incluye **todas las ubicaciones con productos** aunque no estén en Bodegas, la ubicación aunque venga solo como `bodegaNombre`, hasta 20.000 productos (antes 3.000) y se republica **cada 1 h** (antes 6) al abrir la bandeja.
 - Si no hay coincidencias en el tipo elegido (p. ej. Aseo) se muestran las de otros tipos con «está en Insumos médicos» y se pueden agregar igual.
+
+## 4.268 · Pedir insumos sin «Servicio / unidad» (v21.215)
+- Se quitó el campo «Servicio / unidad (Ej: Box 3, Urgencia)» del formulario de pedido, por pedido del usuario. Las solicitudes nuevas van sin servicio (queda vacío); las antiguas lo siguen mostrando si lo tenían.

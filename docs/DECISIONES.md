@@ -1412,3 +1412,8 @@ Hallazgos de 4 agentes (UX, integridad de stock, seguridad, sin internet) y de u
 - **Sin internet:** ya no se borra la base local de Firestore (index.html); cola con Web Locks + id de movimiento (no se aplica dos veces); el inventario guarda el borrador hasta que el servidor confirma y «Reintentar» reescribe el mismo N°; «Por enviar» se actualiza con metadatos; N° provisional con 6 dígitos al azar.
 - **Traspasos:** destino primero por nombre, luego por código, nunca en CUARENTENA; el registro nuevo no hereda bodegaId/estante del origen.
 - **UX:** mensajes arriba (no tapan la barra), un solo N° visible (SOL o «N° oficial en camino»), colores de estado (Enviada azul, Procesando ámbar, Procesada verde, Cerrada gris), cantidad editable, vencimiento visible en la bandeja del teléfono, inventario con filtros «Sin contar / Con diferencia», «Siguiente sin contar», «No hay ninguno», fecha local en el conteo, lo escrito en «Sacar» sobrevive a las actualizaciones en vivo.
+
+## 4.266 · Inicio de «Pedir insumos» con dos botones; usuario solo para inventario (v21.213)
+- Al entrar: **«Pedir insumos»** (se despliega en Insumos médicos · Aseo · Oficina) e **«Inventario de bodega»**.
+- Pedir: al elegir el tipo recién se piden **nombre y correo, sin usuario** («Vas a pedir: Aseo» con Volver) y se pasa directo al formulario de ese tipo. Quien pide no necesita cuenta; bodega cuadra lo pedido con lo que el sistema dice y con lo que finalmente entrega al procesar.
+- Inventario: es lo **único con usuario y contraseña**. Sin sesión abre «Ingresa con tu usuario»; al ingresar abre el inventario directamente. Con sesión, en el inicio se ven los avisos (reconteo pedido, inventario en curso) y «Cerrar sesión».

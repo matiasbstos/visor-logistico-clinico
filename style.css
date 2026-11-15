@@ -6480,3 +6480,12 @@ body[data-user-role="solicitante"] .superadmin-only { display: none !important; 
 .si-rv{width:100%;table-layout:fixed}.si-rv th:first-child,.si-rv td:first-child{width:34px}.si-rv th:nth-child(n+3),.si-rv td:nth-child(n+3){width:58px;text-align:right}
 .si-rv td:nth-child(2){overflow-wrap:anywhere}
 .si-rv th{font-size:.68rem;letter-spacing:0}
+/* v21.213 · Inicio de «Pedir insumos»: dos botones principales */
+.si-home{display:flex;flex-direction:column;gap:12px;margin:12px 0 8px}
+.si-hbtn{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:18px 16px;min-height:96px;border-radius:16px;border:0;background:var(--sar-blue,#1A3668);color:#fff;cursor:pointer;box-shadow:0 6px 18px rgba(26,54,104,.22);transition:transform .15s}
+.si-hbtn:active{transform:scale(.98)}.si-hbtn .si-cat-tx b{color:#fff;font-size:1.2rem}.si-hbtn .si-cat-tx small{color:#cbd5e1}.si-hbtn>i{font-style:normal;font-size:1.4rem;color:#cbd5e1}
+.si-hic{flex:none;width:56px;height:56px;border-radius:14px;background:rgba(255,255,255,.12);display:grid;place-items:center}.si-hic svg{width:34px;height:34px;color:#fff}
+.si-hbtn--inv{background:#fff;color:var(--sar-blue,#1A3668);border:1.5px solid #cfe3b0;box-shadow:0 1px 2px rgba(26,54,104,.06)}.si-hbtn--inv .si-cat-tx b{color:var(--sar-blue,#1A3668)}.si-hbtn--inv .si-cat-tx small{color:#64748b}.si-hbtn--inv .si-hic{background:#eef7e2}.si-hbtn--inv .si-hic svg{color:var(--sar-blue,#1A3668)}.si-hbtn--inv>i{color:#94a3b8}
+.si-cats--sub{margin:-4px 0 4px 18px;padding-left:12px;border-left:3px solid #e2e8f0;animation:si-desp .25s ease-out}
+@keyframes si-desp{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion:reduce){.si-cats--sub{animation:none}}

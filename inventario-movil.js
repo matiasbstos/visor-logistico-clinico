@@ -60,15 +60,17 @@
   }
 
   // ---------------- interfaz ----------------
-  function boton(el) {
-    if (!el) return;
+  function abrir() { ss.del('inv-oculto'); mostrar = true; repintar(); window.scrollTo && window.scrollTo(0, 0); }
+  function boton(el, opc) {
+    if (!el) return; const soloAvisos = !!(opc && opc.soloAvisos);
     if (!habil()) { el.innerHTML = ''; return; }
     if (!bodegasU) { cargarBodegas().then(() => { if (bodegasU) boton(el); }); }
     const b = bor(), rc = reconteos(), n = b ? (b.items || []).length : 0, c = b ? Object.keys(b.cont || {}).length : 0;
-    el.innerHTML = `<p class="si-sep">Bodegas de uso</p>
+    el.innerHTML = `<p class="si-sep">${soloAvisos ? 'Pendiente en tu inventario' : 'Bodegas de uso'}</p>
       ${rc.map(x => `<button type="button" class="si-cat si-cat--rc" data-iv-rc="${esc(x.numero)}"><span class="si-cat-ic">${IC}</span><span class="si-cat-tx"><b>Recontar ${(x.conteo.reconteo || []).length} producto(s)</b><small>Bodega pidió volver a contar en ${esc(x.bodega || '')}${x.correlativo ? ' (' + esc(x.correlativo) + ')' : ''}.</small></span><i aria-hidden="true">›</i></button>`).join('')}
-      <button type="button" class="si-cat si-cat--inv" id="iv-abrir"><span class="si-cat-ic">${IC}</span><span class="si-cat-tx"><b>Inventario</b><small>${b && b.enviando ? 'Inventario enviado: esperando confirmación.' : b ? `En curso (${esc(b.bodega)}): ${c} de ${n} contados. Toca para seguir.` : 'Cuenta lo que hay en tu bodega y envíalo a bodega para revisar.'}</small></span><i aria-hidden="true">›</i></button>`;
-    el.querySelector('#iv-abrir').onclick = () => { ss.del('inv-oculto'); mostrar = true; repintar(); window.scrollTo && window.scrollTo(0, 0); };
+      ${soloAvisos && !b ? '' : `<button type="button" class="si-cat si-cat--inv" id="iv-abrir"><span class="si-cat-ic">${IC}</span><span class="si-cat-tx"><b>Inventario</b><small>${b && b.enviando ? 'Inventario enviado: esperando confirmación.' : b ? `En curso (${esc(b.bodega)}): ${c} de ${n} contados. Toca para seguir.` : 'Cuenta lo que hay en tu bodega y envíalo a bodega para revisar.'}</small></span><i aria-hidden="true">›</i></button>`}`;
+    if (soloAvisos && !b && !rc.length) { el.innerHTML = ''; return; }
+    if (el.querySelector('#iv-abrir')) el.querySelector('#iv-abrir').onclick = () => { ss.del('inv-oculto'); mostrar = true; repintar(); window.scrollTo && window.scrollTo(0, 0); };
     el.querySelectorAll('[data-iv-rc]').forEach(x => x.onclick = () => iniciarReconteo(x.dataset.ivRc));
   }
   function filaHTML(it, v, b) {
@@ -224,10 +226,10 @@
 
   if (typeof document.addEventListener === 'function' && typeof window.addEventListener === 'function' && window.SAR_SOLICITUD_PUBLICA !== false) {
     let n = 0; const t = setInterval(() => { n++; const r = document.getElementById('si-pide'); if (r) { enlazar(r); clearInterval(t); } else if (n > 240) clearInterval(t); }, 250);
-    window.addEventListener('sar-rol', () => { bodegasU = null; if (habil() && bor()) mostrar = true; repintar(); });
+    window.addEventListener('sar-rol', () => { bodegasU = null; if (habil() && (bor() || window.__abrirInvTrasLogin)) mostrar = true; else if (window.__abrirInvTrasLogin && window.SAR_Sesion && window.SAR_Sesion.usuario()) toast('Sin inventario asignado', 'Tu usuario no tiene una bodega para inventariar. Avísale a bodega.', 'warning'); window.__abrirInvTrasLogin = false; repintar(); });
   }
 
-  const api = { boton, pintar, enCurso, calc, lineasDe };
+  const api = { boton, pintar, enCurso, calc, lineasDe, abrir };
   window.SAR_InvMovil = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

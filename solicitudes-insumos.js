@@ -98,9 +98,11 @@
       if (window.SAR_Imagenes && window.SAR_Imagenes.sumarIndice && x.fotos) window.SAR_Imagenes.sumarIndice(x.fotos);
       cargado = true; return;
     }
-    const f = fs(), a = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(3000))), l = []; a.forEach(d => l.push({ id: d.id, ...d.data() })); insumos = l;
+    // todos los productos (antes solo 3000) y la ubicación aunque venga solo como bodegaNombre (v21.214)
+    const f = fs(), a = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(20000))), l = []; a.forEach(d => { const x = d.data(); l.push({ id: d.id, ...x, location: x.location || x.bodegaNombre || '' }); }); insumos = l;
     try { const b = await f.getDocs(f.collection(db(), 'Bodegas')), n = []; destinosStaff = {}; b.forEach(d => { const x = d.data(), nm = x.nombre || x.name || d.id; n.push(nm); if (x.type === 'transitoria') { const ped = x.pedidos !== undefined ? x.pedidos : 'medico'; if (ped && !destinosStaff[ped]) destinosStaff[ped] = nm; } }); bodegas = n.filter(Boolean).sort(); } catch (e) { bodegas = []; }
-    if (!bodegas.length) bodegas = [...new Set(insumos.map(i => i.location).filter(Boolean))].sort();
+    // también las ubicaciones que tienen productos aunque no estén en Bodegas (antes esos productos no salían en la lista pública)
+    bodegas = [...new Set(bodegas.concat(insumos.map(i => i.location)).filter(b => b && b !== 'En tránsito'))].sort();
     cargado = true;
   }
   const listaDe = (bodega, cat) => { const m = new Map(); insumos.filter(i => i.location === bodega && i.status !== 'CUARENTENA').forEach(i => { const k = norm(i.name), t = tipoDe(i); if (k && !m.has(k) && (!cat || cat === '*' || t === cat)) m.set(k, { nombre: i.name, id: i.id, codigo: i.codigoMP || '', tipo: t }); }); return [...m.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')); };
@@ -109,7 +111,7 @@
   // Quien pide sin cuenta no puede leer Insumos ni el Catálogo. Al abrir la bandeja (cada 6 h) o «Descargar para usar sin internet»,
   // bodega publica en Solicitudes_Insumos/catalogo-publico: bodegas, nombres de productos por bodega (SIN stock) y fotos confirmadas.
   async function publicarCatalogo(forzar) {
-    try { const ult = Number(localStorage.getItem('si-pub') || 0); if (!forzar && Date.now() - ult < 6 * 3600e3) return; } catch (e) { /* sigue */ }
+    try { const ult = Number(localStorage.getItem('si-pub') || 0); if (!forzar && Date.now() - ult < 3600e3) return; /* cada 1 h (antes 6): lo recién ingresado aparece pronto */ } catch (e) { /* sigue */ }
     const f = fs(); if (!cargado || forzar) await cargarBase();   // forzar: relee Bodegas (destinos por tipo recién cambiados)
     const c = {}, n = {};
     try { const sn = await f.getDocs(f.query(f.collection(db(), 'Catalogo_Productos'), f.limit(3000)));
@@ -186,6 +188,8 @@
   // Ícono de cámara con el trazo del Visor (reemplaza el emoji).
   const IC_CAM = '<svg class="si-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.3l1.4-2h5.6l1.4 2h2.3A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="17" cy="10" r="1" fill="#8CC63F"/></svg>';
   /** Productos del tipo elegido en todas las bodegas, sin repetir (quien pide no elige bodega). */
+  function listaTodos() { const m = new Map(); bodegas.forEach(b => listaDe(b, '*').forEach(p => { const k = norm(p.nombre); if (!m.has(k)) m.set(k, { ...p, bodega: b }); })); return [...m.values()]; }
+  let eligiendo = '';
   function listaCat() { const m = new Map(); bodegas.forEach(b => listaDe(b, catSel).forEach(p => { const k = norm(p.nombre); if (!m.has(k)) m.set(k, { ...p, bodega: b }); })); return [...m.values()].sort((x, y) => x.nombre.localeCompare(y.nombre, 'es')); }
   /** Búsqueda por palabras: cada palabra escrita debe estar en el nombre (en cualquier orden, «cat 22» encuentra «Catéter … 22G»). */
   function buscarEn(lista, texto) { const t = norm(texto).split(' ').filter(Boolean); if (!t.length) return []; return lista.filter(p => { const n = norm(p.nombre); return t.every(w => n.includes(w)); }).sort((x, y) => (norm(y.nombre).startsWith(t[0]) ? 1 : 0) - (norm(x.nombre).startsWith(t[0]) ? 1 : 0)); }
@@ -225,15 +229,23 @@
     estadoRed(); if (window.SAR_Imagenes) window.SAR_Imagenes.rellenar(r); pintarRes(); pintarSug(); pintarMias();
   }
   /** Coincidencias mientras se escribe; al final, «No está en la lista» abre el ingreso a mano con foto. */
+  /** Coincidencias mientras se escribe. Al tocar una, aparece el recuadro de cantidad y «Agregar».
+   *  Si no hay en el tipo elegido, se buscan en los otros tipos (puede estar clasificado distinto) antes de «No está». */
   function pintarRes() {
     const el = document.getElementById('si-res'); if (!el) return; const q = busca.trim();
     if (q.length < 2) { el.innerHTML = ''; return; }
-    const exacto = buscarEn(listaCat(), q), res = exacto.length ? exacto : parecidos(q, listaCat(), 8), vis = res.slice(0, 12);
-    el.innerHTML = `<div class="si-drop">${!exacto.length && vis.length ? '<p class="si-v">No hay uno exacto. ¿Es alguno de estos?</p>' : ''}${vis.map(x => `<button type="button" class="si-p" data-add="${esc(x.nombre)}" data-id="${esc(x.id)}">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}<span>${esc(x.nombre)}</span><b>+</b></button>`).join('')}
+    let exacto = buscarEn(listaCat(), q), otros = false;
+    if (!exacto.length && catSel && catSel !== '*') { const o = buscarEn(listaTodos(), q); if (o.length) { exacto = o; otros = true; } }
+    const res = exacto.length ? exacto : parecidos(q, listaCat(), 8), vis = res.slice(0, 12), cat = catDe(catSel);
+    const fila = (x) => { const on = eligiendo === norm(x.nombre), ot = otros && x.tipo !== catSel ? catDe(x.tipo) : null;
+      return `<div class="si-pr${on ? ' on' : ''}"><button type="button" class="si-p" data-elige="${esc(x.nombre)}" data-id="${esc(x.id)}" aria-expanded="${on}">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}<span>${esc(x.nombre)}${ot ? `<small class="si-otro">está en ${esc(ot.t)}</small>` : ''}</span><b>${on ? '' : '+'}</b></button>
+        ${on ? `<div class="si-pq"><span>Cantidad</span><button type="button" class="si-pqb" data-pq="-1" aria-label="Uno menos">−</button><input id="si-pq-in" class="si-qn" type="number" min="1" value="1" inputmode="numeric" enterkeyhint="done" aria-label="Cantidad de ${esc(x.nombre)}"><button type="button" class="si-pqb" data-pq="1" aria-label="Uno más">+</button><button type="button" class="btn btn-primary" data-add="${esc(x.nombre)}" data-id="${esc(x.id)}">Agregar</button></div>` : ''}</div>`; };
+    el.innerHTML = `<div class="si-drop">${otros ? `<p class="si-v">No está en ${esc(cat ? cat.t : 'este tipo')}, pero sí en otro tipo:</p>` : !exacto.length && vis.length ? '<p class="si-v">No hay uno exacto. ¿Es alguno de estos?</p>' : ''}${vis.map(fila).join('')}
       ${res.length > vis.length ? `<p class="si-v">Hay ${res.length - vis.length} más: escribe otra palabra para afinar.</p>` : ''}
       ${vis.length ? '' : '<p class="si-v">No encontré productos con esas palabras.</p>'}
-      <button type="button" class="si-noesta" id="si-noesta"><span>${IC_CAM}</span><span><b>No está en la lista</b><small>Agrégalo a mano con una foto</small></span><i aria-hidden="true">›</i></button></div>`;
+      <button type="button" class="si-noesta" id="si-noesta"><span>${IC_CAM}</span><span><b>No está en la lista</b><small>Agrégalo a mano (foto opcional)</small></span><i aria-hidden="true">›</i></button></div>`;
     if (window.SAR_Imagenes) window.SAR_Imagenes.rellenar(el);
+    const qi = el.querySelector('#si-pq-in'); if (qi) qi.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); const b = el.querySelector('.si-pr.on [data-add]'); if (b) b.click(); } });
   }
   /** «¿Es alguno de estos?»: productos de la lista parecidos a lo que se escribe a mano. */
   function parecidos(texto, lista, max) {
@@ -350,7 +362,7 @@
       try { manual.foto = await reducirFoto(fl, 480); const t = document.getElementById('si-mt'), c = document.getElementById('si-mc'); if (t) manual.nombre = t.value; if (c) manual.cantidad = Math.max(1, Math.floor(num(c.value) || 1)); leerCampos(); pintarPide(); }
       catch (er) { toast('Foto', er.message || 'No se pudo leer la foto.', 'error'); } });
     r.addEventListener('input', (e) => { if (e.target.id === 'si-mt') { manual.nombre = e.target.value; pintarSug(); return; }
-      if (e.target.id === 'si-bus') { busca = e.target.value; pintarRes(); }
+      if (e.target.id === 'si-bus') { busca = e.target.value; eligiendo = ''; pintarRes(); }
       if (e.target.id === 'si-mq') { misQ = e.target.value; pintarMiasLista(); }
       if (e.target.dataset && e.target.dataset.qn !== undefined) { const l = lineas[+e.target.dataset.qn]; if (l) l.cantidad = Math.max(1, Math.min(9999, Math.floor(num(e.target.value) || 1))); } });
     r.addEventListener('submit', async (e) => { if (e.target.id !== 'si-ses-f') return; e.preventDefault(); const c = document.getElementById('si-ses-c'), p = document.getElementById('si-ses-p'); if (!window.SAR_Sesion || sesEntrando) return;
@@ -360,7 +372,9 @@
       sesEntrando = false; pintarPide(); });
     r.addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b) return; leerCampos();
-      if (b.dataset.add) { agregarLinea(lineas, { nombre: b.dataset.add, cantidad: 1 }); if (lineas.length) { const l = lineas.find(x => norm(x.nombre) === norm(b.dataset.add)); if (l && b.dataset.id) l.insumoId = b.dataset.id; } busca = ''; pintarPide(); const sb = document.getElementById('si-bus'); if (sb) sb.focus({ preventScroll: true }); toast('Agregado', esc(b.dataset.add), 'success'); }
+      if (b.dataset.elige) { const k = norm(b.dataset.elige); eligiendo = eligiendo === k ? '' : k; pintarRes(); const i = document.getElementById('si-pq-in'); if (i) { i.focus({ preventScroll: true }); i.select(); i.closest('.si-pr').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } return; }
+      if (b.dataset.pq) { const i = document.getElementById('si-pq-in'); if (i) i.value = Math.max(1, Math.floor(num(i.value) || 1) + Number(b.dataset.pq)); return; }
+      if (b.dataset.add) { const qi = document.getElementById('si-pq-in'), cant = Math.max(1, Math.min(9999, Math.floor(num(qi && qi.value) || 1))); eligiendo = ''; agregarLinea(lineas, { nombre: b.dataset.add, cantidad: cant }); if (lineas.length) { const l = lineas.find(x => norm(x.nombre) === norm(b.dataset.add)); if (l && b.dataset.id) l.insumoId = b.dataset.id; } busca = ''; pintarPide(); const sb = document.getElementById('si-bus'); if (sb) sb.focus({ preventScroll: true }); toast('Agregado', `${cant} × ${esc(b.dataset.add)}`, 'success'); }
       else if (b.id === 'si-noesta') { manualAbierto = true; manual.nombre = manual.nombre || busca.trim(); busca = ''; pintarPide(); const t = document.getElementById('si-mt'); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); } }
       else if (b.id === 'si-man-x') { manualAbierto = false; manual = { nombre: '', cantidad: 1, foto: '' }; pintarPide(); const t = document.getElementById('si-bus'); if (t) t.focus(); }
       else if (b.id === 'si-ma') {

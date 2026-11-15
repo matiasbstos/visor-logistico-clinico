@@ -103,6 +103,7 @@
     function entra(m) {
         const t = String(m.type || ''); if (!TIPOS[t]) return;
         if (m.sinEfectoStock) return;
+        if (m.solicitud) return;   // v21.217: los movimientos de una solicitud van en el correo de la solicitud (uno solo, no uno por lote)
         const clave = [m.user, t, m.document || '', m.origin || '', m.dest || m.destination || ''].join('|');
         const g = buf.get(clave) || { filas: [], notas: [], type: t, doc: m.document || '', origen: m.origin || '', dest: m.dest || m.destination || '', acta: m.actaId || '', t: null };
         g.filas.push({ nombre: m.insumoName || m.item || '—', cantidad: num(m.quantity), extra: [m.batch && m.batch !== 'N/A' && m.batch !== 'MULTI-LOTE' ? 'Lote ' + m.batch : '', m.expirationDate ? 'vence ' + m.expirationDate : ''].filter(Boolean).join(' · ') });

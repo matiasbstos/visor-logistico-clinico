@@ -214,7 +214,6 @@
       ${cat ? `<div class="si-catsel si-cat--${cat.k}"><span class="si-cat-ic">${cat.ic}</span><span><small>Estás pidiendo</small><b>${cat.t}</b></span>${editando ? '' : '<button type="button" class="btn btn-secondary btn-sm" id="si-cat-x">Cambiar</button>'}</div>` : ''}
       <h2 class="si-t">Solicitud de ${cat ? esc(cat.t.toLowerCase()) : 'insumos'}</h2><p class="si-s">Busca lo que necesitas, agrégalo y envía. Bodega confirmará lo que hay.</p>
       ${quienHTML()}
-      <div class="si-dos"><label class="si-l">Servicio / unidad<input id="si-ser" class="si-in" value="${esc(form.servicio)}" placeholder="Ej: Box 3, Urgencia"></label><span></span></div>
       <div class="si-busca">${manualAbierto ? '' : `<label class="si-l">Agregar producto<input id="si-bus" class="si-in" value="${esc(busca)}" placeholder="Escribe las primeras palabras… (${esc((cat || CATS[0]).ej.replace(/^Ej: /, 'ej: '))})" autocomplete="off" enterkeyhint="search"></label><div id="si-res"></div>`}
         ${manualAbierto ? `<div class="si-manbox"><div class="si-cab"><b>Agregar a mano</b><button type="button" class="btn btn-secondary btn-sm" id="si-man-x">Volver a buscar</button></div><small>Escribe el <b>nombre completo</b> (qué es, marca, medida o tamaño). Si puedes, <b>agrega una foto</b> (cámara o galería): de la caja, la etiqueta o uno igual. Si no tienes cómo, describe para qué se usa.</small>
           <div class="si-man"><input id="si-mt" class="si-in" placeholder="${esc((cat || CATS[0]).ej)}" value="${esc(manual.nombre)}" autocomplete="off"><input id="si-mc" class="si-in si-cn" type="number" min="1" value="${manual.cantidad}" inputmode="numeric" aria-label="Cantidad"></div>
@@ -408,7 +407,7 @@
   }
   async function abrirPide() {
     const r = rootPide(); if (!r) return; enlazarPide();
-    try { const y = JSON.parse(localStorage.getItem('si-yo') || 'null'); if (y && !form.solicitante) { form.solicitante = y.n || ''; form.correo = y.c || ''; form.servicio = y.s || ''; } } catch (e) { /* sin almacenamiento */ }
+    try { const y = JSON.parse(localStorage.getItem('si-yo') || 'null'); if (y && !form.solicitante) { form.solicitante = y.n || ''; form.correo = y.c || ''; form.servicio = ''; }   // v21.215: sin «Servicio / unidad» } catch (e) { /* sin almacenamiento */ }
     if (window.SAR_Imagenes && !publica()) window.SAR_Imagenes.cargar().catch(() => {});
     if (!cargado) { r.innerHTML = window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando la lista de productos…') : 'Cargando…'; try { await cargarBase(); } catch (e) { r.innerHTML = '<div class="home-empty">No pude cargar la lista. Si no tienes internet, ábrela una vez con conexión para dejarla guardada.</div>'; return; } }
     pintarPide();

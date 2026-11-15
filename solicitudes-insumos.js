@@ -39,12 +39,12 @@
   function agregarLinea(lineas, n) { const k = norm(n.nombre); if (!k) return lineas; const x = lineas.find(l => norm(l.nombre) === k && !!l.manual === !!n.manual); if (x) x.cantidad += Math.max(1, Math.floor(num(n.cantidad) || 1)); else lineas.push({ nombre: String(n.nombre).trim(), cantidad: Math.max(1, Math.floor(num(n.cantidad) || 1)), manual: !!n.manual }); return lineas; }
   /** Texto para pegar en WhatsApp / picking. */
   function textoPicking(s, info) {
-    const L = (s.lineas || []).map((l, i) => { const x = info && info[i]; return `${i + 1}. ${l.nombre} × ${l.cantidad}${x && x.ubicacion ? ` · ${x.ubicacion}` : ''}${x && x.stock != null ? ` (hay ${x.stock})` : ''}`; });
-    return `Solicitud ${s.correlativo || s.numero}${catDe(s.categoria) ? ' · ' + catDe(s.categoria).t : ''} · ${s.bodega || ''}\nPide: ${s.solicitante || s.requester}${s.correo ? ' <' + s.correo + '>' : ''}${s.servicio ? ' (' + s.servicio + ')' : ''}\n${L.join('\n')}${s.nota ? '\nNota: ' + s.nota : ''}`;
+    const L = (s.lineas || []).map((l, i) => { if (l.soloConteo) return null; const x = info && info[i]; return `${i + 1}. ${l.nombre} × ${l.cantidad}${x && x.ubicacion ? ` · ${x.ubicacion}` : ''}${x && x.stock != null ? ` (hay ${x.stock})` : ''}`; });
+    return `Solicitud ${s.correlativo || s.numero}${catDe(s.categoria) ? ' · ' + catDe(s.categoria).t : ''} · ${s.bodega || ''}\nPide: ${s.solicitante || s.requester}${s.correo ? ' <' + s.correo + '>' : ''}${s.servicio ? ' (' + s.servicio + ')' : ''}\n${L.filter(Boolean).join('\n')}${s.nota ? '\nNota: ' + s.nota : ''}`;
   }
   /** Stock y ubicación de una línea a partir de los insumos leídos: coincide por id o por nombre. */
   function infoLinea(l, insumos, bodega) {
-    const k = norm(l.nombre), docs = insumos.filter(i => (l.insumoId && i.id === l.insumoId) || norm(i.name) === k);
+    const k = norm(l.asociado || l.nombre), docs = insumos.filter(i => (l.insumoId && i.id === l.insumoId) || norm(i.name) === k);
     if (!docs.length) return { stock: null, ubicacion: '', otras: [] };
     const enBod = docs.filter(d => !bodega || d.location === bodega), pool = enBod.length ? enBod : docs;
     const otras = [...new Set(docs.filter(d => num(d.quantity) > 0 && d.location !== bodega).map(d => `${d.location}: ${num(d.quantity)}`))];
@@ -57,7 +57,7 @@
   async function cargarBase() {
     if (publica()) {
       const f = fs(), d = await f.getDoc(f.doc(f.collection(db(), COL), ID_PUB)); if (!d.exists()) throw new Error('Bodega aún no publica la lista de productos.');
-      const x = d.data(); bodegas = x.bodegas || []; insumos = []; Object.keys(x.productos || {}).forEach(b => (x.productos[b] || []).forEach(p => insumos.push({ id: p.i || '', name: p.n, location: b, codigoMP: p.c || '', ...(p.t ? { tipoInsumo: p.t } : {}) })));
+      const x = d.data(); window.SAR_CatalogoPublico = x; bodegas = x.bodegas || []; insumos = []; Object.keys(x.productos || {}).forEach(b => (x.productos[b] || []).forEach(p => insumos.push({ id: p.i || '', name: p.n, location: b, codigoMP: p.c || '', ...(p.t ? { tipoInsumo: p.t } : {}) })));
       if (window.SAR_Imagenes && window.SAR_Imagenes.sumarIndice && x.fotos) window.SAR_Imagenes.sumarIndice(x.fotos);
       cargado = true; return;
     }
@@ -86,7 +86,7 @@
         if (v) [x.descripcion, x.insumoName].forEach(t => { const k = norm(t); if (k) n[k] = v; }); }
     } catch (e) { /* sin fotos */ }
     const productos = {}; bodegas.forEach(b => { const l = listaDe(b); if (l.length) productos[b] = l.map(p => ({ n: p.nombre, i: p.id, ...(p.codigo ? { c: String(p.codigo) } : {}), ...(p.tipo !== 'medico' ? { t: p.tipo } : {}) })); });
-    await f.setDoc(f.doc(f.collection(db(), COL), ID_PUB), { tipo: 'CATALOGO_PUBLICO', bodegas: Object.keys(productos).sort(), productos, fotos: { c, n }, actualizado: new Date().toISOString() });
+    await f.setDoc(f.doc(f.collection(db(), COL), ID_PUB), { tipo: 'CATALOGO_PUBLICO', bodegas: Object.keys(productos).sort(), productos, fotos: { c, n }, ...(window.SAR_Transitoria && window.SAR_Transitoria.bloquePublico ? { transitoria: await window.SAR_Transitoria.bloquePublico().catch(() => null) } : {}), actualizado: new Date().toISOString() });
     try { localStorage.setItem('si-pub', String(Date.now())); } catch (e) { /* sin almacenamiento */ }
   }
 
@@ -97,7 +97,8 @@
   function pintarCategorias(r) {
     r.innerHTML = `<div class="si-wrap"><h2 class="si-t">¿Qué necesitas pedir?</h2><p class="si-s">Elige el tipo de insumo y después busca los productos que necesitas.</p>
       <div class="si-cats">${CATS.map(c => `<button type="button" class="si-cat si-cat--${c.k}" data-cat="${c.k}"><span class="si-cat-ic">${c.ic}</span><span class="si-cat-tx"><b>${c.t}</b><small>${c.s}</small></span><i aria-hidden="true">›</i></button>`).join('')}</div>
-      <div id="si-mias"></div></div>`;
+      <div id="si-inv"></div><div id="si-mias"></div></div>`;
+    if (window.SAR_InvMovil) window.SAR_InvMovil.boton(document.getElementById('si-inv'));
     pintarMias();
   }
   // Ícono de cámara con el trazo del Visor (reemplaza el emoji).
@@ -114,7 +115,7 @@
   }
   function pintarPide() {
     const r = rootPide(); if (!r) return;
-    if (!catSel && !editando) { pintarCategorias(r); return; }
+    if (!catSel && !editando) { if (window.SAR_InvMovil && window.SAR_InvMovil.enCurso()) { window.SAR_InvMovil.pintar(r); return; } pintarCategorias(r); return; }
     const cat = catDe(catSel);
     r.innerHTML = `<div class="si-wrap">
       ${editando ? `<div class="si-edit"><span>Modificando <b>${esc(editando.ver)}</b>: agrega, quita o cambia cantidades y guarda.</span><button type="button" class="btn btn-secondary btn-sm" id="si-edit-x">Cancelar</button></div>` : ''}
@@ -139,8 +140,8 @@
   function pintarRes() {
     const el = document.getElementById('si-res'); if (!el) return; const q = busca.trim();
     if (q.length < 2) { el.innerHTML = ''; return; }
-    const res = buscarEn(listaCat(), q), vis = res.slice(0, 12);
-    el.innerHTML = `<div class="si-drop">${vis.map(x => `<button type="button" class="si-p" data-add="${esc(x.nombre)}" data-id="${esc(x.id)}">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}<span>${esc(x.nombre)}</span><b>+</b></button>`).join('')}
+    const exacto = buscarEn(listaCat(), q), res = exacto.length ? exacto : parecidos(q, listaCat(), 8), vis = res.slice(0, 12);
+    el.innerHTML = `<div class="si-drop">${!exacto.length && vis.length ? '<p class="si-v">No hay uno exacto. ¿Es alguno de estos?</p>' : ''}${vis.map(x => `<button type="button" class="si-p" data-add="${esc(x.nombre)}" data-id="${esc(x.id)}">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}<span>${esc(x.nombre)}</span><b>+</b></button>`).join('')}
       ${res.length > vis.length ? `<p class="si-v">Hay ${res.length - vis.length} más: escribe otra palabra para afinar.</p>` : ''}
       ${vis.length ? '' : '<p class="si-v">No encontré productos con esas palabras.</p>'}
       <button type="button" class="si-noesta" id="si-noesta"><span>${IC_CAM}</span><span><b>No está en la lista</b><small>Agrégalo a mano con una foto</small></span><i aria-hidden="true">›</i></button></div>`;
@@ -168,7 +169,7 @@
     try { l = JSON.parse(localStorage.getItem('si-mias') || '[]'); } catch (e) { l = []; } if (!l.length) { el.innerHTML = ''; return; }
     const f = fs(); misDatos = {}; const filas = await Promise.all(l.slice(0, 6).map(async (n) => { try { let d = await f.getDoc(f.doc(f.collection(db(), COL), n)); if (!d.exists() && !publica()) d = await f.getDoc(f.doc(f.collection(db(), COL_ANT), n)).catch(() => d); if (d.exists()) { const x = { ...d.data(), _col: d.ref && d.ref.parent ? d.ref.parent.id : COL }; misDatos[n] = x; return x; } return { numero: n, estado: 'POR_ENVIAR' }; } catch (e) { return { numero: n, estado: 'POR_ENVIAR' }; } }));
     el.innerHTML = `<div class="si-cab"><h3 class="si-h">Tus últimas solicitudes</h3><button type="button" class="btn btn-secondary btn-sm" id="si-mias-act">Actualizar</button></div><div class="si-car">${filas.map((x, k) => `<details class="si-mia"${k === 0 ? ' open' : ''}><summary><span class="si-fn"><b>${esc(x.correlativo || x.numero)}</b>${x.correlativo ? '' : ' <small>(provisional)</small>'}<br><small>${esc(x.bodega || '')}${x.creadoEn ? ' · ' + esc(new Date(x.creadoEn).toLocaleString('es-CL')) : ''}</small></span><span class="si-est si-e-${esc(x.estado)}">${esc(x.estado === 'POR_ENVIAR' ? 'Por enviar (sin internet)' : (ESTADOS[x.estado] || x.estado))}</span></summary>
-      ${(x.lineas || []).map(l => `<div class="si-mia-l"><span>${esc(l.nombre)} × ${l.cantidad}</span>${chipL(l)}</div>`).join('')}${x.estado === 'NUEVA' && misDatos[x.numero] ? `<div class="si-lb"><small>Mientras bodega no empiece a prepararla puedes cambiarla.</small><button type="button" class="btn btn-primary btn-sm" data-mod="${esc(x.numero)}">Modificar</button></div>` : ''}</details>`).join('')}</div>`;
+      ${x.conteo ? `<div class="si-mia-l"><span>Inventario ${x.conteo.bodega ? esc(x.conteo.bodega) : ''}</span><span class="si-le si-le-${x.conteo.estado === 'aplicado' ? 'ok' : 'pendiente'}">${x.conteo.estado === 'aplicado' ? '✔ Cuadrado' : x.conteo.estado ? 'Bodega lo revisa' : 'Por cuadrar'}</span></div>` : ''}${(x.lineas || []).filter(l => !l.soloConteo).map(l => `<div class="si-mia-l"><span>${esc(l.nombre)} × ${l.cantidad}${num(l.reiterado) > 1 ? ' <em class="si-reit">sigue faltando</em>' : ''}</span>${chipL(l)}</div>`).join('')}${x.estado === 'NUEVA' && misDatos[x.numero] ? `<div class="si-lb"><small>Mientras bodega no empiece a prepararla puedes cambiarla.</small><button type="button" class="btn btn-primary btn-sm" data-mod="${esc(x.numero)}">Modificar</button></div>` : ''}</details>`).join('')}</div>`;
     el.querySelectorAll('[data-mod]').forEach(b => b.onclick = () => editar(b.dataset.mod));
     const ac = document.getElementById('si-mias-act'); if (ac) ac.onclick = () => pintarMias();
   }
@@ -280,7 +281,7 @@
   const lotesDeDoc = (d) => (Array.isArray(d.batches) && d.batches.length ? d.batches : (num(d.quantity) > 0 ? [{ batch: d.batch || 'S/L', quantity: num(d.quantity), expirationDate: d.expirationDate || '' }] : []));
   /** Lotes con saldo de este producto en cualquier bodega. Primero la bodega a la que se pidió (no hay que mover), luego lo que vence antes. */
   function lotesCandidatos(l, lista, bodegaPedida) {
-    const k = norm(l.nombre), out = [];
+    const k = norm(l.asociado || l.nombre), out = [];
     lista.filter(i => ((l.insumoId && i.id === l.insumoId) || norm(i.name) === k) && i.status !== 'CUARENTENA').forEach(i => lotesDeDoc(i).forEach(b => { const disp = num(b.quantity); if (disp > 0) out.push({ insumoId: i.id, bodega: i.location || '', estante: i.ubicacionEstante || '', clave: String(b.batch || 'S/L') + '|' + String(b.expirationDate || ''), lote: b.batch || 'S/L', vence: b.expirationDate || '', disp }); }));
     return out.sort((a, b) => ((a.bodega === bodegaPedida ? 0 : 1) - (b.bodega === bodegaPedida ? 0 : 1)) || (a.vence || '9999').localeCompare(b.vence || '9999'));
   }
@@ -291,23 +292,49 @@
   const EST_L = { pendiente: 'Pendiente', ok: 'Confirmado', parcial: 'Parcial', no_hay: 'No hay' };
   const chipL = (l) => { const e = l.estado || 'pendiente'; return `<span class="si-le si-le-${e}">${e === 'ok' ? '✔ ' + num(l.entregar) + ' confirmado' + (num(l.entregar) === 1 ? '' : 's') : e === 'parcial' ? `Parcial: ${num(l.entregar)} de ${l.cantidad}` : EST_L[e]}</span>`; };
   const fmtV = (v) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v || ''); return m ? `${m[3]}-${m[2]}-${m[1]}` : (v || '—'); };
+  // ---- asociar lo pedido (nombre escrito por quien pide) a un producto del inventario (v21.210) ----
+  let asoc = null, alias = {}; const ALIAS_ID = 'solicitudes-alias';
+  const aliasDe = (l) => { const a = alias[norm(l.nombre)]; return a && insumos.some(i => norm(i.name) === norm(a)) ? a : ''; };
+  function productosInv(q) { const t = norm(q).split(' ').filter(Boolean); if (!t.length) return []; const m = new Map(); insumos.forEach(i => { if (i.status === 'CUARENTENA') return; const k = norm(i.name); if (!t.every(w => k.includes(w))) return; const e = m.get(k) || { nombre: i.name, id: i.id, total: 0, bods: new Set() }; e.total += num(i.quantity); if (num(i.quantity) > 0 && i.location) e.bods.add(i.location); m.set(k, e); }); return [...m.values()].sort((a, b) => b.total - a.total).slice(0, 10); }
+  function resAsoc(q) { if (norm(q).length < 2) return '<p class="si-v">Escribe parte del nombre como está en el inventario.</p>'; const l = productosInv(q); return l.length ? l.map(p => `<button type="button" class="si-p" data-asocsi="${asoc ? asoc.i : ''}" data-nom="${esc(p.nombre)}"><span>${esc(p.nombre)}<br><small>${p.total} u. · ${esc([...p.bods].join(', ') || 'sin stock')}</small></span><b>✓</b></button>`).join('') : '<p class="si-v">Sin coincidencias.</p>'; }
+  async function cargarAlias() { try { const d = await fs().getDoc(fs().doc(fs().collection(db(), 'Contadores'), ALIAS_ID)); alias = d.exists() ? (d.data().items || {}) : {}; } catch (e) { alias = {}; } }
+  async function asociar(n, i, nombreInv) {
+    const s = solicitudes.find(x => x.numero === n); if (!s) return; const f = fs(), lin = (s.lineas || []).map(x => ({ ...x })), l = lin[i];
+    if (nombreInv) { const d = insumos.find(x => norm(x.name) === norm(nombreInv) && x.location === s.bodega) || insumos.find(x => norm(x.name) === norm(nombreInv)); lin[i] = { ...l, asociado: nombreInv, ...(d ? { insumoId: d.id } : {}), asociadoPor: usuario() }; }
+    else { const x = { ...l }; delete x.asociado; delete x.asociadoPor; if (x.manual) delete x.insumoId; lin[i] = x; }
+    asoc = null; s.lineas = lin; pintarBandeja();
+    try { await Promise.race([f.updateDoc(f.doc(f.collection(db(), s._col || COL), n), { lineas: lin }), new Promise(r => setTimeout(r, 2500))]); } catch (e) { toast('No se guardó', e.message || String(e), 'error'); }
+    if (nombreInv && norm(l.nombre) !== norm(nombreInv)) { alias[norm(l.nombre)] = nombreInv; f.setDoc(f.doc(f.collection(db(), 'Contadores'), ALIAS_ID), { tipo: 'alias-solicitudes', items: alias, actualizado: new Date().toISOString() }).catch(() => {}); }
+    toast('Asociado', nombreInv ? `Se moverá y descontará como «${esc(nombreInv)}».` : 'Asociación quitada.', 'success');
+  }
   let abiertoL = {}, sel = '';   // sel: solicitud abierta en el panel lateral ('' = la primera; null = cerrado)   // numero|i → mostrar lotes aunque ya esté decidida
 
   function pintarBandeja() {
     const r = rootBandeja(); if (!r) return;
+    if (asoc) queueMicrotask(() => { const x = r.querySelector('.si-asoc-in'); if (x && document.activeElement !== x) { x.focus(); x.setSelectionRange(x.value.length, x.value.length); } });
     const ab = (s) => s.estado !== 'ENTREGADA' && s.estado !== 'ANULADA', vis = solicitudes.filter(s => filtro === 'TODAS' ? true : filtro === 'ABIERTAS' ? ab(s) : s.estado === filtro);
     const IM = window.SAR_Imagenes;
     // «Costado»: en pantallas anchas la lista queda a la izquierda y el detalle se abre al lado, sin perder la lista
     const costado = window.innerWidth >= 1000;
     if (costado && (!sel || !vis.some(x => x.numero === sel)) && sel !== null) sel = vis.length ? vis[0].numero : '';
+    const asocHTML = (s, l, i) => {
+      if (l.asociado) return `<div class="si-asoc si-asoc--ok"><small>${l.manual ? 'Pedido como «' + esc(l.nombre) + '» · ' : ''}asociado a <b>${esc(l.asociado)}</b></small><button type="button" class="btn btn-secondary btn-sm" data-desasoc="${i}">Quitar asociación</button></div>`;
+      const ali = aliasDe(l), abierto = asoc && asoc.n === s.numero && asoc.i === i;
+      if (!l.manual && !abierto && lotesCandidatos(l, insumos, s.bodega).length) return '';
+      return `<div class="si-asoc">${ali ? `<button type="button" class="btn btn-primary btn-sm" data-asocsi="${i}" data-nom="${esc(ali)}">¿Es «${esc(ali)}»? Asociar (ya lo asociaste antes)</button>` : ''}
+        ${abierto ? `<input class="si-in si-asoc-in" data-i="${i}" value="${esc(asoc.q)}" placeholder="Buscar en el inventario (nombre del fabricante)…" autocomplete="off" aria-label="Buscar producto para asociar"><div class="si-asoc-res">${resAsoc(asoc.q)}</div>` : `<button type="button" class="btn btn-secondary btn-sm" data-asoc="${i}">Asociar a producto del inventario</button>`}</div>`; };
+    const cuadreHTML = (s) => { const c = s.conteo, us = (c.descontado || []).reduce((t, x) => t + num(x.usado), 0);
+      if (c.estado === 'aplicado') return `<div class="si-cuadre si-cuadre--ok"><b>Inventario cuadrado</b> · se descontaron <b>${us}</b> u. usadas en ${(c.descontado || []).length} producto(s)${(c.sobrantes || []).length ? ` · sobran: ${c.sobrantes.map(x => esc(x.nombre) + ' +' + x.sobrante).join(', ')} (no se suman solos)` : ''}<details><summary>Ver detalle</summary>${(c.descontado || []).map(x => `<div>${esc(x.nombre)}: sistema ${x.sistema} · contado ${x.contado} · <b>usado ${x.usado}</b></div>`).join('') || 'Sin diferencias.'}</details></div>`;
+      if (!c.estado) return '<div class="si-cuadre">Cuadrando el inventario…</div>';
+      return `<div class="si-cuadre si-cuadre--mal"><b>El inventario no se cuadró solo:</b> ${esc(c.detalle || '')}<button type="button" class="btn btn-primary btn-sm" data-cuadrar="1">Cuadrar ahora</button></div>`; };
     const cardHTML = (s) => { const mover = (s.lineas || []).some(l => !l.movido && (l.seleccion || []).some(x => x.bodega !== s.bodega && x.qty > 0));
         return `<article class="si-card" data-n="${esc(s.numero)}"><header><b>${esc(s.correlativo || s.numero)}</b>${s.correlativo ? '' : ' <small>(asignando N°…)</small>'}<span class="si-est si-e-${esc(s.estado)}">${esc(ESTADOS[s.estado] || s.estado)}</span></header>
         <p class="si-m">${esc(s.solicitante || s.requester)}${s.correo ? ` (<a href="mailto:${esc(s.correo)}">${esc(s.correo)}</a>)` : ''}${s.servicio ? ' · ' + esc(s.servicio) : ''}${catDe(s.categoria) ? ' · <b>' + esc(catDe(s.categoria).t) + '</b>' : ''} · pide a <b>${esc(s.bodega)}</b> · ${esc(new Date(s.creadoEn).toLocaleString('es-CL'))}</p>
-        ${s.nota ? `<p class="si-m">Nota: ${esc(s.nota)}</p>` : ''}
-        <div class="si-lns">${(s.lineas || []).map((l, i) => { const cands = lotesCandidatos(l, insumos, s.bodega), decid = l.estado && l.estado !== 'pendiente', ver = !decid || abiertoL[s.numero + '|' + i] || !ab(s) && false;
+        ${s.nota ? `<p class="si-m">Nota: ${esc(s.nota)}</p>` : ''}${s.conteo ? cuadreHTML(s) : ''}
+        <div class="si-lns">${(s.lineas || []).map((l, i) => { if (l.soloConteo) return ''; const cands = lotesCandidatos(l, insumos, s.bodega), decid = l.estado && l.estado !== 'pendiente', ver = !decid || abiertoL[s.numero + '|' + i] || !ab(s) && false;
           const pre = (l.seleccion && l.seleccion.length) ? cands.map(c => { const x = l.seleccion.find(y => y.insumoId === c.insumoId && y.clave === c.clave); return x ? x.qty : 0; }) : repartir(cands, l.cantidad), hay = cands.reduce((t, c) => t + c.disp, 0);
-          return `<div class="si-ln${decid ? ' si-ln--ok' : ''}" data-i="${i}"><div class="si-lh">${l.foto ? `<span class="prod-img"><img src="${l.foto}" alt="${esc(l.nombre)}"></span>` : IM ? IM.thumb(l.nombre, { codigo: (insumos.find(x => x.id === l.insumoId) || {}).codigoMP || '' }) : ''}<div class="si-ln-t"><b>${esc(l.nombre)}</b>${l.manual ? ' <em>escrito a mano</em>' : ''}<small>Pide <b>${l.cantidad}</b> · hay ${hay} en total${l.movido ? ' · traído a ' + esc(s.bodega) : ''}</small></div>${chipL(l)}</div>
-            ${ab(s) && ver ? (cands.length ? `<table class="si-tb si-lt"><thead><tr><th>Dónde</th><th>Lote</th><th>Vence</th><th>Hay</th><th>Sacar</th></tr></thead><tbody>${cands.map((c, j) => `<tr><td>${esc(c.bodega)}${c.estante ? ' · ' + esc(c.estante) : ''}${c.bodega !== s.bodega ? ' <small class="si-mv">hay que traer</small>' : ''}</td><td>${esc(c.lote)}</td><td>${esc(fmtV(c.vence))}</td><td>${c.disp}</td><td><input type="number" min="0" max="${c.disp}" value="${pre[j]}" class="si-q-in" data-j="${j}" inputmode="numeric" aria-label="Cantidad a sacar del lote ${esc(c.lote)}"></td></tr>`).join('')}</tbody></table>` : '<p class="si-v">No está en el inventario.</p>')
+          return `<div class="si-ln${decid ? ' si-ln--ok' : ''}" data-i="${i}"><div class="si-lh">${l.foto ? `<span class="prod-img"><img src="${l.foto}" alt="${esc(l.nombre)}"></span>` : IM ? IM.thumb(l.nombre, { codigo: (insumos.find(x => x.id === l.insumoId) || {}).codigoMP || '' }) : ''}<div class="si-ln-t"><b>${esc(l.nombre)}</b>${l.manual ? ' <em>escrito a mano</em>' : ''}${num(l.reiterado) > 1 ? ` <em class="si-reit">Sigue faltando · ${num(l.reiterado)}.º día</em>` : ''}<small>Pide <b>${l.cantidad}</b> · hay ${hay} en total${l.movido ? ' · traído a ' + esc(s.bodega) : ''}</small></div>${chipL(l)}</div>
+            ${ab(s) && ver ? (cands.length ? `<table class="si-tb si-lt"><thead><tr><th>Dónde</th><th>Lote</th><th>Vence</th><th>Hay</th><th>Sacar</th></tr></thead><tbody>${cands.map((c, j) => `<tr><td>${esc(c.bodega)}${c.estante ? ' · ' + esc(c.estante) : ''}${c.bodega !== s.bodega ? ' <small class="si-mv">hay que traer</small>' : ''}</td><td>${esc(c.lote)}</td><td>${esc(fmtV(c.vence))}</td><td>${c.disp}</td><td><input type="number" min="0" max="${c.disp}" value="${pre[j]}" class="si-q-in" data-j="${j}" inputmode="numeric" aria-label="Cantidad a sacar del lote ${esc(c.lote)}"></td></tr>`).join('')}</tbody></table>` : '<p class="si-v">No está en el inventario con ese nombre: asócialo al producto que corresponde.</p>') + asocHTML(s, l, i)
               + `<div class="si-lb"><button type="button" class="btn btn-primary btn-sm" data-ok="${i}"${cands.length ? '' : ' disabled'}>Confirmar</button><button type="button" class="btn btn-secondary btn-sm" data-nh="${i}">No hay</button></div>`
               : (ab(s) ? `<div class="si-lb"><small>${(l.seleccion || []).filter(x => x.qty > 0).map(x => `${esc(x.lote)} · ${esc(x.bodega)}: ${x.qty}`).join(' · ')}</small><button type="button" class="btn btn-secondary btn-sm" data-ver="${i}">Cambiar</button></div>` : '')}</div>`; }).join('')}</div>
         <footer>${mover && ab(s) ? `<button class="btn btn-primary" data-mv="1">Traer lo elegido a ${esc(s.bodega)}</button>` : ''}${s.estado === 'LISTA' ? '<button class="btn btn-primary" data-e="ENTREGADA">Marcar entregada</button>' : ''}${s.estado === 'PREPARACION' ? '<button class="btn btn-secondary" data-e="LISTA">Lista para retirar</button>' : ''}<button class="btn btn-secondary" data-c="1">Copiar para WhatsApp</button>${ab(s) ? '<button class="btn btn-secondary" data-e="ANULADA">Anular</button>' : ''}</footer></article>`; };
@@ -335,6 +362,7 @@
     Object.assign(s, cambios); pintarBandeja();
     try { await Promise.race([f.updateDoc(f.doc(f.collection(db(), s._col || COL), n), cambios), new Promise(res => setTimeout(res, 2500))]); }
     catch (e) { toast('No se pudo guardar', e.message || String(e), 'error'); }
+    if (s.origen === 'transitoria' && window.SAR_Transitoria) window.SAR_Transitoria.refrescarPublico();
   }
   /** Trae a la bodega pedida lo elegido de otras bodegas (transferencia normal; sin internet queda en la cola). */
   async function traer(n) {
@@ -354,6 +382,7 @@
     const lin = (s.lineas || []).map((l, i) => hechos.has(i) ? { ...l, movido: true } : l); s.lineas = lin; pintarBandeja();
     const f = fs(); try { await Promise.race([f.updateDoc(f.doc(f.collection(db(), s._col || COL), n), { lineas: lin }), new Promise(res => setTimeout(res, 2500))]); } catch (e) { /* queda en pantalla */ }
     if (enLinea) { try { await cargarBase(); pintarBandeja(); } catch (e) { /* sigue */ } }
+    if (s.origen === 'transitoria' && window.SAR_Transitoria) window.SAR_Transitoria.refrescarPublico();
   }
   async function cambiarEstado(n, e) {
     const f = fs(), s = solicitudes.find(x => x.numero === n); if (!s) return;
@@ -386,6 +415,7 @@
   function enlazarBandeja() {
     const r = rootBandeja(); if (!r || r.dataset.ok) return; r.dataset.ok = '1';
     r.addEventListener('change', (e) => { if (e.target.id === 'si-fil') { filtro = e.target.value; pintarBandeja(); } });
+    r.addEventListener('input', (e) => { if (!e.target.classList.contains('si-asoc-in') || !asoc) return; asoc.q = e.target.value; const res = e.target.parentElement.querySelector('.si-asoc-res'); if (res) res.innerHTML = resAsoc(asoc.q); });
     r.addEventListener('click', async (e) => {
       const b = e.target.closest('button'); if (!b) return; const card = b.closest('.si-card');
       if (b.id === 'si-off') return descargarOffline();
@@ -397,6 +427,12 @@
       if (b.dataset.nh !== undefined) return decidirLinea(n, +b.dataset.nh, true, null);
       if (b.dataset.ver !== undefined) { abiertoL[n + '|' + b.dataset.ver] = true; return pintarBandeja(); }
       if (b.dataset.mv) return traer(n);
+      if (b.dataset.asoc !== undefined) { asoc = { n, i: +b.dataset.asoc, q: '' }; pintarBandeja(); const x = r.querySelector('.si-asoc-in'); if (x) x.focus(); return; }
+      if (b.dataset.asocsi !== undefined && b.dataset.nom) return asociar(n, +b.dataset.asocsi, b.dataset.nom);
+      if (b.dataset.desasoc !== undefined) return asociar(n, +b.dataset.desasoc, '');
+      if (b.dataset.cuadrar) { const s = solicitudes.find(x => x.numero === n), T = window.SAR_Transitoria; if (!s || !T) return; b.disabled = true;
+        try { const f = fs(); await f.updateDoc(f.doc(f.collection(db(), COL), n), { 'conteo.estado': null }); const r = await T.aplicarRemoto({ ...s, conteo: { ...s.conteo, estado: null } }, { manual: true }); toast('Inventario', r && r.ok ? 'Cuadrado: se descontó lo usado.' : 'No se pudo cuadrar: revisa el detalle.', r && r.ok ? 'success' : 'error'); } catch (e) { toast('Inventario', e.message || String(e), 'error'); }
+        b.disabled = false; return; }
       if (b.dataset.e) return cambiarEstado(n, b.dataset.e);
       if (b.dataset.c) { const s = solicitudes.find(x => x.numero === n), t = textoPicking(s, (s.lineas || []).map(l => infoLinea(l, insumos, s.bodega))); try { await navigator.clipboard.writeText(t); toast('Copiado', 'Pégalo en WhatsApp.', 'success'); } catch (er) { window.prompt('Copia este texto:', t); } }
     });
@@ -404,6 +440,7 @@
   async function abrirBandeja() {
     const r = rootBandeja(); if (!r) return; enlazarBandeja();
     if (!cargado) { r.innerHTML = window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando solicitudes…') : 'Cargando…'; try { await cargarBase(); } catch (e) { /* con lo guardado */ } }
+    cargarAlias().then(() => pintarBandeja()).catch(() => {});
     publicarCatalogo().catch((e) => console.warn('[Solicitudes] catálogo público no publicado:', e && e.message));
     if (desuscribir) { try { desuscribir(); } catch (e) { /* ya cerradas */ } }
     const f = fs(), por = { [COL]: [], [COL_ANT]: [] };
@@ -443,15 +480,23 @@
     };
   }
 
+  // ---------------- inventario de bodega transitoria enviado desde el teléfono: se cuadra solo (v21.210) ----------------
+  const intentados = new Set();
+  function cuadrarLlegados(l) {
+    const T = window.SAR_Transitoria; if (!T || !T.aplicarRemoto) return;
+    l.filter(x => x.conteo && !x.conteo.estado && !intentados.has(x.numero)).forEach(x => { intentados.add(x.numero);
+      T.aplicarRemoto(x).then(r => { if (r && r.ok) toast('Inventario cuadrado', `${x.conteo.bodega || 'Bodega transitoria'}: se descontaron ${r.usado} u. usadas. La reposición está en la bandeja.`, 'success'); }).catch(() => { intentados.delete(x.numero); }); });
+  }
   // ---------------- aviso en la campana: solicitudes nuevas (solo bodega) ----------------
   if (typeof module === 'undefined' && typeof document.addEventListener === 'function' && !window.SAR_SOLICITUD_PUBLICA) {
     let n = 0; const t = setInterval(() => { n++; const u = usuario(); if (!(u && esGestor() && fs() && db()) && n < 90) return; clearInterval(t); if (!(u && esGestor())) return;
-      try { const f = fs(); f.onSnapshot(f.query(f.collection(db(), COL), f.where('estado', '==', 'NUEVA')), (sn) => { const l = []; sn.forEach(d => { if (d.data().tipo === TIPO) l.push(d.data()); }); window.SAR_SolicitudesNuevas = l.sort((a, b) => String(b.creadoEn).localeCompare(String(a.creadoEn)));
+      try { const f = fs(); f.onSnapshot(f.query(f.collection(db(), COL), f.where('estado', '==', 'NUEVA')), (sn) => { const l = []; sn.forEach(d => { if (d.data().tipo === TIPO) l.push(d.data()); }); cuadrarLlegados(l); window.SAR_SolicitudesNuevas = l.sort((a, b) => String(b.creadoEn).localeCompare(String(a.creadoEn)));
         const b = document.getElementById('si-badge'); if (b) { b.textContent = l.length || ''; b.style.display = l.length ? '' : 'none'; }
         if (l.length > (window.__solNuevasAntes || 0) && window.__solNuevasAntes !== undefined && typeof window.showToast === 'function') window.showToast('Solicitud de insumos nueva', `${l[0].solicitante || ''}${l[0].servicio ? ' · ' + l[0].servicio : ''}: ${(l[0].lineas || []).length} producto(s).`, 'info');
         window.__solNuevasAntes = l.length; window.dispatchEvent(new Event('sar-avisos')); }, () => { /* sin permiso */ }); } catch (e) { /* sin conexión */ } }, 2000);
   }
 
-  window.SAR_Solicitudes = { abrirPide, abrirBandeja, publicarCatalogo, numeroSolicitud, agregarLinea, textoPicking, infoLinea, lotesCandidatos, repartir, estadoLinea, comprometido, filasInforme, parecidos, CAB_INFORME, leerTodas, pintarAuditoria };
+  function recordarMia(n) { try { const m = JSON.parse(localStorage.getItem('si-mias') || '[]'); m.unshift(n); localStorage.setItem('si-mias', JSON.stringify(m.slice(0, 20))); } catch (e) { /* sin almacenamiento */ } }
+  window.SAR_Solicitudes = { repintar: () => pintarPide(), recordarMia, TIPO, COL, abrirPide, abrirBandeja, publicarCatalogo, numeroSolicitud, agregarLinea, textoPicking, infoLinea, lotesCandidatos, repartir, estadoLinea, comprometido, filasInforme, parecidos, CAB_INFORME, leerTodas, pintarAuditoria };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_Solicitudes;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null });

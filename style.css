@@ -6396,3 +6396,29 @@ body[data-user-role="solicitante"] .superadmin-only { display: none !important; 
 .si-ic{width:24px;height:24px;flex:none;color:var(--sar-blue,#1A3668)}
 .si-fbtn .si-ic{width:22px;height:22px}.si-fbtn--ok{border-color:var(--sar-green,#8CC63F)}
 .si-man .si-fbtn{min-height:48px;padding:10px 14px;border:1.5px solid var(--sar-blue,#1A3668);border-radius:10px;background:#fff;color:var(--sar-blue,#1A3668);font-weight:600}
+/* v21.210 · Inventario de bodega transitoria desde el teléfono, cuadre y asociación en la bandeja */
+.si-sep{margin:4px 0 8px;font-size:.75rem;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#64748b}
+.si-cat--inv{border-color:#cfe3b0}.si-cat--inv .si-cat-ic{background:#eef7e2;color:var(--sar-blue,#1A3668)}
+.iv-wrap{padding-bottom:96px}
+.iv-lista{display:flex;flex-direction:column;gap:10px}
+.iv-row{background:#fff;border:1.5px solid #e2e8f0;border-left-width:5px;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:10px}
+.iv-row.iv-ok{border-left-color:var(--sar-green,#8CC63F)}.iv-row.iv-falta{border-left-color:#f59e0b}.iv-row.iv-sobra{border-left-color:#3b82f6}.iv-row.iv-marca{box-shadow:0 0 0 3px #fca5a5}
+.iv-h{display:flex;gap:10px;align-items:flex-start}.iv-h .prod-img{width:48px;height:48px;flex:none}
+.iv-t{display:flex;flex-direction:column;gap:3px;min-width:0}.iv-t b{color:var(--sar-blue,#1A3668);line-height:1.25}.iv-t small{color:#475569}
+.iv-quiebre{align-self:flex-start;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:999px;padding:2px 10px;font-size:.78rem;font-weight:600}
+.iv-c{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.iv-b{width:44px;height:44px;border-radius:10px;border:1.5px solid #cbd5e1;background:#f8fafc;font-size:1.3rem;color:var(--sar-blue,#1A3668);cursor:pointer}
+.iv-in{width:96px;height:44px;border:1.5px solid #cbd5e1;border-radius:10px;text-align:center;font-size:1.1rem;font-weight:700;color:var(--sar-blue,#1A3668)}.iv-in:focus{outline:none;border-color:var(--sar-green,#8CC63F);box-shadow:0 0 0 3px rgba(140,198,63,.25)}
+.iv-igual{margin-left:auto;height:44px;padding:0 12px;border-radius:10px;border:1.5px dashed var(--sar-green,#8CC63F);background:#fff;color:#3f6212;font-weight:600;cursor:pointer}
+.iv-res{margin:0;font-size:.85rem;color:#475569;min-height:1em}.iv-res:empty{display:none}
+.iv-bar{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;align-items:center;gap:12px;padding:12px 16px calc(12px + env(safe-area-inset-bottom));background:#fff;border-top:1px solid #e2e8f0;box-shadow:0 -4px 16px rgba(26,54,104,.08)}
+.iv-bar span{flex:1;display:flex;flex-direction:column;gap:4px;font-size:.85rem;color:#475569}.iv-bar span b{color:var(--sar-blue,#1A3668);font-size:1rem}
+.iv-bar span i{display:block;height:6px;border-radius:3px;background:linear-gradient(90deg,var(--sar-green,#8CC63F) var(--p),#e2e8f0 var(--p))}
+.iv-desc{margin-top:16px;background:none;border:0;color:#94a3b8;text-decoration:underline;font-size:.85rem;cursor:pointer}
+.si-cuadre{margin:8px 0;padding:10px 12px;border-radius:10px;background:#f1f5f9;font-size:.88rem;display:flex;flex-direction:column;gap:6px}
+.si-cuadre--ok{background:#f0f9e8;border:1px solid #cfe3b0}.si-cuadre--mal{background:#fef2f2;border:1px solid #fecaca}.si-cuadre--mal .btn{align-self:flex-start}
+.si-reit{font-style:normal;background:#fef2f2;color:#b91c1c;border-radius:999px;padding:1px 8px;font-size:.75rem;font-weight:700;white-space:nowrap}
+.si-asoc{display:flex;flex-direction:column;gap:6px;margin:6px 0;padding:8px;border:1px dashed #cbd5e1;border-radius:8px;background:#f8fafc}
+.si-asoc--ok{flex-direction:row;align-items:center;justify-content:space-between;border-style:solid;border-color:#cfe3b0;background:#f0f9e8}
+.si-asoc-res{display:flex;flex-direction:column;gap:4px}.si-asoc-res small{color:#64748b}
+.tra-link{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.tra-link input{flex:1;min-width:220px}

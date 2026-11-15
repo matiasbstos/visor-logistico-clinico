@@ -407,7 +407,7 @@
   }
   async function abrirPide() {
     const r = rootPide(); if (!r) return; enlazarPide();
-    try { const y = JSON.parse(localStorage.getItem('si-yo') || 'null'); if (y && !form.solicitante) { form.solicitante = y.n || ''; form.correo = y.c || ''; form.servicio = ''; }   // v21.215: sin «Servicio / unidad» } catch (e) { /* sin almacenamiento */ }
+    try { const y = JSON.parse(localStorage.getItem('si-yo') || 'null'); if (y && !form.solicitante) { form.solicitante = y.n || ''; form.correo = y.c || ''; form.servicio = ''; } /* v21.215: sin «Servicio / unidad» */ } catch (e) { /* sin almacenamiento */ }
     if (window.SAR_Imagenes && !publica()) window.SAR_Imagenes.cargar().catch(() => {});
     if (!cargado) { r.innerHTML = window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando la lista de productos…') : 'Cargando…'; try { await cargarBase(); } catch (e) { r.innerHTML = '<div class="home-empty">No pude cargar la lista. Si no tienes internet, ábrela una vez con conexión para dejarla guardada.</div>'; return; } }
     pintarPide();

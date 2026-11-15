@@ -6377,3 +6377,22 @@ body[data-user-role="solicitante"] .superadmin-only { display: none !important; 
 .bu-queda{margin-top:10px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:10px;display:flex;flex-direction:column;gap:8px}
 .bu-acc{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}@media(max-width:720px){.bu-acc{grid-template-columns:1fr}}
 .bu-big{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:18px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;cursor:pointer;text-align:left;font:inherit;box-shadow:0 1px 3px rgba(15,23,42,.06)}.bu-big i{font-size:28px;color:var(--primary,#1a3668)}.bu-big b{color:#1e293b;font-size:1rem}.bu-big small{color:#64748b}.bu-big:hover{border-color:var(--primary,#1a3668)}
+/* v21.209 · Pedir insumos: tipo de pedido, buscador único y cámara con la identidad del Visor */
+.si-cats{display:flex;flex-direction:column;gap:12px;margin:8px 0 20px}
+.si-cat{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:16px;border:1.5px solid #e2e8f0;border-radius:14px;background:#fff;cursor:pointer;min-height:84px;box-shadow:0 1px 2px rgba(26,54,104,.06);transition:border-color .15s,transform .15s}
+.si-cat:hover,.si-cat:focus-visible{border-color:var(--sar-blue,#1A3668)}.si-cat:active{transform:scale(.98)}
+.si-cat-ic{flex:none;width:52px;height:52px;border-radius:12px;display:grid;place-items:center;background:#eef2f9;color:var(--sar-blue,#1A3668)}.si-cat-ic svg{width:32px;height:32px}
+.si-cat--aseo .si-cat-ic{background:#eef7e2;color:#4d7a16}.si-cat--oficina .si-cat-ic{background:#f1f5f9;color:#334155}
+.si-cat-tx{flex:1;display:flex;flex-direction:column;gap:2px}.si-cat-tx b{font-size:1.1rem;color:var(--sar-blue,#1A3668)}.si-cat-tx small{color:#64748b;font-size:.85rem;line-height:1.3}
+.si-cat>i{font-style:normal;font-size:1.6rem;color:#94a3b8}
+.si-catsel{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;background:#fff;border:1px solid #e2e8f0;margin-bottom:6px}
+.si-catsel .si-cat-ic{width:40px;height:40px}.si-catsel .si-cat-ic svg{width:24px;height:24px}
+.si-catsel>span:nth-child(2){flex:1;display:flex;flex-direction:column}.si-catsel small{color:#64748b;font-size:.75rem}.si-catsel b{color:var(--sar-blue,#1A3668)}
+.si-busca{display:flex;flex-direction:column;gap:8px}
+.si-drop{display:flex;flex-direction:column;gap:6px;border:1px solid #e2e8f0;border-radius:10px;padding:6px;background:#f8fafc;max-height:420px;overflow:auto}
+.si-noesta{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px;border:1.5px dashed var(--sar-blue,#1A3668);border-radius:10px;background:#fff;cursor:pointer;min-height:56px;color:var(--sar-blue,#1A3668)}
+.si-noesta>span:first-child{flex:none;width:40px;height:40px;border-radius:10px;background:#eef2f9;display:grid;place-items:center}
+.si-noesta>span:nth-child(2){flex:1;display:flex;flex-direction:column}.si-noesta small{color:#64748b}.si-noesta>i{font-style:normal;font-size:1.4rem;color:#94a3b8}
+.si-ic{width:24px;height:24px;flex:none;color:var(--sar-blue,#1A3668)}
+.si-fbtn .si-ic{width:22px;height:22px}.si-fbtn--ok{border-color:var(--sar-green,#8CC63F)}
+.si-man .si-fbtn{min-height:48px;padding:10px 14px;border:1.5px solid var(--sar-blue,#1A3668);border-radius:10px;background:#fff;color:var(--sar-blue,#1A3668);font-weight:600}

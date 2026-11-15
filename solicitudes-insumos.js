@@ -19,6 +19,17 @@
   const toast = (t, m, tipo) => { if (typeof window.showToast === 'function') window.showToast(t, m, tipo || 'info'); };
   const rolActual = () => String((document.body && document.body.getAttribute('data-user-role')) || '').toLowerCase();
   const esGestor = () => ['admin', 'superadmin', 'operador'].includes(rolActual());
+  // Tipo de pedido (v21.209): quien pide elige primero médicos, aseo u oficina y ve solo esos productos.
+  const CATS = [
+    { k: 'medico', t: 'Insumos médicos', s: 'Curaciones, jeringas, catéteres, guantes de procedimiento…', ej: 'Ej: Catéter venoso periférico 22G con alas', ic: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M24 4 41.3 14v20L24 44 6.7 34V14z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M20.5 15h7v5.5H33v7h-5.5V33h-7v-5.5H15v-7h5.5z" fill="currentColor"/></svg>' },
+    { k: 'aseo', t: 'Aseo', s: 'Limpieza, papel higiénico, toallas, bolsas, jabón…', ej: 'Ej: Cloro gel 900 ml', ic: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M18 6h10v6h-4l8 4" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 12h12l3 8v20a3 3 0 0 1-3 3H17a3 3 0 0 1-3-3V20z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M14 26h18" stroke="currentColor" stroke-width="3"/><circle cx="38" cy="10" r="2" fill="currentColor"/><circle cx="42" cy="15" r="1.6" fill="currentColor"/><circle cx="37" cy="17" r="1.4" fill="currentColor"/></svg>' },
+    { k: 'oficina', t: 'Oficina', s: 'Resmas, lápices, carpetas, tóner, corchetes…', ej: 'Ej: Resma papel carta 75 g', ic: '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 6h17l9 9v27H12z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M29 6v9h9" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M18 24h14M18 30h14M18 36h9" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>' }
+  ];
+  const catDe = (k) => CATS.find(c => c.k === k) || null;
+  // Mismas palabras que usa el ingreso para proponer el tipo (script.js); lo marcado como aseo u oficina en el producto manda.
+  const RX_ASEO = /\b(cloro|detergente|desinfectante|lavaloza|jab[oó]n|toalla\s+(de\s+)?(papel|nova)|papel\s+higi[eé]nico|bolsa\s+(de\s+)?(basura|residuo)|escobill|trapero|paño|pa[nñ]o\s+de\s+limpieza|limpia|ambientador|alcohol\s+gel|sanitizante|virutilla|esponja|basurero|guante\s+(de\s+)?(aseo|goma|dom[eé]stico)|dispensador)/i;
+  const RX_OFI = /\b(l[aá]piz|lapicera|bol[ií]grafo|resma|carpeta|archivador|cuaderno|corchete|grapa|post[\s-]?it|plum[oó]n|tinta|toner|t[oó]ner|sobre|cinta\s+adhesiva|cartulina|regla|tijera\s+de\s+oficina)\b/i;
+  function tipoDe(i) { const t = String((i && (i.tipoInsumo || i.t)) || ''); if (t === 'aseo' || t === 'oficina') return t; const n = String((i && (i.name || i.nombre)) || ''); return RX_ASEO.test(n) ? 'aseo' : RX_OFI.test(n) ? 'oficina' : 'medico'; }
   const ESTADOS = { NUEVA: 'Nueva', PREPARACION: 'En preparación', LISTA: 'Lista para retirar', ENTREGADA: 'Entregada', ANULADA: 'Anulada' };
 
   // ---------------- lógica pura ----------------
@@ -29,7 +40,7 @@
   /** Texto para pegar en WhatsApp / picking. */
   function textoPicking(s, info) {
     const L = (s.lineas || []).map((l, i) => { const x = info && info[i]; return `${i + 1}. ${l.nombre} × ${l.cantidad}${x && x.ubicacion ? ` · ${x.ubicacion}` : ''}${x && x.stock != null ? ` (hay ${x.stock})` : ''}`; });
-    return `Solicitud ${s.correlativo || s.numero} · ${s.bodega || ''}\nPide: ${s.solicitante || s.requester}${s.correo ? ' <' + s.correo + '>' : ''}${s.servicio ? ' (' + s.servicio + ')' : ''}\n${L.join('\n')}${s.nota ? '\nNota: ' + s.nota : ''}`;
+    return `Solicitud ${s.correlativo || s.numero}${catDe(s.categoria) ? ' · ' + catDe(s.categoria).t : ''} · ${s.bodega || ''}\nPide: ${s.solicitante || s.requester}${s.correo ? ' <' + s.correo + '>' : ''}${s.servicio ? ' (' + s.servicio + ')' : ''}\n${L.join('\n')}${s.nota ? '\nNota: ' + s.nota : ''}`;
   }
   /** Stock y ubicación de una línea a partir de los insumos leídos: coincide por id o por nombre. */
   function infoLinea(l, insumos, bodega) {
@@ -46,7 +57,7 @@
   async function cargarBase() {
     if (publica()) {
       const f = fs(), d = await f.getDoc(f.doc(f.collection(db(), COL), ID_PUB)); if (!d.exists()) throw new Error('Bodega aún no publica la lista de productos.');
-      const x = d.data(); bodegas = x.bodegas || []; insumos = []; Object.keys(x.productos || {}).forEach(b => (x.productos[b] || []).forEach(p => insumos.push({ id: p.i || '', name: p.n, location: b, codigoMP: p.c || '' })));
+      const x = d.data(); bodegas = x.bodegas || []; insumos = []; Object.keys(x.productos || {}).forEach(b => (x.productos[b] || []).forEach(p => insumos.push({ id: p.i || '', name: p.n, location: b, codigoMP: p.c || '', ...(p.t ? { tipoInsumo: p.t } : {}) })));
       if (window.SAR_Imagenes && window.SAR_Imagenes.sumarIndice && x.fotos) window.SAR_Imagenes.sumarIndice(x.fotos);
       cargado = true; return;
     }
@@ -55,7 +66,7 @@
     if (!bodegas.length) bodegas = [...new Set(insumos.map(i => i.location).filter(Boolean))].sort();
     cargado = true;
   }
-  const listaDe = (bodega) => { const m = new Map(); insumos.filter(i => i.location === bodega && i.status !== 'CUARENTENA').forEach(i => { const k = norm(i.name); if (k && !m.has(k)) m.set(k, { nombre: i.name, id: i.id, codigo: i.codigoMP || '' }); }); return [...m.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')); };
+  const listaDe = (bodega, cat) => { const m = new Map(); insumos.filter(i => i.location === bodega && i.status !== 'CUARENTENA').forEach(i => { const k = norm(i.name), t = tipoDe(i); if (k && !m.has(k) && (!cat || cat === '*' || t === cat)) m.set(k, { nombre: i.name, id: i.id, codigo: i.codigoMP || '', tipo: t }); }); return [...m.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')); };
 
   // ---------------- catálogo público para quien pide ----------------
   // Quien pide sin cuenta no puede leer Insumos ni el Catálogo. Al abrir la bandeja (cada 6 h) o «Descargar para usar sin internet»,
@@ -74,46 +85,75 @@
         let v = null; if (x.imagen && /^https?:/.test(x.imagen)) v = { i: x.imagen }; else if (propia && peso < 700000) { const m = await mini(propia); if (m) { v = { i: m }; peso += m.length; } } else if (arch) v = { a: arch };
         if (v) [x.descripcion, x.insumoName].forEach(t => { const k = norm(t); if (k) n[k] = v; }); }
     } catch (e) { /* sin fotos */ }
-    const productos = {}; bodegas.forEach(b => { const l = listaDe(b); if (l.length) productos[b] = l.map(p => ({ n: p.nombre, i: p.id, ...(p.codigo ? { c: String(p.codigo) } : {}) })); });
+    const productos = {}; bodegas.forEach(b => { const l = listaDe(b); if (l.length) productos[b] = l.map(p => ({ n: p.nombre, i: p.id, ...(p.codigo ? { c: String(p.codigo) } : {}), ...(p.tipo !== 'medico' ? { t: p.tipo } : {}) })); });
     await f.setDoc(f.doc(f.collection(db(), COL), ID_PUB), { tipo: 'CATALOGO_PUBLICO', bodegas: Object.keys(productos).sort(), productos, fotos: { c, n }, actualizado: new Date().toISOString() });
     try { localStorage.setItem('si-pub', String(Date.now())); } catch (e) { /* sin almacenamiento */ }
   }
 
   // ---------------- pantalla de quien pide ----------------
-  let bodegaSel = '', lineas = [], busca = '', form = { solicitante: '', correo: '', servicio: '', nota: '' }, manual = { nombre: '', cantidad: 1, foto: '' }, enviando = false, editando = null, misDatos = {};
+  let manualAbierto = false, catSel = '', bodegaSel = '', lineas = [], busca = '', form = { solicitante: '', correo: '', servicio: '', nota: '' }, manual = { nombre: '', cantidad: 1, foto: '' }, enviando = false, editando = null, misDatos = {};
   const rootPide = () => document.getElementById('si-pide');
+  /** Primer paso: ¿qué necesitas pedir? */
+  function pintarCategorias(r) {
+    r.innerHTML = `<div class="si-wrap"><h2 class="si-t">¿Qué necesitas pedir?</h2><p class="si-s">Elige el tipo de insumo y después busca los productos que necesitas.</p>
+      <div class="si-cats">${CATS.map(c => `<button type="button" class="si-cat si-cat--${c.k}" data-cat="${c.k}"><span class="si-cat-ic">${c.ic}</span><span class="si-cat-tx"><b>${c.t}</b><small>${c.s}</small></span><i aria-hidden="true">›</i></button>`).join('')}</div>
+      <div id="si-mias"></div></div>`;
+    pintarMias();
+  }
+  // Ícono de cámara con el trazo del Visor (reemplaza el emoji).
+  const IC_CAM = '<svg class="si-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.3l1.4-2h5.6l1.4 2h2.3A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="17" cy="10" r="1" fill="#8CC63F"/></svg>';
+  /** Productos del tipo elegido en todas las bodegas, sin repetir (quien pide no elige bodega). */
+  function listaCat() { const m = new Map(); bodegas.forEach(b => listaDe(b, catSel).forEach(p => { const k = norm(p.nombre); if (!m.has(k)) m.set(k, { ...p, bodega: b }); })); return [...m.values()].sort((x, y) => x.nombre.localeCompare(y.nombre, 'es')); }
+  /** Búsqueda por palabras: cada palabra escrita debe estar en el nombre (en cualquier orden, «cat 22» encuentra «Catéter … 22G»). */
+  function buscarEn(lista, texto) { const t = norm(texto).split(' ').filter(Boolean); if (!t.length) return []; return lista.filter(p => { const n = norm(p.nombre); return t.every(w => n.includes(w)); }).sort((x, y) => (norm(y.nombre).startsWith(t[0]) ? 1 : 0) - (norm(x.nombre).startsWith(t[0]) ? 1 : 0)); }
+  /** Bodega a la que va la solicitud: la que tiene más de los productos pedidos; si son todos a mano, la que tiene más productos de ese tipo. */
+  function bodegaAuto() {
+    const c = {}; lineas.forEach(l => { const i = l.insumoId && insumos.find(x => x.id === l.insumoId) || insumos.find(x => norm(x.name) === norm(l.nombre)); if (i && i.location) c[i.location] = (c[i.location] || 0) + 1; });
+    const top = Object.keys(c).sort((x, y) => c[y] - c[x])[0]; if (top) return top;
+    return bodegas.slice().sort((x, y) => listaDe(y, catSel).length - listaDe(x, catSel).length)[0] || '';
+  }
   function pintarPide() {
     const r = rootPide(); if (!r) return;
-    const lista = bodegaSel ? listaDe(bodegaSel) : [], q = norm(busca), vis = q ? lista.filter(x => norm(x.nombre).includes(q)).slice(0, 40) : lista.slice(0, 40);
+    if (!catSel && !editando) { pintarCategorias(r); return; }
+    const cat = catDe(catSel);
     r.innerHTML = `<div class="si-wrap">
       ${editando ? `<div class="si-edit"><span>Modificando <b>${esc(editando.ver)}</b>: agrega, quita o cambia cantidades y guarda.</span><button type="button" class="btn btn-secondary btn-sm" id="si-edit-x">Cancelar</button></div>` : ''}
-      <h2 class="si-t">Solicitud de insumos</h2><p class="si-s">Elige la bodega, marca lo que necesitas y envía. Bodega confirmará lo que hay.</p>
-      <label class="si-l">¿A qué bodega le pides?<select id="si-bod" class="si-in"${editando ? ' disabled' : ''}><option value="">— Elegir —</option>${bodegas.map(b => `<option value="${esc(b)}"${b === bodegaSel ? ' selected' : ''}>${esc(b)}</option>`).join('')}</select></label>
+      ${cat ? `<div class="si-catsel si-cat--${cat.k}"><span class="si-cat-ic">${cat.ic}</span><span><small>Estás pidiendo</small><b>${cat.t}</b></span>${editando ? '' : '<button type="button" class="btn btn-secondary btn-sm" id="si-cat-x">Cambiar</button>'}</div>` : ''}
+      <h2 class="si-t">Solicitud de ${cat ? esc(cat.t.toLowerCase()) : 'insumos'}</h2><p class="si-s">Busca lo que necesitas, agrégalo y envía. Bodega confirmará lo que hay.</p>
       <div class="si-dos"><label class="si-l">Tu nombre<input id="si-nom" class="si-in" value="${esc(form.solicitante)}" placeholder="Nombre y apellido" autocomplete="name"></label><label class="si-l">Tu correo<input id="si-cor" class="si-in" type="email" value="${esc(form.correo)}" placeholder="nombre@cormumel.cl" autocomplete="email" inputmode="email"></label></div>
       <div class="si-dos"><label class="si-l">Servicio / unidad<input id="si-ser" class="si-in" value="${esc(form.servicio)}" placeholder="Ej: Box 3, Urgencia"></label><span></span></div>
-      ${bodegaSel ? `<label class="si-l">Buscar en la lista de la bodega<input id="si-bus" class="si-in" value="${esc(busca)}" placeholder="Escribe parte del nombre…" autocomplete="off"></label>
-      <div class="si-lista">${vis.map(x => `<button type="button" class="si-p" data-add="${esc(x.nombre)}" data-id="${esc(x.id)}">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}<span>${esc(x.nombre)}</span><b>+</b></button>`).join('') || '<p class="si-v">No hay coincidencias: escríbelo abajo.</p>'}${lista.length > vis.length && !q ? `<p class="si-v">Mostrando ${vis.length} de ${lista.length}: usa el buscador.</p>` : ''}</div>` : ''}
-      <div class="si-manbox"><b>¿No está en la lista?</b><small>Escribe el <b>nombre completo</b> (marca, medida, tamaño) y <b>saca una foto</b> del producto: así bodega sabe exactamente qué es.</small>
-        <div class="si-man"><input id="si-mt" class="si-in" placeholder="Ej: Catéter venoso periférico 22G con alas" value="${esc(manual.nombre)}" autocomplete="off"><input id="si-mc" class="si-in si-cn" type="number" min="1" value="${manual.cantidad}" inputmode="numeric" aria-label="Cantidad"></div>
-        <div id="si-sug"></div>
-        <div class="si-man"><label class="btn btn-secondary si-fbtn"><input type="file" accept="image/*" capture="environment" hidden id="si-mf">${manual.foto ? '<img src="' + manual.foto + '" alt="">Cambiar foto' : '📷 Sacar foto del producto'}</label><button type="button" class="btn btn-primary" id="si-ma">Agregar</button></div>
-      </div>
+      <div class="si-busca">${manualAbierto ? '' : `<label class="si-l">Agregar producto<input id="si-bus" class="si-in" value="${esc(busca)}" placeholder="Escribe las primeras palabras… (${esc((cat || CATS[0]).ej.replace(/^Ej: /, 'ej: '))})" autocomplete="off" enterkeyhint="search"></label><div id="si-res"></div>`}
+        ${manualAbierto ? `<div class="si-manbox"><div class="si-cab"><b>Agregar a mano</b><button type="button" class="btn btn-secondary btn-sm" id="si-man-x">Volver a buscar</button></div><small>Escribe el <b>nombre completo</b> (qué es, marca, medida o tamaño) y <b>saca una foto</b> del producto: así bodega sabe exactamente qué es.</small>
+          <div class="si-man"><input id="si-mt" class="si-in" placeholder="${esc((cat || CATS[0]).ej)}" value="${esc(manual.nombre)}" autocomplete="off"><input id="si-mc" class="si-in si-cn" type="number" min="1" value="${manual.cantidad}" inputmode="numeric" aria-label="Cantidad"></div>
+          <div id="si-sug"></div>
+          <div class="si-man"><label class="btn btn-secondary si-fbtn${manual.foto ? ' si-fbtn--ok' : ''}"><input type="file" accept="image/*" capture="environment" hidden id="si-mf">${manual.foto ? '<img src="' + manual.foto + '" alt="">Cambiar foto' : IC_CAM + 'Sacar foto del producto'}</label><button type="button" class="btn btn-primary" id="si-ma">Agregar</button></div>
+        </div>` : ''}</div>
       <h3 class="si-h">Tu solicitud (${lineas.length})</h3>
       <div class="si-car">${lineas.map((l, i) => `<div class="si-fila">${l.foto ? `<img class="si-lfoto" src="${l.foto}" alt="">` : ''}<span class="si-fn">${esc(l.nombre)}${l.manual ? ' <em>escrito a mano</em>' : ''}</span><span class="si-q"><button type="button" data-m="${i}">−</button><b>${l.cantidad}</b><button type="button" data-p="${i}">+</button></span><button type="button" class="si-x" data-x="${i}" aria-label="Quitar">✕</button></div>`).join('') || '<p class="si-v">Aún no agregas nada.</p>'}</div>
       <label class="si-l">Nota (opcional)<input id="si-not" class="si-in" value="${esc(form.nota)}" placeholder="Ej: urgente para hoy"></label>
       <button type="button" class="btn btn-primary si-env" id="si-env"${enviando ? ' disabled' : ''}>${editando ? 'Guardar cambios' : 'Enviar solicitud'}</button>
       <p class="si-v" id="si-red"></p><div id="si-mias"></div></div>`;
-    estadoRed(); if (window.SAR_Imagenes) window.SAR_Imagenes.rellenar(r); pintarSug(); pintarMias();
+    estadoRed(); if (window.SAR_Imagenes) window.SAR_Imagenes.rellenar(r); pintarRes(); pintarSug(); pintarMias();
   }
-  /** «¿Es alguno de estos?»: productos de la lista parecidos a lo que se escribe a mano (en la bodega elegida y en las demás). */
+  /** Coincidencias mientras se escribe; al final, «No está en la lista» abre el ingreso a mano con foto. */
+  function pintarRes() {
+    const el = document.getElementById('si-res'); if (!el) return; const q = busca.trim();
+    if (q.length < 2) { el.innerHTML = ''; return; }
+    const res = buscarEn(listaCat(), q), vis = res.slice(0, 12);
+    el.innerHTML = `<div class="si-drop">${vis.map(x => `<button type="button" class="si-p" data-add="${esc(x.nombre)}" data-id="${esc(x.id)}">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}<span>${esc(x.nombre)}</span><b>+</b></button>`).join('')}
+      ${res.length > vis.length ? `<p class="si-v">Hay ${res.length - vis.length} más: escribe otra palabra para afinar.</p>` : ''}
+      ${vis.length ? '' : '<p class="si-v">No encontré productos con esas palabras.</p>'}
+      <button type="button" class="si-noesta" id="si-noesta"><span>${IC_CAM}</span><span><b>No está en la lista</b><small>Agrégalo a mano con una foto</small></span><i aria-hidden="true">›</i></button></div>`;
+    if (window.SAR_Imagenes) window.SAR_Imagenes.rellenar(el);
+  }
+  /** «¿Es alguno de estos?»: productos de la lista parecidos a lo que se escribe a mano. */
   function parecidos(texto, lista, max) {
     const t = norm(texto).split(' ').filter(w => w.length > 2); if (!t.length) return [];
     return lista.map(p => { const n = norm(p.nombre); return { p, sc: t.filter(w => n.includes(w)).length / t.length }; }).filter(x => x.sc >= 0.5).sort((a, b) => b.sc - a.sc).slice(0, max || 5).map(x => x.p);
   }
   function pintarSug() {
     const el = document.getElementById('si-sug'); if (!el) return; const txt = manual.nombre || '';
-    const todos = []; const vistos = new Set(); (bodegaSel ? [bodegaSel].concat(bodegas.filter(b => b !== bodegaSel)) : bodegas).forEach(b => listaDe(b).forEach(p => { const k = norm(p.nombre); if (!vistos.has(k)) { vistos.add(k); todos.push(p); } }));
-    const l = txt.trim().length >= 3 ? parecidos(txt, todos, 5) : [];
+    const l = txt.trim().length >= 3 ? parecidos(txt, listaCat(), 5) : [];
     el.innerHTML = l.length ? `<p class="si-v">¿Es alguno de estos? Tócalo para agregarlo:</p><div class="si-lista si-lista--sug">${l.map(x => `<button type="button" class="si-p" data-sug="${esc(x.nombre)}" data-id="${esc(x.id)}">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}<span>${esc(x.nombre)}</span><b>+</b></button>`).join('')}</div>` : '';
     if (window.SAR_Imagenes) window.SAR_Imagenes.rellenar(el);
   }
@@ -136,14 +176,13 @@
   function editar(n) {
     const x = misDatos[n]; if (!x || x.estado !== 'NUEVA') { toast('Solicitud', 'Bodega ya empezó a prepararla: no se puede cambiar.', 'warning'); return; }
     editando = { numero: n, col: x._col || COL, ver: x.correlativo || n, historial: x.historial || [] };
-    bodegaSel = x.bodega || ''; lineas = (x.lineas || []).map(l => ({ nombre: l.nombre, cantidad: l.cantidad, manual: !!l.manual, ...(l.insumoId ? { insumoId: l.insumoId } : {}), ...(l.foto ? { foto: l.foto } : {}) }));
+    catSel = x.categoria || '*'; bodegaSel = x.bodega || ''; lineas = (x.lineas || []).map(l => ({ nombre: l.nombre, cantidad: l.cantidad, manual: !!l.manual, ...(l.insumoId ? { insumoId: l.insumoId } : {}), ...(l.foto ? { foto: l.foto } : {}) }));
     form.nota = x.nota || ''; form.servicio = x.servicio || form.servicio; busca = ''; pintarPide(); window.scrollTo && window.scrollTo(0, 0);
   }
   function estadoRed() { const e = document.getElementById('si-red'); if (e) e.textContent = navigator.onLine === false ? 'Sin internet: se guardará en este teléfono y se enviará sola al volver la conexión.' : ''; }
   function leerCampos() { const g = (id) => { const e = document.getElementById(id); return e ? e.value : null; }; const n = g('si-nom'), s = g('si-ser'), o = g('si-not'), c = g('si-cor'); if (c !== null) form.correo = c; if (n !== null) form.solicitante = n; if (s !== null) form.servicio = s; if (o !== null) form.nota = o; }
   async function enviar() {
     leerCampos();
-    if (!bodegaSel) { toast('Solicitud', 'Elige la bodega a la que le pides.', 'warning'); return; }
     if (!lineas.length) { toast('Solicitud', 'Agrega al menos un producto.', 'warning'); return; }
     if (!form.solicitante.trim()) { toast('Solicitud', 'Escribe tu nombre.', 'warning'); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.correo.trim())) { toast('Solicitud', 'Escribe tu correo (ej: nombre@cormumel.cl).', 'warning'); return; }
@@ -155,47 +194,57 @@
       const r = await Promise.race([p.then(() => 'ok'), new Promise(res => setTimeout(() => res('cola'), 2500))]).catch(e => 'error:' + (e.message || e));
       enviando = false;
       if (String(r).startsWith('error')) { toast('No se guardó', /permission/i.test(r) ? 'Bodega ya empezó a prepararla: no se puede cambiar.' : String(r).slice(6), 'error'); pintarPide(); return; }
-      p.catch(() => {}); editando = null; lineas = []; busca = ''; form.nota = ''; bodegaSel = ''; pintarPide();
+      p.catch(() => {}); editando = null; lineas = []; busca = ''; form.nota = ''; bodegaSel = ''; catSel = ''; manualAbierto = false; pintarPide();
       if (window.SAR_Progreso && window.SAR_Progreso.exito) window.SAR_Progreso.exito({ titulo: r === 'ok' ? 'Cambios guardados' : 'Guardado en el teléfono', texto: esc(ed.ver) + (r === 'ok' ? '' : '<br>Se enviará solo al volver internet.') });
       return;
     }
-    const ahora = new Date(), numero = numeroSolicitud(ahora), f = fs();
-    const au = window.firebaseAuth && window.firebaseAuth.currentUser, data = { tipo: TIPO, numero, estado: 'NUEVA', uid: (au && au.uid) || '', requester: (au && au.email) || form.correo.trim().toLowerCase(), solicitante: form.solicitante.trim(), correo: form.correo.trim().toLowerCase(), servicio: form.servicio.trim(), bodega: bodegaSel, nota: form.nota.trim(), lineas: lineas.map(l => ({ ...l })), creadoEn: ahora.toISOString(), historial: [{ estado: 'NUEVA', por: usuario(), en: ahora.toISOString() }] };
+    const ahora = new Date(), numero = numeroSolicitud(ahora), f = fs(); bodegaSel = bodegaAuto();
+    const au = window.firebaseAuth && window.firebaseAuth.currentUser, data = { tipo: TIPO, numero, estado: 'NUEVA', uid: (au && au.uid) || '', requester: (au && au.email) || form.correo.trim().toLowerCase(), solicitante: form.solicitante.trim(), correo: form.correo.trim().toLowerCase(), servicio: form.servicio.trim(), bodega: bodegaSel, ...(catDe(catSel) ? { categoria: catSel } : {}), nota: form.nota.trim(), lineas: lineas.map(l => ({ ...l })), creadoEn: ahora.toISOString(), historial: [{ estado: 'NUEVA', por: usuario(), en: ahora.toISOString() }] };
     const p = f.setDoc(f.doc(f.collection(db(), COL), numero), data);
     const r = await Promise.race([p.then(() => 'ok'), new Promise(res => setTimeout(() => res('cola'), 2500))]).catch(e => 'error:' + (e.message || e));
     enviando = false;
     if (String(r).startsWith('error')) { toast('No se envió', String(r).slice(6) || 'Revisa tu conexión e intenta de nuevo.', 'error'); pintarPide(); return; }
     p.catch(() => { /* se reintenta sola al volver internet */ });
     try { const m = JSON.parse(localStorage.getItem('si-mias') || '[]'); m.unshift(numero); localStorage.setItem('si-mias', JSON.stringify(m.slice(0, 20))); } catch (e) { /* sin almacenamiento */ }
-    lineas = []; busca = ''; form.nota = ''; bodegaSel = ''; pintarPide();
+    lineas = []; busca = ''; form.nota = ''; bodegaSel = ''; catSel = ''; manualAbierto = false; pintarPide();
     if (window.SAR_Progreso && window.SAR_Progreso.exito) window.SAR_Progreso.exito({ titulo: r === 'ok' ? 'Solicitud enviada' : 'Guardada en el teléfono', texto: r === 'ok' ? 'Bodega ya la puede ver. Abajo verás cómo avanza.' : 'Se enviará sola cuando haya internet.' });
     const r2 = rootPide(); if (r2) r2.insertAdjacentHTML('afterbegin', `<div class="si-ok"><b>${r === 'ok' ? 'Solicitud enviada' : 'Solicitud guardada en el teléfono'}</b><br>${numero}${r === 'ok' ? '' : ' · se enviará sola cuando haya internet.'}</div>`);
     window.scrollTo && window.scrollTo(0, 0);
   }
+  async function cambiarCategoria() {
+    if (lineas.length) {
+      const P = window.SAR_Progreso, ok = P && P.confirmar ? await P.confirmar({ titulo: '¿Cambiar el tipo de pedido?', texto: `Se quitarán los <b>${lineas.length}</b> producto(s) que ya agregaste.`, si: 'Cambiar' }) : confirm('Se quitarán los productos agregados. ¿Cambiar?');
+      if (!ok) return;
+    }
+    lineas = []; bodegaSel = ''; busca = ''; manual = { nombre: '', cantidad: 1, foto: '' }; catSel = ''; manualAbierto = false; pintarPide(); window.scrollTo && window.scrollTo(0, 0);
+  }
   function enlazarPide() {
     const r = rootPide(); if (!r || r.dataset.ok) return; r.dataset.ok = '1';
-    r.addEventListener('change', (e) => { if (e.target.id === 'si-bod') { leerCampos(); bodegaSel = e.target.value; busca = ''; pintarPide(); } });
     r.addEventListener('change', async (e) => { if (e.target.id !== 'si-mf') return; const fl = e.target.files && e.target.files[0]; if (!fl) return;
       try { manual.foto = await reducirFoto(fl, 480); const t = document.getElementById('si-mt'), c = document.getElementById('si-mc'); if (t) manual.nombre = t.value; if (c) manual.cantidad = Math.max(1, Math.floor(num(c.value) || 1)); leerCampos(); pintarPide(); }
       catch (er) { toast('Foto', er.message || 'No se pudo leer la foto.', 'error'); } });
     r.addEventListener('input', (e) => { if (e.target.id === 'si-mt') { manual.nombre = e.target.value; pintarSug(); return; }
-      if (e.target.id === 'si-bus') { busca = e.target.value; const p = e.target.selectionStart; leerCampos(); pintarPide(); const b = document.getElementById('si-bus'); if (b) { b.focus(); b.setSelectionRange(p, p); } } });
+      if (e.target.id === 'si-bus') { busca = e.target.value; pintarRes(); } });
     r.addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b) return; leerCampos();
-      if (b.dataset.add) { agregarLinea(lineas, { nombre: b.dataset.add, cantidad: 1 }); if (lineas.length) { const l = lineas.find(x => norm(x.nombre) === norm(b.dataset.add)); if (l && b.dataset.id) l.insumoId = b.dataset.id; } pintarPide(); }
+      if (b.dataset.add) { agregarLinea(lineas, { nombre: b.dataset.add, cantidad: 1 }); if (lineas.length) { const l = lineas.find(x => norm(x.nombre) === norm(b.dataset.add)); if (l && b.dataset.id) l.insumoId = b.dataset.id; } busca = ''; pintarPide(); toast('Agregado', esc(b.dataset.add), 'success'); }
+      else if (b.id === 'si-noesta') { manualAbierto = true; manual.nombre = manual.nombre || busca.trim(); busca = ''; pintarPide(); const t = document.getElementById('si-mt'); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); } }
+      else if (b.id === 'si-man-x') { manualAbierto = false; manual = { nombre: '', cantidad: 1, foto: '' }; pintarPide(); const t = document.getElementById('si-bus'); if (t) t.focus(); }
       else if (b.id === 'si-ma') {
         const t = document.getElementById('si-mt'), c = document.getElementById('si-mc'); manual.nombre = t ? t.value : manual.nombre; manual.cantidad = Math.max(1, Math.floor(num(c && c.value) || 1));
         const nom = manual.nombre.trim();
         if (nom.split(/\s+/).length < 2 || nom.length < 8) { toast('Nombre completo', 'Escribe el nombre completo del producto (qué es, medida o tamaño).', 'warning'); return; }
         if (!manual.foto) { toast('Falta la foto', 'Saca una foto del producto para que bodega sepa exactamente qué es.', 'warning'); return; }
-        lineas.push({ nombre: nom, cantidad: manual.cantidad, manual: true, foto: manual.foto }); manual = { nombre: '', cantidad: 1, foto: '' }; pintarPide();
+        lineas.push({ nombre: nom, cantidad: manual.cantidad, manual: true, foto: manual.foto }); manual = { nombre: '', cantidad: 1, foto: '' }; manualAbierto = false; pintarPide();
       }
-      else if (b.dataset.sug) { agregarLinea(lineas, { nombre: b.dataset.sug, cantidad: manual.cantidad || 1 }); const l = lineas.find(x => norm(x.nombre) === norm(b.dataset.sug)); if (l && b.dataset.id) l.insumoId = b.dataset.id; manual = { nombre: '', cantidad: 1, foto: '' }; pintarPide(); }
+      else if (b.dataset.sug) { agregarLinea(lineas, { nombre: b.dataset.sug, cantidad: manual.cantidad || 1 }); const l = lineas.find(x => norm(x.nombre) === norm(b.dataset.sug)); if (l && b.dataset.id) l.insumoId = b.dataset.id; manual = { nombre: '', cantidad: 1, foto: '' }; manualAbierto = false; pintarPide(); }
       else if (b.dataset.p !== undefined) { lineas[+b.dataset.p].cantidad++; pintarPide(); }
       else if (b.dataset.m !== undefined) { const l = lineas[+b.dataset.m]; l.cantidad = Math.max(1, l.cantidad - 1); pintarPide(); }
       else if (b.dataset.x !== undefined) { lineas.splice(+b.dataset.x, 1); pintarPide(); }
       else if (b.id === 'si-env') enviar();
-      else if (b.id === 'si-edit-x') { editando = null; lineas = []; bodegaSel = ''; form.nota = ''; pintarPide(); }
+      else if (b.id === 'si-edit-x') { editando = null; lineas = []; bodegaSel = ''; catSel = ''; form.nota = ''; pintarPide(); }
+      else if (b.dataset.cat) { catSel = b.dataset.cat; bodegaSel = ''; busca = ''; pintarPide(); window.scrollTo && window.scrollTo(0, 0); }
+      else if (b.id === 'si-cat-x') { cambiarCategoria(); }
     });
     window.addEventListener('online', () => { estadoRed(); if (publica()) { cargado = false; cargarBase().then(pintarPide).catch(() => {}); } });   // al volver internet: lista y estados al día
     window.addEventListener('offline', estadoRed);
@@ -253,7 +302,7 @@
     if (costado && (!sel || !vis.some(x => x.numero === sel)) && sel !== null) sel = vis.length ? vis[0].numero : '';
     const cardHTML = (s) => { const mover = (s.lineas || []).some(l => !l.movido && (l.seleccion || []).some(x => x.bodega !== s.bodega && x.qty > 0));
         return `<article class="si-card" data-n="${esc(s.numero)}"><header><b>${esc(s.correlativo || s.numero)}</b>${s.correlativo ? '' : ' <small>(asignando N°…)</small>'}<span class="si-est si-e-${esc(s.estado)}">${esc(ESTADOS[s.estado] || s.estado)}</span></header>
-        <p class="si-m">${esc(s.solicitante || s.requester)}${s.correo ? ` (<a href="mailto:${esc(s.correo)}">${esc(s.correo)}</a>)` : ''}${s.servicio ? ' · ' + esc(s.servicio) : ''} · pide a <b>${esc(s.bodega)}</b> · ${esc(new Date(s.creadoEn).toLocaleString('es-CL'))}</p>
+        <p class="si-m">${esc(s.solicitante || s.requester)}${s.correo ? ` (<a href="mailto:${esc(s.correo)}">${esc(s.correo)}</a>)` : ''}${s.servicio ? ' · ' + esc(s.servicio) : ''}${catDe(s.categoria) ? ' · <b>' + esc(catDe(s.categoria).t) + '</b>' : ''} · pide a <b>${esc(s.bodega)}</b> · ${esc(new Date(s.creadoEn).toLocaleString('es-CL'))}</p>
         ${s.nota ? `<p class="si-m">Nota: ${esc(s.nota)}</p>` : ''}
         <div class="si-lns">${(s.lineas || []).map((l, i) => { const cands = lotesCandidatos(l, insumos, s.bodega), decid = l.estado && l.estado !== 'pendiente', ver = !decid || abiertoL[s.numero + '|' + i] || !ab(s) && false;
           const pre = (l.seleccion && l.seleccion.length) ? cands.map(c => { const x = l.seleccion.find(y => y.insumoId === c.insumoId && y.clave === c.clave); return x ? x.qty : 0; }) : repartir(cands, l.cantidad), hay = cands.reduce((t, c) => t + c.disp, 0);

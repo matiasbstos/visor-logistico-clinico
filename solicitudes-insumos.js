@@ -30,7 +30,15 @@
   const RX_ASEO = /\b(cloro|detergente|desinfectante|lavaloza|jab[oó]n|toalla\s+(de\s+)?(papel|nova)|papel\s+higi[eé]nico|bolsa\s+(de\s+)?(basura|residuo)|escobill|trapero|paño|pa[nñ]o\s+de\s+limpieza|limpia|ambientador|alcohol\s+gel|sanitizante|virutilla|esponja|basurero|guante\s+(de\s+)?(aseo|goma|dom[eé]stico)|dispensador)/i;
   const RX_OFI = /\b(l[aá]piz|lapicera|bol[ií]grafo|resma|carpeta|archivador|cuaderno|corchete|grapa|post[\s-]?it|plum[oó]n|tinta|toner|t[oó]ner|sobre|cinta\s+adhesiva|cartulina|regla|tijera\s+de\s+oficina)\b/i;
   function tipoDe(i) { const t = String((i && (i.tipoInsumo || i.t)) || ''); if (t === 'aseo' || t === 'oficina') return t; const n = String((i && (i.name || i.nombre)) || ''); return RX_ASEO.test(n) ? 'aseo' : RX_OFI.test(n) ? 'oficina' : 'medico'; }
-  const ESTADOS = { NUEVA: 'Nueva', PREPARACION: 'En preparación', LISTA: 'Lista para retirar', ENTREGADA: 'Entregada', ANULADA: 'Anulada' };
+  const ESTADOS = { NUEVA: 'Enviada', PREPARACION: 'Procesando', LISTA: 'Procesada', ENTREGADA: 'Cerrada', ANULADA: 'Anulada' };
+  // Recorrido que ven ambas partes (v21.211): Enviada → Procesando → Procesada (bodega movió el stock) → Cerrada (entregada)
+  const PASOS = ['NUEVA', 'PREPARACION', 'LISTA', 'ENTREGADA'], AV_EST = { NUEVA: 'enviada', PREPARACION: 'procesando', LISTA: 'procesada', ENTREGADA: 'cerrada', ANULADA: 'anulada' };
+  function recorridoHTML(estado) {
+    if (estado === 'ANULADA') return '<div class="si-rec si-rec--anulada"><span class="si-rec-p on">Anulada</span></div>';
+    const k = Math.max(0, PASOS.indexOf(estado === 'POR_ENVIAR' ? 'NUEVA' : estado));
+    return `<ol class="si-rec" aria-label="Estado: ${esc(ESTADOS[estado] || 'Por enviar')}">${PASOS.map((p, i) => `<li class="si-rec-p${i < k ? ' hecho' : i === k ? ' on' : ''}"><i aria-hidden="true"></i><span>${ESTADOS[p]}</span></li>`).join('')}</ol>`;
+  }
+  const avisar = (o) => { const P = window.SAR_Progreso; if (P && P.aviso) P.aviso(o); else toast(o.titulo, o.texto || '', 'info'); };
 
   // ---------------- lógica pura ----------------
   /** Código de la solicitud: SI-AAAAMMDD-HHMM-XXX (se calcula en el teléfono, sirve sin internet). */
@@ -62,7 +70,7 @@
       cargado = true; return;
     }
     const f = fs(), a = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(3000))), l = []; a.forEach(d => l.push({ id: d.id, ...d.data() })); insumos = l;
-    try { const b = await f.getDocs(f.collection(db(), 'Bodegas')), n = []; b.forEach(d => n.push((d.data().nombre || d.data().name || d.id))); bodegas = n.filter(Boolean).sort(); } catch (e) { bodegas = []; }
+    try { const b = await f.getDocs(f.collection(db(), 'Bodegas')), n = []; transitoriasStaff = []; b.forEach(d => { const nm = d.data().nombre || d.data().name || d.id; n.push(nm); if (d.data().type === 'transitoria') transitoriasStaff.push(nm); }); bodegas = n.filter(Boolean).sort(); } catch (e) { bodegas = []; }
     if (!bodegas.length) bodegas = [...new Set(insumos.map(i => i.location).filter(Boolean))].sort();
     cargado = true;
   }
@@ -94,8 +102,19 @@
   let manualAbierto = false, catSel = '', bodegaSel = '', lineas = [], busca = '', form = { solicitante: '', correo: '', servicio: '', nota: '' }, manual = { nombre: '', cantidad: 1, foto: '' }, enviando = false, editando = null, misDatos = {};
   const rootPide = () => document.getElementById('si-pide');
   /** Primer paso: ¿qué necesitas pedir? */
+  const correoOk = (c) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(c || '').trim());
+  let cambiandoQuien = false;
+  /** Paso 0 (v21.211): quien pide se identifica al entrar; todas sus solicitudes quedan a su nombre y correo. */
+  function pintarQuien(r) {
+    r.innerHTML = `<div class="si-wrap"><h2 class="si-t">¿Quién pide?</h2><p class="si-s">Tus solicitudes quedarán a tu nombre y te avisaremos aquí cuando bodega las procese.</p>
+      <label class="si-l">Tu nombre<input id="si-q-nom" class="si-in" value="${esc(form.solicitante)}" placeholder="Nombre y apellido" autocomplete="name"></label>
+      <label class="si-l">Tu correo<input id="si-q-cor" class="si-in" type="email" value="${esc(form.correo)}" placeholder="nombre@cormumel.cl" autocomplete="email" inputmode="email"></label>
+      <button type="button" class="btn btn-primary si-env" id="si-q-ok">Continuar</button><div id="si-mias"></div></div>`;
+    pintarMias();
+  }
+  const quienHTML = () => `<div class="si-quien"><span>Pidiendo como <b>${esc(form.solicitante)}</b><small>${esc(form.correo)}</small></span><button type="button" class="btn btn-secondary btn-sm" id="si-q-x">Cambiar</button></div>`;
   function pintarCategorias(r) {
-    r.innerHTML = `<div class="si-wrap"><h2 class="si-t">¿Qué necesitas pedir?</h2><p class="si-s">Elige el tipo de insumo y después busca los productos que necesitas.</p>
+    r.innerHTML = `<div class="si-wrap">${quienHTML()}<h2 class="si-t">¿Qué necesitas pedir?</h2><p class="si-s">Elige el tipo de insumo y después busca los productos que necesitas.</p>
       <div class="si-cats">${CATS.map(c => `<button type="button" class="si-cat si-cat--${c.k}" data-cat="${c.k}"><span class="si-cat-ic">${c.ic}</span><span class="si-cat-tx"><b>${c.t}</b><small>${c.s}</small></span><i aria-hidden="true">›</i></button>`).join('')}</div>
       <div id="si-inv"></div><div id="si-mias"></div></div>`;
     if (window.SAR_InvMovil) window.SAR_InvMovil.boton(document.getElementById('si-inv'));
@@ -108,6 +127,9 @@
   /** Búsqueda por palabras: cada palabra escrita debe estar en el nombre (en cualquier orden, «cat 22» encuentra «Catéter … 22G»). */
   function buscarEn(lista, texto) { const t = norm(texto).split(' ').filter(Boolean); if (!t.length) return []; return lista.filter(p => { const n = norm(p.nombre); return t.every(w => n.includes(w)); }).sort((x, y) => (norm(y.nombre).startsWith(t[0]) ? 1 : 0) - (norm(x.nombre).startsWith(t[0]) ? 1 : 0)); }
   /** Bodega a la que va la solicitud: la que tiene más de los productos pedidos; si son todos a mano, la que tiene más productos de ese tipo. */
+  /** Bodega transitoria (destino de los insumos médicos que se piden): del catálogo público o de Bodegas. */
+  let transitoriasStaff = [];
+  function transitoriaNombre() { const t = window.SAR_CatalogoPublico && window.SAR_CatalogoPublico.transitoria; const b = t && (t.bodegas || [])[0]; return (b && b.bodega) || transitoriasStaff[0] || ''; }
   function bodegaAuto() {
     const c = {}; lineas.forEach(l => { const i = l.insumoId && insumos.find(x => x.id === l.insumoId) || insumos.find(x => norm(x.name) === norm(l.nombre)); if (i && i.location) c[i.location] = (c[i.location] || 0) + 1; });
     const top = Object.keys(c).sort((x, y) => c[y] - c[x])[0]; if (top) return top;
@@ -115,13 +137,14 @@
   }
   function pintarPide() {
     const r = rootPide(); if (!r) return;
+    if (!editando && (cambiandoQuien || !form.solicitante.trim() || !correoOk(form.correo))) { pintarQuien(r); return; }
     if (!catSel && !editando) { if (window.SAR_InvMovil && window.SAR_InvMovil.enCurso()) { window.SAR_InvMovil.pintar(r); return; } pintarCategorias(r); return; }
     const cat = catDe(catSel);
     r.innerHTML = `<div class="si-wrap">
       ${editando ? `<div class="si-edit"><span>Modificando <b>${esc(editando.ver)}</b>: agrega, quita o cambia cantidades y guarda.</span><button type="button" class="btn btn-secondary btn-sm" id="si-edit-x">Cancelar</button></div>` : ''}
       ${cat ? `<div class="si-catsel si-cat--${cat.k}"><span class="si-cat-ic">${cat.ic}</span><span><small>Estás pidiendo</small><b>${cat.t}</b></span>${editando ? '' : '<button type="button" class="btn btn-secondary btn-sm" id="si-cat-x">Cambiar</button>'}</div>` : ''}
       <h2 class="si-t">Solicitud de ${cat ? esc(cat.t.toLowerCase()) : 'insumos'}</h2><p class="si-s">Busca lo que necesitas, agrégalo y envía. Bodega confirmará lo que hay.</p>
-      <div class="si-dos"><label class="si-l">Tu nombre<input id="si-nom" class="si-in" value="${esc(form.solicitante)}" placeholder="Nombre y apellido" autocomplete="name"></label><label class="si-l">Tu correo<input id="si-cor" class="si-in" type="email" value="${esc(form.correo)}" placeholder="nombre@cormumel.cl" autocomplete="email" inputmode="email"></label></div>
+      ${quienHTML()}
       <div class="si-dos"><label class="si-l">Servicio / unidad<input id="si-ser" class="si-in" value="${esc(form.servicio)}" placeholder="Ej: Box 3, Urgencia"></label><span></span></div>
       <div class="si-busca">${manualAbierto ? '' : `<label class="si-l">Agregar producto<input id="si-bus" class="si-in" value="${esc(busca)}" placeholder="Escribe las primeras palabras… (${esc((cat || CATS[0]).ej.replace(/^Ej: /, 'ej: '))})" autocomplete="off" enterkeyhint="search"></label><div id="si-res"></div>`}
         ${manualAbierto ? `<div class="si-manbox"><div class="si-cab"><b>Agregar a mano</b><button type="button" class="btn btn-secondary btn-sm" id="si-man-x">Volver a buscar</button></div><small>Escribe el <b>nombre completo</b> (qué es, marca, medida o tamaño) y <b>saca una foto</b> del producto: así bodega sabe exactamente qué es.</small>
@@ -164,12 +187,43 @@
       img.onerror = () => { URL.revokeObjectURL(url); mal(new Error('No se pudo leer la foto.')); }; img.src = url; });
   }
   /** Las últimas solicitudes hechas desde este teléfono y en qué estado van (bodega las va moviendo). */
+  /** Lo que bodega no tenía (no hay / parcial), para que quien pidió lo vea de un vistazo. */
+  function resumenNoHay(x) { const l = (x.lineas || []).filter(y => !y.soloConteo && (y.estado === 'no_hay' || y.estado === 'parcial')); if (!l.length || x.estado === 'NUEVA') return ''; return `<p class="si-nohay"><b>No disponible:</b> ${l.map(y => `${esc(y.nombre)} (${y.estado === 'no_hay' ? y.cantidad : y.cantidad - num(y.entregar)} u.)`).join(' · ')}</p>`; }
+  const miaHTML = (x, k) => `<details class="si-mia"${k === 0 ? ' open' : ''}><summary><span class="si-fn"><b>${esc(x.correlativo || x.numero)}</b>${x.correlativo ? '' : ' <small>(provisional)</small>'}<br><small>${esc(x.bodega || '')}${x.creadoEn ? ' · ' + esc(new Date(x.creadoEn).toLocaleString('es-CL')) : ''}</small></span><span class="si-est si-e-${esc(x.estado)}">${esc(x.estado === 'POR_ENVIAR' || x._pend ? 'Por enviar (sin internet)' : (ESTADOS[x.estado] || x.estado))}</span></summary>${recorridoHTML(x._pend ? 'POR_ENVIAR' : x.estado)}${resumenNoHay(x)}
+      ${x.conteo ? `<div class="si-mia-l"><span>Inventario ${x.conteo.bodega ? esc(x.conteo.bodega) : ''}</span><span class="si-le si-le-${x.conteo.estado === 'aplicado' ? 'ok' : 'pendiente'}">${x.conteo.estado === 'aplicado' ? '✔ Cuadrado' : x.conteo.estado ? 'Bodega lo revisa' : 'Por cuadrar'}</span></div>` : ''}${(x.lineas || []).filter(l => !l.soloConteo).map(l => `<div class="si-mia-l"><span>${esc(l.nombre)} × ${l.cantidad}${num(l.reiterado) > 1 ? ' <em class="si-reit">sigue faltando</em>' : ''}</span>${chipL(l)}</div>`).join('')}${x.estado === 'NUEVA' && misDatos[x.numero] ? `<div class="si-lb"><small>Mientras bodega no empiece a prepararla puedes cambiarla.</small><button type="button" class="btn btn-primary btn-sm" data-mod="${esc(x.numero)}">Modificar</button></div>` : ''}</details>`;
+  // Quien pide (página pública): sus solicitudes en vivo (solo las de este teléfono), buscador y aviso cuando cambian de estado (v21.211)
+  let misSub = null, misLista = [], misQ = '';
+  const TXT_AV = { PREPARACION: 'Bodega la está revisando.', LISTA: 'Bodega ya preparó tus productos. Revisa el detalle.', ENTREGADA: 'Solicitud cerrada: entregada.', ANULADA: 'Bodega la anuló.' };
+  function vigilarMias() {
+    if (misSub) return true; const f = fs(), au = window.firebaseAuth && window.firebaseAuth.currentUser; if (!au || !f.onSnapshot) return false;
+    try {
+      misSub = f.onSnapshot(f.query(f.collection(db(), COL), f.where('uid', '==', au.uid)), (sn) => {
+        const l = []; sn.forEach(d => { if (d.data().tipo === TIPO) l.push({ ...d.data(), _col: COL, _pend: !!(d.metadata && d.metadata.hasPendingWrites && !d.data().correlativo) }); });
+        misLista = l.sort((a, b) => String(b.creadoEn).localeCompare(String(a.creadoEn))); misDatos = {}; misLista.forEach(x => { misDatos[x.numero] = x; });
+        let vistos = {}; try { vistos = JSON.parse(localStorage.getItem('si-estados') || '{}'); } catch (e) { vistos = {}; }
+        misLista.forEach(x => { const antes = vistos[x.numero]; if (antes && antes !== x.estado && TXT_AV[x.estado]) avisar({ titulo: `Solicitud ${x.correlativo || x.numero} ${String(ESTADOS[x.estado]).toLowerCase()}`, texto: TXT_AV[x.estado], estado: AV_EST[x.estado], boton: 'Ver', alTocar: () => { misQ = x.correlativo || x.numero; pintarMiasLista(); const e = document.getElementById('si-mias'); if (e) e.scrollIntoView({ behavior: 'smooth' }); } }); vistos[x.numero] = x.estado; });
+        try { localStorage.setItem('si-estados', JSON.stringify(vistos)); } catch (e) { /* sin almacenamiento */ }
+        pintarMiasLista();
+      }, () => { misSub = null; });
+      return true;
+    } catch (e) { misSub = null; return false; }
+  }
+  function pintarMiasLista() {
+    const el = document.getElementById('si-mias'); if (!el) return;
+    if (!misLista.length) { el.innerHTML = ''; return; }
+    if (!el.querySelector('#si-mq')) el.innerHTML = `<div class="si-cab"><h3 class="si-h">Tus solicitudes</h3><small class="si-v">${misLista.length} en total</small></div><input id="si-mq" class="si-in" type="search" value="${esc(misQ)}" placeholder="Buscar por N° de solicitud (SOL-…) o producto" autocomplete="off" aria-label="Buscar tus solicitudes"><div id="si-mias-l" class="si-car"></div>`;
+    const q = el.querySelector('#si-mq'); if (q && q.value !== misQ && document.activeElement !== q) q.value = misQ;
+    const l = misLista.filter(x => coincideSol(x, misQ)).slice(0, misQ ? 30 : 8);
+    const c = el.querySelector('#si-mias-l'); c.innerHTML = l.map((x, k) => miaHTML(x, misQ ? 0 : k)).join('') || '<p class="si-v">No encontré solicitudes con eso.</p>';
+    c.querySelectorAll('[data-mod]').forEach(b => b.onclick = () => editar(b.dataset.mod));
+  }
   async function pintarMias() {
-    const el = document.getElementById('si-mias'); if (!el) return; let l = [];
+    const el = document.getElementById('si-mias'); if (!el) return;
+    if (publica() && vigilarMias()) { pintarMiasLista(); return; }
+    let l = [];
     try { l = JSON.parse(localStorage.getItem('si-mias') || '[]'); } catch (e) { l = []; } if (!l.length) { el.innerHTML = ''; return; }
     const f = fs(); misDatos = {}; const filas = await Promise.all(l.slice(0, 6).map(async (n) => { try { let d = await f.getDoc(f.doc(f.collection(db(), COL), n)); if (!d.exists() && !publica()) d = await f.getDoc(f.doc(f.collection(db(), COL_ANT), n)).catch(() => d); if (d.exists()) { const x = { ...d.data(), _col: d.ref && d.ref.parent ? d.ref.parent.id : COL }; misDatos[n] = x; return x; } return { numero: n, estado: 'POR_ENVIAR' }; } catch (e) { return { numero: n, estado: 'POR_ENVIAR' }; } }));
-    el.innerHTML = `<div class="si-cab"><h3 class="si-h">Tus últimas solicitudes</h3><button type="button" class="btn btn-secondary btn-sm" id="si-mias-act">Actualizar</button></div><div class="si-car">${filas.map((x, k) => `<details class="si-mia"${k === 0 ? ' open' : ''}><summary><span class="si-fn"><b>${esc(x.correlativo || x.numero)}</b>${x.correlativo ? '' : ' <small>(provisional)</small>'}<br><small>${esc(x.bodega || '')}${x.creadoEn ? ' · ' + esc(new Date(x.creadoEn).toLocaleString('es-CL')) : ''}</small></span><span class="si-est si-e-${esc(x.estado)}">${esc(x.estado === 'POR_ENVIAR' ? 'Por enviar (sin internet)' : (ESTADOS[x.estado] || x.estado))}</span></summary>
-      ${x.conteo ? `<div class="si-mia-l"><span>Inventario ${x.conteo.bodega ? esc(x.conteo.bodega) : ''}</span><span class="si-le si-le-${x.conteo.estado === 'aplicado' ? 'ok' : 'pendiente'}">${x.conteo.estado === 'aplicado' ? '✔ Cuadrado' : x.conteo.estado ? 'Bodega lo revisa' : 'Por cuadrar'}</span></div>` : ''}${(x.lineas || []).filter(l => !l.soloConteo).map(l => `<div class="si-mia-l"><span>${esc(l.nombre)} × ${l.cantidad}${num(l.reiterado) > 1 ? ' <em class="si-reit">sigue faltando</em>' : ''}</span>${chipL(l)}</div>`).join('')}${x.estado === 'NUEVA' && misDatos[x.numero] ? `<div class="si-lb"><small>Mientras bodega no empiece a prepararla puedes cambiarla.</small><button type="button" class="btn btn-primary btn-sm" data-mod="${esc(x.numero)}">Modificar</button></div>` : ''}</details>`).join('')}</div>`;
+    el.innerHTML = `<div class="si-cab"><h3 class="si-h">Tus últimas solicitudes</h3><button type="button" class="btn btn-secondary btn-sm" id="si-mias-act">Actualizar</button></div><div class="si-car">${filas.map(miaHTML).join('')}</div>`;
     el.querySelectorAll('[data-mod]').forEach(b => b.onclick = () => editar(b.dataset.mod));
     const ac = document.getElementById('si-mias-act'); if (ac) ac.onclick = () => pintarMias();
   }
@@ -199,8 +253,8 @@
       if (window.SAR_Progreso && window.SAR_Progreso.exito) window.SAR_Progreso.exito({ titulo: r === 'ok' ? 'Cambios guardados' : 'Guardado en el teléfono', texto: esc(ed.ver) + (r === 'ok' ? '' : '<br>Se enviará solo al volver internet.') });
       return;
     }
-    const ahora = new Date(), numero = numeroSolicitud(ahora), f = fs(); bodegaSel = bodegaAuto();
-    const au = window.firebaseAuth && window.firebaseAuth.currentUser, data = { tipo: TIPO, numero, estado: 'NUEVA', uid: (au && au.uid) || '', requester: (au && au.email) || form.correo.trim().toLowerCase(), solicitante: form.solicitante.trim(), correo: form.correo.trim().toLowerCase(), servicio: form.servicio.trim(), bodega: bodegaSel, ...(catDe(catSel) ? { categoria: catSel } : {}), nota: form.nota.trim(), lineas: lineas.map(l => ({ ...l })), creadoEn: ahora.toISOString(), historial: [{ estado: 'NUEVA', por: usuario(), en: ahora.toISOString() }] };
+    const ahora = new Date(), numero = numeroSolicitud(ahora), f = fs(); const bt = catSel === 'medico' ? transitoriaNombre() : ''; bodegaSel = bt || bodegaAuto();
+    const au = window.firebaseAuth && window.firebaseAuth.currentUser, data = { tipo: TIPO, numero, estado: 'NUEVA', uid: (au && au.uid) || '', requester: (au && au.email) || form.correo.trim().toLowerCase(), solicitante: form.solicitante.trim(), correo: form.correo.trim().toLowerCase(), servicio: form.servicio.trim(), bodega: bodegaSel, ...(bt ? { destino: 'transitoria' } : {}), ...(catDe(catSel) ? { categoria: catSel } : {}), nota: form.nota.trim(), lineas: lineas.map(l => ({ ...l })), creadoEn: ahora.toISOString(), historial: [{ estado: 'NUEVA', por: usuario(), en: ahora.toISOString() }] };
     const p = f.setDoc(f.doc(f.collection(db(), COL), numero), data);
     const r = await Promise.race([p.then(() => 'ok'), new Promise(res => setTimeout(() => res('cola'), 2500))]).catch(e => 'error:' + (e.message || e));
     enviando = false;
@@ -225,7 +279,8 @@
       try { manual.foto = await reducirFoto(fl, 480); const t = document.getElementById('si-mt'), c = document.getElementById('si-mc'); if (t) manual.nombre = t.value; if (c) manual.cantidad = Math.max(1, Math.floor(num(c.value) || 1)); leerCampos(); pintarPide(); }
       catch (er) { toast('Foto', er.message || 'No se pudo leer la foto.', 'error'); } });
     r.addEventListener('input', (e) => { if (e.target.id === 'si-mt') { manual.nombre = e.target.value; pintarSug(); return; }
-      if (e.target.id === 'si-bus') { busca = e.target.value; pintarRes(); } });
+      if (e.target.id === 'si-bus') { busca = e.target.value; pintarRes(); }
+      if (e.target.id === 'si-mq') { misQ = e.target.value; pintarMiasLista(); } });
     r.addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b) return; leerCampos();
       if (b.dataset.add) { agregarLinea(lineas, { nombre: b.dataset.add, cantidad: 1 }); if (lineas.length) { const l = lineas.find(x => norm(x.nombre) === norm(b.dataset.add)); if (l && b.dataset.id) l.insumoId = b.dataset.id; } busca = ''; pintarPide(); toast('Agregado', esc(b.dataset.add), 'success'); }
@@ -243,6 +298,10 @@
       else if (b.dataset.m !== undefined) { const l = lineas[+b.dataset.m]; l.cantidad = Math.max(1, l.cantidad - 1); pintarPide(); }
       else if (b.dataset.x !== undefined) { lineas.splice(+b.dataset.x, 1); pintarPide(); }
       else if (b.id === 'si-env') enviar();
+      else if (b.id === 'si-q-ok') { const n = document.getElementById('si-q-nom'), c = document.getElementById('si-q-cor'); const nn = n ? n.value.trim() : '', cc = c ? c.value.trim() : '';
+        if (nn.split(/\s+/).length < 2) { toast('Tu nombre', 'Escribe tu nombre y apellido.', 'warning'); return; } if (!correoOk(cc)) { toast('Tu correo', 'Escribe un correo válido (ej: nombre@cormumel.cl).', 'warning'); return; }
+        form.solicitante = nn; form.correo = cc; cambiandoQuien = false; try { const y = JSON.parse(localStorage.getItem('si-yo') || '{}'); localStorage.setItem('si-yo', JSON.stringify({ ...y, n: nn, c: cc })); } catch (e) { /* sin almacenamiento */ } pintarPide(); }
+      else if (b.id === 'si-q-x') { cambiandoQuien = true; pintarPide(); }
       else if (b.id === 'si-edit-x') { editando = null; lineas = []; bodegaSel = ''; catSel = ''; form.nota = ''; pintarPide(); }
       else if (b.dataset.cat) { catSel = b.dataset.cat; bodegaSel = ''; busca = ''; pintarPide(); window.scrollTo && window.scrollTo(0, 0); }
       else if (b.id === 'si-cat-x') { cambiarCategoria(); }
@@ -261,8 +320,8 @@
   // ---------------- correlativo SOL-AAAA-NNNN ----------------
   // Quien pide no puede numerar (no accede a Contadores): el número oficial lo pone bodega al recibirla, en orden de llegada.
   let asignando = false;
-  async function asignarCorrelativos() {
-    if (asignando) return; const sin = solicitudes.filter(x => !x.correlativo && x._col === COL).sort((a, b) => String(a.creadoEn).localeCompare(String(b.creadoEn))); if (!sin.length) return;
+  async function asignarCorrelativos(lista) {
+    if (asignando) return; const sin = (lista || solicitudes).filter(x => !x.correlativo && x._col === COL).sort((a, b) => String(a.creadoEn).localeCompare(String(b.creadoEn))); if (!sin.length) return;
     asignando = true; const f = fs();
     try {
       for (const x of sin) {
@@ -275,20 +334,24 @@
   }
 
   // ---------------- bandeja de bodega ----------------
-  let solicitudes = [], desuscribir = null, filtro = 'ABIERTAS';
+  let solicitudes = [], desuscribir = null, filtro = 'ABIERTAS', bq = '';
+  const coincideSol = (s, q) => { const t = norm(q).split(' ').filter(Boolean); if (!t.length) return true; const h = norm([s.correlativo, s.numero, s.solicitante, s.correo, s.servicio, s.bodega, ...(s.lineas || []).map(l => l.nombre + ' ' + (l.asociado || ''))].join(' ')); return t.every(w => h.includes(w)); };
   const rootBandeja = () => document.getElementById('si-bandeja');
   // ---- checklist por producto: lotes candidatos (bodega · estante · lote · vence) y reparto FEFO ----
   const lotesDeDoc = (d) => (Array.isArray(d.batches) && d.batches.length ? d.batches : (num(d.quantity) > 0 ? [{ batch: d.batch || 'S/L', quantity: num(d.quantity), expirationDate: d.expirationDate || '' }] : []));
   /** Lotes con saldo de este producto en cualquier bodega. Primero la bodega a la que se pidió (no hay que mover), luego lo que vence antes. */
-  function lotesCandidatos(l, lista, bodegaPedida) {
+  function lotesCandidatos(l, lista, bodegaPedida, sinDestino) {
     const k = norm(l.asociado || l.nombre), out = [];
-    lista.filter(i => ((l.insumoId && i.id === l.insumoId) || norm(i.name) === k) && i.status !== 'CUARENTENA').forEach(i => lotesDeDoc(i).forEach(b => { const disp = num(b.quantity); if (disp > 0) out.push({ insumoId: i.id, bodega: i.location || '', estante: i.ubicacionEstante || '', clave: String(b.batch || 'S/L') + '|' + String(b.expirationDate || ''), lote: b.batch || 'S/L', vence: b.expirationDate || '', disp }); }));
+    lista.filter(i => ((l.insumoId && i.id === l.insumoId) || norm(i.name) === k) && i.status !== 'CUARENTENA' && !(sinDestino && i.location === bodegaPedida)).forEach(i => lotesDeDoc(i).forEach(b => { const disp = num(b.quantity); if (disp > 0) out.push({ insumoId: i.id, bodega: i.location || '', estante: i.ubicacionEstante || '', clave: String(b.batch || 'S/L') + '|' + String(b.expirationDate || ''), lote: b.batch || 'S/L', vence: b.expirationDate || '', disp }); }));
     return out.sort((a, b) => ((a.bodega === bodegaPedida ? 0 : 1) - (b.bodega === bodegaPedida ? 0 : 1)) || (a.vence || '9999').localeCompare(b.vence || '9999'));
   }
   /** Reparte lo pedido entre los lotes en ese orden. Devuelve [cantidad por lote]. */
   function repartir(cands, pide) { let falta = Math.max(0, num(pide)); return cands.map(c => { const q = Math.min(c.disp, falta); falta -= q; return q; }); }
   /** Estado de una línea según lo que bodega confirmó. */
   function estadoLinea(pide, entregar, noHay) { if (noHay) return 'no_hay'; const e = num(entregar); return e <= 0 ? 'pendiente' : e >= num(pide) ? 'ok' : 'parcial'; }
+  /** Reposición de la bodega transitoria: el stock sale de las OTRAS bodegas (nunca de la misma transitoria). */
+  const esRepo = (s) => s.origen === 'transitoria' || s.destino === 'transitoria';
+  const candDe = (l, s) => lotesCandidatos(l, insumos, s.bodega, esRepo(s));
   const EST_L = { pendiente: 'Pendiente', ok: 'Confirmado', parcial: 'Parcial', no_hay: 'No hay' };
   const chipL = (l) => { const e = l.estado || 'pendiente'; return `<span class="si-le si-le-${e}">${e === 'ok' ? '✔ ' + num(l.entregar) + ' confirmado' + (num(l.entregar) === 1 ? '' : 's') : e === 'parcial' ? `Parcial: ${num(l.entregar)} de ${l.cantidad}` : EST_L[e]}</span>`; };
   const fmtV = (v) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v || ''); return m ? `${m[3]}-${m[2]}-${m[1]}` : (v || '—'); };
@@ -312,7 +375,8 @@
   function pintarBandeja() {
     const r = rootBandeja(); if (!r) return;
     if (asoc) queueMicrotask(() => { const x = r.querySelector('.si-asoc-in'); if (x && document.activeElement !== x) { x.focus(); x.setSelectionRange(x.value.length, x.value.length); } });
-    const ab = (s) => s.estado !== 'ENTREGADA' && s.estado !== 'ANULADA', vis = solicitudes.filter(s => filtro === 'TODAS' ? true : filtro === 'ABIERTAS' ? ab(s) : s.estado === filtro);
+    const ab = (s) => s.estado !== 'ENTREGADA' && s.estado !== 'ANULADA', vis = solicitudes.filter(s => (bq.trim() ? true : filtro === 'TODAS' ? true : filtro === 'ABIERTAS' ? ab(s) : s.estado === filtro) && coincideSol(s, bq));
+    if (bq) queueMicrotask(() => { const x = r.querySelector('#si-bq'); if (x && document.activeElement !== x && !asoc) { x.focus(); x.setSelectionRange(x.value.length, x.value.length); } });
     const IM = window.SAR_Imagenes;
     // «Costado»: en pantallas anchas la lista queda a la izquierda y el detalle se abre al lado, sin perder la lista
     const costado = window.innerWidth >= 1000;
@@ -320,7 +384,7 @@
     const asocHTML = (s, l, i) => {
       if (l.asociado) return `<div class="si-asoc si-asoc--ok"><small>${l.manual ? 'Pedido como «' + esc(l.nombre) + '» · ' : ''}asociado a <b>${esc(l.asociado)}</b></small><button type="button" class="btn btn-secondary btn-sm" data-desasoc="${i}">Quitar asociación</button></div>`;
       const ali = aliasDe(l), abierto = asoc && asoc.n === s.numero && asoc.i === i;
-      if (!l.manual && !abierto && lotesCandidatos(l, insumos, s.bodega).length) return '';
+      if (!l.manual && !abierto && candDe(l, s).length) return '';
       return `<div class="si-asoc">${ali ? `<button type="button" class="btn btn-primary btn-sm" data-asocsi="${i}" data-nom="${esc(ali)}">¿Es «${esc(ali)}»? Asociar (ya lo asociaste antes)</button>` : ''}
         ${abierto ? `<input class="si-in si-asoc-in" data-i="${i}" value="${esc(asoc.q)}" placeholder="Buscar en el inventario (nombre del fabricante)…" autocomplete="off" aria-label="Buscar producto para asociar"><div class="si-asoc-res">${resAsoc(asoc.q)}</div>` : `<button type="button" class="btn btn-secondary btn-sm" data-asoc="${i}">Asociar a producto del inventario</button>`}</div>`; };
     const cuadreHTML = (s) => { const c = s.conteo, us = (c.descontado || []).reduce((t, x) => t + num(x.usado), 0);
@@ -329,17 +393,17 @@
       return `<div class="si-cuadre si-cuadre--mal"><b>El inventario no se cuadró solo:</b> ${esc(c.detalle || '')}<button type="button" class="btn btn-primary btn-sm" data-cuadrar="1">Cuadrar ahora</button></div>`; };
     const cardHTML = (s) => { const mover = (s.lineas || []).some(l => !l.movido && (l.seleccion || []).some(x => x.bodega !== s.bodega && x.qty > 0));
         return `<article class="si-card" data-n="${esc(s.numero)}"><header><b>${esc(s.correlativo || s.numero)}</b>${s.correlativo ? '' : ' <small>(asignando N°…)</small>'}<span class="si-est si-e-${esc(s.estado)}">${esc(ESTADOS[s.estado] || s.estado)}</span></header>
-        <p class="si-m">${esc(s.solicitante || s.requester)}${s.correo ? ` (<a href="mailto:${esc(s.correo)}">${esc(s.correo)}</a>)` : ''}${s.servicio ? ' · ' + esc(s.servicio) : ''}${catDe(s.categoria) ? ' · <b>' + esc(catDe(s.categoria).t) + '</b>' : ''} · pide a <b>${esc(s.bodega)}</b> · ${esc(new Date(s.creadoEn).toLocaleString('es-CL'))}</p>
+        <p class="si-m">${esc(s.solicitante || s.requester)}${s.correo ? ` (<a href="mailto:${esc(s.correo)}">${esc(s.correo)}</a>)` : ''}${s.servicio ? ' · ' + esc(s.servicio) : ''}${catDe(s.categoria) ? ' · <b>' + esc(catDe(s.categoria).t) + '</b>' : ''}${esRepo(s) ? ' · reponer <b>' + esc(s.bodega) + '</b>' : ' · pide a <b>' + esc(s.bodega) + '</b>'} · ${esc(new Date(s.creadoEn).toLocaleString('es-CL'))}</p>
         ${s.nota ? `<p class="si-m">Nota: ${esc(s.nota)}</p>` : ''}${s.conteo ? cuadreHTML(s) : ''}
-        <div class="si-lns">${(s.lineas || []).map((l, i) => { if (l.soloConteo) return ''; const cands = lotesCandidatos(l, insumos, s.bodega), decid = l.estado && l.estado !== 'pendiente', ver = !decid || abiertoL[s.numero + '|' + i] || !ab(s) && false;
+        <div class="si-lns">${(s.lineas || []).map((l, i) => { if (l.soloConteo) return ''; const cands = candDe(l, s), decid = l.estado && l.estado !== 'pendiente', ver = !decid || abiertoL[s.numero + '|' + i] || !ab(s) && false;
           const pre = (l.seleccion && l.seleccion.length) ? cands.map(c => { const x = l.seleccion.find(y => y.insumoId === c.insumoId && y.clave === c.clave); return x ? x.qty : 0; }) : repartir(cands, l.cantidad), hay = cands.reduce((t, c) => t + c.disp, 0);
           return `<div class="si-ln${decid ? ' si-ln--ok' : ''}" data-i="${i}"><div class="si-lh">${l.foto ? `<span class="prod-img"><img src="${l.foto}" alt="${esc(l.nombre)}"></span>` : IM ? IM.thumb(l.nombre, { codigo: (insumos.find(x => x.id === l.insumoId) || {}).codigoMP || '' }) : ''}<div class="si-ln-t"><b>${esc(l.nombre)}</b>${l.manual ? ' <em>escrito a mano</em>' : ''}${num(l.reiterado) > 1 ? ` <em class="si-reit">Sigue faltando · ${num(l.reiterado)}.º día</em>` : ''}<small>Pide <b>${l.cantidad}</b> · hay ${hay} en total${l.movido ? ' · traído a ' + esc(s.bodega) : ''}</small></div>${chipL(l)}</div>
             ${ab(s) && ver ? (cands.length ? `<table class="si-tb si-lt"><thead><tr><th>Dónde</th><th>Lote</th><th>Vence</th><th>Hay</th><th>Sacar</th></tr></thead><tbody>${cands.map((c, j) => `<tr><td>${esc(c.bodega)}${c.estante ? ' · ' + esc(c.estante) : ''}${c.bodega !== s.bodega ? ' <small class="si-mv">hay que traer</small>' : ''}</td><td>${esc(c.lote)}</td><td>${esc(fmtV(c.vence))}</td><td>${c.disp}</td><td><input type="number" min="0" max="${c.disp}" value="${pre[j]}" class="si-q-in" data-j="${j}" inputmode="numeric" aria-label="Cantidad a sacar del lote ${esc(c.lote)}"></td></tr>`).join('')}</tbody></table>` : '<p class="si-v">No está en el inventario con ese nombre: asócialo al producto que corresponde.</p>') + asocHTML(s, l, i)
               + `<div class="si-lb"><button type="button" class="btn btn-primary btn-sm" data-ok="${i}"${cands.length ? '' : ' disabled'}>Confirmar</button><button type="button" class="btn btn-secondary btn-sm" data-nh="${i}">No hay</button></div>`
               : (ab(s) ? `<div class="si-lb"><small>${(l.seleccion || []).filter(x => x.qty > 0).map(x => `${esc(x.lote)} · ${esc(x.bodega)}: ${x.qty}`).join(' · ')}</small><button type="button" class="btn btn-secondary btn-sm" data-ver="${i}">Cambiar</button></div>` : '')}</div>`; }).join('')}</div>
-        <footer>${mover && ab(s) ? `<button class="btn btn-primary" data-mv="1">Traer lo elegido a ${esc(s.bodega)}</button>` : ''}${s.estado === 'LISTA' ? '<button class="btn btn-primary" data-e="ENTREGADA">Marcar entregada</button>' : ''}${s.estado === 'PREPARACION' ? '<button class="btn btn-secondary" data-e="LISTA">Lista para retirar</button>' : ''}<button class="btn btn-secondary" data-c="1">Copiar para WhatsApp</button>${ab(s) ? '<button class="btn btn-secondary" data-e="ANULADA">Anular</button>' : ''}</footer></article>`; };
+        ${recorridoHTML(s.estado)}<footer>${(s.estado === 'NUEVA' || s.estado === 'PREPARACION') ? (() => { const faltan = (s.lineas || []).filter(l => !l.soloConteo && (!l.estado || l.estado === 'pendiente')).length; return `<button class="btn btn-primary" data-procesar="1"${faltan ? ' disabled' : ''} title="${faltan ? 'Confirma o marca «No hay» en cada producto' : 'Mueve el stock y avisa a quien pidió'}">${faltan ? `Procesar (faltan ${faltan})` : (mover ? `Procesar: mover a ${esc(s.bodega)}` : 'Procesar solicitud')}</button>`; })() : ''}${mover && s.estado === 'LISTA' ? `<button class="btn btn-secondary" data-mv="1">Mover lo pendiente a ${esc(s.bodega)}</button>` : ''}${s.estado === 'LISTA' ? '<button class="btn btn-primary" data-e="ENTREGADA">Cerrar solicitud (entregada)</button>' : ''}<button class="btn btn-secondary" data-c="1">Copiar para WhatsApp</button>${ab(s) ? '<button class="btn btn-secondary" data-e="ANULADA">Anular</button>' : ''}</footer></article>`; };
     r.innerHTML = `<div class="si-wrap si-ancho${costado ? ' si-wrap--costado' : ''}"><div class="si-cab"><div><h2 class="si-t">Solicitudes de insumos</h2><p class="si-s">Revisa cada producto: foto, dónde hay y de qué lote sacar. Confirma o marca «No hay»; quien pidió lo ve en su teléfono.</p></div>
-      <div class="si-acc"><select id="si-fil" class="si-in">${[['ABIERTAS', 'Abiertas'], ['NUEVA', 'Nuevas'], ['PREPARACION', 'En preparación'], ['LISTA', 'Listas'], ['ENTREGADA', 'Entregadas'], ['TODAS', 'Todas']].map(([v, t]) => `<option value="${v}"${v === filtro ? ' selected' : ''}>${t}</option>`).join('')}</select>
+      <div class="si-acc"><input id="si-bq" class="si-in si-bq" type="search" value="${esc(bq)}" placeholder="Buscar N° (SOL-…), nombre, correo o producto" autocomplete="off" aria-label="Buscar solicitud"><select id="si-fil" class="si-in">${[['ABIERTAS', 'Abiertas'], ['NUEVA', 'Enviadas'], ['PREPARACION', 'Procesando'], ['LISTA', 'Procesadas'], ['ENTREGADA', 'Cerradas'], ['TODAS', 'Todas']].map(([v, t]) => `<option value="${v}"${v === filtro ? ' selected' : ''}>${t}</option>`).join('')}</select>
       <button type="button" class="btn btn-secondary" id="si-off" title="Guarda en el teléfono el inventario y las solicitudes para trabajar sin internet">Descargar para usar sin internet</button></div></div><p class="si-v" id="si-offm">${esc(localStorage.getItem('si-off') ? 'Última descarga: ' + new Date(localStorage.getItem('si-off')).toLocaleString('es-CL') : '')}</p>
       ${costado ? `<div class="si-costado"><div class="si-lsol" role="listbox" aria-label="Solicitudes">${vis.map(s => `<button type="button" role="option" class="si-fsol${s.numero === sel ? ' on' : ''}" data-sel="${esc(s.numero)}" aria-selected="${s.numero === sel}"><span><b>${esc(s.correlativo || s.numero)}</b><small>${esc(s.solicitante || '')}${s.servicio ? ' · ' + esc(s.servicio) : ''} · ${(s.lineas || []).length} prod.</small></span><span class="si-est si-e-${esc(s.estado)}">${esc(ESTADOS[s.estado] || s.estado)}</span></button>`).join('') || '<div class="home-empty">No hay solicitudes en este filtro.</div>'}</div>
         <section class="si-panel" aria-live="polite">${vis.find(s => s.numero === sel) ? `<div class="si-pcab"><small>↑ ↓ recorre · Esc cierra</small><button type="button" class="si-pnav" data-nav="-1" aria-label="Anterior">▲</button><button type="button" class="si-pnav" data-nav="1" aria-label="Siguiente">▼</button><button type="button" class="si-pnav" data-cerrar="1" aria-label="Cerrar">✕</button></div>` + cardHTML(vis.find(s => s.numero === sel)) : '<div class="si-pvacio">Elige una solicitud de la lista para ver el detalle.</div>'}</section></div>`
@@ -349,14 +413,14 @@
   /** Guarda el resultado de una línea (y pasa la solicitud a «En preparación» o «Lista» según corresponda). */
   async function decidirLinea(n, i, noHay, cards) {
     const f = fs(), s = solicitudes.find(x => x.numero === n); if (!s) return; const lin = (s.lineas || []).map(x => ({ ...x }));
-    const l = lin[i], cands = lotesCandidatos(l, insumos, s.bodega);
+    const l = lin[i], cands = candDe(l, s);
     const qs = cards ? [...cards.querySelectorAll('.si-q-in')].map(x => Math.max(0, Math.floor(num(x.value)))) : [];
     const mal = cands.find((c, j) => qs[j] > c.disp); if (mal) { toast('Cantidad', `El lote ${mal.lote} solo tiene ${mal.disp}.`, 'warning'); return; }
     const sel = noHay ? [] : cands.map((c, j) => ({ insumoId: c.insumoId, bodega: c.bodega, clave: c.clave, lote: c.lote, vence: c.vence, qty: qs[j] || 0 })).filter(x => x.qty > 0);
     const entregar = sel.reduce((t, x) => t + x.qty, 0);
-    if (!noHay && entregar <= 0) { toast('Solicitud', 'Indica cuánto sacar de algún lote, o marca «No hay».', 'warning'); return; }
+    if (!noHay && entregar <= 0) noHay = true;   // dejar todo en 0 = no tenemos: queda «No hay» en la solicitud
     lin[i] = { ...l, estado: estadoLinea(l.cantidad, entregar, noHay), entregar, seleccion: sel, movido: false, revisadoPor: usuario(), revisadoEn: new Date().toISOString() };
-    const todas = lin.every(x => x.estado && x.estado !== 'pendiente'), est = todas ? (lin.some(x => x.estado === 'ok' || x.estado === 'parcial') ? 'LISTA' : s.estado) : (s.estado === 'NUEVA' ? 'PREPARACION' : s.estado);
+    const est = s.estado === 'NUEVA' ? 'PREPARACION' : s.estado;   // «Procesada» solo al tocar «Procesar» (mueve el stock)
     const cambios = { lineas: lin }; if (est !== s.estado) { cambios.estado = est; cambios.historial = (s.historial || []).concat([{ estado: est, por: usuario(), en: new Date().toISOString() }]); }
     delete abiertoL[n + '|' + i];
     Object.assign(s, cambios); pintarBandeja();
@@ -365,13 +429,13 @@
     if (s.origen === 'transitoria' && window.SAR_Transitoria) window.SAR_Transitoria.refrescarPublico();
   }
   /** Trae a la bodega pedida lo elegido de otras bodegas (transferencia normal; sin internet queda en la cola). */
-  async function traer(n) {
+  async function traer(n, auto) {
     const s = solicitudes.find(x => x.numero === n); if (!s || !window.SAR_Traspaso) return;
     const mov = []; (s.lineas || []).forEach((l, i) => { if (l.movido) return; const g = {}; (l.seleccion || []).filter(x => x.bodega !== s.bodega && x.qty > 0).forEach(x => { const k = x.insumoId + '|' + x.bodega; (g[k] = g[k] || { i, nombre: l.nombre, id: x.insumoId, desde: x.bodega, lotes: [] }).lotes.push({ clave: x.clave, qty: x.qty }); }); Object.values(g).forEach(m => mov.push(m)); });
-    if (!mov.length) return;
-    const P = window.SAR_Progreso, ok = P && P.confirmar ? await P.confirmar({ titulo: `¿Traer a ${s.bodega}?`, texto: `Para la solicitud <b>${esc(n)}</b>:`, lineas: mov.map(m => `${esc(m.nombre)} · <b>${m.lotes.reduce((t, x) => t + x.qty, 0)}</b> u. desde ${esc(m.desde)}`), si: 'Traer' }) : confirm('¿Traer lo elegido?');
-    if (!ok) return;
-    const nota = `Solicitud ${n}`, enLinea = !window.SAR_Cola || await window.SAR_Cola.hayConexion(), hechos = new Set(), prog = enLinea && P ? P.iniciar('Trayendo productos…', []) : null; let mal = 0;
+    if (!mov.length) return true;
+    const P = window.SAR_Progreso, ok = auto ? true : P && P.confirmar ? await P.confirmar({ titulo: `¿Traer a ${s.bodega}?`, texto: `Para la solicitud <b>${esc(n)}</b>:`, lineas: mov.map(m => `${esc(m.nombre)} · <b>${m.lotes.reduce((t, x) => t + x.qty, 0)}</b> u. desde ${esc(m.desde)}`), si: 'Traer' }) : confirm('¿Traer lo elegido?');
+    if (!ok) return false;
+    const nota = `Solicitud ${s.correlativo || n}`, enLinea = !window.SAR_Cola || await window.SAR_Cola.hayConexion(), hechos = new Set(), prog = enLinea && P ? P.iniciar('Trayendo productos…', []) : null; let mal = 0;
     for (const [k, m] of mov.entries()) {
       if (prog) prog.paso(`${k + 1} de ${mov.length}: ${m.nombre}`);
       try { if (enLinea) await window.SAR_Traspaso.moverUno(m.id, m.desde, s.bodega, m.lotes, nota); else window.SAR_Cola.encolar({ tipo: 'traspaso', titulo: `Mover ${m.lotes.reduce((t, x) => t + x.qty, 0)} · ${m.nombre}: ${m.desde} → ${s.bodega}`, datos: { id: m.id, desde: m.desde, hasta: s.bodega, lotes: m.lotes, nota, en: Date.now() } }); hechos.add(m.i); }
@@ -383,12 +447,25 @@
     const f = fs(); try { await Promise.race([f.updateDoc(f.doc(f.collection(db(), s._col || COL), n), { lineas: lin }), new Promise(res => setTimeout(res, 2500))]); } catch (e) { /* queda en pantalla */ }
     if (enLinea) { try { await cargarBase(); pintarBandeja(); } catch (e) { /* sigue */ } }
     if (s.origen === 'transitoria' && window.SAR_Transitoria) window.SAR_Transitoria.refrescarPublico();
+    return !mal;
   }
-  async function cambiarEstado(n, e) {
+  /** Procesar: con todos los productos decididos, mueve de una vez el stock elegido a la bodega de la solicitud
+   *  (sale de la bodega de origen y entra a la de destino) y la deja «Procesada»; quien pidió lo ve al instante. */
+  async function procesar(n) {
+    const s = solicitudes.find(x => x.numero === n); if (!s) return; const L = (s.lineas || []).filter(l => !l.soloConteo);
+    const ok = L.filter(l => l.estado === 'ok').length, par = L.filter(l => l.estado === 'parcial').length, nh = L.filter(l => l.estado === 'no_hay').length;
+    const mv = L.reduce((t, l) => t + (l.movido ? 0 : (l.seleccion || []).filter(x => x.bodega !== s.bodega).reduce((a, x) => a + num(x.qty), 0)), 0);
+    const P = window.SAR_Progreso, si = P && P.confirmar ? await P.confirmar({ titulo: `¿Procesar ${esc(s.correlativo || n)}?`, texto: `Para <b>${esc(s.solicitante || s.requester)}</b>${s.servicio ? ' · ' + esc(s.servicio) : ''}.`, lineas: [`${ok} completo(s)${par ? ` · ${par} parcial(es)` : ''}${nh ? ` · ${nh} sin stock` : ''}`, mv ? `Se mueven <b>${mv}</b> u. a ${esc(s.bodega)} (salen de su bodega de origen).` : `Todo está en ${esc(s.bodega)}: no hay que mover.`, 'Quien pidió verá la solicitud como «Procesada».'], si: 'Procesar' }) : confirm('¿Procesar?');
+    if (!si) return;
+    const movio = await traer(n, true); if (movio === false) { toast('Procesar', 'Algún producto no se pudo mover: revisa y vuelve a intentar.', 'error'); return; }
+    await cambiarEstado(n, 'LISTA', true);
+    avisar({ titulo: `Solicitud ${s.correlativo || n} procesada`, texto: mv ? `Stock movido a ${esc(s.bodega)}. ${esc(s.solicitante || '')} ya lo ve.` : `${esc(s.solicitante || '')} ya lo ve.`, estado: 'procesada' });
+  }
+  async function cambiarEstado(n, e, callado) {
     const f = fs(), s = solicitudes.find(x => x.numero === n); if (!s) return;
     if (e === 'ANULADA' && !confirm('¿Anular esta solicitud?')) return;
     const hist = (s.historial || []).concat([{ estado: e, por: usuario(), en: new Date().toISOString() }]);
-    try { await Promise.race([f.updateDoc(f.doc(f.collection(db(), s._col || COL), n), { estado: e, historial: hist }), new Promise(res => setTimeout(res, 2500))]); toast('Solicitud', `${n}: ${ESTADOS[e]}.`, 'success'); } catch (err) { toast('No se pudo', err.message || String(err), 'error'); }
+    try { await Promise.race([f.updateDoc(f.doc(f.collection(db(), s._col || COL), n), { estado: e, historial: hist }), new Promise(res => setTimeout(res, 2500))]); if (!callado) avisar({ titulo: `Solicitud ${s.correlativo || n} ${String(ESTADOS[e]).toLowerCase()}`, texto: esc(s.solicitante || ''), estado: AV_EST[e] }); } catch (err) { toast('No se pudo', err.message || String(err), 'error'); }
   }
   async function descargarOffline() {
     const f = fs(), btn = document.getElementById('si-off'), m = document.getElementById('si-offm'); if (btn) btn.disabled = true;
@@ -415,7 +492,7 @@
   function enlazarBandeja() {
     const r = rootBandeja(); if (!r || r.dataset.ok) return; r.dataset.ok = '1';
     r.addEventListener('change', (e) => { if (e.target.id === 'si-fil') { filtro = e.target.value; pintarBandeja(); } });
-    r.addEventListener('input', (e) => { if (!e.target.classList.contains('si-asoc-in') || !asoc) return; asoc.q = e.target.value; const res = e.target.parentElement.querySelector('.si-asoc-res'); if (res) res.innerHTML = resAsoc(asoc.q); });
+    r.addEventListener('input', (e) => { if (e.target.id === 'si-bq') { bq = e.target.value; clearTimeout(window.__siBq); window.__siBq = setTimeout(pintarBandeja, 150); return; } if (!e.target.classList.contains('si-asoc-in') || !asoc) return; asoc.q = e.target.value; const res = e.target.parentElement.querySelector('.si-asoc-res'); if (res) res.innerHTML = resAsoc(asoc.q); });
     r.addEventListener('click', async (e) => {
       const b = e.target.closest('button'); if (!b) return; const card = b.closest('.si-card');
       if (b.id === 'si-off') return descargarOffline();
@@ -427,6 +504,7 @@
       if (b.dataset.nh !== undefined) return decidirLinea(n, +b.dataset.nh, true, null);
       if (b.dataset.ver !== undefined) { abiertoL[n + '|' + b.dataset.ver] = true; return pintarBandeja(); }
       if (b.dataset.mv) return traer(n);
+      if (b.dataset.procesar) return procesar(n);
       if (b.dataset.asoc !== undefined) { asoc = { n, i: +b.dataset.asoc, q: '' }; pintarBandeja(); const x = r.querySelector('.si-asoc-in'); if (x) x.focus(); return; }
       if (b.dataset.asocsi !== undefined && b.dataset.nom) return asociar(n, +b.dataset.asocsi, b.dataset.nom);
       if (b.dataset.desasoc !== undefined) return asociar(n, +b.dataset.desasoc, '');
@@ -490,9 +568,9 @@
   // ---------------- aviso en la campana: solicitudes nuevas (solo bodega) ----------------
   if (typeof module === 'undefined' && typeof document.addEventListener === 'function' && !window.SAR_SOLICITUD_PUBLICA) {
     let n = 0; const t = setInterval(() => { n++; const u = usuario(); if (!(u && esGestor() && fs() && db()) && n < 90) return; clearInterval(t); if (!(u && esGestor())) return;
-      try { const f = fs(); f.onSnapshot(f.query(f.collection(db(), COL), f.where('estado', '==', 'NUEVA')), (sn) => { const l = []; sn.forEach(d => { if (d.data().tipo === TIPO) l.push(d.data()); }); cuadrarLlegados(l); window.SAR_SolicitudesNuevas = l.sort((a, b) => String(b.creadoEn).localeCompare(String(a.creadoEn)));
+      try { const f = fs(); f.onSnapshot(f.query(f.collection(db(), COL), f.where('estado', '==', 'NUEVA')), (sn) => { const l = []; sn.forEach(d => { if (d.data().tipo === TIPO) l.push({ ...d.data(), _col: COL }); }); cuadrarLlegados(l); asignarCorrelativos(l); window.SAR_SolicitudesNuevas = l.sort((a, b) => String(b.creadoEn).localeCompare(String(a.creadoEn)));
         const b = document.getElementById('si-badge'); if (b) { b.textContent = l.length || ''; b.style.display = l.length ? '' : 'none'; }
-        if (l.length > (window.__solNuevasAntes || 0) && window.__solNuevasAntes !== undefined && typeof window.showToast === 'function') window.showToast('Solicitud de insumos nueva', `${l[0].solicitante || ''}${l[0].servicio ? ' · ' + l[0].servicio : ''}: ${(l[0].lineas || []).length} producto(s).`, 'info');
+        if (l.length > (window.__solNuevasAntes || 0) && window.__solNuevasAntes !== undefined) avisar({ titulo: `Solicitud enviada${l[0].correlativo ? ' · ' + l[0].correlativo : ''}`, texto: `${esc(l[0].solicitante || '')}${l[0].servicio ? ' · ' + esc(l[0].servicio) : ''}: ${(l[0].lineas || []).filter(x => !x.soloConteo).length} producto(s).`, estado: 'enviada', boton: 'Ver solicitud', alTocar: () => { location.hash = 'view-solicitudes-insumos'; } });
         window.__solNuevasAntes = l.length; window.dispatchEvent(new Event('sar-avisos')); }, () => { /* sin permiso */ }); } catch (e) { /* sin conexión */ } }, 2000);
   }
 

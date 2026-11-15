@@ -6489,3 +6489,11 @@ body[data-user-role="solicitante"] .superadmin-only { display: none !important; 
 .si-cats--sub{margin:-4px 0 4px 18px;padding-left:12px;border-left:3px solid #e2e8f0;animation:si-desp .25s ease-out}
 @keyframes si-desp{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
 @media (prefers-reduced-motion:reduce){.si-cats--sub{animation:none}}
+/* v21.214 · cantidad al elegir un producto en el buscador */
+.si-pr{display:flex;flex-direction:column;border-radius:10px}.si-pr.on{background:#fff;box-shadow:0 0 0 2px var(--sar-blue,#1A3668)}
+.si-pr.on .si-p{border-color:transparent}
+.si-pq{display:flex;align-items:center;gap:6px;padding:8px 10px 12px;flex-wrap:wrap;animation:si-desp .2s ease-out}.si-pq>span{font-weight:600;color:#334155;margin-right:auto;font-size:.88rem}
+.si-pqb{width:44px;height:44px;border-radius:10px;border:1.5px solid #cbd5e1;background:#f8fafc;font-size:1.3rem;color:var(--sar-blue,#1A3668);cursor:pointer}
+.si-pq .si-qn{width:72px;height:44px;font-size:1.1rem}.si-pq .btn{min-height:44px}
+.si-otro{display:block;font-size:.75rem;color:#92400e;font-weight:600}
+.si-pq .btn{flex:1 1 100%}

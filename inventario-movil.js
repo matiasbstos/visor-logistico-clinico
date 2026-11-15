@@ -163,7 +163,7 @@
   // enlace de la persona asignada: solicitar.html?inv=CÓDIGO (se guarda y se quita de la barra de direcciones)
   try { const u = new URL(location.href), c = u.searchParams.get('inv'); if (c) { ls.set(K_COD, c); ss.del('inv-oculto'); u.searchParams.delete('inv'); history.replaceState(null, '', u.pathname + (u.search || '') + u.hash); } } catch (e) { /* sin URL */ }
   // cuando llega el catálogo público: revisar el código y, si hay un inventario a medias, volver a mostrarlo
-  if (typeof document.addEventListener === 'function' && window.SAR_SOLICITUD_PUBLICA !== false) {
+  if (typeof document.addEventListener === 'function' && typeof window.addEventListener === 'function' && window.SAR_SOLICITUD_PUBLICA !== false) {
     let n = 0; const t = setInterval(async () => { n++; const r = document.getElementById('si-pide');
       if (r) enlazar(r);
       if (!trans() && n < 120) return; clearInterval(t);

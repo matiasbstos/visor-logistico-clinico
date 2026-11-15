@@ -95,5 +95,21 @@
             setTimeout(fin, o.ms || 1900);
         });
     }
-    window.SAR_Progreso = { exito, confirmar, iniciar, correr, cargando, segundoPlano };
+    /** Ventana de notificación con la marca (v21.211): entra deslizando, el hexágono late según el estado y se cierra sola.
+     *  SAR_Progreso.aviso({ titulo, texto, estado: 'enviada'|'procesando'|'procesada'|'cerrada'|'anulada'|'info', boton, alTocar, ms }) */
+    function aviso(o) {
+        o = o || {}; let caja = document.getElementById('sar-avisos-pila');
+        if (!caja) { caja = document.createElement('div'); caja.id = 'sar-avisos-pila'; caja.className = 'sar-av-pila'; caja.setAttribute('aria-live', 'polite'); document.body.appendChild(caja); }
+        const d = document.createElement('div'), est = String(o.estado || 'info');
+        d.className = 'sar-av sar-av--' + est; d.setAttribute('role', 'status');
+        d.innerHTML = `<span class="sar-av__ic" aria-hidden="true"><svg viewBox="0 0 200 200"><polygon class="sar-av__hex" points="100,12 176.2,56 176.2,144 100,188 23.8,144 23.8,56"/>${est === 'cerrada' || est === 'procesada' ? '<path class="sar-av__chk" d="M62 102 l26 26 l52 -56"/>' : est === 'anulada' ? '<path class="sar-av__chk" d="M70 70 L130 130 M130 70 L70 130"/>' : '<circle class="sar-av__pt" cx="100" cy="100" r="22"/>'}</svg></span>
+            <span class="sar-av__tx"><b>${esc(o.titulo || '')}</b>${o.texto ? `<span>${o.texto}</span>` : ''}${o.boton ? `<button type="button" class="sar-av__btn">${esc(o.boton)}</button>` : ''}</span><button type="button" class="sar-av__x" aria-label="Cerrar">✕</button><i class="sar-av__t" style="animation-duration:${o.ms || 8000}ms"></i>`;
+        const fin = () => { if (!d.isConnected) return; d.classList.add('sar-av--fuera'); setTimeout(() => d.remove(), 260); };
+        d.querySelector('.sar-av__x').onclick = (e) => { e.stopPropagation(); fin(); };
+        if (o.alTocar) d.addEventListener('click', () => { fin(); o.alTocar(); });
+        caja.prepend(d); while (caja.children.length > 3) caja.lastElementChild.remove();
+        try { if (window.SAR_Sonidos) window.SAR_Sonidos.tocar('ok'); } catch (e) { /* sin sonido */ }
+        setTimeout(fin, o.ms || 8000); return d;
+    }
+    window.SAR_Progreso = { exito, confirmar, iniciar, correr, cargando, segundoPlano, aviso };
 })(window, document);

@@ -6422,3 +6422,35 @@ body[data-user-role="solicitante"] .superadmin-only { display: none !important; 
 .si-asoc--ok{flex-direction:row;align-items:center;justify-content:space-between;border-style:solid;border-color:#cfe3b0;background:#f0f9e8}
 .si-asoc-res{display:flex;flex-direction:column;gap:4px}.si-asoc-res small{color:#64748b}
 .tra-link{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.tra-link input{flex:1;min-width:220px}
+/* v21.211 · Estados de la solicitud (recorrido), ventana de aviso con la marca e identificación de quien pide */
+.si-rec{list-style:none;display:flex;margin:10px 0 4px;padding:0;gap:0}
+.si-rec-p{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;position:relative;font-size:.72rem;color:#94a3b8;text-align:center}
+.si-rec-p::before{content:"";position:absolute;top:9px;left:-50%;width:100%;height:3px;background:#e2e8f0;z-index:0}.si-rec-p:first-child::before{display:none}
+.si-rec-p i{width:20px;height:20px;border-radius:50%;background:#fff;border:3px solid #cbd5e1;position:relative;z-index:1;box-sizing:border-box}
+.si-rec-p.hecho{color:#3f6212}.si-rec-p.hecho::before,.si-rec-p.on::before{background:var(--sar-green,#8CC63F)}.si-rec-p.hecho i{background:var(--sar-green,#8CC63F);border-color:var(--sar-green,#8CC63F)}
+.si-rec-p.on{color:var(--sar-blue,#1A3668);font-weight:700}.si-rec-p.on i{border-color:var(--sar-blue,#1A3668);background:var(--sar-blue,#1A3668);box-shadow:0 0 0 0 rgba(26,54,104,.4);animation:si-pulso 1.6s ease-out infinite}
+.si-rec--anulada .si-rec-p{color:#b91c1c;font-weight:700}
+@keyframes si-pulso{0%{box-shadow:0 0 0 0 rgba(26,54,104,.45)}70%{box-shadow:0 0 0 10px rgba(26,54,104,0)}100%{box-shadow:0 0 0 0 rgba(26,54,104,0)}}
+.si-nohay{margin:6px 0;padding:8px 10px;border-radius:8px;background:#fef2f2;color:#991b1b;font-size:.82rem}
+.si-quien{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;background:#eef2f9;margin-bottom:8px}.si-quien span{flex:1;display:flex;flex-direction:column}.si-quien small{color:#64748b}
+.si-bq{min-width:260px;flex:1}
+.sar-av-pila{position:fixed;top:16px;right:16px;z-index:10050;display:flex;flex-direction:column;gap:10px;width:min(380px,calc(100vw - 32px));pointer-events:none}
+.sar-av{pointer-events:auto;position:relative;overflow:hidden;display:flex;align-items:flex-start;gap:12px;padding:14px 40px 14px 14px;border-radius:14px;background:#fff;border:1px solid #e2e8f0;box-shadow:0 12px 32px rgba(26,54,104,.18);cursor:pointer;animation:sar-av-in .38s cubic-bezier(.2,.9,.3,1.2)}
+.sar-av--fuera{animation:sar-av-out .26s ease-in forwards}
+.sar-av__ic{flex:none;width:44px;height:44px}.sar-av__ic svg{width:100%;height:100%}
+.sar-av__hex{fill:var(--sar-blue,#1A3668);stroke:none;transform-origin:center;animation:sar-av-hex .5s ease-out}
+.sar-av__chk{fill:none;stroke:#fff;stroke-width:16;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:140;stroke-dashoffset:140;animation:sar-av-chk .45s .25s ease-out forwards}
+.sar-av__pt{fill:var(--sar-green,#8CC63F);transform-origin:center;animation:si-latido 1.2s ease-in-out infinite}
+.sar-av--procesada .sar-av__hex,.sar-av--cerrada .sar-av__hex{fill:#4d7a16}.sar-av--anulada .sar-av__hex{fill:#b91c1c}.sar-av--procesando .sar-av__pt{fill:#f59e0b}
+.sar-av__tx{flex:1;display:flex;flex-direction:column;gap:3px;font-size:.88rem;color:#475569}.sar-av__tx b{color:var(--sar-blue,#1A3668);font-size:.98rem}
+.sar-av__btn{align-self:flex-start;margin-top:6px;padding:4px 12px;border-radius:8px;border:1.5px solid var(--sar-blue,#1A3668);background:#fff;color:var(--sar-blue,#1A3668);font-weight:600;cursor:pointer}
+.sar-av__x{position:absolute;top:8px;right:8px;width:28px;height:28px;border:0;background:none;color:#94a3b8;cursor:pointer;font-size:.9rem}
+.sar-av__t{position:absolute;left:0;bottom:0;height:3px;width:100%;background:var(--sar-green,#8CC63F);transform-origin:left;animation-name:sar-av-t;animation-timing-function:linear;animation-fill-mode:forwards}
+@keyframes sar-av-in{from{opacity:0;transform:translateX(40px) scale(.96)}to{opacity:1;transform:none}}
+@keyframes sar-av-out{to{opacity:0;transform:translateX(40px)}}
+@keyframes sar-av-hex{from{transform:scale(.4) rotate(-30deg);opacity:0}to{transform:none;opacity:1}}
+@keyframes sar-av-chk{to{stroke-dashoffset:0}}
+@keyframes si-latido{0%,100%{transform:scale(1)}50%{transform:scale(1.25)}}
+@keyframes sar-av-t{from{transform:scaleX(1)}to{transform:scaleX(0)}}
+@media (max-width:600px){.sar-av-pila{top:auto;bottom:16px;right:16px;left:16px;width:auto}}
+@media (prefers-reduced-motion:reduce){.sar-av,.sar-av__hex,.sar-av__chk,.sar-av__pt,.si-rec-p.on i{animation:none!important}.sar-av__chk{stroke-dashoffset:0}}

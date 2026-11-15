@@ -135,7 +135,8 @@
   let cambiandoQuien = false;
   /** Paso 0 (v21.211): quien pide se identifica al entrar; todas sus solicitudes quedan a su nombre y correo. */
   function pintarQuien(r) {
-    r.innerHTML = `<div class="si-wrap"><h2 class="si-t">¿Quién pide?</h2><p class="si-s">Tus solicitudes quedarán a tu nombre y te avisaremos aquí cuando bodega las procese.</p>
+    const cat = catDe(catSel);
+    r.innerHTML = `<div class="si-wrap">${cat ? `<div class="si-catsel si-cat--${cat.k}"><span class="si-cat-ic">${cat.ic}</span><span><small>Vas a pedir</small><b>${cat.t}</b></span><button type="button" class="btn btn-secondary btn-sm" id="si-volver">Volver</button></div>` : ''}<h2 class="si-t">¿Quién pide?</h2><p class="si-s">No necesitas usuario: solo tu nombre y correo. Tus solicitudes quedan a tu nombre y aquí verás cuando bodega las procese.</p>
       <label class="si-l">Tu nombre<input id="si-q-nom" class="si-in" value="${esc(form.solicitante)}" placeholder="Nombre y apellido" autocomplete="name"></label>
       <label class="si-l">Tu correo<input id="si-q-cor" class="si-in" type="email" value="${esc(form.correo)}" placeholder="nombre@cormumel.cl" autocomplete="email" inputmode="email"></label>
       <button type="button" class="btn btn-primary si-env" id="si-q-ok">Continuar</button><div id="si-mias"></div></div>`;
@@ -151,12 +152,36 @@
     return `<form class="si-ses-f" id="si-ses-f" autocomplete="on"><b>Ingresar con tu usuario</b><label class="si-l">Correo<input id="si-ses-c" class="si-in" type="email" autocomplete="username" inputmode="email" required></label><label class="si-l">Contraseña<input id="si-ses-p" class="si-in" type="password" autocomplete="current-password" required></label>
       <div class="si-lb"><button type="button" class="btn btn-secondary btn-sm" id="si-ses-cancel">Cancelar</button><button type="submit" class="btn btn-primary btn-sm"${sesEntrando ? ' disabled' : ''}>${sesEntrando ? 'Ingresando…' : 'Ingresar'}</button></div></form>`;
   }
+  // Inicio (v21.213): dos botones principales. «Pedir insumos» se despliega en médicos/aseo/oficina y recién ahí se piden
+  // nombre y correo (sin usuario). «Inventario» es lo único que pide usuario y contraseña.
+  let pedirAbierto = false, vista = '';
+  const IC_PEDIR = '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M8 14h32l-3 24a4 4 0 0 1-4 3.5H15A4 4 0 0 1 11 38z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M17 14a7 7 0 0 1 14 0" fill="none" stroke="currentColor" stroke-width="3"/><path d="M20.5 24h7v4.5H32v7h-4.5V40" fill="none"/><path d="M21 22h6v5h5v6h-5v5h-6v-5h-5v-6h5z" fill="currentColor"/></svg>';
+  const IC_INV = '<svg viewBox="0 0 48 48" aria-hidden="true"><rect x="10" y="8" width="28" height="34" rx="4" fill="none" stroke="currentColor" stroke-width="3"/><path d="M18 8V5h12v3" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="m17 24 4 4 9-9" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M17 35h14" stroke="currentColor" stroke-width="3" stroke-linecap="round"/><circle cx="38" cy="40" r="3" fill="#8CC63F"/></svg>';
+  const conUsuario = () => !!(window.SAR_Sesion && window.SAR_Sesion.usuario());
   function pintarCategorias(r) {
-    r.innerHTML = `<div class="si-wrap">${quienHTML()}<h2 class="si-t">¿Qué necesitas pedir?</h2><p class="si-s">Elige el tipo de insumo y después busca los productos que necesitas.</p>
-      <div class="si-cats">${CATS.map(c => `<button type="button" class="si-cat si-cat--${c.k}" data-cat="${c.k}"><span class="si-cat-ic">${c.ic}</span><span class="si-cat-tx"><b>${c.t}</b><small>${c.s}</small></span><i aria-hidden="true">›</i></button>`).join('')}</div>
-      <div id="si-inv"></div><div id="si-ses">${sesionHTML()}</div><div id="si-mias"></div></div>`;
-    if (window.SAR_InvMovil) window.SAR_InvMovil.boton(document.getElementById('si-inv'));
+    const u = conUsuario();
+    r.innerHTML = `<div class="si-wrap"><h2 class="si-t">¿Qué necesitas hacer?</h2>
+      <div class="si-home">
+        <button type="button" class="si-hbtn" id="si-h-pedir" aria-expanded="${pedirAbierto}"><span class="si-hic">${IC_PEDIR}</span><span class="si-cat-tx"><b>Pedir insumos</b><small>Médicos, aseo u oficina · no necesitas usuario</small></span><i aria-hidden="true">${pedirAbierto ? '▴' : '▾'}</i></button>
+        ${pedirAbierto ? `<div class="si-cats si-cats--sub">${CATS.map(c => `<button type="button" class="si-cat si-cat--${c.k}" data-cat="${c.k}"><span class="si-cat-ic">${c.ic}</span><span class="si-cat-tx"><b>${c.t}</b><small>${c.s}</small></span><i aria-hidden="true">›</i></button>`).join('')}</div>` : ''}
+        <button type="button" class="si-hbtn si-hbtn--inv" id="si-h-inv"><span class="si-hic">${IC_INV}</span><span class="si-cat-tx"><b>Inventario de bodega</b><small>${u ? 'Sesión de ' + esc(window.SAR_Sesion.usuario()) : 'Para encargadas de bodega · con tu usuario'}</small></span><i aria-hidden="true">›</i></button>
+      </div>
+      ${u ? `<div id="si-inv"></div><div id="si-ses">${sesionHTML()}</div>` : ''}<div id="si-mias"></div></div>`;
+    if (u && window.SAR_InvMovil) window.SAR_InvMovil.boton(document.getElementById('si-inv'), { soloAvisos: true });
     pintarMias();
+  }
+  /** Ingreso con usuario, solo para el inventario. */
+  function pintarLogin(r) {
+    sesForm = true;
+    r.innerHTML = `<div class="si-wrap"><div class="si-catsel si-cat--inv"><span class="si-cat-ic">${IC_INV}</span><span><small>Inventario de bodega</small><b>Ingresa con tu usuario</b></span><button type="button" class="btn btn-secondary btn-sm" id="si-volver">Volver</button></div>
+      <p class="si-s">El inventario mueve el stock, por eso necesita tu usuario (el mismo del Visor). Pedir insumos no lo necesita.</p>${sesionHTML()}</div>`;
+    const c = document.getElementById('si-ses-c'); if (c) setTimeout(() => c.focus(), 50);
+  }
+  function abrirInventario() {
+    const I = window.SAR_InvMovil, rolOk = /^(transitoria|admin|superadmin|operador|administrador|global)$/i.test(String(window.SAR_Rol || ''));
+    if (!conUsuario()) { vista = 'login'; pintarPide(); return; }
+    if (!rolOk) { toast('Sin inventario asignado', 'Tu usuario no tiene una bodega para inventariar. Avísale a bodega.', 'warning'); return; }
+    vista = ''; if (I && I.abrir) I.abrir();
   }
   // Ícono de cámara con el trazo del Visor (reemplaza el emoji).
   const IC_CAM = '<svg class="si-ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5A1.5 1.5 0 0 1 5.5 7h2.3l1.4-2h5.6l1.4 2h2.3A1.5 1.5 0 0 1 20 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 4 17.5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.4" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="17" cy="10" r="1" fill="#8CC63F"/></svg>';
@@ -176,8 +201,9 @@
   }
   function pintarPide() {
     const r = rootPide(); if (!r) return;
-    if (!editando && (cambiandoQuien || !form.solicitante.trim() || !correoOk(form.correo))) { pintarQuien(r); return; }
+    if (!editando && vista === 'login') { if (conUsuario()) vista = ''; else { pintarLogin(r); return; } }
     if (!catSel && !editando) { if (window.SAR_InvMovil && window.SAR_InvMovil.enCurso()) { window.SAR_InvMovil.pintar(r); return; } pintarCategorias(r); return; }
+    if (!editando && (cambiandoQuien || !form.solicitante.trim() || !correoOk(form.correo))) { pintarQuien(r); return; }
     const cat = catDe(catSel);
     r.innerHTML = `<div class="si-wrap">
       ${editando ? `<div class="si-edit"><span>Modificando <b>${esc(editando.ver)}</b>: agrega, quita o cambia cantidades y guarda.</span><button type="button" class="btn btn-secondary btn-sm" id="si-edit-x">Cancelar</button></div>` : ''}
@@ -329,7 +355,7 @@
       if (e.target.dataset && e.target.dataset.qn !== undefined) { const l = lineas[+e.target.dataset.qn]; if (l) l.cantidad = Math.max(1, Math.min(9999, Math.floor(num(e.target.value) || 1))); } });
     r.addEventListener('submit', async (e) => { if (e.target.id !== 'si-ses-f') return; e.preventDefault(); const c = document.getElementById('si-ses-c'), p = document.getElementById('si-ses-p'); if (!window.SAR_Sesion || sesEntrando) return;
       sesEntrando = true; const correo = c.value, clave = p.value; const btn = e.target.querySelector('[type=submit]'); if (btn) { btn.disabled = true; btn.textContent = 'Ingresando…'; }
-      try { await window.SAR_Sesion.entrar(correo, clave); sesForm = false; toast('Sesión iniciada', 'Ya puedes hacer inventario.', 'success'); }
+      try { await window.SAR_Sesion.entrar(correo, clave); sesForm = false; if (vista === 'login') { vista = ''; window.__abrirInvTrasLogin = true; } toast('Sesión iniciada', 'Abriendo el inventario…', 'success'); }
       catch (er) { const m = String(er && er.code || ''); toast('No se pudo ingresar', /wrong-password|invalid-credential|user-not-found|invalid-email/.test(m) ? 'Correo o contraseña incorrectos.' : /network/.test(m) ? 'Sin internet: para ingresar se necesita conexión.' : m === 'pendientes' ? esc(er.message) : 'Intenta de nuevo (' + esc(m) + ').', 'error'); }
       sesEntrando = false; pintarPide(); });
     r.addEventListener('click', (e) => {
@@ -353,8 +379,11 @@
         if (nn.split(/\s+/).length < 2) { toast('Tu nombre', 'Escribe tu nombre y apellido.', 'warning'); return; } if (!correoOk(cc)) { toast('Tu correo', 'Escribe un correo válido (ej: nombre@cormumel.cl).', 'warning'); return; }
         form.solicitante = nn; form.correo = cc; cambiandoQuien = false; try { const y = JSON.parse(localStorage.getItem('si-yo') || '{}'); localStorage.setItem('si-yo', JSON.stringify({ ...y, n: nn, c: cc })); } catch (e) { /* sin almacenamiento */ } pintarPide(); }
       else if (b.id === 'si-q-x') { cambiandoQuien = true; pintarPide(); }
+      else if (b.id === 'si-h-pedir') { pedirAbierto = !pedirAbierto; pintarPide(); }
+      else if (b.id === 'si-h-inv') abrirInventario();
+      else if (b.id === 'si-volver') { vista = ''; sesForm = false; cambiandoQuien = false; catSel = ''; pintarPide(); window.scrollTo && window.scrollTo(0, 0); }
       else if (b.id === 'si-ses-in') { sesForm = true; pintarPide(); const c = document.getElementById('si-ses-c'); if (c) c.focus(); }
-      else if (b.id === 'si-ses-cancel') { sesForm = false; pintarPide(); }
+      else if (b.id === 'si-ses-cancel') { sesForm = false; vista = ''; pintarPide(); }
       else if (b.id === 'si-ses-x') { if (window.SAR_Sesion) window.SAR_Sesion.salir().then(() => { sesForm = false; toast('Sesión cerrada', 'Sigues pudiendo pedir sin usuario.', 'info'); }); }
       else if (b.id === 'si-edit-x') { editando = null; lineas = []; bodegaSel = ''; catSel = ''; form.nota = ''; pintarPide(); }
       else if (b.dataset.cat) { catSel = b.dataset.cat; bodegaSel = ''; busca = ''; pintarPide(); window.scrollTo && window.scrollTo(0, 0); }

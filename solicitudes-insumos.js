@@ -49,7 +49,7 @@
   function limpiarSol(x, id) {
     if (!x || typeof x !== 'object') return x; const s = { ...x }; if (id) s.numero = id;
     const nueva = s.estado === 'NUEVA';
-    s.lineas = (Array.isArray(s.lineas) ? s.lineas : []).slice(0, 80).map(l0 => { const l = { ...(l0 && typeof l0 === 'object' ? l0 : {}) };
+    s.lineas = (Array.isArray(s.lineas) ? s.lineas : []).slice(0, 200).map(l0 => { const l = { ...(l0 && typeof l0 === 'object' ? l0 : {}) };
       if (nueva && !l.soloConteo) CAMPOS_BODEGA.forEach(k => { delete l[k]; });
       l.nombre = String(l.nombre || '').slice(0, 300); l.cantidad = ent(l.cantidad); if ('entregar' in l) l.entregar = ent(l.entregar); if ('reiterado' in l) l.reiterado = ent(l.reiterado, 365);
       l.foto = FOTO_OK.test(String(l.foto || '')) ? l.foto : ''; if (!l.foto) delete l.foto;
@@ -62,7 +62,7 @@
     if (s.conteo && typeof s.conteo === 'object') { const c = { ...s.conteo };
       c.items = (Array.isArray(c.items) ? c.items : []).slice(0, 500).map(i => ({ k: String(i.k || ''), n: String(i.n || '').slice(0, 300), sis: ent(i.sis), obj: ent(i.obj), contado: ent(i.contado), ...(i.recontado !== undefined ? { recontado: ent(i.recontado) } : {}) }));
       ['descontado', 'sobrantes'].forEach(k => { c[k] = (Array.isArray(c[k]) ? c[k] : []).map(z => ({ nombre: String(z.nombre || ''), sistema: ent(z.sistema), contado: ent(z.contado), usado: ent(z.usado), sobrante: ent(z.sobrante) })); });
-      if (nueva && c.estado && !['reconteo', 'recontado'].includes(c.estado)) delete c.estado;
+      if (nueva && c.estado && !['reconteo', 'recontado', 'aplicado'].includes(c.estado)) delete c.estado;
       c.reconteo = (Array.isArray(c.reconteo) ? c.reconteo : []).map(String); s.conteo = c; }
     return s;
   }
@@ -110,7 +110,7 @@
   // bodega publica en Solicitudes_Insumos/catalogo-publico: bodegas, nombres de productos por bodega (SIN stock) y fotos confirmadas.
   async function publicarCatalogo(forzar) {
     try { const ult = Number(localStorage.getItem('si-pub') || 0); if (!forzar && Date.now() - ult < 6 * 3600e3) return; } catch (e) { /* sigue */ }
-    const f = fs(); if (!cargado) await cargarBase();
+    const f = fs(); if (!cargado || forzar) await cargarBase();   // forzar: relee Bodegas (destinos por tipo recién cambiados)
     const c = {}, n = {};
     try { const sn = await f.getDocs(f.query(f.collection(db(), 'Catalogo_Productos'), f.limit(3000)));
       const mini = (src) => new Promise(ok => { const im = new Image(); im.onload = () => { const k = Math.min(1, 96 / Math.max(im.width, im.height)), cv = document.createElement('canvas'); cv.width = Math.round(im.width * k); cv.height = Math.round(im.height * k); cv.getContext('2d').drawImage(im, 0, 0, cv.width, cv.height); try { ok(cv.toDataURL('image/jpeg', 0.6)); } catch (e) { ok(''); } }; im.onerror = () => ok(''); im.src = src; });
@@ -330,7 +330,7 @@
     r.addEventListener('submit', async (e) => { if (e.target.id !== 'si-ses-f') return; e.preventDefault(); const c = document.getElementById('si-ses-c'), p = document.getElementById('si-ses-p'); if (!window.SAR_Sesion || sesEntrando) return;
       sesEntrando = true; const correo = c.value, clave = p.value; const btn = e.target.querySelector('[type=submit]'); if (btn) { btn.disabled = true; btn.textContent = 'Ingresando…'; }
       try { await window.SAR_Sesion.entrar(correo, clave); sesForm = false; toast('Sesión iniciada', 'Ya puedes hacer inventario.', 'success'); }
-      catch (er) { const m = String(er && er.code || ''); toast('No se pudo ingresar', /wrong-password|invalid-credential|user-not-found|invalid-email/.test(m) ? 'Correo o contraseña incorrectos.' : /network/.test(m) ? 'Sin internet: para ingresar se necesita conexión.' : 'Intenta de nuevo (' + esc(m) + ').', 'error'); }
+      catch (er) { const m = String(er && er.code || ''); toast('No se pudo ingresar', /wrong-password|invalid-credential|user-not-found|invalid-email/.test(m) ? 'Correo o contraseña incorrectos.' : /network/.test(m) ? 'Sin internet: para ingresar se necesita conexión.' : m === 'pendientes' ? esc(er.message) : 'Intenta de nuevo (' + esc(m) + ').', 'error'); }
       sesEntrando = false; pintarPide(); });
     r.addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b) return; leerCampos();
@@ -409,9 +409,12 @@
   const TRANSITO = 'En tránsito';
   const grupoDe = (x) => `${x.insumoId}|${x.clave}`;
   const gruposDe = (l) => (l.seleccion || []).filter(x => num(x.qty) > 0).map(grupoDe);
-  const tocadaL = (l) => (l.movidos || []).length > 0;
-  const movidaL = (l) => l.estado === 'no_hay' || l.soloConteo || (gruposDe(l).length > 0 && gruposDe(l).every(k => (l.movidos || []).includes(k)));
-  const recibidaL = (l) => !tocadaL(l) || (l.movidos || []).every(k => (l.recibidos || []).includes(k));
+  // l.movido === true: solicitud de una versión anterior (v21.211 o antes) ya traída a su bodega: cuenta como movida y recibida
+  const tocadaL = (l) => l.movido === true || (l.movidos || []).length > 0;
+  const movidaL = (l) => l.movido === true || l.estado === 'no_hay' || l.soloConteo || (gruposDe(l).length > 0 && gruposDe(l).every(k => (l.movidos || []).includes(k)));
+  const recibidaL = (l) => l.movido === true || !(l.movidos || []).length || (l.movidos || []).every(k => (l.recibidos || []).includes(k));
+  /** Solicitudes ya procesadas antes de v21.212 (sin marcas por lote): no se vuelve a mover nada; solo se pueden cerrar. */
+  const legado = (s) => (s.estado === 'LISTA' || s.estado === 'ENTREGADA') && !(s.lineas || []).some(l => Array.isArray(l.movidos)) && String(s.creadoEn || '') < '2026-11-16';
   const ocupado = new Set();   // solicitudes procesándose en esta sesión: el botón queda bloqueado
   const candDe = (l, s) => lotesCandidatos(l, insumos, s.bodega, esRepo(s));
   const EST_L = { pendiente: 'Pendiente', ok: 'Confirmado', parcial: 'Parcial', no_hay: 'No hay' };
@@ -429,14 +432,13 @@
     if (nombreInv) { const d = insumos.find(x => norm(x.name) === norm(nombreInv) && x.location !== s.bodega && x.location !== TRANSITO) || insumos.find(x => norm(x.name) === norm(nombreInv)); lin[i] = { ...l, asociado: nombreInv, ...(d ? { insumoId: d.id } : {}), insumoIdOrig: l.insumoIdOrig !== undefined ? l.insumoIdOrig : (l.insumoId || ''), asociadoPor: usuario() }; delete lin[i].estado; delete lin[i].seleccion; delete lin[i].entregar; }
     else { const x = { ...l }; delete x.asociado; delete x.asociadoPor; if (x.insumoIdOrig) x.insumoId = x.insumoIdOrig; else delete x.insumoId; delete x.insumoIdOrig; delete x.estado; delete x.seleccion; delete x.entregar; lin[i] = x; }
     asoc = null; s.lineas = lin; pintarBandeja();
-    const cambios = { lineas: lin }; if (s.estado === 'NUEVA') { cambios.estado = 'PREPARACION'; cambios.historial = (s.historial || []).concat([{ estado: 'PREPARACION', por: usuario(), en: new Date().toISOString() }]); Object.assign(s, cambios); }
-    try { await Promise.race([f.updateDoc(f.doc(f.collection(db(), s._col || COL), n), cambios), new Promise(r => setTimeout(r, 2500))]); } catch (e) { toast('No se guardó', e.message || String(e), 'error'); }
+    try { const c = await guardarLinea(s, i, lin[i], { nombreOrig: l.nombre }); Object.assign(s, c); pintarBandeja(); } catch (e) { toast('No se guardó', esc(e.message || String(e)), 'error'); return; }
     if (nombreInv && norm(l.nombre) !== norm(nombreInv)) { alias[norm(l.nombre)] = nombreInv; f.setDoc(f.doc(f.collection(db(), 'Contadores'), ALIAS_ID), { tipo: 'alias-solicitudes', items: alias, actualizado: new Date().toISOString() }).catch(() => {}); }
     toast('Asociado', nombreInv ? `Se moverá y descontará como «${esc(nombreInv)}».` : 'Asociación quitada.', 'success');
   }
   const escritas = {};   // lo que bodega va escribiendo en «Sacar»: sobrevive a las actualizaciones en vivo
   const revs = {};   // revisión de inventarios por solicitud
-  async function cargarRevision(s) { revs[s.numero] = { estado: 'cargando' }; try { const F = await window.SAR_Transitoria.revisar(s); const pre = new Set(F.filter(x => x.usado > 0 && x.alContar > 0 && x.usado / x.alContar >= 0.3).map(x => x.k)); revs[s.numero] = { estado: 'ok', filas: F, sel: pre }; } catch (e) { revs[s.numero] = { estado: 'error', error: e.message || String(e) }; } pintarBandeja(); }
+  async function cargarRevision(s) { const ver = String((s.conteo || {}).recontadoEn || (s.conteo || {}).fin || ''); revs[s.numero] = { estado: 'cargando', ver }; try { const F = await window.SAR_Transitoria.revisar(s); const pre = new Set(F.filter(x => x.usado > 0 && x.alContar > 0 && x.usado / x.alContar >= 0.3).map(x => x.k)); revs[s.numero] = { estado: 'ok', filas: F, sel: pre, ver }; } catch (e) { revs[s.numero] = { estado: 'error', error: e.message || String(e), ver }; } pintarBandeja(); }
   let abiertoL = {}, sel = '';   // sel: solicitud abierta en el panel lateral ('' = la primera; null = cerrado)   // numero|i → mostrar lotes aunque ya esté decidida
 
   function pintarBandeja() {
@@ -458,7 +460,7 @@
     const cuadreHTML = (s) => { const c = s.conteo, us = (c.descontado || []).reduce((t, x) => t + num(x.usado), 0);
       if (c.estado === 'aplicado') return `<div class="si-cuadre si-cuadre--ok"><b>Inventario aceptado</b> · se descontaron <b>${us}</b> u. usadas en ${(c.descontado || []).length} producto(s)${c.aplicadoPor ? ' · ' + esc(c.aplicadoPor) : ''}${(c.sobrantes || []).length ? ` · sobran: ${c.sobrantes.map(x => esc(x.nombre) + ' +' + x.sobrante).join(', ')} (no se suman solos)` : ''}<details><summary>Ver detalle</summary>${(c.descontado || []).map(x => `<div>${esc(x.nombre)}: sistema ${x.sistema} · contado ${x.contado} · <b>usado ${x.usado}</b></div>`).join('') || 'Sin diferencias.'}</details></div>`;
       if (c.estado === 'reconteo') return `<div class="si-cuadre si-cuadre--esp"><b>Reconteo pedido</b> de ${(c.reconteo || []).length} producto(s)${c.reconteoPedidoEn ? ' · ' + esc(new Date(c.reconteoPedidoEn).toLocaleString('es-CL')) : ''}. Cuando lo envíen, lo revisas aquí.</div>`;
-      const rv = revs[s.numero];
+      const ver = String(c.recontadoEn || c.fin || ''); let rv = revs[s.numero]; if (rv && rv.ver !== ver) { delete revs[s.numero]; rv = null; }
       if (!rv || rv.estado === 'cargando') { if (!rv) cargarRevision(s); return '<div class="si-cuadre">Calculando lo usado por producto…</div>'; }
       if (rv.estado === 'error') return `<div class="si-cuadre si-cuadre--mal"><b>No pude revisar el inventario:</b> ${esc(rv.error)} <button type="button" class="btn btn-secondary btn-sm" data-rev="1">Reintentar</button></div>`;
       const F = rv.filas, us2 = F.reduce((t, x) => t + x.usado, 0), dif = F.filter(x => x.usado > 0 || x.sobra > 0).length;
@@ -474,9 +476,9 @@
           return `<div class="si-ln${decid ? ' si-ln--ok' : ''}" data-i="${i}"><div class="si-lh">${l.foto ? `<span class="prod-img"><img src="${l.foto}" alt="${esc(l.nombre)}"></span>` : IM ? IM.thumb(l.nombre, { codigo: (insumos.find(x => x.id === l.insumoId) || {}).codigoMP || '' }) : ''}<div class="si-ln-t"><b>${esc(l.nombre)}</b>${l.manual ? ' <em>escrito a mano</em>' : ''}${num(l.reiterado) > 1 ? ` <em class="si-reit">Sigue faltando · ${num(l.reiterado)}.º día</em>` : ''}<small>Pide <b>${l.cantidad}</b> · hay ${hay} en otras bodegas${tocadaL(l) ? (esRepo(s) ? (recibidaL(l) ? ' · <b>recibido en ' + esc(s.bodega) + '</b>' : ' · <b>en camino</b>') : ' · <b>entregado</b>') : ''}</small></div>${chipL(l)}</div>
             ${ab(s) && ver ? (cands.length ? `<table class="si-tb si-lt"><thead><tr><th>Dónde</th><th>Lote</th><th>Vence</th><th>Hay</th><th>Sacar</th></tr></thead><tbody>${cands.map((c, j) => `<tr><td>${esc(c.bodega)}${c.estante ? ' · ' + esc(c.estante) : ''}</td><td>${esc(c.lote)}<small class="si-vm"> · vence ${esc(fmtV(c.vence))}</small></td><td>${esc(fmtV(c.vence))}</td><td>${c.disp}</td><td><input type="number" min="0" max="${c.disp}" value="${escritas[s.numero + '|' + i + '|' + c.insumoId + '|' + c.clave] !== undefined ? esc(escritas[s.numero + '|' + i + '|' + c.insumoId + '|' + c.clave]) : pre[j]}" class="si-q-in" data-j="${j}" data-g="${esc(s.numero + '|' + i + '|' + c.insumoId + '|' + c.clave)}" inputmode="numeric" aria-label="Cantidad a sacar del lote ${esc(c.lote)}"></td></tr>`).join('')}</tbody></table>` : '<p class="si-v">No está en el inventario con ese nombre: asócialo al producto que corresponde.</p>') + asocHTML(s, l, i)
               + `<div class="si-lb"><button type="button" class="btn btn-primary btn-sm" data-ok="${i}"${cands.length ? '' : ' disabled'}>Confirmar</button><button type="button" class="btn btn-secondary btn-sm" data-nh="${i}">No hay</button></div>`
-              : (ab(s) && !(s.conteo && s.conteo.estado !== 'aplicado') ? `<div class="si-lb"><small>${(l.seleccion || []).filter(x => x.qty > 0).map(x => `${esc(x.lote)} · ${esc(x.bodega)}: ${x.qty}`).join(' · ')}</small>${tocadaL(l) ? '' : `<button type="button" class="btn btn-secondary btn-sm" data-ver="${i}">Cambiar</button>`}</div>` : '')}</div>`; }).join('')}</div>
+              : (ab(s) && !(s.conteo && s.conteo.estado !== 'aplicado') ? `<div class="si-lb"><small>${(l.seleccion || []).filter(x => x.qty > 0).map(x => `${esc(x.lote)} · ${esc(x.bodega)}: ${x.qty}`).join(' · ')}</small>${tocadaL(l) ? (movidaL(l) ? '' : `<button type="button" class="btn btn-secondary btn-sm" data-solomov="${i}" title="Un lote no se pudo mover: deja la línea solo con lo que sí salió">Quedarse con lo movido</button>`) : `<button type="button" class="btn btn-secondary btn-sm" data-ver="${i}">Cambiar</button>`}</div>` : '')}</div>`; }).join('')}</div>
         ${recorridoHTML(s.estado)}<footer>${(() => { const L = (s.lineas || []).filter(l => !l.soloConteo), faltan = L.filter(l => !l.estado || l.estado === 'pendiente').length, inv = s.conteo && s.conteo.estado !== 'aplicado', busy = ocupado.has(s.numero), repo = esRepo(s);
-          const tocada = L.some(tocadaL), todoMov = L.every(movidaL), todoRec = L.every(recibidaL); let h = '';
+          const tocada = L.some(tocadaL), viejo = legado(s), todoMov = viejo || L.every(movidaL), todoRec = viejo || L.every(recibidaL); let h = '';
           if (s.estado === 'NUEVA' || s.estado === 'PREPARACION') h += `<button class="btn btn-primary" data-procesar="1"${faltan || inv || busy ? ' disabled' : ''} title="${inv ? 'Primero acepta el inventario' : faltan ? 'Confirma o marca «No hay» en cada producto' : ''}">${busy ? 'Procesando…' : inv ? 'Procesar (acepta el inventario)' : faltan ? `Procesar (faltan ${faltan})` : repo ? `Procesar: enviar a ${esc(s.bodega)}` : 'Procesar: entregar'}</button>`;
           if (s.estado === 'LISTA' && !todoMov) h += `<button class="btn btn-primary" data-procesar="1"${busy ? ' disabled' : ''}>Reintentar lo que no se movió</button>`;
           if (s.estado === 'LISTA' && repo && todoMov && !todoRec) h += `<button class="btn btn-primary" data-recibir="1"${busy ? ' disabled' : ''}>${s.recibidoSolicitado ? 'Confirmar recibido (lo marcó ' + esc(s.recibidoSolicitado.por || 'la encargada') + ')' : `Marcar recibido en ${esc(s.bodega)}`}</button>`;
@@ -493,22 +495,37 @@
     if (IM) IM.rellenar(r);
   }
   /** Guarda el resultado de una línea (y pasa la solicitud a «En preparación» o «Lista» según corresponda). */
+  /** Guarda UNA línea leyendo la solicitud en una transacción: no pisa las marcas de movimiento de las demás líneas
+   *  ni lo que otra sesión hizo entre medio. Sin internet (las transacciones no funcionan) guarda como antes. */
+  async function guardarLinea(s, i, nueva, opc) {
+    const f = fs(), ref = f.doc(f.collection(db(), s._col || COL), s.numero), ahora = new Date().toISOString();
+    const aplicar = (x) => { const L = (x.lineas || []).map(y => ({ ...y })), act = L[i]; if (!act || norm(act.nombre) !== norm((opc && opc.nombreOrig) || nueva.nombre)) throw new Error('La solicitud cambió: actualiza y vuelve a intentar.');
+      if (tocadaL(act) && !(opc && opc.permitirTocada)) throw new Error('Este producto ya salió de su bodega: no se puede cambiar.');
+      L[i] = { ...nueva, ...(act.movidos ? { movidos: act.movidos } : {}), ...(act.recibidos ? { recibidos: act.recibidos } : {}), ...(act.transito ? { transito: act.transito } : {}) };
+      const cambios = { lineas: L }; if (x.estado === 'NUEVA') { cambios.estado = 'PREPARACION'; cambios.historial = (x.historial || []).concat([{ estado: 'PREPARACION', por: usuario(), en: ahora }]); } return cambios; };
+    try { let c; await f.runTransaction(db(), async (tx) => { const sn = await tx.get(ref); if (!sn.exists()) throw new Error('La solicitud ya no existe.'); c = aplicar(sn.data()); tx.update(ref, c); }); return c; }
+    catch (e) { if (!/offline|unavailable|network|failed to get/i.test(String(e && (e.code || '') + ' ' + (e.message || '')))) throw e; const c = aplicar(s); await Promise.race([f.updateDoc(ref, c), new Promise(r => setTimeout(r, 2500))]); return c; }
+  }
+  /** Guarda el resultado de una línea (y pasa la solicitud a «Procesando»). */
   async function decidirLinea(n, i, noHay, cards) {
-    const f = fs(), s = solicitudes.find(x => x.numero === n); if (!s) return; const lin = (s.lineas || []).map(x => ({ ...x }));
-    const l = lin[i], cands = candDe(l, s); if (tocadaL(l)) { toast('Ya movido', 'Este producto ya salió de su bodega: no se puede cambiar.', 'warning'); return; }
+    const s = solicitudes.find(x => x.numero === n); if (!s) return; const l = (s.lineas || [])[i]; if (!l) return;
+    const cands = candDe(l, s); if (tocadaL(l)) { toast('Ya movido', 'Este producto ya salió de su bodega: no se puede cambiar.', 'warning'); return; }
     const qs = cards ? [...cards.querySelectorAll('.si-q-in')].map(x => Math.max(0, Math.floor(num(x.value)))) : [];
     const mal = cands.find((c, j) => qs[j] > c.disp); if (mal) { toast('Cantidad', `El lote ${mal.lote} solo tiene ${mal.disp}.`, 'warning'); return; }
     const sel = noHay ? [] : cands.map((c, j) => ({ insumoId: c.insumoId, bodega: c.bodega, clave: c.clave, lote: c.lote, vence: c.vence, qty: qs[j] || 0 })).filter(x => x.qty > 0);
     const entregar = sel.reduce((t, x) => t + x.qty, 0);
     if (!noHay && entregar <= 0) noHay = true;   // dejar todo en 0 = no tenemos: queda «No hay» en la solicitud
-    lin[i] = { ...l, estado: estadoLinea(l.cantidad, entregar, noHay), entregar, seleccion: sel, revisadoPor: usuario(), revisadoEn: new Date().toISOString() }; delete lin[i].movido;
-    Object.keys(escritas).forEach(k => { if (k.startsWith(n + '|' + i + '|')) delete escritas[k]; });
-    const est = s.estado === 'NUEVA' ? 'PREPARACION' : s.estado;   // «Procesada» solo al tocar «Procesar» (mueve el stock)
-    const cambios = { lineas: lin }; if (est !== s.estado) { cambios.estado = est; cambios.historial = (s.historial || []).concat([{ estado: est, por: usuario(), en: new Date().toISOString() }]); }
-    delete abiertoL[n + '|' + i];
-    Object.assign(s, cambios); pintarBandeja();
-    try { await Promise.race([f.updateDoc(f.doc(f.collection(db(), s._col || COL), n), cambios), new Promise(res => setTimeout(res, 2500))]); }
-    catch (e) { toast('No se pudo guardar', e.message || String(e), 'error'); }
+    const nueva = { ...l, estado: estadoLinea(l.cantidad, entregar, noHay), entregar, seleccion: sel, revisadoPor: usuario(), revisadoEn: new Date().toISOString() }; delete nueva.movido;
+    Object.keys(escritas).forEach(k => { if (k.startsWith(n + '|' + i + '|')) delete escritas[k]; }); delete abiertoL[n + '|' + i];
+    try { const c = await guardarLinea(s, i, nueva); Object.assign(s, c); pintarBandeja(); }
+    catch (e) { toast('No se pudo guardar', esc(e.message || String(e)), 'error'); }
+  }
+  /** Línea con un lote movido y otro que falló: queda solo con lo que sí salió (lo demás se informa como no entregado). */
+  async function soloMovido(n, i) {
+    const s = solicitudes.find(x => x.numero === n), l = s && (s.lineas || [])[i]; if (!l) return;
+    const sel = (l.seleccion || []).filter(x => (l.movidos || []).includes(grupoDe(x))), e = sel.reduce((t, x) => t + num(x.qty), 0);
+    try { const c = await guardarLinea(s, i, { ...l, seleccion: sel, entregar: e, estado: estadoLinea(l.cantidad, e, e === 0), revisadoPor: usuario(), revisadoEn: new Date().toISOString() }, { permitirTocada: true }); Object.assign(s, c); pintarBandeja(); toast('Listo', 'La línea quedó con lo que sí se movió.', 'success'); }
+    catch (er) { toast('No se pudo', esc(er.message || er), 'error'); }
   }
   /** Procesar (v21.212): con todos los productos decididos y con internet, mueve cada lote elegido.
    *  · Reposición de una bodega de uso: sale de su bodega y queda «En tránsito» hasta que se marque recibido.
@@ -521,7 +538,8 @@
     if (s.conteo && s.conteo.estado !== 'aplicado') { toast('Inventario', 'Primero acepta el inventario (o espera el reconteo).', 'warning'); return; }
     if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) { toast('Sin internet', 'Procesar mueve stock y necesita conexión. Puedes ir confirmando productos; procesa cuando vuelva internet.', 'warning'); return; }
     const repo = esRepo(s), tareas = [];
-    (s.lineas || []).forEach((l, i) => { if (l.soloConteo || l.estado === 'no_hay') return; (l.seleccion || []).filter(x => num(x.qty) > 0 && !(l.movidos || []).includes(grupoDe(x))).forEach(x => tareas.push({ l, i, x })); });
+    if (legado(s)) { toast('Procesar', 'Esta solicitud se procesó con la versión anterior: ciérrala directamente.', 'info'); return; }
+    (s.lineas || []).forEach((l, i) => { if (l.soloConteo || l.estado === 'no_hay' || l.movido === true) return; (l.seleccion || []).filter(x => num(x.qty) > 0 && !(l.movidos || []).includes(grupoDe(x))).forEach(x => tareas.push({ l, i, x })); });
     const L = (s.lineas || []).filter(l => !l.soloConteo), ok = L.filter(l => l.estado === 'ok').length, par = L.filter(l => l.estado === 'parcial').length, nh = L.filter(l => l.estado === 'no_hay').length, u = tareas.reduce((t, z) => t + num(z.x.qty), 0);
     if (!sDoc) { const si = P && P.confirmar ? await P.confirmar({ titulo: `¿Procesar ${esc(s.correlativo || n)}?`, texto: `Para <b>${esc(s.solicitante || s.requester)}</b>${s.servicio ? ' · ' + esc(s.servicio) : ''}.`, lineas: [`${ok} completo(s)${par ? ` · ${par} parcial(es)` : ''}${nh ? ` · ${nh} sin stock (quedan avisados)` : ''}`, u ? (repo ? `Salen <b>${u}</b> u. de su bodega y quedan <b>en camino</b> a ${esc(s.bodega)} hasta que se marquen recibidas.` : `Se entregan <b>${u}</b> u.: salen del stock por lote.`) : 'No hay nada que mover.', 'Quien pidió verá la solicitud como «Procesada».'], si: 'Procesar' }) : confirm('¿Procesar?'); if (!si) return; }
     ocupado.add(n); pintarBandeja(); const nota = `Solicitud ${s.correlativo || n}`, prog = P && tareas.length ? P.iniciar('Procesando la solicitud…', []) : null; let mal = 0; const errs = [];
@@ -613,6 +631,7 @@
       if (b.dataset.nh !== undefined) return decidirLinea(n, +b.dataset.nh, true, null);
       if (b.dataset.ver !== undefined) { abiertoL[n + '|' + b.dataset.ver] = true; return pintarBandeja(); }
       if (b.dataset.procesar) return procesar(n);
+      if (b.dataset.solomov !== undefined) return soloMovido(n, +b.dataset.solomov);
       if (b.dataset.recibir) return recibir(n);
       if (b.dataset.rev) { const s = solicitudes.find(x => x.numero === n); if (s) cargarRevision(s); return; }
       if (b.dataset.aceptar || b.dataset.reconteo) return revisarAccion(n, !!b.dataset.aceptar, b);

@@ -198,10 +198,15 @@ service cloud.firestore {
         // Reconteo pedido por bodega: la encargada reenvía SOLO el conteo (bodega vuelve a revisar y acepta)
         || (isTransitoria() && resource.data.uid == request.auth.uid
             && resource.data.conteo.get('estado', '') == 'reconteo' && request.resource.data.conteo.get('estado', '') == 'recontado'
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['conteo', 'historial', 'editadoEn']))
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['conteo', 'historial', 'editadoEn'])
+            && request.resource.data.conteo.bodegaId == resource.data.conteo.bodegaId
+            && request.resource.data.conteo.bodega == resource.data.conteo.bodega
+            && request.resource.data.conteo.fin == resource.data.conteo.fin
+            && request.resource.data.historial.size() == resource.data.historial.size() + 1)
         // La encargada marca «Recibido» en su bodega; la sesión de bodega mueve lo que estaba en camino
-        || (isTransitoria() && resource.data.estado == 'LISTA'
-            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['recibidoSolicitado', 'historial']));
+        || (isTransitoria() && resource.data.estado == 'LISTA' && resource.data.uid == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['recibidoSolicitado', 'historial'])
+            && request.resource.data.historial.size() == resource.data.historial.size() + 1);
       allow delete: if isAdmin();
     }
 

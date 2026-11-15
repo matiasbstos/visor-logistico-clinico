@@ -172,7 +172,7 @@
         lineas: (() => { const l = lineasDe(items, cont); return l.length ? l.slice(0, 200) : [{ nombre: 'Inventario completo: sin reposición', cantidad: 0, soloConteo: true }]; })(),
         conteo: { bodegaId: b.bodegaId, bodega: b.bodega, inicio: b.inicio, fin: ahora.toISOString(), datosAl: b.datosAl, items: items.map(it => ({ k: it.k, n: it.n, i: it.i || '', sis: num(it.sis), obj: num(it.obj), contado: num(cont[it.k]) })) },
         creadoEn: ahora.toISOString(), historial: [{ estado: 'NUEVA', por: String(yo.c || '').toLowerCase(), en: ahora.toISOString() }] };
-      pr = f.setDoc(f.doc(f.collection(db, S.COL), numero), data);
+      b.datos = data; pr = f.setDoc(f.doc(f.collection(db, S.COL), numero), data);
     }
     // el borrador queda marcado «enviando» hasta que el servidor confirme; si se rechaza, vuelve a quedar para reenviar
     b.enviando = numero; ls.set(K_BOR, b);
@@ -185,6 +185,17 @@
     else pintar(r);
     if (P && P.exito) P.exito({ titulo: res === 'ok' ? (b.modo === 'reconteo' ? 'Reconteo enviado' : 'Inventario enviado') : 'Guardado en el teléfono', texto: res === 'ok' ? 'Bodega lo revisará. Abajo verás cuando lo acepte.' : 'Se enviará solo cuando vuelva internet.' });
     window.scrollTo && window.scrollTo(0, 0);
+  }
+  /** Reintentar SIN crear otro inventario: si ya llegó, listo; si no, se vuelve a escribir el MISMO documento (mismo N°). */
+  async function reenviar(r, btn) {
+    const b = bor(); if (!b || !b.enviando) return; const f = window.firebaseFirestore, db = window.firebaseDb, S = window.SAR_Solicitudes, ref = f.doc(f.collection(db, S.COL), b.enviando);
+    btn.disabled = true; btn.textContent = 'Revisando…';
+    try { const sn = await f.getDoc(ref);
+      if (sn.exists() && (b.modo !== 'reconteo' || (sn.data().conteo || {}).estado === 'recontado')) { ls.del(K_BOR); mostrar = false; toast('Inventario', 'Ya lo tiene bodega.', 'success'); repintar(); return; }
+      if (b.modo === 'reconteo') { delete b.enviando; ls.set(K_BOR, b); enviar(r); return; }   // un reconteo es una actualización del mismo documento: no duplica
+      if (b.datos) { await Promise.race([f.setDoc(ref, b.datos), new Promise((_, x) => setTimeout(() => x(new Error('sin respuesta')), 6000))]); ls.del(K_BOR); mostrar = false; toast('Inventario', 'Enviado.', 'success'); repintar(); return; }
+    } catch (e) { toast('Sin conexión', 'Sigue guardado en el teléfono; se enviará solo al volver internet.', 'warning'); }
+    btn.disabled = false; btn.textContent = 'Reintentar ahora';
   }
   /** Eventos delegados en el contenedor de la página (se enlazan una sola vez). */
   function enlazar(r) {
@@ -200,7 +211,7 @@
       else if (t.hasAttribute('data-iv-igual') && inp) { const it = ((bor() || {}).items || []).find(x => x.k === row.dataset.k); inp.value = num(it && it.sis); guardarValor(r, row, inp.value); }
       else if (t.hasAttribute('data-iv-sig')) { const x = [...r.querySelectorAll('.iv-row.iv-pend')].find(y => !y.hidden) || r.querySelector('.iv-row.iv-pend'); if (x) { x.hidden = false; x.scrollIntoView({ behavior: 'smooth', block: 'center' }); const i = x.querySelector('.iv-in'); if (i) setTimeout(() => i.focus({ preventScroll: true }), 300); } else toast('Inventario', 'Ya contaste todo.', 'success'); }
       else if (t.hasAttribute('data-iv-enviar')) enviar(r);
-      else if (t.hasAttribute('data-iv-reenviar')) { const b = bor(); if (b) { delete b.enviando; ls.set(K_BOR, b); enviar(r); } }
+      else if (t.hasAttribute('data-iv-reenviar')) reenviar(r, t);
       else if (t.hasAttribute('data-iv-descartar')) { const b = bor(); if (b && b.modo === 'reconteo') { ls.del(K_BOR); mostrar = false; repintar(); return; } const P = window.SAR_Progreso, ok = P && P.confirmar ? await P.confirmar({ titulo: '¿Descartar el inventario?', texto: 'Se borra lo contado en este teléfono. No se envía nada.', si: 'Descartar' }) : confirm('¿Descartar lo contado?'); if (ok) { ls.del(K_BOR); pintar(r); } }
     });
     r.addEventListener('input', (e) => {

@@ -64,11 +64,16 @@
     if (extra && extra.transitoId) m.l.transito = { ...(m.l.transito || {}), [marca.grupo]: extra.transitoId };
     tx.update(m.ref, { lineas: m.lin, actualizadoEn: new Date().toISOString() });
   }
-  /** Destino: mismo producto (nombre normalizado o código) en la bodega de llegada, nunca un registro en CUARENTENA. */
+  /** Destino: mismo producto en la bodega de llegada, nunca un registro en CUARENTENA. Primero por nombre exacto,
+   *  después por código (como antes de v21.212, sin leer toda la bodega); si el id de respaldo está en cuarentena, otro id. */
   async function buscarDestino(F, D, d0, hasta) {
-    const q = await F.getDocs(F.query(F.collection(D, 'Insumos'), F.where('location', '==', hasta))); let ref = null;
-    (q.docs || []).forEach(x => { if (ref) return; const d = x.data(); if (d.status === 'CUARENTENA') return; if (norm(d.name) === norm(d0.name) || (d0.codigoMP && String(d.codigoMP || '') === String(d0.codigoMP))) ref = x.ref; });
-    return ref || F.doc(D, 'Insumos', `tras_${slug(d0.name)}__${slug(hasta)}`);
+    const libre = (q) => (q.docs || []).find(x => x.data().status !== 'CUARENTENA');
+    let x = libre(await F.getDocs(F.query(F.collection(D, 'Insumos'), F.where('name', '==', d0.name), F.where('location', '==', hasta), F.limit(10))));
+    if (!x && d0.codigoMP) x = libre(await F.getDocs(F.query(F.collection(D, 'Insumos'), F.where('codigoMP', '==', d0.codigoMP), F.where('location', '==', hasta), F.limit(10))));
+    if (x) return x.ref;
+    const base = `tras_${slug(d0.name)}__${slug(hasta)}`; let ref = F.doc(D, 'Insumos', base);
+    for (let n = 2; n < 6; n++) { const sn = await F.getDoc(ref); if (!sn.exists() || sn.data().status !== 'CUARENTENA') break; ref = F.doc(D, 'Insumos', `${base}_${n}`); }
+    return ref;
   }
   async function moverUno(id, desde, hasta, sel, nota, marca) {
     sel = sel.map(x => ({ ...x, qty: Math.max(0, Math.floor(num(x.qty))) })); const qty = sel.reduce((s, x) => s + x.qty, 0);

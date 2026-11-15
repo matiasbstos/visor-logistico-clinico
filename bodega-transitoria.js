@@ -60,7 +60,7 @@
 
   async function cargarBodegas() {
     const sn = await fs().getDocs(fs().collection(db(), 'Bodegas')); bodegas = [];
-    sn.forEach(d => { const x = d.data(); bodegas.push({ id: d.id, name: x.name, type: x.type, pedidos: x.pedidos || (x.type === 'transitoria' ? 'medico' : '') }); });
+    sn.forEach(d => { const x = d.data(); bodegas.push({ id: d.id, name: x.name, type: x.type, pedidos: x.pedidos !== undefined ? x.pedidos : (x.type === 'transitoria' ? 'medico' : '') }); });
     bodegas = bodegas.filter(b => b.name).sort((a, b) => a.name.localeCompare(b.name, 'es'));
     if (!bodegaSel || !bodegas.some(b => b.id === bodegaSel)) { const t = bodegas.find(b => b.type === 'transitoria') || bodegas.find(b => b.name === CENTRAL) || bodegas[0]; bodegaSel = t ? t.id : null; }
   }
@@ -106,6 +106,7 @@
       const sref = remoto ? doc('Solicitudes_Insumos', remoto.numero) : null, sd = sref ? await tx.get(sref) : null;
       if (sd && (!sd.exists() || (sd.data().conteo || {}).estado === 'aplicado')) throw Object.assign(new Error('Este inventario ya se cuadró.'), { ya: true });
       if (sd && (sd.data().conteo || {}).estado === 'reconteo') throw new Error('Se pidió un reconteo: espera a que lo envíen.');
+      if (sd && remoto.version !== undefined) { const c0 = sd.data().conteo || {}; if (String(c0.recontadoEn || c0.fin || '') !== String(remoto.version)) throw new Error('El inventario cambió (llegó un reconteo): vuelve a revisarlo.'); }
       let prev = await tx.get(cref);
       if (prev.exists() && prev.data().aplicado) { if (!remoto) throw new Error('El conteo de hoy ya se cerró.'); cref = doc('Contadores', `transitoria-conteo-${b.id}-${fecha}-${remoto.numero}`); prev = await tx.get(cref); }
       const refs = [], leidos = new Map();
@@ -236,7 +237,7 @@
       <div class="data-table-card mt-24"><h3>Planilla Excel de la bodega</h3><p class="act-hint">Descarga la planilla con todo lo que el sistema dice que hay aquí. Quien toma el inventario anota el <b>estante</b> (A1–C6) y lo <b>contado</b>; luego la subes y el Visor asigna las ubicaciones y carga el conteo (el descuento de faltantes sigue siendo con «Cerrar conteo»).</p>
         <div class="tra-acc"><button type="button" class="btn btn-outline" id="tra-xls-bajar"><i class="ph-bold ph-download-simple"></i> Descargar planilla</button><button type="button" class="btn btn-outline" id="tra-xls-subir"><i class="ph-bold ph-upload-simple"></i> Subir planilla</button><input type="file" id="tra-xls-file" accept=".xlsx,.xls" style="display:none" aria-label="Subir planilla de la bodega"></div></div>
       <div class="data-table-card mt-24 tra-cod"><h3>Inventario desde el teléfono</h3><p class="act-hint">La persona encargada entra a <b>Pedir insumos</b> (solicitar.html) con su usuario de rol <b>transitoria</b> y toca «Inventario». Al enviar, el inventario llega a <b>Solicitudes recibidas</b>: ahí lo aceptas (se descuenta lo usado) o pides un reconteo.</p>
-        <label class="act-l">Esta bodega recibe los pedidos de<select id="tra-ped">${[['medico', 'Insumos médicos'], ['aseo', 'Aseo'], ['oficina', 'Oficina'], ['', 'Ninguno (solo inventario)']].map(([v, t]) => `<option value="${v}"${(b.pedidos || '') === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label></div>
+        ${/^(admin|superadmin|administrador|global)$/i.test(String(document.body.getAttribute('data-user-role') || '')) ? '' : '<!--'}<label class="act-l">Esta bodega recibe los pedidos de<select id="tra-ped">${[['medico', 'Insumos médicos'], ['aseo', 'Aseo'], ['oficina', 'Oficina'], ['', 'Ninguno (solo inventario)']].map(([v, t]) => `<option value="${v}"${(b.pedidos || '') === v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>${/^(admin|superadmin|administrador|global)$/i.test(String(document.body.getAttribute('data-user-role') || '')) ? '' : `--><p class="act-hint">Recibe los pedidos de: <b>${esc({ medico: 'Insumos médicos', aseo: 'Aseo', oficina: 'Oficina' }[b.pedidos] || 'ninguno')}</b> (lo cambia un administrador).</p>`}</div>
       <div class="data-table-card mt-24"><h3>Agregar producto a la disposición</h3><input type="search" id="tra-bus" class="form-control" placeholder="ID o nombre del producto…" value="${esc(buscaProd)}" autocomplete="off">
         <div class="tra-sug">${sug.map((s, i) => `<button type="button" class="vp-op tra-add" data-i="${i}"><b>${esc(s.nombre)}</b>${s.codigo ? ' <small>ID ' + esc(s.codigo) + '</small>' : ''}</button>`).join('')}</div></div>`}`;
     if (soloConteo()) {
@@ -301,13 +302,16 @@
     const b = bodegas.find(x => x.id === c.bodegaId) || bodegas.find(x => x.name === s.bodega); if (!b) throw new Error('No encontré la bodega del inventario.');
     if (b.type !== 'transitoria') throw new Error(`${b.name} no es una bodega de uso: no se puede cuadrar por inventario.`);
     const d = await datosDe(b), cont = {}, tel = {}; (c.items || []).forEach(x => { cont[x.k] = Math.max(0, Math.floor(num(x.contado))); tel[x.k] = x; });
-    const fin = Date.parse(c.fin || s.creadoEn || '') || Date.now(), ent = {}, sal = {};
+    // Movimientos posteriores al conteo (sin los «usado» de otros inventarios: ese consumo no es una salida física posterior).
+    // Lo recontado se contó físicamente al recontar: para esos productos el corte es la hora del reconteo.
+    const fin = Date.parse(c.fin || s.creadoEn || '') || Date.now(), finRc = Date.parse(c.recontadoEn || '') || fin, movs = [];
     try { const [e, o] = await Promise.all([fs().getDocs(fs().query(fs().collection(db(), 'Historial_Movimientos'), fs().where('dest', '==', b.name))), fs().getDocs(fs().query(fs().collection(db(), 'Historial_Movimientos'), fs().where('origin', '==', b.name)))]);
-      e.forEach(m => { const x = m.data(); if (ms(x.date) > fin) { const k = norm(x.insumoName); ent[k] = (ent[k] || 0) + num(x.quantity); } });
-      o.forEach(m => { const x = m.data(); if (ms(x.date) > fin) { const k = norm(x.insumoName); sal[k] = (sal[k] || 0) + num(x.quantity); } }); } catch (er) { /* sin historial: se usa el stock actual */ }
+      e.forEach(m => { const x = m.data(); if (x.type !== 'TRANSITORIA_FALTANTE') movs.push({ k: norm(x.insumoName), t: ms(x.date), q: num(x.quantity) }); });
+      o.forEach(m => { const x = m.data(); if (x.type !== 'TRANSITORIA_FALTANTE') movs.push({ k: norm(x.insumoName), t: ms(x.date), q: -num(x.quantity) }); }); } catch (er) { /* sin historial: se usa el stock actual */ }
     return filasCon(d.objetivos, d.ib, d.ic, cont).filter(r => cont[r.k] !== undefined).map(r => {
-      const nombres = new Set([norm(r.o.nombre), ...r.dB.map(x => norm(x.name))]); let aj = 0; nombres.forEach(k => { aj += (ent[k] || 0) - (sal[k] || 0); });
-      const alContar = Math.max(0, r.sistema - aj), contado = cont[r.k], t = tel[r.k] || {};
+      const t = tel[r.k] || {}, corte = t.recontado !== undefined ? finRc : fin, nombres = new Set([norm(r.o.nombre), ...r.dB.map(x => norm(x.name))]);
+      const aj = movs.filter(m => nombres.has(m.k) && m.t > corte).reduce((a, m) => a + m.q, 0);
+      const alContar = Math.max(0, r.sistema - aj), contado = cont[r.k];
       return { k: r.k, nombre: r.o.nombre, objetivo: num(r.o.objetivo), sistema: r.sistema, alContar, movPost: aj, contado, usado: Math.max(0, alContar - contado), sobra: Math.max(0, contado - alContar), visto: num(t.sis), ...(t.recontado !== undefined ? { recontado: true } : {}), r };
     });
   }
@@ -316,7 +320,7 @@
     if (!bodegas.length) await cargarBodegas();
     const c = s.conteo || {}, b = bodegas.find(x => x.id === c.bodegaId) || bodegas.find(x => x.name === s.bodega);
     const usados = {}, sisAl = {}; filasRev.forEach(x => { usados[x.k] = x.usado; sisAl[x.k] = x.alContar; });
-    await cerrarConteoCon(b, filasRev.map(x => x.r), { numero: s.numero, solicitante: s.solicitante, usados, sisAl, lineas });
+    await cerrarConteoCon(b, filasRev.map(x => x.r), { numero: s.numero, solicitante: s.solicitante, usados, sisAl, lineas, version: String(c.recontadoEn || c.fin || '') });
     if (root() && bodegaSel === b.id) cargarBodega().then(pintar).catch(() => {});
   }
   async function pedirReconteo(s, ks) {

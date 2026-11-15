@@ -163,24 +163,45 @@ service cloud.firestore {
     // Quien pide solo puede crear su solicitud (estado NUEVA, a su nombre) y leer las suyas y la lista pública de productos.
     // Bodega (staff) las ve todas, cambia el estado y publica la lista (catalogo-publico).
     match /Solicitudes_Insumos/{id} {
+      // (v21.212) Página «Pedir insumos»: quien pide sin cuenta (anónimo) o la encargada de una bodega de uso (rol transitoria).
+      // Las decisiones de bodega (lotes, movimientos, cuadre, correlativo) solo las escribe el staff.
       allow read: if isStaff()
         || (request.auth != null && (id == 'catalogo-publico' || resource.data.uid == request.auth.uid));
       allow create: if isStaff()
         || (request.auth != null
+            && request.resource.data.keys().hasOnly(['tipo', 'numero', 'estado', 'uid', 'requester', 'solicitante', 'correo', 'servicio', 'bodega', 'destino', 'categoria', 'nota', 'lineas', 'creadoEn', 'historial', 'origen', 'conteo'])
+            && request.resource.data.numero == id
             && request.resource.data.tipo == 'SOLICITUD_INSUMOS'
             && request.resource.data.estado == 'NUEVA'
             && request.resource.data.uid == request.auth.uid
-            && request.resource.data.lineas is list && request.resource.data.lineas.size() > 0 && request.resource.data.lineas.size() <= 80
+            && request.resource.data.lineas is list && request.resource.data.lineas.size() > 0
+            && request.resource.data.lineas.size() <= (isTransitoria() ? 200 : 80)
             && request.resource.data.solicitante is string && request.resource.data.solicitante.size() <= 120
-            && request.resource.data.correo is string && request.resource.data.correo.size() <= 120);
+            && request.resource.data.correo is string && request.resource.data.correo.size() <= 120
+            && (!('nota' in request.resource.data) || (request.resource.data.nota is string && request.resource.data.nota.size() <= 500))
+            && (!('servicio' in request.resource.data) || (request.resource.data.servicio is string && request.resource.data.servicio.size() <= 120))
+            && request.resource.data.historial is list && request.resource.data.historial.size() == 1
+            // inventario: solo con usuario de rol transitoria, y sin estado de cuadre
+            && ((!('conteo' in request.resource.data) && request.resource.data.get('origen', '') != 'transitoria')
+                || (isTransitoria() && request.resource.data.origen == 'transitoria'
+                    && request.resource.data.conteo.keys().hasOnly(['bodegaId', 'bodega', 'inicio', 'fin', 'datosAl', 'items']))));
       // Quien pidió puede cambiar SU solicitud mientras siga «Nueva» (agregar, quitar, cambiar cantidades, nota),
       // sin tocar el estado, el número, su identidad ni lo que ya hizo bodega (v21.197).
       allow update: if isStaff()
         || (request.auth != null && resource.data.uid == request.auth.uid
             && resource.data.estado == 'NUEVA' && request.resource.data.estado == 'NUEVA'
             && request.resource.data.uid == resource.data.uid
+            && !('conteo' in resource.data)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lineas', 'nota', 'servicio', 'solicitante', 'correo', 'editadoEn', 'historial'])
-            && request.resource.data.lineas is list && request.resource.data.lineas.size() > 0 && request.resource.data.lineas.size() <= 80);
+            && request.resource.data.lineas is list && request.resource.data.lineas.size() > 0 && request.resource.data.lineas.size() <= 80
+            && request.resource.data.historial.size() == resource.data.historial.size() + 1)
+        // Reconteo pedido por bodega: la encargada reenvía SOLO el conteo (bodega vuelve a revisar y acepta)
+        || (isTransitoria() && resource.data.uid == request.auth.uid
+            && resource.data.conteo.get('estado', '') == 'reconteo' && request.resource.data.conteo.get('estado', '') == 'recontado'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['conteo', 'historial', 'editadoEn']))
+        // La encargada marca «Recibido» en su bodega; la sesión de bodega mueve lo que estaba en camino
+        || (isTransitoria() && resource.data.estado == 'LISTA'
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['recibidoSolicitado', 'historial']));
       allow delete: if isAdmin();
     }
 

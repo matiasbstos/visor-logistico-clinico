@@ -53,11 +53,7 @@
                     )
                 );
             }
-            if ('indexedDB' in window) {
-                try {
-                    indexedDB.deleteDatabase('firestore/[DEFAULT]/sarinventario/main');
-                } catch (e) {}
-            }
+            // (v21.212) Ya NO se borra la base local de Firestore: guarda envíos hechos sin internet (también los de «Pedir insumos»).
             Promise.allSettled(cleanupPromises).then(() => {
                 if (!sessionStorage.getItem('SAR_FORCE_RELOAD_' + APP_VERSION)) {
                     sessionStorage.setItem('SAR_FORCE_RELOAD_' + APP_VERSION, '1');
@@ -74,9 +70,7 @@
                 ev.preventDefault();
                 if (!sessionStorage.getItem('SAR_FS_IDB_RECOVERED_' + APP_VERSION)) {
                     sessionStorage.setItem('SAR_FS_IDB_RECOVERED_' + APP_VERSION, '1');
-                    try {
-                        indexedDB.deleteDatabase('firestore/[DEFAULT]/sarinventario/main');
-                    } catch (e) {}
+                    // Se recarga una vez sin borrar nada: borrar la base local perdía lo pendiente de sincronizar (v21.212)
                     setTimeout(() => window.location.reload(), 150);
                 }
             }

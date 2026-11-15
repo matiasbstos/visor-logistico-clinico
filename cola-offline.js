@@ -32,7 +32,12 @@
   const esDeRed = (e) => /unavailable|offline|network|failed to fetch|deadline|timeout|lento|sin conexi/i.test(String((e && (e.code || '')) + ' ' + (e && e.message || e)));
 
   /** Aplica lo pendiente, en el orden en que se hizo. Devuelve {ok, error, quedan}. */
-  async function procesar(opc) {
+  /** Una sola pestaña a la vez aplica la cola (Web Locks; si el navegador no lo tiene, sigue como antes). */
+  function procesar(opc) {
+    if (navigator.locks && navigator.locks.request) return navigator.locks.request('sar-cola', { ifAvailable: true }, (l) => l ? procesarUna(opc) : { ok: 0, error: 0, quedan: pendientes().length, ocupado: true });
+    return procesarUna(opc);
+  }
+  async function procesarUna(opc) {
     const o = opc || {}; if (procesando) return { ok: 0, error: 0, quedan: pendientes().length };
     if (!pendientes().length) return { ok: 0, error: 0, quedan: 0 };
     if (!usuario() || !(await hayConexion())) return { ok: 0, error: 0, quedan: pendientes().length, sinRed: true };
@@ -78,7 +83,8 @@
   }
 
   // ---------------- ejecutores ----------------
-  registrar('traspaso', async (d) => { if (!window.SAR_Traspaso || !window.SAR_Traspaso.moverUno) throw new Error('sin conexión: módulo de transferencias aún no cargado'); await window.SAR_Traspaso.moverUno(d.id, d.desde, d.hasta, d.lotes, (d.nota ? d.nota + ' · ' : '') + 'hecho sin conexión el ' + new Date(d.en || Date.now()).toLocaleString('es-CL')); });
+  // idMov = id de la operación: si dos pestañas o un reintento la aplican, la segunda ve el movimiento ya creado y no mueve de nuevo (v21.212)
+  registrar('traspaso', async (d, op) => { if (!window.SAR_Traspaso || !window.SAR_Traspaso.moverUno) throw new Error('sin conexión: módulo de transferencias aún no cargado'); try { await window.SAR_Traspaso.moverUno(d.id, d.desde, d.hasta, d.lotes, (d.nota ? d.nota + ' · ' : '') + 'hecho sin conexión el ' + new Date(d.en || Date.now()).toLocaleString('es-CL'), { idMov: op && op.id }); } catch (e) { if (!e.ya) throw e; } });
   registrar('ajuste', async (d) => {
     const f = window.firebaseFirestore, db = window.firebaseDb, G = window.SAR_Gobernanza;
     const snap = await f.getDoc(f.doc(f.collection(db, 'Insumos'), d.docId)); if (!snap.exists()) throw new Error('El producto ya no existe.');

@@ -10,7 +10,7 @@
   const num = (v) => Number(v) || 0;
   const norm = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
   const soloDig = (t) => String(t || '').replace(/\D/g, '');
-  const TIPOS = { INGRESO_PROVEEDOR: 'Ingreso de proveedor', INGRESO_INVENTARIO: 'Ingreso de inventario', RECEPCION_OC: 'Recepción de orden', INGRESO: 'Ingreso', EGRESO: 'Salida', SALIDA: 'Salida', TRASPASO: 'Traspaso', traspaso: 'Traspaso', TRANSFERENCIA: 'Transferencia', AJUSTE: 'Ajuste', ACTA_ENTREGA: 'Acta de entrega', ENTREGA_ACTA: 'Acta de entrega', TRANSITORIA_FALTANTE: 'Faltante bodega transitoria', CUADRE_SOBREGIRO: 'Cuadre de sobregiro', MERMA: 'Merma' };
+  const TIPOS = { INGRESO_PROVEEDOR: 'Ingreso de proveedor', INGRESO_INVENTARIO: 'Ingreso de inventario', RECEPCION_OC: 'Recepción de orden', INGRESO: 'Ingreso', EGRESO: 'Salida', SALIDA: 'Salida', TRASPASO: 'Traspaso', traspaso: 'Traspaso', TRANSFERENCIA: 'Transferencia', AJUSTE: 'Ajuste', ACTA_ENTREGA: 'Acta de entrega', ENTREGA_ACTA: 'Acta de entrega', TRANSITORIA_FALTANTE: 'Usado (inventario de bodega de uso)', SALIDA_SOLICITUD: 'Entrega por solicitud', CUADRE_SOBREGIRO: 'Cuadre de sobregiro', MERMA: 'Merma' };
   const tipoTxt = (t) => TIPOS[t] || String(t || '—').replace(/_/g, ' ').toLowerCase().replace(/^./, c => c.toUpperCase());
   const esIngreso = (t) => /INGRESO|RECEP/i.test(String(t || ''));
 

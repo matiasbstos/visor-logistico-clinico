@@ -1425,3 +1425,10 @@ Hallazgos de 4 agentes (UX, integridad de stock, seguridad, sin internet) y de u
 
 ## 4.268 · Pedir insumos sin «Servicio / unidad» (v21.215)
 - Se quitó el campo «Servicio / unidad (Ej: Box 3, Urgencia)» del formulario de pedido, por pedido del usuario. Las solicitudes nuevas van sin servicio (queda vacío); las antiguas lo siguen mostrando si lo tenían.
+
+## 4.269 · Correo en cada gestión de solicitudes e inventarios (v21.217)
+- Mismo módulo, identidad visual (correo-html.js), destinatarios de bodega y horario que los demás avisos: **lunes a viernes 8:00–17:00 sin feriados**; fuera de horario quedan en la cola y salen solos.
+- Gestiones con correo: solicitud **recibida** (al asignarse el SOL), **inventario recibido**, **procesada** (entregado / parcial / no hay por producto), **cerrada** (recibido o entregada), **anulada**, **inventario aceptado** (lo usado) y **reconteo pedido**.
+- Van a bodega (mismos destinatarios de siempre) y a quien pidió si su correo es de cormumel.cl o vivirsalud.cl (el script solo envía a esos dominios).
+- Un solo correo por solicitud y gestión aunque haya varias sesiones abiertas: se reserva `Contadores/aviso-sol-<N°>-<gestión>` en una transacción antes de enviar. Las solicitudes anteriores a esta versión no envían «recibida».
+- Los traspasos hechos al procesar una solicitud ya no mandan además un correo de «Traspaso entre bodegas» por cada lote.

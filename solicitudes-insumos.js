@@ -596,6 +596,7 @@
     ocupado.delete(n); if (prog) { if (mal) prog.error(); else prog.listo(repo ? `En camino a ${s.bodega}` : 'Entregado', { aviso: false }); }
     try { await cargarBase(); } catch (e) { /* sigue */ } pintarBandeja();
     if (mal) { toast('Procesar', `${mal} lote(s) no se movieron: ${esc(errs.slice(0, 2).join(' · '))}. Revisa y toca «Reintentar».`, 'error'); return; }
+    try { const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), COL), n)); if (sn.exists() && sn.data().estado === 'LISTA') correoSolicitud(limpiarSol(sn.data(), n), 'procesada'); } catch (e) { /* el correo es secundario */ }
     avisar({ titulo: `Solicitud ${s.correlativo || n} procesada`, texto: repo ? `${u} u. en camino a ${esc(s.bodega)}.` : `${esc(s.solicitante || '')} ya lo ve.`, estado: 'procesada' });
   }
   /** Recibido: lo que está «En tránsito» de esta solicitud entra a la bodega de uso; con todo recibido, se cierra. */
@@ -609,13 +610,13 @@
     try { const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), COL), n)), x = sn.exists() ? limpiarSol(sn.data(), n) : null;
       if (x && (x.lineas || []).every(recibidaL) && x.estado === 'LISTA') { const ahora = new Date().toISOString(); await f.updateDoc(f.doc(f.collection(db(), COL), n), { estado: 'ENTREGADA', recibidoEn: ahora, historial: (x.historial || []).concat([{ estado: 'ENTREGADA', por: usuario(), en: ahora, nota: 'Recibido en ' + s.bodega }]) }); } } catch (e) { mal++; }
     ocupado.delete(n); try { await cargarBase(); } catch (e) { /* sigue */ } pintarBandeja();
-    if (!mal) avisar({ titulo: `Solicitud ${s.correlativo || n} cerrada`, texto: `Recibido en ${esc(s.bodega)}.`, estado: 'cerrada' });
+    if (!mal) { try { const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), COL), n)); if (sn.exists() && sn.data().estado === 'ENTREGADA') correoSolicitud(limpiarSol(sn.data(), n), 'cerrada'); } catch (e) { /* secundario */ } avisar({ titulo: `Solicitud ${s.correlativo || n} cerrada`, texto: `Recibido en ${esc(s.bodega)}.`, estado: 'cerrada' }); }
   }
   async function cambiarEstado(n, e, callado) {
     const f = fs(), s = solicitudes.find(x => x.numero === n); if (!s) return;
     if (e === 'ANULADA') { if ((s.lineas || []).some(tocadaL)) { toast('Anular', 'Ya se movió stock de esta solicitud: no se puede anular.', 'warning'); return; } const P = window.SAR_Progreso, ok = P && P.confirmar ? await P.confirmar({ titulo: `¿Anular ${esc(s.correlativo || n)}?`, texto: 'Quien pidió la verá como «Anulada».', si: 'Anular' }) : confirm('¿Anular esta solicitud?'); if (!ok) return; }
     const hist = (s.historial || []).concat([{ estado: e, por: usuario(), en: new Date().toISOString() }]);
-    try { await Promise.race([f.updateDoc(f.doc(f.collection(db(), s._col || COL), n), { estado: e, historial: hist }), new Promise(res => setTimeout(res, 2500))]); if (!callado) avisar({ titulo: `Solicitud ${s.correlativo || n} ${String(ESTADOS[e]).toLowerCase()}`, texto: esc(s.solicitante || ''), estado: AV_EST[e] }); } catch (err) { toast('No se pudo', err.message || String(err), 'error'); }
+    try { await Promise.race([f.updateDoc(f.doc(f.collection(db(), s._col || COL), n), { estado: e, historial: hist }), new Promise(res => setTimeout(res, 2500))]); if (e === 'ENTREGADA' || e === 'ANULADA') correoSolicitud({ ...s, estado: e }, e === 'ENTREGADA' ? 'cerrada' : 'anulada'); if (!callado) avisar({ titulo: `Solicitud ${s.correlativo || n} ${String(ESTADOS[e]).toLowerCase()}`, texto: esc(s.solicitante || ''), estado: AV_EST[e] }); } catch (err) { toast('No se pudo', err.message || String(err), 'error'); }
   }
   async function descargarOffline() {
     const f = fs(), btn = document.getElementById('si-off'), m = document.getElementById('si-offm'); if (btn) btn.disabled = true;
@@ -645,7 +646,7 @@
     if (!aceptar) {
       if (!rv.sel.size) { toast('Reconteo', 'Marca los productos que quieres que vuelvan a contar.', 'warning'); return; }
       const ok = P && P.confirmar ? await P.confirmar({ titulo: '¿Pedir reconteo?', texto: `${esc(s.solicitante || '')} verá en su teléfono que debe volver a contar:`, lineas: rv.filas.filter(x => rv.sel.has(x.k)).map(x => `${esc(x.nombre)} (contó ${x.contado}, había ${x.alContar})`), si: 'Pedir reconteo' }) : confirm('¿Pedir reconteo?');
-      if (!ok) return; btn.disabled = true; try { await T.pedirReconteo(s, [...rv.sel]); delete revs[n]; avisar({ titulo: 'Reconteo pedido', texto: `${rv.sel.size} producto(s) a ${esc(s.solicitante || '')}.`, estado: 'procesando' }); } catch (e) { toast('No se pudo', esc(e.message || e), 'error'); btn.disabled = false; } return;
+      if (!ok) return; btn.disabled = true; try { await T.pedirReconteo(s, [...rv.sel]); correoSolicitud(s, 'reconteo', { filas: rv.filas.filter(x => rv.sel.has(x.k)), sufijo: String(Date.now()) }); delete revs[n]; avisar({ titulo: 'Reconteo pedido', texto: `${rv.sel.size} producto(s) a ${esc(s.solicitante || '')}.`, estado: 'procesando' }); } catch (e) { toast('No se pudo', esc(e.message || e), 'error'); btn.disabled = false; } return;
     }
     // lo que se pide = dotación − contado − lo que ya viene en camino o está pedido sin procesar para esa bodega (no se pide dos veces)
     const pend = {}; solicitudes.filter(x => x.numero !== n && x.bodega === s.bodega && esRepo(x) && x.estado !== 'ANULADA' && x.estado !== 'ENTREGADA').forEach(x => (x.lineas || []).forEach(l => { if (l.soloConteo || l.estado === 'no_hay') return; const k = norm(l.asociado || l.nombre), q = l.estado ? (recibidaL(l) && tocadaL(l) ? 0 : num(l.entregar)) : num(l.cantidad); pend[k] = (pend[k] || 0) + q; }));
@@ -655,7 +656,7 @@
     if (!lineas.length) lineas = [{ nombre: 'Inventario completo: sin reposición', cantidad: 0, soloConteo: true }];
     const ok = P && P.confirmar ? await P.confirmar({ titulo: '¿Aceptar el inventario?', texto: `${esc(s.bodega)} · ${esc(s.solicitante || '')}.`, lineas: [`Se descuentan <b>${us}</b> u. usadas (por lote, el que vence primero).`, pedidos ? `Quedan <b>${pedidos}</b> producto(s) para reponer${Object.keys(pend).length ? ' (ya restado lo que viene en camino)' : ''}.` : 'No hay nada que reponer.'], si: 'Aceptar y descontar' }) : confirm('¿Aceptar?');
     if (!ok) return; btn.disabled = true;
-    try { await T.aceptarConteo(s, rv.filas, lineas); delete revs[n]; avisar({ titulo: 'Inventario aceptado', texto: `${us} u. descontadas · ${pedidos} producto(s) por reponer.`, estado: 'procesada' }); try { await cargarBase(); } catch (e) { /* sigue */ } pintarBandeja(); }
+    try { await T.aceptarConteo(s, rv.filas, lineas); correoSolicitud(s, 'aceptado', { filas: rv.filas, pedidos }); delete revs[n]; avisar({ titulo: 'Inventario aceptado', texto: `${us} u. descontadas · ${pedidos} producto(s) por reponer.`, estado: 'procesada' }); try { await cargarBase(); } catch (e) { /* sigue */ } pintarBandeja(); }
     catch (e) { toast('No se aceptó', esc(e.message || e), 'error'); btn.disabled = false; }
   }
   function enlazarBandeja() {
@@ -727,13 +728,42 @@
     };
   }
 
+  // ---------------- correos de cada gestión (v21.217) ----------------
+  // Misma identidad visual y mismo horario que los demás avisos (lunes a viernes 8:00–17:00 sin feriados; fuera de
+  // horario quedan en cola). Van a quien pidió (si su correo es del dominio permitido) y a bodega. Un solo correo por
+  // solicitud y gestión aunque haya varias sesiones abiertas: se reserva Contadores/aviso-sol-<N°>-<gestión> antes de enviar.
+  const CORREO_DESDE = '2026-11-15T23:00:00Z';   // las solicitudes anteriores a esta versión no generan correo de «enviada»
+  const correoPermitido = (c) => /@(cormumel|vivirsalud)\.cl$/i.test(String(c || '').trim());
+  const TIT_CORREO = { enviada: 'Solicitud recibida', inventario: 'Inventario recibido', procesada: 'Solicitud procesada', cerrada: 'Solicitud cerrada', anulada: 'Solicitud anulada', aceptado: 'Inventario aceptado', reconteo: 'Reconteo pedido' };
+  async function correoSolicitud(s, evento, extra) {
+    const A = window.SAR_Avisos, f = fs(); if (!A || !A.avisar || !s || publica()) return;
+    const id = `aviso-sol-${s.numero}-${evento}${extra && extra.sufijo ? '-' + extra.sufijo : ''}`, ref = f.doc(f.collection(db(), 'Contadores'), id);
+    try { const libre = await f.runTransaction(db(), async (tx) => { const d = await tx.get(ref); if (d.exists()) return false; tx.set(ref, { tipo: 'aviso-correo', evento, solicitud: s.numero, estado: 'enviando', creadoEn: new Date().toISOString() }); return true; }); if (!libre) return; } catch (e) { return; }
+    const N = s.correlativo || s.numero, cat = catDe(s.categoria), L = (s.lineas || []).filter(l => !l.soloConteo), repo = esRepo(s);
+    const quien = `${s.solicitante || 'Sin nombre'}${s.correo ? ' (' + s.correo + ')' : ''}`;
+    let intro = '', filas = [], notas = [];
+    if (evento === 'enviada' || evento === 'inventario') {
+      intro = evento === 'inventario' ? `${quien} envió el inventario de ${s.bodega}. Bodega lo revisa: acepta (se descuenta lo usado) o pide reconteo.` : `${quien} pidió ${cat ? cat.t.toLowerCase() : 'insumos'}${repo ? ' para ' + s.bodega : ''}. Bodega lo revisa y te avisa por aquí cuando esté procesada.`;
+      filas = L.map(l => ({ nombre: l.nombre, cantidad: l.cantidad, extra: [l.manual ? 'escrito a mano' : '', num(l.reiterado) > 1 ? 'sigue faltando · ' + num(l.reiterado) + '.º día' : ''].filter(Boolean).join(' · ') }));
+      if (s.nota) notas.push('Nota: ' + s.nota);
+    } else if (evento === 'procesada' || evento === 'cerrada') {
+      intro = evento === 'procesada' ? (repo ? `Bodega preparó tu solicitud: lo entregado va en camino a ${s.bodega}.` : 'Bodega preparó tu solicitud.') : (repo ? `Recibido en ${s.bodega}. La solicitud quedó cerrada.` : 'La solicitud quedó cerrada (entregada).');
+      filas = L.map(l => ({ nombre: l.asociado || l.nombre, cantidad: l.estado === 'no_hay' ? 0 : num(l.entregar), extra: l.estado === 'no_hay' ? `no hay stock (pedido ${l.cantidad})` : l.estado === 'parcial' ? `parcial (pedido ${l.cantidad})` : 'completo' }));
+      const nh = L.filter(l => l.estado === 'no_hay' || l.estado === 'parcial'); if (nh.length) notas.push(`${nh.length} producto(s) sin stock completo: quedan registrados en la solicitud.`);
+    } else if (evento === 'anulada') { intro = `Bodega anuló la solicitud de ${quien}.`; filas = L.map(l => ({ nombre: l.nombre, cantidad: l.cantidad, extra: 'anulado' })); }
+    else if (evento === 'aceptado') { intro = `Bodega aceptó el inventario de ${s.bodega}: se descontó lo usado (por lote, el que vence primero).`; filas = ((extra && extra.filas) || []).filter(x => x.usado > 0).map(x => ({ nombre: x.nombre, cantidad: x.usado, extra: `usado · había ${x.alContar}, contado ${x.contado}` })); notas.push((extra && extra.pedidos) ? `Quedan ${extra.pedidos} producto(s) para reponer.` : 'No hay nada que reponer.'); }
+    else if (evento === 'reconteo') { intro = `Bodega pidió volver a contar ${((extra && extra.filas) || []).length} producto(s) del inventario de ${s.bodega}. Ábrelo en «Pedir insumos» → Inventario.`; filas = ((extra && extra.filas) || []).map(x => ({ nombre: x.nombre, cantidad: x.contado, extra: `contado · el sistema decía ${x.alContar}` })); }
+    const destinos = [...new Set([...(correoPermitido(s.correo) ? [String(s.correo).toLowerCase()] : []), ...A.DESTINOS])];
+    await A.avisar({ id, evento: 'solicitud-' + evento, titulo: TIT_CORREO[evento] || 'Solicitud', sujeto: `${N}${cat ? ' · ' + cat.t : ''}`, asunto: `[Visor SAR] ${TIT_CORREO[evento] || 'Solicitud'} · ${N}${s.bodega ? ' · ' + s.bodega : ''}`, intro, filas, notas, destinos }).catch(() => {});
+  }
+  function correosLlegados(l) { l.filter(x => x.correlativo && String(x.creadoEn || '') >= CORREO_DESDE).forEach(x => correoSolicitud(x, x.conteo ? 'inventario' : 'enviada')); }
   // ---------------- «Recibido» marcado por la encargada en su teléfono: la sesión de bodega mueve lo que estaba en camino (v21.212) ----------------
   const recibiendo = new Set();
   function recibirMarcados(l) { l.filter(x => x.recibidoSolicitado && x.estado === 'LISTA' && !recibiendo.has(x.numero) && (x.lineas || []).every(movidaL) && !(x.lineas || []).every(recibidaL)).forEach(x => { recibiendo.add(x.numero); recibir(x.numero, x).finally(() => setTimeout(() => recibiendo.delete(x.numero), 60000)); }); }
   // ---------------- aviso en la campana: solicitudes nuevas (solo bodega) ----------------
   if (typeof module === 'undefined' && typeof document.addEventListener === 'function' && !window.SAR_SOLICITUD_PUBLICA) {
     let n = 0; const t = setInterval(() => { n++; const u = usuario(); if (!(u && esGestor() && fs() && db()) && n < 90) return; clearInterval(t); if (!(u && esGestor())) return;
-      try { const f = fs(); f.onSnapshot(f.query(f.collection(db(), COL), f.where('estado', '==', 'NUEVA')), (sn) => { const l = []; sn.forEach(d => { if (d.data().tipo === TIPO) l.push({ ...limpiarSol(d.data(), d.id), _col: COL }); }); asignarCorrelativos(l); window.SAR_SolicitudesNuevas = l.sort((a, b) => String(b.creadoEn).localeCompare(String(a.creadoEn)));
+      try { const f = fs(); f.onSnapshot(f.query(f.collection(db(), COL), f.where('estado', '==', 'NUEVA')), (sn) => { const l = []; sn.forEach(d => { if (d.data().tipo === TIPO) l.push({ ...limpiarSol(d.data(), d.id), _col: COL }); }); asignarCorrelativos(l); correosLlegados(l); window.SAR_SolicitudesNuevas = l.sort((a, b) => String(b.creadoEn).localeCompare(String(a.creadoEn)));
         const b = document.getElementById('si-badge'); if (b) { b.textContent = l.length || ''; b.style.display = l.length ? '' : 'none'; }
         if (l.length > (window.__solNuevasAntes || 0) && window.__solNuevasAntes !== undefined) avisar({ titulo: l[0].conteo ? `Inventario por revisar · ${esc(l[0].bodega || '')}` : `Solicitud enviada${l[0].correlativo ? ' · ' + l[0].correlativo : ''}`, texto: `${esc(l[0].solicitante || '')}${l[0].servicio ? ' · ' + esc(l[0].servicio) : ''}: ${(l[0].lineas || []).filter(x => !x.soloConteo).length} producto(s).`, estado: 'enviada', boton: 'Ver solicitud', alTocar: () => { location.hash = 'view-solicitudes-insumos'; } });
         window.__solNuevasAntes = l.length; window.dispatchEvent(new Event('sar-avisos')); }, () => { /* sin permiso */ });
@@ -741,6 +771,6 @@
   }
 
   function recordarMia(n) { try { const m = JSON.parse(localStorage.getItem('si-mias') || '[]'); m.unshift(n); localStorage.setItem('si-mias', JSON.stringify(m.slice(0, 20))); } catch (e) { /* sin almacenamiento */ } }
-  window.SAR_Solicitudes = { _prueba: { procesar, recibir, limpiarSol, movidaL, recibidaL, set solicitudes(v) { solicitudes = v; } }, repintar: () => pintarPide(), recordarMia, misSolicitudes: () => misLista.slice(), limpiarSol, TIPO, COL, abrirPide, abrirBandeja, publicarCatalogo, numeroSolicitud, agregarLinea, textoPicking, infoLinea, lotesCandidatos, repartir, estadoLinea, comprometido, filasInforme, parecidos, CAB_INFORME, leerTodas, pintarAuditoria };
+  window.SAR_Solicitudes = { _prueba: { procesar, recibir, correoSolicitud, limpiarSol, movidaL, recibidaL, set solicitudes(v) { solicitudes = v; } }, repintar: () => pintarPide(), recordarMia, misSolicitudes: () => misLista.slice(), limpiarSol, TIPO, COL, abrirPide, abrirBandeja, publicarCatalogo, numeroSolicitud, agregarLinea, textoPicking, infoLinea, lotesCandidatos, repartir, estadoLinea, comprometido, filasInforme, parecidos, CAB_INFORME, leerTodas, pintarAuditoria };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_Solicitudes;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null });

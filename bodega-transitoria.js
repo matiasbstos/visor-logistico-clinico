@@ -82,7 +82,8 @@
   }
 
   /** Filas de la pantalla: una por producto con objetivo. */
-  function filas() {
+  function filas() { return filasCon(objetivos, insumosBod, insumosCentral, conteo); }
+  function filasCon(objetivos, insumosBod, insumosCentral, conteo) {
     return Object.entries(objetivos).map(([k, o]) => {
       const dB = docsDe(insumosBod, o), dC = docsDe(insumosCentral, o), sistema = sumaQ(dB), central = sumaQ(dC);
       const c = conteo[k] === undefined ? '' : conteo[k];
@@ -91,14 +92,19 @@
   }
 
   // ---------------- acciones con transacción ----------------
-  async function cerrarConteo() {
-    const b = bodegas.find(x => x.id === bodegaSel), lista = filas();
+  async function cerrarConteo() { return cerrarConteoCon(bodegas.find(x => x.id === bodegaSel), filas()); }
+  /** Cierra el conteo: descuenta faltantes (FEFO). `remoto` = inventario enviado desde el teléfono: se marca en la misma
+   *  transacción como aplicado en la solicitud, así dos sesiones abiertas nunca descuentan dos veces (v21.210). */
+  async function cerrarConteoCon(b, lista, remoto) {
     if (lista.some(r => r.calc.estado === 'pendiente')) throw new Error('Falta contar algún producto. Ingresa el conteo de todos (0 si no hay).');
     const SA = window.SAR_ActasEntrega; if (!SA || !SA.descontarFEFO) throw new Error('El módulo de stock no está cargado.');
-    const f = fs(), fecha = hoy(), cref = doc('Contadores', `transitoria-conteo-${b.id}-${fecha}`);
-    const conF = lista.filter(r => r.calc.faltante > 0);
+    const f = fs(), fecha = hoy(); let cref = doc('Contadores', `transitoria-conteo-${b.id}-${fecha}`);
+    const conF = lista.filter(r => r.calc.faltante > 0), por = remoto ? `${remoto.solicitante || 'Inventario'} (teléfono)` : usuario();
     await f.runTransaction(db(), async (tx) => {
-      const prev = await tx.get(cref); if (prev.exists() && prev.data().aplicado) throw new Error('El conteo de hoy ya se cerró.');
+      const sref = remoto ? doc('Solicitudes_Insumos', remoto.numero) : null, sd = sref ? await tx.get(sref) : null;
+      if (sd && (!sd.exists() || (sd.data().conteo || {}).estado)) throw Object.assign(new Error('Este inventario ya se cuadró.'), { ya: true });
+      let prev = await tx.get(cref);
+      if (prev.exists() && prev.data().aplicado) { if (!remoto) throw new Error('El conteo de hoy ya se cerró.'); cref = doc('Contadores', `transitoria-conteo-${b.id}-${fecha}-${remoto.numero}`); prev = await tx.get(cref); }
       const refs = [], leidos = new Map();
       for (const r of conF) for (const d of r.dB) if (!leidos.has(d.id)) { const ref = doc('Insumos', d.id); refs.push(ref); leidos.set(d.id, await tx.get(ref)); }
       const cambios = [];
@@ -109,9 +115,10 @@
       }
       cambios.forEach(c => {
         tx.update(doc('Insumos', c.id), { quantity: c.pl.quantity, batches: c.pl.batches, updatedAt: f.serverTimestamp() });
-        tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: c.d.name, quantity: c.cant, type: 'TRANSITORIA_FALTANTE', user: usuario(), date: f.serverTimestamp(), document: `CONTEO-${b.name}-${fecha}`, batch: c.pl.usados.length === 1 ? c.pl.usados[0].batch : 'MULTI-LOTE', origin: b.name, lotes: c.pl.usados, idInsumoOrigen: c.id, observacion: `Faltante en el conteo diario de ${b.name} (${fecha}): sale del stock total` });
+        tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: c.d.name, quantity: c.cant, type: 'TRANSITORIA_FALTANTE', user: por, date: f.serverTimestamp(), document: `CONTEO-${b.name}-${fecha}`, batch: c.pl.usados.length === 1 ? c.pl.usados[0].batch : 'MULTI-LOTE', origin: b.name, lotes: c.pl.usados, idInsumoOrigen: c.id, observacion: `Faltante en el conteo diario de ${b.name} (${fecha}): sale del stock total${remoto ? ' · inventario ' + remoto.numero : ''}` });
       });
-      tx.set(cref, { tipo: 'transitoria-conteo', bodegaId: b.id, bodega: b.name, fecha, aplicado: true, por: usuario(), creadoEn: f.serverTimestamp(), filas: lista.map(r => ({ nombre: r.o.nombre, codigo: r.o.codigo || '', objetivo: num(r.o.objetivo), sistema: r.sistema, contado: r.calc.contado, faltante: r.calc.faltante, sobrante: r.calc.sobrante })) });
+      if (sref) tx.update(sref, { 'conteo.estado': 'aplicado', 'conteo.aplicadoEn': new Date().toISOString(), 'conteo.aplicadoPor': usuario(), 'conteo.descontado': conF.map(r => ({ k: r.k, nombre: r.o.nombre, sistema: r.sistema, contado: r.calc.contado, usado: r.calc.faltante })), 'conteo.sobrantes': lista.filter(r => r.calc.sobrante > 0).map(r => ({ nombre: r.o.nombre, sobrante: r.calc.sobrante })) });
+      tx.set(cref, { tipo: 'transitoria-conteo', bodegaId: b.id, bodega: b.name, fecha, aplicado: true, por, ...(remoto ? { solicitud: remoto.numero } : {}), creadoEn: f.serverTimestamp(), filas: lista.map(r => ({ nombre: r.o.nombre, codigo: r.o.codigo || '', objetivo: num(r.o.objetivo), sistema: r.sistema, contado: r.calc.contado, faltante: r.calc.faltante, sobrante: r.calc.sobrante })) });
     });
   }
   async function reponer() {
@@ -223,10 +230,12 @@
         <div class="tra-acc"><button type="button" class="btn btn-primary" id="tra-cerrar"${cerrado ? ' disabled' : ''}>Cerrar conteo y descontar faltantes</button><button type="button" class="btn btn-outline" id="tra-reponer"${tRep ? '' : ' disabled'}>Reponer desde Bodega Central (${tRep} u.)</button></div>` : '<p class="act-hint">Aún no defines qué productos van en esta bodega. Agrégalos abajo.</p>'}</div>
       <div class="data-table-card mt-24"><h3>Planilla Excel de la bodega</h3><p class="act-hint">Descarga la planilla con todo lo que el sistema dice que hay aquí. Quien toma el inventario anota el <b>estante</b> (A1–C6) y lo <b>contado</b>; luego la subes y el Visor asigna las ubicaciones y carga el conteo (el descuento de faltantes sigue siendo con «Cerrar conteo»).</p>
         <div class="tra-acc"><button type="button" class="btn btn-outline" id="tra-xls-bajar"><i class="ph-bold ph-download-simple"></i> Descargar planilla</button><button type="button" class="btn btn-outline" id="tra-xls-subir"><i class="ph-bold ph-upload-simple"></i> Subir planilla</button><input type="file" id="tra-xls-file" accept=".xlsx,.xls" style="display:none" aria-label="Subir planilla de la bodega"></div></div>
+      <div class="data-table-card mt-24 tra-cod"><h3>Inventario desde el teléfono</h3><p class="act-hint">La persona asignada cuenta en la página <b>Pedir insumos</b> (funciona sin internet) y al enviar: se descuenta solo lo usado y llega la solicitud de reposición a tu bandeja. Genera un enlace y mándaselo; al generar uno nuevo, el anterior deja de servir.</p>
+        <div class="tra-acc"><button type="button" class="btn btn-outline" id="tra-cod"><i class="ph-bold ph-key"></i> Generar enlace para la persona asignada</button></div><div id="tra-cod-out"></div></div>
       <div class="data-table-card mt-24"><h3>Agregar producto a la disposición</h3><input type="search" id="tra-bus" class="form-control" placeholder="ID o nombre del producto…" value="${esc(buscaProd)}" autocomplete="off">
         <div class="tra-sug">${sug.map((s, i) => `<button type="button" class="vp-op tra-add" data-i="${i}"><b>${esc(s.nombre)}</b>${s.codigo ? ' <small>ID ' + esc(s.codigo) + '</small>' : ''}</button>`).join('')}</div></div>`}`;
     if (soloConteo()) {
-      r.querySelectorAll('.tra-quitar, #tra-cerrar, #tra-reponer, .tra-acc:has(#tra-cerrar)').forEach(e => e.remove());
+      r.querySelectorAll('.tra-quitar, #tra-cerrar, #tra-reponer, .tra-acc:has(#tra-cerrar), .tra-cod').forEach(e => e.remove());
       r.querySelectorAll('.tra-obj').forEach(e => { e.disabled = true; });
       const ag = [...r.querySelectorAll('.data-table-card')].find(c => c.querySelector('#tra-bus')); if (ag) ag.remove();
     }
@@ -242,14 +251,21 @@
     const sb = r.querySelector('#tra-bod'); if (sb) sb.addEventListener('change', async () => { bodegaSel = sb.value; await cargarBodega(); pintar(); });
     const bus = r.querySelector('#tra-bus'); if (bus) bus.addEventListener('input', () => { buscaProd = bus.value; const p = bus.selectionStart; pintar(); const n = document.getElementById('tra-bus'); if (n) { n.focus(); n.setSelectionRange(p, p); } });
     $$('.tra-add').forEach(b => b.addEventListener('click', () => { const s = sug[+b.dataset.i]; objetivos[claveDe(s.nombre, s.codigo)] = { nombre: s.nombre, codigo: s.codigo, objetivo: 10 }; buscaProd = ''; proteger(guardarObjetivos, 'Producto agregado. Ajusta su disposición.'); }));
-    $$('.tra-obj').forEach(i => i.addEventListener('change', () => { objetivos[i.dataset.k].objetivo = Math.max(0, Math.floor(num(i.value))); proteger(guardarObjetivos); }));
+    $$('.tra-obj').forEach(i => i.addEventListener('change', () => { objetivos[i.dataset.k].objetivo = Math.max(0, Math.floor(num(i.value))); proteger(async () => { await guardarObjetivos(); refrescarPublico(); }); }));
     $$('.tra-quitar').forEach(b => b.addEventListener('click', () => { delete objetivos[b.dataset.k]; delete conteo[b.dataset.k]; proteger(guardarObjetivos); }));
     $$('.tra-cont').forEach(i => i.addEventListener('change', () => { conteo[i.dataset.k] = i.value === '' ? undefined : Math.max(0, Math.floor(num(i.value))); pintar(); }));
+    const cb = r.querySelector('#tra-cod'); if (cb) cb.addEventListener('click', async () => {
+      const P = window.SAR_Progreso, ok = P && P.confirmar ? await P.confirmar({ titulo: '¿Generar enlace de inventario?', texto: 'Si ya habías mandado uno, ese deja de funcionar.', si: 'Generar' }) : confirm('¿Generar enlace? El anterior deja de funcionar.');
+      if (!ok) return; cb.disabled = true;
+      try { const cod = await nuevoCodigo(), url = location.origin + '/solicitar.html?inv=' + encodeURIComponent(cod), o = r.querySelector('#tra-cod-out');
+        o.innerHTML = `<div class="tra-link"><input class="form-control" readonly value="${esc(url)}" aria-label="Enlace de inventario"><button type="button" class="btn btn-primary btn-sm" id="tra-cod-cp">Copiar</button><a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="https://wa.me/?text=${encodeURIComponent('Enlace para el inventario de la bodega transitoria (ábrelo en tu teléfono): ' + url)}">WhatsApp</a></div><p class="act-hint">Solo se muestra ahora. Ábrelo en el teléfono de la persona asignada: le aparece «Inventario bodega transitoria».</p>`;
+        o.querySelector('#tra-cod-cp').addEventListener('click', () => { navigator.clipboard && navigator.clipboard.writeText(url).then(() => toast('Enlace', 'Copiado.', 'success')); });
+      } catch (e) { toast('No se pudo', e.message || String(e), 'error'); } cb.disabled = false; });
     const xb = r.querySelector('#tra-xls-bajar'); if (xb) xb.addEventListener('click', () => { try { descargarPlanilla(); } catch (e) { toast('No se pudo', e.message, 'error'); } });
     const xs = r.querySelector('#tra-xls-subir'), xf = r.querySelector('#tra-xls-file');
     if (xs && xf) { xs.addEventListener('click', () => xf.click()); xf.addEventListener('change', async () => { const fl = xf.files[0]; if (!fl) return; try { const res = await subirPlanilla(fl); const prev = { ...conteo }; await cargarBodega(); Object.assign(conteo, prev, res._c); toast('Planilla cargada', `${res.asignados} ubicaciones asignadas, ${res.contados} conteos cargados${res.sinMatch.length ? '. Sin stock en esta bodega: ' + res.sinMatch.slice(0, 5).join(', ') : ''}.`, res.sinMatch.length ? 'warning' : 'success'); pintar(); } catch (e) { toast('No se pudo leer la planilla', e.message || String(e), 'error'); } }); }
-    const c = r.querySelector('#tra-cerrar'); if (c) c.addEventListener('click', () => { if (!confirm('Se cerrará el conteo de hoy y los FALTANTES se descontarán del stock total.\n\n¿Continuar?')) return; c.disabled = true; proteger(cerrarConteo, 'Conteo cerrado: faltantes descontados del stock.'); });
-    const rp = r.querySelector('#tra-reponer'); if (rp) rp.addEventListener('click', () => { if (!confirm('Se traspasará stock de la Bodega Central a esta bodega para llegar a la disposición.\n\n¿Reponer?')) return; rp.disabled = true; const keep = { ...conteo }; proteger(async () => { await reponer(); }, 'Reposición hecha: stock traspasado desde la Bodega Central.').then(() => { Object.assign(conteo, keep); }); });
+    const c = r.querySelector('#tra-cerrar'); if (c) c.addEventListener('click', () => { if (!confirm('Se cerrará el conteo de hoy y los FALTANTES se descontarán del stock total.\n\n¿Continuar?')) return; c.disabled = true; proteger(async () => { await cerrarConteo(); refrescarPublico(); }, 'Conteo cerrado: faltantes descontados del stock.'); });
+    const rp = r.querySelector('#tra-reponer'); if (rp) rp.addEventListener('click', () => { if (!confirm('Se traspasará stock de la Bodega Central a esta bodega para llegar a la disposición.\n\n¿Reponer?')) return; rp.disabled = true; const keep = { ...conteo }; proteger(async () => { await reponer(); refrescarPublico(); }, 'Reposición hecha: stock traspasado desde la Bodega Central.').then(() => { Object.assign(conteo, keep); }); });
   }
   async function abrir() {
     const r = root(); if (!r) return;
@@ -257,7 +273,56 @@
     try { await cargarBodegas(); await cargarBodega(); pintar(); } catch (e) { r.innerHTML = `<p class="act-err" style="padding:24px">No se pudo cargar: ${esc(e.message || e)}</p>`; }
   }
 
-  const api = { abrir, normEstante, calcularFila, repartir, sumarLotes, claveDe };
+  // ---------------- inventario desde el teléfono (página «Pedir insumos», v21.210) ----------------
+  async function sha(t) { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode('sar-inv|' + String(t || '').trim())); return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, '0')).join(''); }
+  async function datosDe(b) {
+    const [o, ib, ic] = await Promise.all([fs().getDoc(doc('Contadores', 'transitoria-obj-' + b.id)).catch(() => null), leerInsumos(b.name), leerInsumos(CENTRAL)]);
+    return { objetivos: (o && o.exists() && o.data().items) || {}, ib, ic };
+  }
+  /** Lo último que se pidió de cada producto desde el inventario y no llegó completo (constancia de quiebre). */
+  async function pendientesDe(nombreBodega) {
+    const out = {}; let l = [];
+    try { const sn = await fs().getDocs(fs().query(fs().collection(db(), 'Solicitudes_Insumos'), fs().where('origen', '==', 'transitoria'))); sn.forEach(d => { const x = d.data(); if (x.bodega === nombreBodega && x.estado !== 'ANULADA') l.push(x); }); } catch (e) { return out; }
+    const u = l.sort((a, b) => String(b.creadoEn).localeCompare(String(a.creadoEn)))[0]; if (!u) return out;
+    (u.lineas || []).forEach(x => { if (!x.k || x.soloConteo) return; const e = x.estado || 'pendiente'; if (e === 'ok' && !(num(x.entregar) < num(x.cantidad))) return;
+      out[x.k] = { pidio: num(x.cantidad), dio: num(x.entregar), est: e, dias: num(x.reiterado) || 1, fecha: String(u.creadoEn || '').slice(0, 10), sol: u.correlativo || u.numero }; });
+    return out;
+  }
+  /** Bloque que va en el catálogo público: por bodega transitoria, cada producto con dotación, lo que dice el sistema y quiebres. */
+  async function bloquePublico() {
+    if (!bodegas.length) await cargarBodegas();
+    let hash = ''; try { const c = await fs().getDoc(doc('Contadores', 'transitoria-codigo')); if (c.exists()) hash = c.data().hash || ''; } catch (e) { /* sin código */ }
+    const bods = [];
+    for (const b of bodegas.filter(x => x.type === 'transitoria')) {
+      const d = await datosDe(b), pend = await pendientesDe(b.name);
+      bods.push({ id: b.id, bodega: b.name, items: filasCon(d.objetivos, d.ib, d.ic, {}).map(r => ({ k: r.k, n: r.o.nombre, ...(r.o.codigo ? { c: String(r.o.codigo) } : {}), i: (r.dB[0] || r.dC[0] || {}).id || '', obj: num(r.o.objetivo), sis: r.sistema, ...(pend[r.k] ? { p: pend[r.k] } : {}) })) });
+    }
+    return { hash, bodegas: bods, actualizado: new Date().toISOString() };
+  }
+  async function refrescarPublico() { try { const t = await bloquePublico(); await fs().updateDoc(doc('Solicitudes_Insumos', 'catalogo-publico'), { transitoria: t }); } catch (e) { /* se publica en la próxima vuelta */ } }
+  /** Cuadra un inventario enviado desde el teléfono (lo llama la sesión de bodega apenas llega). */
+  async function aplicarRemoto(s, opt) {
+    const c = s.conteo || {}; if (c.estado) return { ya: true }; const manual = !!(opt && opt.manual);
+    const marcar = (estado, detalle) => fs().updateDoc(doc('Solicitudes_Insumos', s.numero), { 'conteo.estado': estado, 'conteo.detalle': detalle, 'conteo.aplicadoEn': new Date().toISOString(), 'conteo.aplicadoPor': usuario() }).catch(() => {});
+    let h = ''; try { const x = await fs().getDoc(doc('Contadores', 'transitoria-codigo')); h = x.exists() ? x.data().hash || '' : ''; } catch (e) { /* sin código */ }
+    if (!manual && (!h || h !== await sha(c.codigo))) { await marcar('rechazado', 'El código de inventario no es válido (¿se cambió?). Revisa el conteo y cuádralo a mano.'); return { ok: false }; }
+    if (!bodegas.length) await cargarBodegas();
+    const b = bodegas.find(x => x.id === c.bodegaId) || bodegas.find(x => x.name === s.bodega); if (!b) { await marcar('error', 'No encontré la bodega transitoria.'); return { ok: false }; }
+    const d = await datosDe(b), cont = {}; (c.items || []).forEach(x => { cont[x.k] = Math.max(0, Math.floor(num(x.contado))); });
+    const lista = filasCon(d.objetivos, d.ib, d.ic, cont).filter(r => cont[r.k] !== undefined);
+    try { await cerrarConteoCon(b, lista, s); }
+    catch (e) { if (e.ya) return { ya: true }; await marcar('error', e.message || String(e)); return { ok: false }; }
+    refrescarPublico(); if (root() && bodegaSel === b.id) { cargarBodega().then(pintar).catch(() => {}); }
+    return { ok: true, usado: lista.reduce((t, r) => t + r.calc.faltante, 0) };
+  }
+  /** Código de la persona asignada: se guarda solo su huella; el enlace se muestra una vez para mandarlo por WhatsApp. */
+  async function nuevoCodigo() {
+    const cod = String(Math.floor(100000 + Math.random() * 900000)) + '-' + Math.random().toString(36).slice(2, 6);
+    await fs().setDoc(doc('Contadores', 'transitoria-codigo'), { tipo: 'transitoria-codigo', hash: await sha(cod), por: usuario(), updatedAt: fs().serverTimestamp() });
+    await refrescarPublico(); return cod;
+  }
+
+  const api = { abrir, bloquePublico, refrescarPublico, aplicarRemoto, nuevoCodigo, sha, normEstante, calcularFila, repartir, sumarLotes, claveDe };
   if (typeof window !== 'undefined') window.SAR_Transitoria = api;
   if (typeof module !== 'undefined') module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

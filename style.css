@@ -6518,3 +6518,7 @@ body[data-user-role="solicitante"] .superadmin-only { display: none !important; 
 .bu-et b{white-space:nowrap}
 .bu-imp-vacia{background:#f1f5f9;color:#64748b}
 @media(max-width:560px){.bu-oc{display:grid;grid-template-columns:1fr auto;row-gap:6px}.bu-oc>i{grid-column:2;grid-row:1/3}.bu-oc-c{grid-column:1;align-items:flex-start;text-align:left}.bu-et{display:grid;grid-template-columns:auto 1fr auto;column-gap:10px;row-gap:4px;align-items:center}.bu-et>input{grid-row:1/3}.bu-et .bu-imp{grid-column:2;justify-self:start}.bu-et .bu-ed{grid-column:3;grid-row:1/3}.bu-grp-h{flex-direction:column}.bu-ocacc .btn{flex:1 1 100%}}
+
+/* v21.225 · Impresión de etiquetas por producto */
+.bu-modo{margin:6px 0 4px}.bu-modo button{display:inline-flex;align-items:center;gap:6px}
+.bu-grp--foco{border-color:var(--brand-green,#8CC63F);box-shadow:0 0 0 3px rgba(140,198,63,.25)}

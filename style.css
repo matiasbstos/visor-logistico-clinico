@@ -6522,3 +6522,10 @@ body[data-user-role="solicitante"] .superadmin-only { display: none !important; 
 /* v21.225 · Impresión de etiquetas por producto */
 .bu-modo{margin:6px 0 4px}.bu-modo button{display:inline-flex;align-items:center;gap:6px}
 .bu-grp--foco{border-color:var(--brand-green,#8CC63F);box-shadow:0 0 0 3px rgba(140,198,63,.25)}
+
+/* v21.226 · Varias guías o facturas en una recepción */
+.rc-docs-cab{display:flex;flex-direction:column;gap:2px;margin:10px 0 6px}.rc-docs-cab b{color:#1e293b;font-size:.92rem}.rc-docs-cab small{color:#64748b;font-size:.8rem}
+.rc-doc{border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;margin-bottom:8px;background:#f8fafc}
+.rc-doc .soc-fila{margin:0}.rc-doc-f{display:flex;align-items:flex-end;gap:10px;justify-content:space-between;flex-wrap:wrap}.rc-doc-f label{flex:1;min-width:200px}
+.rc-doc .rc-dq{color:#b91c1c;border-color:#fecaca}.rc-doc .rc-dq:hover{background:#fef2f2}
+.rc-doc-add{margin:0 0 10px;display:inline-flex;align-items:center;gap:6px}

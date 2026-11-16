@@ -1471,3 +1471,8 @@ Pedido del usuario: un apartado propio en la barra lateral para imprimir despué
 - Nuevo ítem **Impresión de etiquetas** (Inventario, bajo Bultos y etiquetas; oculto para enfermería) que abre como página la vista «Etiquetas por orden de compra» (v21.223).
 - **Aviso en el menú**: número de órdenes con etiquetas pendientes (faltan, sin imprimir o editadas). Se calcula al entrar (una vez cada 30 min por pestaña) y al usar la página; se reinicia al crear o imprimir etiquetas.
 - «Falta etiquetar»: lo recibido sin lote (S/L) se cubre con cualquier etiqueta del mismo producto; lo recibido con lote, con etiquetas de ese lote. Órdenes recibidas antes de las etiquetas por caja: «Sin etiquetas (anterior)», en gris.
+
+## 4.277 · Impresión de etiquetas: búsqueda por orden o por producto (v21.225)
+Pedido del usuario: la sección «Impresión de etiquetas» guarda todas las etiquetas y se busca por orden de compra o por el nombre del producto o medicamento.
+- Dos vistas: **Por orden de compra** y **Por producto**. La búsqueda acepta varias palabras sin tildes ni mayúsculas; por orden también encuentra la OC por los productos que trae (aunque aún no tenga etiquetas) y por lote o folio.
+- Por producto: cada grupo de etiquetas (producto + lote) con su OC, cajas, unidades y estado, más lo recibido que aún no tiene etiqueta («Sin etiqueta»). Al tocarlo abre la orden y resalta ese producto.

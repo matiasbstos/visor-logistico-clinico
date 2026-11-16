@@ -336,21 +336,43 @@
       const peso = { faltan: 0, editada: 1, sin: 2, legado: 3, reimpresa: 4, impresa: 5, vacia: 6 };
       return l.sort((a, b) => (peso[a.est.k] - peso[b.est.k]) || String(b.fecha).localeCompare(String(a.fecha)));
     };
-    let q = '', filtro = '';
-    const lista = () => {
-      const t = norm(q), todas = filas(), cuenta = (k) => todas.filter(x => x.est.k === k).length; pintarBadge(todas);
-      const vis = todas.filter(x => (!filtro || x.est.k === filtro || (filtro === 'pend' && ['faltan', 'editada', 'sin'].includes(x.est.k))) && (!t || norm(x.num + ' ' + x.prov + ' ' + x.bultos.map(b => b.nombre + ' ' + b.folio).join(' ')).includes(t)));
-      caja.innerHTML = `<p class="si-v"${en ? ' hidden' : ''}>Cada orden con sus etiquetas de bulto: si ya se imprimieron, si se reimprimieron o si falta etiquetar algo. Entra a una orden para imprimir, reimprimir o corregir datos.</p>
-        <div class="bu-ocbar"><input class="si-in" id="bu-oq" type="search" placeholder="N° de OC, proveedor, producto o folio…" value="${esc(q)}">
-        <div class="bu-chips">${[['', 'Todas', todas.length], ['pend', 'Pendientes', todas.filter(x => ['faltan', 'editada', 'sin'].includes(x.est.k)).length], ['impresa', 'Impresas', cuenta('impresa')], ['reimpresa', 'Reimpresas', cuenta('reimpresa')]].map(([k, n, c]) => `<button type="button" class="bu-chip${filtro === k ? ' on' : ''}" data-fl="${k}">${n} <b>${c}</b></button>`).join('')}</div></div>
-        <div class="bu-ocs">${vis.slice(0, 200).map((x, i) => { const tot = x.bultos.length, imp = x.bultos.filter(b => ['impresa', 'reimpresa'].includes(estadoImp(b))).length, ft = x.faltan.reduce((t, f) => t + f.total, 0);
-          return `<button type="button" class="bu-oc" data-i="${todas.indexOf(x)}"><span class="bu-oc-n"><b>${esc(x.num === SIN_OC ? 'Sin orden de compra' : 'OC ' + x.num)}</b><small>${esc(x.prov)}${x.fecha ? ' · recibida ' + esc(fechaCL(String(x.fecha).slice(0, 10))) : ''}</small></span>
-            <span class="bu-oc-c"><small>${tot} etiqueta${tot === 1 ? '' : 's'}${tot ? ` · ${imp} impresa${imp === 1 ? '' : 's'}` : ''}${ft ? ` · faltan ${ft} u.` : ''}</small><span class="bu-imp bu-imp-${x.est.k}">${esc(x.est.t)}</span></span><i class="ph-bold ph-caret-right"></i></button>`; }).join('') || '<p class="si-v">Sin órdenes que coincidan.</p>'}</div>`;
-      const i = caja.querySelector('#bu-oq'); i.oninput = () => { q = i.value; const p0 = i.selectionStart; lista(); const j = caja.querySelector('#bu-oq'); j.focus(); j.setSelectionRange(p0, p0); };
-      caja.querySelectorAll('[data-fl]').forEach(b => b.onclick = () => { filtro = b.dataset.fl; lista(); });
-      caja.querySelectorAll('.bu-oc').forEach(b => b.onclick = () => detalle(todas[Number(b.dataset.i)]));
+    let q = '', filtro = '', modo = 'oc';
+    const PEND = ['faltan', 'editada', 'sin'], pasa = (k) => !filtro || k === filtro || (filtro === 'pend' && PEND.includes(k));
+    const textoOC = (x) => norm([x.num, x.prov, ...x.bultos.map(b => b.nombre + ' ' + (b.nombreOrig || '') + ' ' + b.folio + ' ' + b.lote), ...(x.oc.lineas || []).map(l => l.descripcion), ...(x.oc.recepciones || []).flatMap(r => (r.detalle || []).map(d => (d.insumoName || '') + ' ' + (d.descripcion || '')))].join(' '));
+    /** Vista por producto: cada grupo de etiquetas (producto + lote) y lo recibido que aún no tiene etiqueta. */
+    const productos = (todas) => {
+      const l = [];
+      todas.forEach(x => {
+        const g = new Map(); x.bultos.forEach(b => { const k = b.grupo || b.folio; if (!g.has(k)) g.set(k, []); g.get(k).push(b); });
+        g.forEach((bs, k) => l.push({ x, k, nombre: bs[0].nombre, lote: bs[0].lote || 'S/L', vence: bs[0].vence || '', cajas: bs.length, u: bs.reduce((t, b) => t + num(b.inicial != null ? b.inicial : b.contenido), 0), est: estadoOC(bs, 0), txt: norm(bs.map(b => b.nombre + ' ' + (b.nombreOrig || '') + ' ' + b.folio + ' ' + b.lote).join(' ') + ' ' + x.num + ' ' + x.prov) }));
+        x.faltan.forEach(f => l.push({ x, k: '', nombre: f.nombre, lote: f.lote || 'S/L', vence: f.vence || '', cajas: 0, u: f.total, est: { k: 'faltan', t: 'Sin etiqueta' }, txt: norm(f.nombre + ' ' + f.lote + ' ' + x.num + ' ' + x.prov) }));
+      });
+      const peso = { faltan: 0, editada: 1, sin: 2, legado: 3, reimpresa: 4, impresa: 5 };
+      return l.sort((a, b) => (peso[a.est.k] - peso[b.est.k]) || a.nombre.localeCompare(b.nombre, 'es'));
     };
-    const detalle = (x) => {
+    const lista = () => {
+      const t = norm(q), todas = filas(); pintarBadge(todas);
+      const items = modo === 'oc' ? todas.map(x => ({ x, k: x.est.k })) : productos(todas).map(p => ({ p, k: p.est.k }));
+      const cuenta = (k) => items.filter(y => y.k === k).length;
+      const vis = modo === 'oc' ? todas.filter(x => pasa(x.est.k) && (!t || t.split(' ').every(w => textoOC(x).includes(w))))
+        : productos(todas).filter(p => pasa(p.est.k) && (!t || t.split(' ').every(w => p.txt.includes(w))));
+      caja.innerHTML = `<p class="si-v"${en ? ' hidden' : ''}>Cada orden con sus etiquetas de bulto: si ya se imprimieron, si se reimprimieron o si falta etiquetar algo. Entra a una orden para imprimir, reimprimir o corregir datos.</p>
+        <div class="bu-tabs bu-modo"><button type="button" class="${modo === 'oc' ? 'on' : ''}" data-modo="oc"><i class="ph-bold ph-clipboard-text"></i> Por orden de compra</button><button type="button" class="${modo === 'prod' ? 'on' : ''}" data-modo="prod"><i class="ph-bold ph-pill"></i> Por producto</button></div>
+        <div class="bu-ocbar"><input class="si-in" id="bu-oq" type="search" placeholder="${modo === 'oc' ? 'Busca por N° de orden, proveedor o producto…' : 'Busca el producto o medicamento (también lote, folio u OC)…'}" value="${esc(q)}" autocomplete="off">
+        <div class="bu-chips">${[['', 'Todas', items.length], ['pend', 'Pendientes', items.filter(y => PEND.includes(y.k)).length], ['impresa', 'Impresas', cuenta('impresa')], ['reimpresa', 'Reimpresas', cuenta('reimpresa')]].map(([k, n, c]) => `<button type="button" class="bu-chip${filtro === k ? ' on' : ''}" data-fl="${k}">${n} <b>${c}</b></button>`).join('')}</div></div>
+        ${t ? `<p class="si-v">${vis.length} resultado${vis.length === 1 ? '' : 's'} para «${esc(q)}»</p>` : ''}
+        <div class="bu-ocs">${modo === 'oc' ? vis.slice(0, 200).map((x) => { const tot = x.bultos.length, imp = x.bultos.filter(b => ['impresa', 'reimpresa'].includes(estadoImp(b))).length, ft = x.faltan.reduce((s2, f) => s2 + f.total, 0);
+          return `<button type="button" class="bu-oc" data-i="${todas.indexOf(x)}"><span class="bu-oc-n"><b>${esc(x.num === SIN_OC ? 'Sin orden de compra' : 'OC ' + x.num)}</b><small>${esc(x.prov)}${x.fecha ? ' · recibida ' + esc(fechaCL(String(x.fecha).slice(0, 10))) : ''}</small></span>
+            <span class="bu-oc-c"><small>${tot} etiqueta${tot === 1 ? '' : 's'}${tot ? ` · ${imp} impresa${imp === 1 ? '' : 's'}` : ''}${ft ? ` · faltan ${ft} u.` : ''}</small><span class="bu-imp bu-imp-${x.est.k}">${esc(x.est.t)}</span></span><i class="ph-bold ph-caret-right"></i></button>`; }).join('')
+          : vis.slice(0, 300).map((p) => `<button type="button" class="bu-oc" data-i="${todas.indexOf(p.x)}" data-g="${esc(p.k)}"><span class="bu-oc-n"><b>${esc(p.nombre)}</b><small>lote ${esc(p.lote)}${p.vence ? ' · vence ' + esc(fechaCL(p.vence)) : ''} · ${esc(p.x.num === SIN_OC ? 'sin orden de compra' : 'OC ' + p.x.num)}</small></span>
+            <span class="bu-oc-c"><small>${p.cajas ? `${p.cajas} caja${p.cajas === 1 ? '' : 's'} · ` : ''}${p.u} u.</small><span class="bu-imp bu-imp-${p.est.k}">${esc(p.est.t)}</span></span><i class="ph-bold ph-caret-right"></i></button>`).join('')}
+          ${vis.length ? '' : `<p class="si-v">${t ? 'Nada coincide con la búsqueda.' : 'Sin resultados.'}</p>`}</div>`;
+      const i = caja.querySelector('#bu-oq'); i.oninput = () => { q = i.value; const p0 = i.selectionStart; lista(); const j2 = caja.querySelector('#bu-oq'); j2.focus(); j2.setSelectionRange(p0, p0); };
+      caja.querySelectorAll('[data-fl]').forEach(b => b.onclick = () => { filtro = b.dataset.fl; lista(); });
+      caja.querySelectorAll('[data-modo]').forEach(b => b.onclick = () => { modo = b.dataset.modo; lista(); });
+      caja.querySelectorAll('.bu-oc').forEach(b => b.onclick = () => detalle(todas[Number(b.dataset.i)], b.dataset.g));
+    };
+    const detalle = (x, foco) => {
       const marcados = new Set();
       const pinta = () => {
         const fila = filas().find(y => y.num === x.num) || x; x = fila;
@@ -361,7 +383,7 @@
           <div class="bu-ochead"><div><h4>${esc(x.num === SIN_OC ? 'Sin orden de compra' : 'OC ' + x.num)}</h4><p class="si-v">${esc(x.prov)} · ${bs.length} etiqueta${bs.length === 1 ? '' : 's'}</p></div><span class="bu-imp bu-imp-${x.est.k}">${esc(x.est.t)}</span></div>
           ${ft ? `<div class="bu-falta"><b>Falta etiquetar ${ft} u.</b><small>${x.faltan.map(f => `${esc(f.nombre)} · ${f.total} u.`).join('<br>')}</small><button type="button" class="btn btn-primary btn-sm" id="bu-crea"><i class="ph-bold ph-tag"></i> Crear las que faltan</button></div>` : ''}
           <div class="fp-facc bu-ocacc"><button type="button" class="btn btn-primary" id="bu-pend"${pend.length ? '' : ' disabled'}><i class="ph-bold ph-printer"></i> Imprimir pendientes${pend.length ? ' (' + pend.length + ')' : ''}</button><button type="button" class="btn btn-secondary" id="bu-sel"${marcados.size ? '' : ' disabled'}><i class="ph-bold ph-arrows-clockwise"></i> Reimprimir seleccionadas${marcados.size ? ' (' + marcados.size + ')' : ''}</button><button type="button" class="btn btn-secondary btn-sm" id="bu-todas">${marcados.size === bs.length && bs.length ? 'Quitar selección' : 'Seleccionar todas'}</button></div>
-          ${[...grupos.values()].map(g => { const a = g[0]; return `<div class="bu-grp"><div class="bu-grp-h"><span><b>${esc(a.nombre)}</b><small>lote ${esc(a.lote || 'S/L')}${a.vence ? ' · vence ' + esc(fechaCL(a.vence)) : ''} · ${g.length} caja${g.length === 1 ? '' : 's'} · ${g.reduce((t, b) => t + num(b.inicial != null ? b.inicial : b.contenido), 0)} u.${a.rec ? ' · ' + esc(a.rec) : ''}</small></span><button type="button" class="btn btn-secondary btn-sm" data-eg="${esc(a.grupo || a.folio)}"><i class="ph-bold ph-pencil-simple"></i> Editar datos</button></div>
+          ${[...grupos.values()].map(g => { const a = g[0]; return `<div class="bu-grp${foco && (a.grupo || a.folio) === foco ? ' bu-grp--foco' : ''}" data-grp="${esc(a.grupo || a.folio)}"><div class="bu-grp-h"><span><b>${esc(a.nombre)}</b><small>lote ${esc(a.lote || 'S/L')}${a.vence ? ' · vence ' + esc(fechaCL(a.vence)) : ''} · ${g.length} caja${g.length === 1 ? '' : 's'} · ${g.reduce((t, b) => t + num(b.inicial != null ? b.inicial : b.contenido), 0)} u.${a.rec ? ' · ' + esc(a.rec) : ''}</small></span><button type="button" class="btn btn-secondary btn-sm" data-eg="${esc(a.grupo || a.folio)}"><i class="ph-bold ph-pencil-simple"></i> Editar datos</button></div>
             ${g.map(b => `<label class="bu-fila bu-et"><input type="checkbox" data-f="${esc(b.folio)}"${marcados.has(b.folio) ? ' checked' : ''}><span><b>${esc(b.folio)}</b> · bulto ${num(b.n)}/${num(b.de)} · ${num(b.contenido)} u.<small>${b.ultimaImpresion ? 'Última impresión ' + esc(fechaCL(b.ultimaImpresion.slice(0, 10))) + ' ' + esc(new Date(b.ultimaImpresion).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })) : ''}</small></span><span class="bu-imp bu-imp-${estadoImp(b)}">${esc(textoImp(b))}</span><button type="button" class="bu-ed" data-eb="${esc(b.folio)}" aria-label="Editar etiqueta ${esc(b.folio)}"><i class="ph-bold ph-pencil-simple"></i></button></label>`).join('')}</div>`; }).join('') || '<p class="si-v">Esta orden aún no tiene etiquetas.</p>'}`;
         caja.querySelector('#bu-vol').onclick = lista;
         caja.querySelectorAll('[data-f]').forEach(c => c.onchange = () => { if (c.checked) marcados.add(c.dataset.f); else marcados.delete(c.dataset.f); pinta(); });
@@ -379,6 +401,8 @@
         };
       };
       pinta();
+      if (foco) { const g = [...caja.querySelectorAll('[data-grp]')].find(e => e.dataset.grp === foco); if (g && g.scrollIntoView) g.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+      else if (foco === '' && x.faltan.length) { const fz = caja.querySelector('.bu-falta'); if (fz && fz.scrollIntoView) fz.scrollIntoView({ block: 'center' }); }
     };
     lista();
     return ov;

@@ -152,6 +152,7 @@
     const vacio = () => ({ origen: null, centro: '', dist: null, historica: null, items: [], pendientes: [], documentos: [], recibe: { nombre: '', cargo: '' } });
     let borrador = vacio();
     let stock = [];           // docs de la bodega elegida
+    let global = [];          // v21.229: productos con stock en todas las bodegas {n, nombre, cod, bodega, q}
     let bodegas = [];
     let historial = [];
     let busqueda = '';
@@ -191,8 +192,10 @@
         bodegas = []; snap.forEach(d => { const b = { id: d.id, ...d.data() }; if (b.name && b.isActive !== false) bodegas.push(b); });
         // También aparecen las bodegas que tienen stock (p. ej. donde ingresó una recepción) y la Central, aunque no tengan ficha en Bodegas
         try {
-            const ins = await fs().getDocs(fs().query(fs().collection(db(), 'Insumos'), fs().limit(3000)));
+            const ins = await fs().getDocs(fs().query(fs().collection(db(), 'Insumos'), fs().limit(10000)));
             const ya = new Set(bodegas.map(x => String(x.name).toLowerCase()));
+            /* v21.229: stock de TODAS las bodegas, para avisar «hay X en otra bodega» en vez de agregar como provisional sin stock */
+            global = []; ins.forEach(d => { const x = d.data(), q = num(x.quantity), l = String(x.location || '').trim(); if (q > 0 && l && x.status !== 'CUARENTENA') global.push({ id: d.id, n: normN(x.name), nombre: x.name || '', cod: String(x.codigoMP || ''), bodega: l, q }); });
             ins.forEach(d => { const l = String(d.data().location || '').trim(); if (l && !ya.has(l.toLowerCase())) { ya.add(l.toLowerCase()); bodegas.push({ id: 'loc_' + l, name: l, derivada: true }); } });
         } catch (e) { /* solo las fichas */ }
         if (!bodegas.some(x => /central/i.test(String(x.name)))) bodegas.push({ id: 'loc_central', name: 'Bodega Central', derivada: true });
@@ -223,6 +226,13 @@
     }
     const reservadoItem = (id, nombre) => pendConf.reduce((t, a) => t + (a.items || []).filter(i => (id && i.id === id) || (!i.id && nombre && normN(i.nombre) === normN(nombre))).reduce((s2, i) => s2 + num(i.cantidad), 0), 0);
     const reservadoOC = (ocId, key, ocI) => pendConf.filter(a => a.oc && a.oc.id === ocId && a.oc.columna === key).reduce((t, a) => t + (a.items || []).filter(i => i.ocI === ocI).reduce((s2, i) => s2 + num(i.cantidad), 0), 0);
+    /** v21.229: dónde más hay stock de un producto (otras bodegas), por nombre normalizado o ID de Mercado Público. */
+    function enOtras(nombre, codigo) {
+        const n = normN(nombre), c = String(codigo || ''), m = new Map();
+        global.filter(g => g.bodega !== String(borrador.origen || '').trim() && (g.n === n || (c && /^\d{5,}$/.test(c) && g.cod === c))).forEach(g => m.set(g.bodega, (m.get(g.bodega) || 0) + g.q));
+        return [...m.entries()].map(([bodega, q]) => ({ bodega, q })).sort((a, b) => b.q - a.q);
+    }
+    const otrasHTML = (o) => o.length ? `<span class="act-otra"><i class="ph-bold ph-warning"></i> Hay ${o.map(x => `<b>${x.q}</b> en ${esc(x.bodega)}`).join(', ')}</span> <button type="button" class="btn btn-outline btn-sm act-cambia" data-cambia="${esc(o[0].bodega)}">Usar ${esc(o[0].bodega)}</button>` : '';
     async function cargarStock() {
         stock = [];
         await cargarPendConf();
@@ -557,13 +567,14 @@
                 if (!(nom.toLowerCase().includes(q) || cod.includes(q))) return;
                 vistos.add(nn); out.push({ ci, nombre: nom, codigo: cod, imagen: c.imagen || '', derivado: c.derivado || '' });
             });
-            return out.slice(0, 15);
+            global.forEach(g => { if (vistos.has(g.n) || g.bodega === String(borrador.origen || '').trim() || !(g.nombre.toLowerCase().includes(q) || g.cod.includes(q))) return; vistos.add(g.n); out.push({ ci: -1, nombre: String(g.nombre).toUpperCase(), codigo: g.cod, imagen: '', derivado: '' }); });   /* v21.229: también lo que está en otras bodegas */
+            return out.slice(0, 20);
         })();
         const yaCat = (x) => borrador.items.some(i => i.manual && (normN(i.nombre) === normN(x.nombre) || (x.codigo && i.codigo === x.codigo)));
         const esCero = (i) => num(i.cantidad) === 0 && num(i.solicitado) > 0;   // no se entrega nada: queda pendiente del centro
         const pares = borrador.items.map((i, k) => [i, k]);
         const entregan = pares.filter(([i]) => !esCero(i)), enCero = pares.filter(([i]) => esCero(i));
-        const filaItem = (i, k) => `<div class="act-fila"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(i.nombre, { codigo: i.codigo }) : ''}${esc(i.nombre)}${i.manual ? ' <small>(manual · provisional)</small>' : ''}<small>${i.codigo ? '<b>ID ' + esc(i.codigo) + '</b> · ' : (i.manual ? '' : `<input class="act-cod" data-k="${k}" inputmode="numeric" placeholder="Sin ID: escríbelo aquí (opcional)" aria-label="ID de Mercado Público"> `)}Disponible: ${num(i.stock)}${num(i.solicitado) > num(i.cantidad) ? ` · pedido ${num(i.solicitado)} · <b>pendiente ${num(i.solicitado) - num(i.cantidad)}</b>` : ''}${num(i.cantidad) > num(i.stock) ? ` · <span class="act-sin">sin respaldo: ${num(i.cantidad) - num(i.stock)}</span>` : ''}</small>${fotoDe(i, k)}<small class="act-fis-w"><input class="act-fis" data-k="${k}" list="act-fisl" value="${esc(i.fisico || '')}" placeholder="¿Entregas físicamente otro similar? Escríbelo (solo interno, no sale en el acta)" aria-label="Producto que se entrega físicamente"></small></div>
+        const filaItem = (i, k) => `<div class="act-fila"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(i.nombre, { codigo: i.codigo }) : ''}${esc(i.nombre)}${i.manual ? ' <small>(manual · provisional)</small>' : ''}<small>${i.codigo ? '<b>ID ' + esc(i.codigo) + '</b> · ' : (i.manual ? '' : `<input class="act-cod" data-k="${k}" inputmode="numeric" placeholder="Sin ID: escríbelo aquí (opcional)" aria-label="ID de Mercado Público"> `)}Disponible: ${num(i.stock)}${num(i.solicitado) > num(i.cantidad) ? ` · pedido ${num(i.solicitado)} · <b>pendiente ${num(i.solicitado) - num(i.cantidad)}</b>` : ''}${num(i.cantidad) > num(i.stock) ? ` · <span class="act-sin">sin respaldo: ${num(i.cantidad) - num(i.stock)}</span>` : ''}${num(i.cantidad) > num(i.stock) ? (() => { const o = enOtras(i.nombre, i.codigo); return o.length ? '<br>' + otrasHTML(o) : ''; })() : ''}</small>${fotoDe(i, k)}<small class="act-fis-w"><input class="act-fis" data-k="${k}" list="act-fisl" value="${esc(i.fisico || '')}" placeholder="¿Entregas físicamente otro similar? Escríbelo (solo interno, no sale en el acta)" aria-label="Producto que se entrega físicamente"></small></div>
                 <input type="number" min="0" value="${num(i.solicitado) > num(i.cantidad) ? num(i.solicitado) : ''}" class="act-qty act-sedit" data-k="${k}" placeholder="Pedido" aria-label="Cantidad pedida"><input type="number" min="0" value="${i.cantidad}" class="act-qty act-edit" data-k="${k}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-del" data-k="${k}" aria-label="Quitar">✕</button></div>`;
         const errores = validarBorrador(borrador);
         r.innerHTML = `
@@ -590,9 +601,9 @@
             <div class="act-stock">${!borrador.origen ? '<p class="act-hint">Elige una bodega para ver su stock.</p>' : !lista.length ? '<p class="act-hint">Sin resultados. Si no está en el sistema, agrégalo a mano abajo.</p>' : lista.map(s => `
               <div class="act-fila${yaEsta(s.id) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(s.name, { codigo: s.codigo }) : ''}${esc(s.name)}${s.controlado ? ' <small>(controlado)</small>' : ''}${s.provisional ? ' <small>(provisional)</small>' : ''}<small>${s.codigo ? '<b>ID ' + esc(s.codigo) + '</b> · ' : '<span class="act-sin">sin ID</span> · '}${s.disp > 0 ? 'Disponible: ' + s.disp + (s.reserv > 0 ? ' · reservado en actas por confirmar: ' + s.reserv : '') : '<span class="act-sin">Sin stock en sistema</span>'}${s.sobregiro > 0 ? ' · sobregiro: ' + s.sobregiro : ''}</small></div>
                 ${yaEsta(s.id) ? '<span class="act-chip">agregado</span>' : `<input type="number" min="0" class="act-qty" data-sid="${esc(s.id)}" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input type="number" min="1" value="1" class="act-qty" data-qid="${esc(s.id)}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-add" data-id="${esc(s.id)}">Agregar</button>`}</div>`).join('')}
-              ${enCat.length ? '<p class="act-hint"><b>Del catálogo o registrados antes, sin stock en esta bodega</b> (se agregan como manual · provisional):</p>' + enCat.map(x => `
-              <div class="act-fila${yaCat(x) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}${esc(x.nombre)} <small>(${x.derivado ? 'registrado en ' + esc(x.derivado) : 'catálogo'})</small><small>${x.codigo ? '<b>ID ' + esc(x.codigo) + '</b>' : '<span class="act-sin">sin ID</span>'} · <span class="act-sin">Sin stock en esta bodega</span></small></div>
-                ${yaCat(x) ? '<span class="act-chip">agregado</span>' : `<input type="number" min="0" class="act-qty" data-csid="${x.ci}" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input type="number" min="0" value="1" class="act-qty" data-cqid="${x.ci}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-addcat" data-ci="${x.ci}">Agregar</button>`}</div>`).join('') : ''}
+              ${enCat.length ? '<p class="act-hint"><b>Sin stock en esta bodega</b> (del catálogo, registrados antes o en otras bodegas). Si está en otra bodega, usa esa bodega como origen; agregarlo aquí lo deja como manual · provisional (deuda):</p>' + enCat.map(x => `
+              <div class="act-fila${yaCat(x) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}${esc(x.nombre)} <small>(${x.derivado ? 'registrado en ' + esc(x.derivado) : 'catálogo'})</small><small>${x.codigo ? '<b>ID ' + esc(x.codigo) + '</b>' : '<span class="act-sin">sin ID</span>'} · <span class="act-sin">Sin stock en esta bodega</span>${(() => { const o = enOtras(x.nombre, x.codigo); return o.length ? '<br>' + otrasHTML(o) : ''; })()}</small></div>
+                ${yaCat(x) ? '<span class="act-chip">agregado</span>' : x.ci < 0 ? '' : `<input type="number" min="0" class="act-qty" data-csid="${x.ci}" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input type="number" min="0" value="1" class="act-qty" data-cqid="${x.ci}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-addcat" data-ci="${x.ci}">Agregar</button>`}</div>`).join('') : ''}
               ${stock.filter(s => !q || s.name.toLowerCase().includes(q) || String(s.codigo || '').includes(q)).length > 80 ? '<p class="act-hint">Hay más resultados: afina la búsqueda.</p>' : ''}</div>
           </div>
           <div class="act-col">
@@ -693,8 +704,22 @@
         { const dh = document.getElementById('act-dist-host'); if (dh && window.SAR_Distribucion) window.SAR_Distribucion.panelEn(dh); }
         const hon = document.getElementById('act-hist-on'); if (hon) hon.addEventListener('change', () => { leerCampos(); borrador.historica = hon.checked ? { on: true, folio: '', fecha: '' } : null; guardarBorrador(); pintar(); });
         ['act-centro', 'act-rn', 'act-rc', 'act-en', 'act-ec', 'act-hist-folio', 'act-hist-fecha'].forEach(id => { const e = document.getElementById(id); if (e) e.addEventListener('change', () => { leerCampos(); guardarBorrador(); if (id === 'act-centro') pintar(); }); });
-        $$('.act-addcat').forEach(b => b.addEventListener('click', () => {
+        /* v21.229: usar como origen la bodega donde sí hay stock; lo ya agregado se vuelve a buscar en esa bodega */
+        $$('.act-cambia').forEach(b => b.addEventListener('click', async () => {
+            leerCampos(); const nueva = b.dataset.cambia, previos = borrador.items.map(i => ({ ...i }));
+            borrador.origen = nueva; borrador.items = [];
+            try { await cargarStock(); } catch (x) { toast('Error', 'No se pudo cargar el stock: ' + x.message, 'error'); }
+            let conStock = 0, sin = 0;
+            previos.forEach(i => { const s = stock.find(x => normN(x.name) === normN(i.nombre) || (i.codigo && /^\d{5,}$/.test(String(i.codigo)) && String(x.codigo) === String(i.codigo)));
+                if (s) { conStock++; borrador.items.push({ ...i, id: s.id, manual: false, nombre: s.name, codigo: s.codigo || i.codigo || '', stock: s.disp, controlado: s.controlado }); }
+                else { sin++; borrador.items.push({ ...i, id: null, manual: true, stock: 0 }); } });
+            const sel = document.getElementById('act-origen'); if (sel) sel.value = nueva;
+            guardarBorrador(); pintar();
+            toast('Bodega de origen: ' + nueva, previos.length ? `${conStock} producto(s) ahora con stock de ${nueva}${sin ? ` · ${sin} siguen sin stock (revísalos)` : ''}.` : 'Ya puedes agregar el producto con su stock.', sin ? 'warning' : 'success');
+        }));
+        $$('.act-addcat').forEach(b => b.addEventListener('click', async () => {
             const c0 = catalogo[+b.dataset.ci]; if (!c0) return;
+            { const o = enOtras(String(c0.descripcion || c0.insumoName || ''), c0.codigoMP); if (o.length && !(await (window.SAR_Progreso && window.SAR_Progreso.confirmar ? window.SAR_Progreso.confirmar({ titulo: 'Este producto está en otra bodega', texto: `Hay <b>${o[0].q}</b> en <b>${esc(o[0].bodega)}</b>. Si lo agregas desde ${esc(borrador.origen)} queda como provisional sin stock (deuda en ${esc(borrador.origen)}) y en ${esc(o[0].bodega)} no se descuenta. Lo correcto es usar ${esc(o[0].bodega)} como origen.`, si: 'Agregar igual sin stock', no: 'Cancelar' }) : confirm('Hay stock en ' + o[0].bodega + '. ¿Agregar igual sin stock?')))) return; }
             const c = Math.floor(num((r.querySelector(`.act-qty[data-cqid="${b.dataset.ci}"]`) || {}).value)), solC = Math.floor(num((r.querySelector(`.act-qty[data-csid="${b.dataset.ci}"]`) || {}).value));
             if (!(c > 0 || (c === 0 && solC > 0))) { toast('Cantidad', 'Indica una cantidad mayor que 0 (o 0 con el pedido, para dejarlo pendiente).', 'warning'); return; }
             if (borrador.items.length >= MAX_ITEMS) { toast('Límite', `Máximo ${MAX_ITEMS} productos por acta.`, 'warning'); return; }

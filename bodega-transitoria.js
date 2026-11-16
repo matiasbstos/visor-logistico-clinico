@@ -278,7 +278,7 @@
   // ---------------- inventario desde el teléfono con usuario (v21.212) ----------------
   // La encargada (rol «transitoria») cuenta en «Pedir insumos» y envía; NADA se descuenta solo: bodega revisa, acepta o pide reconteo.
   async function datosDe(b) {
-    const [o, ib, ic] = await Promise.all([fs().getDoc(doc('Contadores', 'transitoria-obj-' + b.id)).catch(() => null), leerInsumos(b.name), leerInsumos(CENTRAL).catch(() => [])]);
+    const [o, ib, ic] = await Promise.all([fs().getDoc(doc('Contadores', 'transitoria-obj-' + b.id)).catch(() => null), leerInsumos(b.name), leerInsumos(CENTRAL).catch((e) => { toast('No pude leer Bodega Central', 'La columna «En Central» puede salir en 0: ' + ((e && e.message) || e), 'warning'); return []; })]);
     return { objetivos: (o && o.exists() && o.data().items) || {}, ib, ic };
   }
   /** Bodegas de uso (con dotación) que puede contar quien está conectado: transitoria, aseo, oficina… */
@@ -290,7 +290,7 @@
   async function pendientesDe(nombreBodega, uid) {
     const out = {}; let l = [];
     try { const q = uid ? fs().query(fs().collection(db(), 'Solicitudes_Insumos'), fs().where('uid', '==', uid)) : fs().query(fs().collection(db(), 'Solicitudes_Insumos'), fs().where('origen', '==', 'transitoria'));
-      const sn = await fs().getDocs(q); sn.forEach(d => { const x = d.data(); if (x.origen === 'transitoria' && x.bodega === nombreBodega && (x.estado === 'LISTA' || x.estado === 'ENTREGADA')) l.push(x); }); } catch (e) { return out; }
+      const sn = await fs().getDocs(q); sn.forEach(d => { const x = d.data(); if (x.origen === 'transitoria' && String(x.bodega || '').trim() === String(nombreBodega || '').trim() && (x.estado === 'LISTA' || x.estado === 'ENTREGADA')) l.push(x); }); } catch (e) { return out; }
     const u = l.sort((a, b) => String(b.creadoEn).localeCompare(String(a.creadoEn)))[0]; if (!u) return out;
     (u.lineas || []).forEach(x => { if (!x.k || x.soloConteo) return; const e = x.estado || 'pendiente'; if (e === 'ok' && !(num(x.entregar) < num(x.cantidad))) return;
       out[x.k] = { pidio: num(x.cantidad), dio: num(x.entregar), est: e, dias: num(x.reiterado) || 1, fecha: String(u.creadoEn || '').slice(0, 10), sol: u.correlativo || u.numero }; });
@@ -309,7 +309,7 @@
     const fin = Date.parse(c.fin || s.creadoEn || '') || Date.now(), finRc = Date.parse(c.recontadoEn || '') || fin, movs = [];
     try { const [e, o] = await Promise.all([fs().getDocs(fs().query(fs().collection(db(), 'Historial_Movimientos'), fs().where('dest', '==', b.name))), fs().getDocs(fs().query(fs().collection(db(), 'Historial_Movimientos'), fs().where('origin', '==', b.name)))]);
       e.forEach(m => { const x = m.data(); if (x.type !== 'TRANSITORIA_FALTANTE') movs.push({ k: norm(x.insumoName), t: ms(x.date), q: num(x.quantity) }); });
-      o.forEach(m => { const x = m.data(); if (x.type !== 'TRANSITORIA_FALTANTE') movs.push({ k: norm(x.insumoName), t: ms(x.date), q: -num(x.quantity) }); }); } catch (er) { /* sin historial: se usa el stock actual */ }
+      o.forEach(m => { const x = m.data(); if (x.type !== 'TRANSITORIA_FALTANTE') movs.push({ k: norm(x.insumoName), t: ms(x.date), q: -num(x.quantity) }); }); } catch (er) { throw new Error('No pude leer los movimientos posteriores al conteo, así que el «usado» saldría mal: ' + ((er && er.message) || er)); }   /* v21.228: antes seguía con 0 movimientos */
     return filasCon(d.objetivos, d.ib, d.ic, cont).filter(r => cont[r.k] !== undefined).map(r => {
       const t = tel[r.k] || {}, corte = t.recontado !== undefined ? finRc : fin, nombres = new Set([norm(r.o.nombre), ...r.dB.map(x => norm(x.name))]);
       const aj = movs.filter(m => nombres.has(m.k) && m.t > corte).reduce((a, m) => a + m.q, 0);

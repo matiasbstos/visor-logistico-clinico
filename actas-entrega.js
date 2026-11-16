@@ -34,7 +34,7 @@
     // Lógica pura (testeable)
     // ---------------------------------------------------------------
     function lotesDeDoc(d) {
-        if (Array.isArray(d.batches) && d.batches.length) return d.batches.map(b => ({ batch: b.batch || 'S/L', quantity: num(b.quantity), expirationDate: b.expirationDate || '', ...(b.provider ? { provider: b.provider } : {}) }));
+        if (Array.isArray(d.batches) && d.batches.length) return d.batches.map(b => ({ ...b, batch: b.batch || 'S/L', quantity: num(b.quantity), expirationDate: b.expirationDate || '', ...(b.provider ? { provider: b.provider } : {}) }));
         const q = num(d.quantity);
         return q > 0 ? [{ batch: d.batch || 'S/L', quantity: q, expirationDate: d.expirationDate || '' }] : [];
     }
@@ -342,9 +342,15 @@
         if (opc.historica && (numHist === 'HIS-' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha))) throw new Error('Indica el N° de tu acta anterior y su fecha original.');
         // Productos manuales: si ya existe uno con ese nombre en la bodega se usa; si no, se crea como PROVISIONAL.
         const items = b.items.map(i => ({ ...i }));
+        /* v21.228: se compara el nombre sin tildes, mayúsculas ni espacios de más contra TODOS los productos de la bodega
+           (antes, por name_lowercase exacto: cada acta sin stock creaba un provisional nuevo del mismo producto y la deuda quedaba repartida) */
+        let locales = null; const nn = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
         for (const i of items) {
             if (i.id || !i.manual) continue;
-            const nombre = String(i.nombre || '').trim().toUpperCase();
+            const nombre = String(i.nombre || '').trim().replace(/\s+/g, ' ').toUpperCase();
+            if (!locales) { locales = []; try { const sl = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('location', '==', b.origen), f.limit(5000))); sl.forEach(x => locales.push({ id: x.id, d: x.data() })); } catch (e) { /* sigue con la búsqueda exacta */ } }
+            const igual = locales.filter(x => nn(x.d.name) === nn(nombre) && x.d.status !== 'CUARENTENA').sort((a, c) => (Number(c.d.quantity) || 0) - (Number(a.d.quantity) || 0) || (a.d.provisional ? 1 : 0) - (c.d.provisional ? 1 : 0))[0];
+            if (igual) { i.id = igual.id; i.nombre = igual.d.name || nombre; continue; }
             const q = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('name_lowercase', '==', nombre.toLowerCase()), f.where('location', '==', b.origen), f.limit(1)));
             let q2 = null; if (q.empty && i.codigo) q2 = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('codigoMP', '==', String(i.codigo)), f.where('location', '==', b.origen), f.limit(1)));
             if (!q.empty) { i.id = q.docs[0].id; i.nombre = q.docs[0].data().name || nombre; }

@@ -193,8 +193,13 @@
                 if (!ref && g.codigo) { const s2 = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('codigoMP', '==', g.codigo), f.limit(10))); s2.forEach(x => { if (!ref && x.data().location === bodegaSel) ref = f.doc(f.collection(db(), 'Insumos'), x.id); }); }
                 if (!ref) ref = f.doc(f.collection(db(), 'Insumos'), `inv_${slug(g.codigo || g.nombre)}__${slug(bodegaSel)}`);
                 await f.runTransaction(db(), async (tx) => {
-                    const sn = await tx.get(ref), actual = sn.exists() ? sn.data() : null, m = mezclar(actual, g.ingresos), limite = num(actual && (actual.criticalLimit || actual.stock_minimo)) || 50, prox = m.batches[0];
-                    const base = { origenOC: true, origenIngreso: (actual && actual.origenIngreso) || 'INVENTARIO_RAPIDO', ...(ocRef ? { ultimaOC: ocRef } : {}), ...(g.codigo ? { codigoMP: g.codigo } : {}), quantity: m.quantity, batches: m.batches, isCritical: m.quantity <= limite, batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', updatedAt: f.serverTimestamp() };
+                    const sn = await tx.get(ref), actual = sn.exists() ? sn.data() : null, m = mezclar(actual, g.ingresos), limite = num(actual && (actual.criticalLimit || actual.stock_minimo)) || 50;
+                    /* v21.228: el ingreso rápido carga lo CONTADO físicamente: lo adeudado no se descuenta solo (ya salió de bodega);
+                       queda en «Salud del inventario» para descontar o regularizar. */
+                    const cq = null;
+                    if (cq) { m.quantity = cq.quantity; m.batches = cq.batches; m.sobregiro = cq.sobregiro; m.sobregiroDetalle = cq.sobregiroDetalle; }
+                    const prox = m.batches[0];
+                    const base = { origenOC: true, origenIngreso: (actual && actual.origenIngreso) || 'INVENTARIO_RAPIDO', ...(ocRef ? { ultimaOC: ocRef } : {}), ...(g.codigo ? { codigoMP: g.codigo } : {}), quantity: m.quantity, batches: m.batches, ...(m.sobregiro != null ? { sobregiro: m.sobregiro, sobregiroDetalle: m.sobregiroDetalle } : {}), isCritical: m.quantity <= limite, batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', updatedAt: f.serverTimestamp() };
                     if (actual) tx.update(ref, base); else tx.set(ref, { name: g.nombre, name_lowercase: g.nombre.toLowerCase(), location: bodegaSel, criticalLimit: 50, category: 'General', ...base });
                     g.ingresos.forEach(ing => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: g.nombre, item: g.nombre, quantity: ing.cantidad, type: 'INGRESO_INVENTARIO', batch: ing.lote, expirationDate: ing.vence, destination: bodegaSel, dest: bodegaSel, origin: 'Inventario inicial', user: usuario(), date: f.serverTimestamp(), document: `${recId} · Ingreso rápido${ocRef ? ' · OC ' + ocRef : ''}`, observacion: 'Ingreso rápido de inventario' + (ocRef ? ' (llegó con la OC ' + ocRef + ')' : ''), idInsumoDestino: ref.id }));
                 });

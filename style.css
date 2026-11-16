@@ -6532,3 +6532,15 @@ body[data-user-role="solicitante"] .superadmin-only { display: none !important; 
 
 /* v21.227 · «Solicitud de insumos» (pedir) solo en el menú de quien pide; bodega usa «Solicitudes recibidas» y la página pública */
 body:not([data-user-role="solicitante"]) .menu-item[data-target="view-solicitud-insumos"] { display: none !important; }
+
+/* v21.228 · Salud del inventario */
+.shi-sec{background:#fff;border:1px solid #e2e8f0;border-radius:var(--shape-card,12px);padding:14px 16px;margin:12px 0}
+.shi-sec header{display:flex;justify-content:space-between;align-items:center;gap:10px}.shi-sec h3{margin:0;font-size:1rem;color:#1e293b}
+.shi-n{background:#fef3c7;color:#92400e;border-radius:999px;padding:2px 10px;font-weight:700;font-size:.8rem;white-space:nowrap}
+.shi-sec--ok .shi-n{background:#dcfce7;color:#166534}.shi-sec--ok{opacity:.85}
+.shi-fila{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-top:1px solid #f1f5f9}
+.shi-fila small{display:block;color:#64748b;font-size:.8rem;margin-top:2px}.shi-fila b{color:#1e293b}
+.shi-acc{display:flex;gap:8px;align-items:center;flex-wrap:nowrap;justify-content:flex-end;flex:none}.shi-sel{min-width:170px;padding:6px 10px}
+.shi-aviso{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;padding:10px 12px}
+.shi-fila>div:first-child{min-width:0;flex:1}.shi-fila small{overflow-wrap:anywhere}
+@media(max-width:560px){.shi-fila{flex-direction:column;align-items:stretch}.shi-acc{justify-content:flex-start;flex-wrap:wrap;flex:initial}.shi-acc .btn,.shi-sel{flex:1 1 140px;min-width:0}.shi-acc>.btn:only-child,.shi-fila>.btn{width:100%}}

@@ -1289,13 +1289,14 @@
             for (const d of det) {
                 const nombre = String(d.insumoName || '').trim(); if (!nombre) throw new Error('Indica el producto del inventario de cada línea recibida.');
                 const snap = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('name', '==', nombre), f.limit(10)));
-                let ref = null; snap.forEach(x => { const l = x.data().location; if (!ref && (l === central || !l)) ref = f.doc(f.collection(db(), 'Insumos'), x.id); });
+                /* v21.228: si hay repetidos con el mismo nombre, se suma al de esa bodega con más stock (antes: al primero, que podía ser un provisional en 0) */
+                let ref = null, mejor = -1; snap.forEach(x => { const dx = x.data(), l = String(dx.location || '').trim(), p = (l === String(central).trim() ? 1e9 : 0) + num(dx.quantity); if ((l === String(central).trim() || (!l && !String(dx.bodegaNombre || '').trim())) && dx.status !== 'CUARENTENA' && p > mejor) { mejor = p; ref = f.doc(f.collection(db(), 'Insumos'), x.id); } });
                 const cod = String((oc.lineas[d.i] || {}).codigoMP || '').trim();
                 // Si el producto ya estaba en el sistema con ese ID (p. ej. ingresado a mano en un acta), se suma a ese mismo insumo
                 if (!ref && cod) { const s2 = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('codigoMP', '==', cod), f.limit(10))); s2.forEach(x => { const l = x.data().location; if (!ref && (l === central || !l)) ref = f.doc(f.collection(db(), 'Insumos'), x.id); }); }
                 if (!ref) ref = f.doc(f.collection(db(), 'Insumos'), `tras_${slug(nombre)}__${slug(central)}`);
                 const g = grupos.get(ref.path) || { ref, nombre, codigo: cod, ingresos: [], lineas: [] };
-                g.ingresos.push({ cantidad: d.cantidad, lote: (d.lote || '').trim().toUpperCase() || 'S/L', vence: d.vence || 'N/A' }); g.lineas.push(d); grupos.set(ref.path, g);
+                g.ingresos.push({ cantidad: d.cantidad, lote: (d.lote || '').trim().toUpperCase() || 'S/L', vence: d.vence || 'N/A' }); g.lineas.push(d); d._ref = ref.id; grupos.set(ref.path, g);
             }
         }
         paso(`Guardando la recepción ${recId} y subiendo ${det.reduce((t, d) => t + d.cantidad, 0)} unidades al stock…`);
@@ -1309,17 +1310,22 @@
             }
             det.forEach(d => { const l = (fresca.lineas || [])[d.i] || {}, pe = num(l.dist && l.dist[key]) - num(l.recibido && l.recibido[key]); if (d.cantidad > Math.max(0, pe)) throw new Error(`"${String(l.descripcion || '').slice(0, 40)}": solo quedan ${Math.max(0, pe)} por recibir (otra recepción se registró antes). Cierra y vuelve a abrir.`); });
             tx.update(ocRef, { ...aplicarRecepcion(fresca, key, det, incidencias, null, ingresaStock), ...(guia ? { ultimaGuia: guia } : {}), ultimaRecepcion: fecha, recepciones: [...(fresca.recepciones || []), { recId, fecha, hora, guia: guia || '', columna: key, bodega: ingresaStock ? central : '', ingresoAStock: !!ingresaStock, usuario: usuario(), unidades: det.reduce((t, d) => t + d.cantidad, 0), detalle: det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, insumoName: d.insumoName || '', cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })) }], actualizadoEn: f.serverTimestamp() });
-            tx.set(evRef, { tipo: 'RECEPCION', texto, autor: usuario(), fecha: f.serverTimestamp(), ...(correo ? { correo } : {}), columna: key, guia, recId, horaLlegada: hora, bodegaDestino: central, fechaRecepcion: fecha, ingresoAStock: !!ingresaStock, detalle: det.map(d => ({ i: d.i, bodega: central, insumoName: d.insumoName || '', descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })), incidencias: incidencias.map(n => ({ producto: n.producto, tipo: n.tipo, detalle: n.detalle })) });
+            const cuadresEv = [];   /* v21.228: lo adeudado que se descontó al ingresar (para poder anular la recepción sin perder unidades) */
             lecturas.forEach(([g, snap]) => {
                 const actual = snap.exists() ? snap.data() : null, m = mezclarIngreso(actual, g.ingresos);
                 const limite = num(actual && (actual.criticalLimit || actual.stock_minimo)) || 50;
                 const prox = m.batches[0];
-                const base = { origenOC: true, ...(g.codigo ? { codigoMP: g.codigo } : {}), quantity: m.quantity, batches: m.batches, isCritical: m.quantity <= limite, batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', provider: oc.proveedor || provDoc || (actual && actual.provider) || 'S/I', updatedAt: f.serverTimestamp() };
+                /* v21.228: lo adeudado (entregado antes sin stock en el sistema) se descuenta primero de lo que ingresa */
+                const cq = window.SAR_CuadreIngreso ? window.SAR_CuadreIngreso.aplicar(f, db(), tx, { ref: g.ref, antes: actual, quantity: m.quantity, batches: m.batches, documento: `${recId} · OC ${oc.numeroOC}`, bodega: central, nombre: g.nombre, usuario: usuario() }) : null;
+                if (cq) { m.quantity = cq.quantity; m.batches = cq.batches; cuadresEv.push({ idInsumo: g.ref.id, nombre: g.nombre, cuadrado: cq.cuadrado, cubiertas: cq.cubiertas }); }
+                const prox2 = m.batches[0];
+                const base = { origenOC: true, ...(g.codigo ? { codigoMP: g.codigo } : {}), quantity: m.quantity, batches: m.batches, isCritical: m.quantity <= limite, batch: prox2 ? prox2.batch : '', expirationDate: prox2 ? prox2.expirationDate : 'N/A', provider: oc.proveedor || provDoc || (actual && actual.provider) || 'S/I', ...(cq ? { sobregiro: cq.sobregiro, sobregiroDetalle: cq.sobregiroDetalle } : {}), ...(actual && !actual.location && !actual.bodegaNombre ? { location: central, bodegaNombre: central } : {}), updatedAt: f.serverTimestamp() };
                 if (actual) tx.update(g.ref, base); else tx.set(g.ref, { name: g.nombre, name_lowercase: String(g.nombre).toLowerCase(), location: central, criticalLimit: 50, ...base });
                 g.ingresos.forEach(ing => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), {
                     insumoName: g.nombre, item: g.nombre, quantity: ing.cantidad, type: 'INGRESO_OC', batch: ing.lote, expirationDate: ing.vence, destination: central, dest: central, origin: oc.proveedor || 'Proveedor',
                     provider: oc.proveedor || provDoc || 'S/I', user: usuario(), date: f.serverTimestamp(), document: `${recId} · OC ${oc.numeroOC}${guia ? ' · guía ' + guia : ''}`, observacion: obs || '', ocId: oc.id, idInsumoDestino: g.ref.id }));
             });
+            tx.set(evRef, { tipo: 'RECEPCION', ...(cuadresEv.length ? { cuadres: cuadresEv } : {}), texto, autor: usuario(), fecha: f.serverTimestamp(), ...(correo ? { correo } : {}), columna: key, guia, recId, horaLlegada: hora, bodegaDestino: central, fechaRecepcion: fecha, ingresoAStock: !!ingresaStock, detalle: det.map(d => ({ i: d.i, ...(d._ref ? { idInsumo: d._ref } : {}), bodega: central, insumoName: d.insumoName || '', descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })), incidencias: incidencias.map(n => ({ producto: n.producto, tipo: n.tipo, detalle: n.detalle })) });
         });
         if (notificar) { paso('Enviando el aviso por correo…'); try { correo = await enviarCorreo(DESTINO_RECEPCION, armarCorreo({ ...oc, ...aplicadoLocal }, titulo, textoCorreo || texto, usuario())); } catch (e) { toast('Recepción guardada', 'No se pudo preparar el correo: ' + e.message, 'warning'); } }
         return correo;
@@ -1344,9 +1350,9 @@
             for (const d of ev.detalle) {
                 const nombre = String(d.insumoName || '').trim();
                 const cod = String(((oc.lineas || [])[d.i] || {}).codigoMP || '').trim();
-                let ref = null;
-                const s1 = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('name', '==', nombre), f.limit(10)));
-                s1.forEach(x => { const l = x.data().location; if (!ref && (l === central || !l)) ref = f.doc(f.collection(db(), 'Insumos'), x.id); });
+                let ref = d.idInsumo ? f.doc(f.collection(db(), 'Insumos'), d.idInsumo) : null;   /* v21.228: el mismo registro al que entró */
+                if (!ref) { let mejor = -1; const s1 = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('name', '==', nombre), f.limit(10)));
+                  s1.forEach(x => { const dx = x.data(), l = String(dx.location || '').trim(), p = (l === String(central).trim() ? 1e9 : 0) + num(dx.quantity); if ((l === String(central).trim() || !l) && p > mejor) { mejor = p; ref = f.doc(f.collection(db(), 'Insumos'), x.id); } }); }
                 if (!ref && cod) { const s2 = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('codigoMP', '==', cod), f.limit(10))); s2.forEach(x => { const l = x.data().location; if (!ref && (l === central || !l)) ref = f.doc(f.collection(db(), 'Insumos'), x.id); }); }
                 if (!ref) throw new Error(`No se encontró "${nombre}" en ${central}.`);
                 const g = grupos.get(ref.path) || { ref, nombre, quitar: [] };
@@ -1371,8 +1377,12 @@
                 if (!snap.exists()) throw new Error(`"${g.nombre}" ya no existe en el stock.`);
                 const d = snap.data(); let lotes = (Array.isArray(d.batches) ? d.batches : []).map(b => ({ ...b }));
                 if (!lotes.length && num(d.quantity) > 0) lotes = [{ batch: d.batch || 'S/L', quantity: num(d.quantity), expirationDate: d.expirationDate || 'N/A' }];
+                /* v21.228: si al recibir se descontó lo adeudado, esas unidades no están en el stock: se vuelven a dejar como adeudadas */
+                const cu = (Array.isArray(ev.cuadres) ? ev.cuadres : []).filter(c => c.idInsumo === g.ref.id), cuad = cu.reduce((t, c) => t + num(c.cuadrado), 0);
+                let porCuadre = cuad;
                 g.quitar.forEach(q => {
-                    let falta = q.cantidad;
+                    const ya = Math.min(porCuadre, q.cantidad); porCuadre -= ya;
+                    let falta = q.cantidad - ya;
                     const sacar = (b) => { const t = Math.min(falta, num(b.quantity)); b.quantity = num(b.quantity) - t; falta -= t; };
                     lotes.filter(b => b.batch === ((q.lote || '').trim().toUpperCase() || 'S/L') && (b.expirationDate || 'N/A') === (q.vence || 'N/A')).forEach(b => { if (falta > 0) sacar(b); });
                     if (falta > 0) lotes.filter(b => b.batch === 'S/L').forEach(b => { if (falta > 0) sacar(b); });
@@ -1381,7 +1391,8 @@
                 });
                 lotes = lotes.filter(b => num(b.quantity) > 0);
                 const total = lotes.reduce((t, b) => t + num(b.quantity), 0), prox = lotes[0];
-                nuevas.push([g, { quantity: total, batches: lotes, isCritical: total <= (num(d.criticalLimit || d.stock_minimo) || 50), batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', updatedAt: f.serverTimestamp() }]);
+                const devuelve = cuad > 0 ? { sobregiro: num(d.sobregiro) + cuad, sobregiroDetalle: (Array.isArray(d.sobregiroDetalle) ? d.sobregiroDetalle : []).concat(cu.flatMap(c => (c.cubiertas || []).map(x => ({ acta: x.acta, qty: num(x.qty) })))) } : {};
+                nuevas.push([g, { quantity: total, batches: lotes, ...devuelve, isCritical: total <= (num(d.criticalLimit || d.stock_minimo) || 50), batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', updatedAt: f.serverTimestamp() }]);
             });
             tx.update(ocRef, { lineas, recepciones: (fresca.recepciones || []).map(r => r.recId === recId ? { ...r, anulada: true, anuladaPor: usuario(), anuladaMotivo: motivo, anuladaFecha: hoyISO() } : r), actualizadoEn: f.serverTimestamp() });
             tx.set(f.doc(f.collection(db(), 'Seguimiento_OC', oc.id, 'Eventos')), { tipo: 'RECEPCION_ANULADA', texto: `Recepción ${recId} ANULADA (${r0.unidades} u.). Motivo: ${motivo}`, autor: usuario(), fecha: f.serverTimestamp(), recId, columna: key });

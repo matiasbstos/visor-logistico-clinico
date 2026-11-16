@@ -84,7 +84,7 @@
         const add = (m, k) => { if (!k) return; const e = m.get(k) || { central: 0, otras: 0, nombre: x.name, codigo: x.codigoMP || '' }; if (central) e.central += q; else e.otras += q; m.set(k, e); };
         add(idx.cod, digs(x.codigoMP)); add(idx.nom, norm(x.name));
         if (q > 0) { const k = norm(x.name), e = idx.todos.get(k) || { nombre: x.name, codigo: x.codigoMP || '', cant: 0, donde: new Set() }; e.cant += q; e.donde.add(String(x.location || 'sin bodega')); idx.todos.set(k, e); } });
-    } catch (e) { /* sin lectura */ }
+    } catch (e) { toast('No pude leer el stock', 'Las cantidades «en Central» pueden salir en 0 aunque haya: ' + ((e && e.message) || e) + '. Recarga la página.', 'error'); }   /* v21.228: antes se callaba */
     nombresCat = new Map();
     try { const sn = await f.getDocs(f.query(f.collection(db(), 'Catalogo_Productos'), f.limit(3000))); sn.forEach(d => { const x = d.data(); if (x.insumoName) { if (x.descripcion) nombresCat.set(norm(x.descripcion), norm(x.insumoName)); if (x.codigoMP) nombresCat.set('c' + digs(x.codigoMP), norm(x.insumoName)); } }); } catch (e) { /* sin catálogo */ }
     stockIdx = idx;

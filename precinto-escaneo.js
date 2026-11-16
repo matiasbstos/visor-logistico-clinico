@@ -11,8 +11,8 @@
   /** Devuelve el folio PI-AAAA-NNNN si el texto escaneado corresponde a un precinto; si no, null. */
   function leerFolio(txt) {
     const t = String(txt || '').trim().toUpperCase();
-    let m = t.match(/^PI-(\d{4})-(\d{4})$/); if (m) return 'PI-' + m[1] + '-' + m[2];
-    m = t.match(/^(20\d{2})(\d{4})$/); if (m) return 'PI-' + m[1] + '-' + m[2];
+    let m = t.match(/^PI-(\d{4})-(\d{4,5})$/); if (m) return 'PI-' + m[1] + '-' + m[2];   /* 5 dígitos desde 2027 */
+    m = t.match(/^(20\d{2})(\d{4,5})$/); if (m) return 'PI-' + m[1] + '-' + m[2];
     return null;
   }
   /** Conteo del precinto → opción de «Conteo / Toma» del formulario. */

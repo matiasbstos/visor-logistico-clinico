@@ -15,7 +15,7 @@
   const ESTADO_TXT = { LLENO: 'Lleno', VACIO: 'Vacío', EN_RECARGA: 'En recarga', PRESTADO: 'Entregado a centro', FUERA_SERVICIO: 'Fuera de servicio' };
   const fCL = (s) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s || '')); return m ? `${m[3]}-${m[2]}-${m[1]}` : String(s || ''); };
   const t = (v) => { const c = v && v.creadoEn; return c && c.toMillis ? c.toMillis() : (v && v.fecha ? Date.parse(v.fecha + 'T12:00:00') || 0 : 0); };
-  const actaDe = (v) => { const m = /AE-\d{4}-\d{4}/.exec(`${v.documento || ''} ${v.detalle || ''}`); return m ? m[0] : ''; };
+  const actaDe = (v) => { const m = /AE-\d{4}-\d{4,5}\b/.exec(`${v.documento || ''} ${v.detalle || ''}`); return m ? m[0] : ''; };
 
   /** Puro: eventos de un balón → ciclos. Cada ciclo: {n, desde, hasta, abierto, dias, destino, actas[], eventos[], fuera[]} */
   function ciclos(eventos) {
@@ -57,8 +57,8 @@
   async function seguimiento(q, equipos) {
     q = String(q || '').trim(); if (q.length < 3) return '';
     const ql = q.toLowerCase(); let ids = [], acta = null;
-    if (/^ae-\d{4}-\d{1,4}$/i.test(q)) {
-      const f = fs(), num = q.toUpperCase().replace(/^AE-(\d{4})-(\d+)$/, (m, a, b) => `AE-${a}-${b.padStart(4, '0')}`);
+    if (/^ae-\d{4}-\d{1,5}$/i.test(q)) {
+      const f = fs(), num = q.toUpperCase().replace(/^AE-(\d{4})-(\d+)$/, (m, a, b) => window.SAR_Folio ? window.SAR_Folio.formato('AE', a, b, Number(a) >= 2027 ? '2027-06-01' : '2026-06-01') : `AE-${a}-${b.padStart(4, '0')}`);
       try { const d = await f.getDoc(f.doc(f.collection(db(), 'Actas_Entrega'), num)); if (d.exists()) { acta = { ...d.data(), numero: d.id }; ids = (acta.items || []).map(i => i.id).filter(Boolean); } } catch (e) { /* sin permiso */ }
       if (!ids.length) ids = equipos.filter(e => String(e.ultimaEntregaActa || '').toUpperCase() === num).map(e => e.id);
     } else ids = equipos.filter(e => String(e.serie || '').toLowerCase() === ql || (ql.length >= 4 && String(e.serie || '').toLowerCase().includes(ql))).map(e => e.id);

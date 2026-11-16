@@ -244,7 +244,7 @@
         } catch (e) { return { estado: 'error', detalle: 'No se pudo dejar el correo en cola: ' + String((e && e.message) || e) }; }
     }
     /** v21.122: cuando un correo de la cola sale, el aviso del acta (Contadores/aviso-<acta>-<evento>) pasa a «enviado» con la hora real. */
-    const EVENTO_POR_TITULO = [['Acta de entrega emitida', 'emision'], ['Entrega confirmada', 'confirmacion'], ['Acta firmada guardada', 'firmada'], ['Acta de entrega eliminada', 'anulacion']];
+    const EVENTO_POR_TITULO = [['Acta de entrega emitida', 'emision'], ['Entrega confirmada', 'confirmacion'], ['Acta firmada guardada', 'firmada'], ['Acta de entrega eliminada', 'anulacion'], ['Acta de entrega anulada', 'anulacion']];
     async function marcarAvisoEnviado(item, r) {
         let id = '';
         try { id = (JSON.parse(item.carga).extra || {}).avisoId || ''; } catch (e) { /* sin carga */ }
@@ -1512,7 +1512,7 @@
                 const textoDe = (k, recId) => { const col = cols.find(c => c.key === k), g = porKey.get(k), det = g.det, incidencias = g.incidencias; return `${recId} · Recepción en ${col.centro}${col.memo ? ' (memo ' + col.memo + (col.cdp ? ', CDP ' + col.cdp : '') + ')' : ''} el ${fmtFecha(fecha)} a las ${hora}${guia ? ' · guía N° ' + guia : ''}:\n` +
                     (det.length ? det.map(d => `- ${oc.lineas[d.i].descripcion}${oc.lineas[d.i].agregada ? ' (agregado en la recepción)' : ''}: ${d.cantidad} un.${d.lote ? ' · lote ' + d.lote : ''}${d.vence ? ' · vence ' + fmtFecha(d.vence) : ''}`).join('\n') : '- (sin unidades recibidas)') +
                     (incidencias.length ? '\nINCIDENCIAS:\n' + incidencias.map(n => `- ${n.producto}: ${INCIDENCIAS[n.tipo]}${n.detalle ? ' — ' + n.detalle : ''}`).join('\n') : '') + (obs ? '\nObs.: ' + obs : '') + (ingresaStock ? `\nIngresado al stock de ${central}.` : ''); };
-                const ids = activos.map((k, n) => idDe(n)), unidades = allDet.reduce((t, d) => t + d.cantidad, 0), hayInc = activos.some(k => porKey.get(k).incidencias.length);
+                const ids = window.SAR_Folio ? await window.SAR_Folio.varios('REC', activos.length) : activos.map((k, n) => idDe(n)), /* REC-AAAA-NNNNN: la OC queda como dato aparte; el archivo RC_<orden> no cambia */ unidades = allDet.reduce((t, d) => t + d.cantidad, 0), hayInc = activos.some(k => porKey.get(k).incidencias.length);
                 const textoCorreo = activos.map((k, n) => textoDe(k, ids[n])).join('\n\n'), tituloCorreo = (hayInc ? 'Recepción con incidencias' : 'Recepción') + (activos.length > 1 ? ` de ${activos.length} memos` : ` en ${(cols.find(c => c.key === activos[0]) || {}).centro}`);
                 const prog = progresoRecepcion(o, ['Validando la recepción…']);
                 const recNuevas = [];

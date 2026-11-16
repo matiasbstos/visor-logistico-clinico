@@ -195,7 +195,7 @@
         return f.runTransaction(db(), async (tx) => {
             const cs = await tx.get(ctrRef);
             const n = (cs.exists() ? num(cs.data().ultimo) : 0) + 1;
-            const numero = `AE-${anio}-${String(n).padStart(4, '0')}`;
+            const numero = window.SAR_Folio ? window.SAR_Folio.formato('AE', anio, n) : `AE-${anio}-${String(n).padStart(4, '0')}`;
             const snaps = []; for (const r of refs) snaps.push(await tx.get(r.ref));
             snaps.forEach((s, k) => { if (!s.exists()) throw new Error(`El balón ${refs[k].e.serie} ya no existe.`); const est = s.data().estado; if (opts.prestamo ? !['LLENO', 'VACIO'].includes(est) : est !== 'LLENO') throw new Error(opts.prestamo ? `El balón ${refs[k].e.serie} no está en el SAR (${(ESTADOS[est] || {}).txt || est}).` : `El balón ${refs[k].e.serie} ya no está lleno.`); });
             const fechaE = opts.fecha || hoy();

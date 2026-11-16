@@ -87,6 +87,8 @@
     await F.runTransaction(D, async (tx) => {
       const o = await tx.get(refO); if (!o.exists()) throw new Error('El producto ya no existe.');
       const d = o.data(); const sd = await tx.get(refD); const m = await leerMarca(tx, F, D, marca);
+      // Folio TRA-AAAA-NNNNN (estándar de correlativos): uno por operación si viene dado; si no, se toma aquí, en la misma transacción
+      const ctr = !(marca && marca.folio) && window.SAR_Folio ? await window.SAR_Folio.leer(tx, 'TRA') : null;
       if (marca && marca.idMov) { const h = await tx.get(refH); if (h.exists()) throw Object.assign(new Error('Ya estaba hecho.'), { ya: true }); }
       if (d.status === 'CUARENTENA') throw new Error('En CUARENTENA: no se puede mover.');
       if (qty > num(d.quantity)) throw new Error('Stock insuficiente.');
@@ -100,7 +102,7 @@
         const base = { ...d }; delete base.sobregiro; delete base.sobregiroDetalle; delete base.provisional; delete base.bodegaId; delete base.ubicacionEstante; delete base.status;
         tx.set(refD, { ...base, location: hasta, bodegaNombre: hasta, quantity: qty, isCritical: qty <= lim, criticalLimit: lim, batches: nuevos, batch: prox ? prox.batch : (d.batch || ''), expirationDate: prox && prox.expirationDate ? prox.expirationDate : (d.expirationDate || ''), updatedAt: F.serverTimestamp() });
       }
-      tx.set(refH, { insumoName: d.name, quantity: qty, type: 'traspaso', user: ((window.firebaseAuth || window.auth || {}).currentUser || {}).email || 'Usuario', date: F.serverTimestamp(), document: `TRASP-${String(desde).substring(0, 3)}-${String(hasta).substring(0, 3)}`, batch: movidos.length === 1 ? movidos[0].batch : 'MULTI-LOTE', origin: desde, dest: hasta, lotes: movidos, idInsumoOrigen: id, idInsumoDestino: refD.id, ...(nota ? { nota } : {}), ...(marca && marca.numero ? { solicitud: marca.numero } : {}) });
+      tx.set(refH, { insumoName: d.name, quantity: qty, type: 'traspaso', user: ((window.firebaseAuth || window.auth || {}).currentUser || {}).email || 'Usuario', date: F.serverTimestamp(), document: (marca && marca.folio) || (ctr ? window.SAR_Folio.escribir(tx, ctr) : `TRASP-${String(desde).substring(0, 3)}-${String(hasta).substring(0, 3)}`), batch: movidos.length === 1 ? movidos[0].batch : 'MULTI-LOTE', origin: desde, dest: hasta, lotes: movidos, idInsumoOrigen: id, idInsumoDestino: refD.id, ...(nota ? { nota } : {}), ...(marca && marca.numero ? { solicitud: marca.numero } : {}) });
       escribirMarca(tx, F, m, marca, { transitoId: marca && marca.transito ? refD.id : '' });
     });
     return { destinoId: refD.id };
@@ -166,7 +168,8 @@
     }
     const btn = document.getElementById('tb-ir'); btn.disabled = true; const ok = [], mal2 = [];
     const prog = P && P.iniciar ? P.iniciar('Moviendo productos…', []) : null;
-    for (const [n, s] of sel.entries()) { if (prog) prog.paso(`Moviendo ${n + 1} de ${sel.length}: ${String(s.name).slice(0, 48)}`); try { await moverUno(s.id, desde, hasta, s.lotes.map(l => ({ clave: l.clave, qty: l.qty })), nota); ok.push(s); } catch (e) { mal2.push({ ...s, err: (e && e.message) || String(e) }); } }
+    const folioOp = sel.length > 1 && window.SAR_Folio ? await window.SAR_Folio.siguiente('TRA') : '';   /* un solo TRA para toda la operación */
+    for (const [n, s] of sel.entries()) { if (prog) prog.paso(`Moviendo ${n + 1} de ${sel.length}: ${String(s.name).slice(0, 48)}`); try { await moverUno(s.id, desde, hasta, s.lotes.map(l => ({ clave: l.clave, qty: l.qty })), nota, folioOp ? { folio: folioOp } : undefined); ok.push(s); } catch (e) { mal2.push({ ...s, err: (e && e.message) || String(e) }); } }
     out.innerHTML = `<div class="tb-res">${ok.length ? `<p class="tb-ok"><b>${ok.length} movido(s):</b> ${ok.map(s => `${esc(s.name)} (${s.qty})`).join(', ')}.</p>` : ''}${mal2.length ? `<p class="tb-mal"><b>No se movieron ${mal2.length}:</b> ${mal2.map(s => `${esc(s.name)} — ${esc(s.err)}`).join('; ')}.</p>` : ''}</div>`;
     if (prog) { if (mal2.length && !ok.length) prog.error('No se pudo mover'); else prog.listo(`${ok.length} producto(s) movido(s) a ${hasta}`, { aviso: false }); }
     btn.disabled = false;

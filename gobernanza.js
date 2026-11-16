@@ -40,6 +40,8 @@
   async function puedeCorregir(nombre, anteriores) { return evaluarVentana(await movimientosDe(nombre, anteriores)); }
 
   async function codigo(pref) {
+    // Desde 2027 (estándar de correlativos): ING, CAM y AJU con contador propio y 5 dígitos. En 2026 sigue el contador compartido.
+    const FO = window.SAR_Folio; if (FO && FO.nuevo()) return FO.siguiente(pref || 'CAM', { estricto: true });
     const f = fs(), anio = new Date().getFullYear(), ref = f.doc(f.collection(db(), 'Contadores'), 'codigo-cambio-' + anio);
     const n = await f.runTransaction(db(), async (tx) => { const s = await tx.get(ref), v = (s.exists() ? Number(s.data().valor) || 0 : 0) + 1; tx.set(ref, { valor: v, actualizado: f.serverTimestamp() }); return v; });
     return (pref || 'CAM') + '-' + anio + '-' + String(n).padStart(6, '0');

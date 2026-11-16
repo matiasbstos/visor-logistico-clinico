@@ -181,8 +181,8 @@
         });
         const lista = [...grupos.values()];
         if (!confirm(`Se ingresarán ${v.unidades} unidades de ${lista.length} productos a "${bodegaSel}". ¿Confirmas?`)) return;
-        const recId = 'INV-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
-        const prog = window.SAR_Progreso.iniciar(`Ingresando el inventario a ${bodegaSel}…`, ['Preparando…']);
+        const prog = window.SAR_Progreso.iniciar(`Ingresando el inventario a ${bodegaSel}…`, ['Tomando el número de registro…']);
+        const recId = window.SAR_Folio ? await window.SAR_Folio.siguiente('INV') : 'INV-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
         try {
             const f = fs(); let n = 0;
             for (const g of lista) {

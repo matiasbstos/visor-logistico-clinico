@@ -139,7 +139,7 @@
         a.download = `Seguimiento_${seg.acta.numero}.csv`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
     }
 
-    // Recepciones de mercadería (ID REC-<orden>-NN) para seguimiento en Auditoría
+    // Recepciones de mercadería (ID REC-AAAA-NNNNN; antes REC-<orden>-NN) para seguimiento en Auditoría
     let recs = null, ocsRaw = [], recQ = '', recCargando = false;
     async function cargarRec() {
         const f = fs(); if (!f || recCargando) return; recCargando = true; pintarRec();
@@ -152,7 +152,7 @@
         if (recs == null && !recCargando) { cargarRec(); return; }
         const t = recQ.trim().toLowerCase(), vis = (recs || []).filter(x => !t || [x.recId, x.numeroOC, x.guia, x.proveedor].join(' ').toLowerCase().includes(t));
         h.innerHTML = `<h3 class="act-h">Recepciones de mercadería</h3>
-        <p class="act-hint">Cada recepción de una orden de compra tiene un ID propio (<b>REC-orden-NN</b>) para seguirla.</p>
+        <p class="act-hint">Cada recepción de una orden de compra tiene un ID propio (<b>REC-AAAA-NNNNN</b>; las antiguas, REC-orden-NN) para seguirla.</p>
         <div class="sal-barra"><input id="rec-q" type="search" class="form-control" placeholder="REC-…, orden o guía" value="${esc(recQ)}" autocomplete="off" style="max-width:260px"></div>
         ${recCargando ? (window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando recepciones…') : 'Cargando recepciones…') : !vis.length ? '<p class="act-hint">Sin recepciones registradas.</p>' : `<div class="sal-tabla"><div class="sal-fila sal-cab"><span>ID</span><span>Orden</span><span>Fecha</span><span>Guía</span><span>Unidades</span><span>Motivo</span><span>Registró</span></div>${vis.slice(0, 200).map(x => `<div class="sal-fila"><span class="sal-n">${esc(x.recId)}<small>${esc((x.detalle || []).map(d => d.descripcion + ' (' + d.cantidad + ')').join(' · ').slice(0, 160))}</small></span><span>${esc(x.numeroOC)}</span><span>${esc(x.fecha)} ${esc(x.hora || '')}</span><span>${esc(x.guia || '—')}</span><span>${num(x.unidades)}</span><span>${x.anulada ? '<i class="sal-e sal-e--SIN_RESPALDO">Recepción anulada</i>' : '<i class="sal-e sal-e--LISTO">' + esc(x.tipoConforme ? 'Recepción conforme · ' + x.tipoConforme : 'Recepción de orden de compra') + '</i>'}${x.bodega ? '<small>Ingresó a ' + esc(x.bodega) + '</small>' : ''}</span><span>${esc(x.usuario || '')}</span></div>`).join('')}</div>`}`;
         const q = h.querySelector('#rec-q'); if (q) q.addEventListener('input', () => { recQ = q.value; const pos = q.selectionStart; pintarRec(); const n = document.getElementById('rec-q'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } });

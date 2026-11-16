@@ -41,7 +41,7 @@
         return d;
     }
     /** Mismo nombre del modelo: RC1298355-744-AG26.pdf (la 2.ª recepción de la orden en adelante lleva _02, _03…). */
-    const nombreBase = (oc, rec) => { const n = Number(String(rec.recId || '').match(/-(\d+)$/)?.[1] || 1); return `RC${String(oc.numeroOC || '').replace(/[^A-Za-z0-9-]+/g, '')}${n > 1 ? '_' + String(n).padStart(2, '0') : ''}`; };
+    const nombreBase = (oc, rec) => { const id = String(rec.recId || ''), pos = (oc.recepciones || []).findIndex(r => r && r.recId === id), n = /^REC-\d{4}-\d{5}$|^REC-P-/.test(id) ? (pos >= 0 ? pos + 1 : 1) : Number(id.match(/-(\d+)$/)?.[1] || 1);   /* folio nuevo REC-AAAA-NNNNN: _02, _03 según el orden de la recepción en la OC */ return `RC${String(oc.numeroOC || '').replace(/[^A-Za-z0-9-]+/g, '')}${n > 1 ? '_' + String(n).padStart(2, '0') : ''}`; };
 
     async function pdf(oc, rec, parcial) {
         const [PDFLib, logoBytes, firmaBytes] = await Promise.all([RC().cargarPDFLib(), RC().cargarLogo(), RC().cargarFirma()]);

@@ -126,8 +126,8 @@
         const f = fs();
         const auth = window.firebaseAuth;
         const usuario = (auth && auth.currentUser && auth.currentUser.email) || 'Admin';
-        const cierreId = `CIE-${Date.now()}`;
-        const ctx = { usuario, motivo, cierreId, documento: `CIERRE-${slug(origen.name).slice(0, 20)}` };
+        const cierreId = window.SAR_Folio ? await window.SAR_Folio.siguiente('CIE') : `CIE-${Date.now()}`;   // CIE-AAAA-NNNNN
+        const ctx = { usuario, motivo, cierreId, documento: window.SAR_Folio ? cierreId : `CIERRE-${slug(origen.name).slice(0, 20)}` };
         const fallos = []; let movidos = 0, unidades = 0;
         for (let i = 0; i < items.length; i++) {
             try { const q = await moverUno(items[i], origen, destino, ctx); if (q > 0) { movidos++; unidades += q; } }

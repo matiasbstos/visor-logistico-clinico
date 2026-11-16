@@ -9,7 +9,7 @@
   const hoy = () => new Date().toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: 'numeric' });
   const usuario = () => { const a = window.firebaseAuth; return (a && a.currentUser && a.currentUser.email) || ''; };
   const nombreDe = (e) => String(e || '').split('@')[0].replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-  const folio = (anio, n) => 'PI-' + anio + '-' + String(n).padStart(4, '0');
+  const folio = (anio, n) => (window.SAR_Folio ? window.SAR_Folio.formato('PI', anio, n) : 'PI-' + anio + '-' + String(n).padStart(4, '0'));
   const ESTADOS = ['Conteo completo', 'Reconteo requerido', 'Con diferencia', 'Caja abierta / dañada', 'Verificado 2.ª persona'];
   let lote = [];
 
@@ -74,7 +74,7 @@
     const primero = await f.runTransaction(db(), async (tx) => { const s = await tx.get(ref); const ult = s.exists() ? Number(s.data().ultimo) || 0 : 0; tx.set(ref, { ultimo: ult + n, tipo: 'contador-precinto-oxigeno', updatedAt: f.serverTimestamp() }, { merge: true }); return ult + 1; });
     const out = [];
     for (let i = 0; i < n; i++) {
-      const e = equipos[i], folioOxi = 'PO-' + anio + '-' + String(primero + i).padStart(4, '0');
+      const e = equipos[i], folioOxi = window.SAR_Folio ? window.SAR_Folio.formato('PO', anio, primero + i) : 'PO-' + anio + '-' + String(primero + i).padStart(4, '0');
       out.push(Object.assign({}, e, { folio: folioOxi }));
       await f.setDoc(f.doc(f.collection(db(), 'Contadores'), 'pin-' + folioOxi), { tipo: 'precinto-oxigeno', folio: folioOxi, serie: e.serie || '', gas: e.gas || 'Oxígeno medicinal', capacidad: e.capacidad || '', proveedor: e.proveedor || '', fechaCarga: e.ultimaRecarga || '', creadoPor: usuario(), updatedAt: f.serverTimestamp() });
     }

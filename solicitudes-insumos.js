@@ -436,7 +436,7 @@
     const f = fs(); if (!f.runTransaction) throw new Error('sin transacciones');
     const anio = String(new Date(data.creadoEn || Date.now()).getFullYear()), refC = f.doc(f.collection(db(), 'Contadores'), 'correlativo-solicitudes-' + anio), refS = f.doc(f.collection(db(), COL), numero);
     let corr = '';
-    await f.runTransaction(db(), async (tx) => { const c = await tx.get(refC), v = (c.exists() ? num(c.data().valor) : 0) + 1; corr = `SOL-${anio}-${String(v).padStart(4, '0')}`;
+    await f.runTransaction(db(), async (tx) => { const c = await tx.get(refC), v = (c.exists() ? num(c.data().valor) : 0) + 1; corr = window.SAR_Folio ? window.SAR_Folio.formato('SOL', anio, v, data.creadoEn) : `SOL-${anio}-${String(v).padStart(4, '0')}`;
       tx.set(refC, { valor: v, actualizado: new Date().toISOString(), ultima: numero }); tx.set(refS, { ...data, correlativo: corr, correlativoN: v, correlativoAnio: anio }); });
     return corr;
   }
@@ -447,7 +447,7 @@
       for (const x of sin) {
         const anio = new Date(x.creadoEn || Date.now()).getFullYear(), refC = f.doc(f.collection(db(), 'Contadores'), 'correlativo-solicitudes-' + anio), refS = f.doc(f.collection(db(), COL), x.numero);
         await f.runTransaction(db(), async (tx) => { const s1 = await tx.get(refS); if (!s1.exists() || s1.data().correlativo) return; const c = await tx.get(refC), v = (c.exists() ? num(c.data().valor) : 0) + 1;
-          tx.set(refC, { valor: v, actualizado: new Date().toISOString(), ultima: x.numero }); tx.update(refS, { correlativo: `SOL-${anio}-${String(v).padStart(4, '0')}`, correlativoN: v, correlativoAnio: String(anio) }); });
+          tx.set(refC, { valor: v, actualizado: new Date().toISOString(), ultima: x.numero }); tx.update(refS, { correlativo: window.SAR_Folio ? window.SAR_Folio.formato('SOL', anio, v, x.creadoEn) : `SOL-${anio}-${String(v).padStart(4, '0')}`, correlativoN: v, correlativoAnio: String(anio) }); });
       }
     } catch (e) { console.warn('[Solicitudes] correlativo pendiente:', e && e.message); }
     finally { asignando = false; }
@@ -608,10 +608,10 @@
     (s.lineas || []).forEach((l, i) => { if (l.soloConteo || l.estado === 'no_hay' || l.movido === true) return; (l.seleccion || []).filter(x => num(x.qty) > 0 && !(l.movidos || []).includes(grupoDe(x))).forEach(x => tareas.push({ l, i, x })); });
     const L = (s.lineas || []).filter(l => !l.soloConteo), ok = L.filter(l => l.estado === 'ok').length, par = L.filter(l => l.estado === 'parcial').length, nh = L.filter(l => l.estado === 'no_hay').length, u = tareas.reduce((t, z) => t + num(z.x.qty), 0);
     if (!sDoc) { const si = P && P.confirmar ? await P.confirmar({ titulo: `¿Procesar ${esc(s.correlativo || n)}?`, texto: `Para <b>${esc(s.solicitante || s.requester)}</b>${s.servicio ? ' · ' + esc(s.servicio) : ''}.`, lineas: [`${ok} completo(s)${par ? ` · ${par} parcial(es)` : ''}${nh ? ` · ${nh} sin stock (quedan avisados)` : ''}`, u ? (repo ? `Salen <b>${u}</b> u. de su bodega y quedan <b>en camino</b> a ${esc(s.bodega)} hasta que se marquen recibidas.` : `Se entregan <b>${u}</b> u.: salen del stock por lote.`) : 'No hay nada que mover.', 'Quien pidió verá la solicitud como «Procesada».'], si: 'Procesar' }) : confirm('¿Procesar?'); if (!si) return; }
-    ocupado.add(n); pintarBandeja(); const nota = `Solicitud ${s.correlativo || n}`, prog = P && tareas.length ? P.iniciar('Procesando la solicitud…', []) : null; let mal = 0; const errs = [];
+    ocupado.add(n); pintarBandeja(); const folioTra = repo && tareas.length && window.SAR_Folio ? await window.SAR_Folio.siguiente('TRA') : ''; const nota = `Solicitud ${s.correlativo || n}`, prog = P && tareas.length ? P.iniciar('Procesando la solicitud…', []) : null; let mal = 0; const errs = [];
     for (const [k, t] of tareas.entries()) {
       if (prog) prog.paso(`${k + 1} de ${tareas.length}: ${t.l.asociado || t.l.nombre}`);
-      const marca = { numero: n, i: t.i, grupo: grupoDe(t.x), campo: 'movidos', nombre: t.l.nombre, transito: repo };
+      const marca = { numero: n, i: t.i, grupo: grupoDe(t.x), campo: 'movidos', nombre: t.l.nombre, transito: repo, ...(folioTra ? { folio: folioTra } : {}) };
       try { if (repo) await T.moverUno(t.x.insumoId, t.x.bodega, TRANSITO, [{ clave: t.x.clave, qty: num(t.x.qty) }], nota + ' · en camino a ' + s.bodega, marca); else await T.salidaUno(t.x.insumoId, t.x.bodega, [{ clave: t.x.clave, qty: num(t.x.qty) }], nota + ' · entregado a ' + (s.solicitante || '') + (s.servicio ? ' (' + s.servicio + ')' : ''), marca); }
       catch (e) { if (!e.ya) { mal++; errs.push(`${t.l.nombre}: ${e.message || e}`); } }
     }
@@ -629,8 +629,8 @@
     if (!T || !T.moverUno) return; if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) { if (!sDoc) toast('Sin internet', 'Marcar recibido mueve stock y necesita conexión.', 'warning'); return; }
     const tareas = []; (s.lineas || []).forEach((l, i) => (l.movidos || []).filter(g => !(l.recibidos || []).includes(g)).forEach(g => { const x = (l.seleccion || []).find(y => grupoDe(y) === g), tid = (l.transito || {})[g]; if (x && tid) tareas.push({ l, i, g, x, tid }); }));
     if (!sDoc) { const si = P && P.confirmar ? await P.confirmar({ titulo: `¿Recibido en ${esc(s.bodega)}?`, texto: `${esc(s.correlativo || n)}: entra a ${esc(s.bodega)} lo que estaba en camino.`, lineas: tareas.map(t => `${esc(t.l.asociado || t.l.nombre)} · <b>${num(t.x.qty)}</b> u. · lote ${esc(t.x.lote)}`), si: 'Recibido' }) : confirm('¿Recibido?'); if (!si) return; }
-    ocupado.add(n); pintarBandeja(); let mal = 0; const nota = `Solicitud ${s.correlativo || n} · recibido`;
-    for (const t of tareas) { try { await T.moverUno(t.tid, TRANSITO, s.bodega, [{ clave: t.x.clave, qty: num(t.x.qty) }], nota, { numero: n, i: t.i, grupo: t.g, campo: 'recibidos', nombre: t.l.nombre }); } catch (e) { if (!e.ya) { mal++; toast('No se recibió', `${esc(t.l.nombre)}: ${esc(e.message || e)}`, 'error'); } } }
+    ocupado.add(n); pintarBandeja(); let mal = 0; const nota = `Solicitud ${s.correlativo || n} · recibido`, folioRec = tareas.length && window.SAR_Folio ? await window.SAR_Folio.siguiente('TRA') : '';
+    for (const t of tareas) { try { await T.moverUno(t.tid, TRANSITO, s.bodega, [{ clave: t.x.clave, qty: num(t.x.qty) }], nota, { numero: n, i: t.i, grupo: t.g, campo: 'recibidos', nombre: t.l.nombre, ...(folioRec ? { folio: folioRec } : {}) }); } catch (e) { if (!e.ya) { mal++; toast('No se recibió', `${esc(t.l.nombre)}: ${esc(e.message || e)}`, 'error'); } } }
     try { const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), COL), n)), x = sn.exists() ? limpiarSol(sn.data(), n) : null;
       if (x && (x.lineas || []).every(recibidaL) && x.estado === 'LISTA') { const ahora = new Date().toISOString(); await f.updateDoc(f.doc(f.collection(db(), COL), n), { estado: 'ENTREGADA', recibidoEn: ahora, historial: (x.historial || []).concat([{ estado: 'ENTREGADA', por: usuario(), en: ahora, nota: 'Recibido en ' + s.bodega }]) }); } } catch (e) { mal++; }
     ocupado.delete(n); try { await cargarBase(); } catch (e) { /* sigue */ } pintarBandeja();

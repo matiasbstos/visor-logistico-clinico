@@ -226,7 +226,8 @@
       ${quienHTML()}
       <div class="si-busca">${manualAbierto ? '' : `<label class="si-l">Agregar producto<input id="si-bus" class="si-in" value="${esc(busca)}" placeholder="Escribe las primeras palabras… (${esc((cat || CATS[0]).ej.replace(/^Ej: /, 'ej: '))})" autocomplete="off" enterkeyhint="search"></label><div id="si-res"></div>`}
         ${manualAbierto ? `<div class="si-manbox"><div class="si-cab"><b>Agregar a mano</b><button type="button" class="btn btn-secondary btn-sm" id="si-man-x">Volver a buscar</button></div><small>Escribe el <b>nombre completo</b> (qué es, marca, medida o tamaño). Si puedes, <b>agrega una foto</b> (cámara o galería): de la caja, la etiqueta o uno igual. Si no tienes cómo, describe para qué se usa.</small>
-          <div class="si-man"><input id="si-mt" class="si-in" placeholder="${esc((cat || CATS[0]).ej)}" value="${esc(manual.nombre)}" autocomplete="off"><input id="si-mc" class="si-in si-cn" type="number" min="1" value="${manual.cantidad}" inputmode="numeric" aria-label="Cantidad"></div>
+          <label class="si-l">Nombre del producto<input id="si-mt" class="si-in" placeholder="${esc((cat || CATS[0]).ej)}" value="${esc(manual.nombre)}" autocomplete="off"></label>
+          <div class="si-pq si-pq--man"><span>Cantidad</span><button type="button" class="si-pqb" data-mq="-1" aria-label="Uno menos">−</button><input id="si-mc" class="si-qn" type="number" min="1" value="${manual.cantidad}" inputmode="numeric" aria-label="Cantidad"><button type="button" class="si-pqb" data-mq="1" aria-label="Uno más">+</button></div>
           <div id="si-sug"></div>
           <div class="si-man"><label class="btn btn-secondary si-fbtn${manual.foto ? ' si-fbtn--ok' : ''}"><input type="file" accept="image/*" hidden id="si-mf">${manual.foto ? '<img src="' + manual.foto + '" alt="">Cambiar foto' : IC_CAM + 'Foto (opcional)'}</label><button type="button" class="btn btn-primary" id="si-ma">Agregar</button></div>
         </div>` : ''}</div>
@@ -347,15 +348,18 @@
     }
     const ahora = new Date(), numero = numeroSolicitud(ahora), f = fs(); const bt = destinoDe(catSel); bodegaSel = bt || bodegaAuto();
     const au = window.firebaseAuth && window.firebaseAuth.currentUser, data = { tipo: TIPO, numero, estado: 'NUEVA', uid: (au && au.uid) || '', requester: (au && au.email) || form.correo.trim().toLowerCase(), solicitante: form.solicitante.trim(), correo: form.correo.trim().toLowerCase(), servicio: form.servicio.trim(), bodega: bodegaSel, ...(bt ? { destino: 'transitoria' } : {}), ...(catDe(catSel) ? { categoria: catSel } : {}), nota: form.nota.trim(), lineas: lineas.map(l => ({ ...l })), creadoEn: ahora.toISOString(), historial: [{ estado: 'NUEVA', por: usuario(), en: ahora.toISOString() }] };
-    const p = f.setDoc(f.doc(f.collection(db(), COL), numero), data);
-    const r = await Promise.race([p.then(() => 'ok'), new Promise(res => setTimeout(() => res('cola'), 2500))]).catch(e => 'error:' + (e.message || e));
+    // v21.219: con internet, el N° oficial SOL sale al tiro (contador + solicitud en una sola transacción, validada por las reglas);
+    // sin internet (o si las reglas aún no se publican) se guarda como antes y bodega le asigna el N° al recibirla.
+    let p, r, corr = '';
+    try { corr = await Promise.race([crearConCorrelativo(numero, data), new Promise((_, x) => setTimeout(() => x(new Error('lento')), 6000))]); r = 'ok'; }
+    catch (e) { p = f.setDoc(f.doc(f.collection(db(), COL), numero), data); r = await Promise.race([p.then(() => 'ok'), new Promise(res => setTimeout(() => res('cola'), 2500))]).catch(er => 'error:' + (er.message || er)); }
     enviando = false;
     if (String(r).startsWith('error')) { toast('No se envió', String(r).slice(6) || 'Revisa tu conexión e intenta de nuevo.', 'error'); pintarPide(); return; }
-    p.catch(() => { /* se reintenta sola al volver internet */ });
+    if (p) p.catch(() => { /* se reintenta sola al volver internet */ });
     try { const m = JSON.parse(localStorage.getItem('si-mias') || '[]'); m.unshift(numero); localStorage.setItem('si-mias', JSON.stringify(m.slice(0, 20))); } catch (e) { /* sin almacenamiento */ }
     lineas = []; busca = ''; form.nota = ''; bodegaSel = ''; catSel = ''; manualAbierto = false; pintarPide();
-    if (window.SAR_Progreso && window.SAR_Progreso.exito) window.SAR_Progreso.exito({ titulo: r === 'ok' ? 'Solicitud enviada' : 'Guardada en el teléfono', texto: r === 'ok' ? 'Bodega ya la puede ver. Abajo verás cómo avanza.' : 'Se enviará sola cuando haya internet.' });
-    const r2 = rootPide(); if (r2) r2.insertAdjacentHTML('afterbegin', `<div class="si-ok"><b>${r === 'ok' ? 'Solicitud enviada' : 'Solicitud guardada en el teléfono'}</b><br>${r === 'ok' ? 'Bodega le asigna el N° oficial (SOL-…) al recibirla. La ves abajo en «Tus solicitudes».' : 'Se enviará sola cuando haya internet.'}</div>`);
+    if (window.SAR_Progreso && window.SAR_Progreso.exito) window.SAR_Progreso.exito({ titulo: r === 'ok' ? 'Solicitud enviada' : 'Guardada en el teléfono', texto: corr ? `N° ${corr}. Bodega ya la puede ver.` : r === 'ok' ? 'Bodega ya la puede ver. Abajo verás cómo avanza.' : 'Se enviará sola cuando haya internet.' });
+    const r2 = rootPide(); if (r2) r2.insertAdjacentHTML('afterbegin', `<div class="si-ok"><b>${r === 'ok' ? 'Solicitud enviada' : 'Solicitud guardada en el teléfono'}</b><br>${corr ? `Tu número es <b>${esc(corr)}</b>. La ves abajo en «Tus solicitudes».` : r === 'ok' ? 'Bodega le asigna el N° oficial (SOL-…) al recibirla. La ves abajo en «Tus solicitudes».' : 'Se enviará sola cuando haya internet.'}</div>`);
     window.scrollTo && window.scrollTo(0, 0);
   }
   async function cambiarCategoria() {
@@ -382,6 +386,7 @@
     r.addEventListener('click', (e) => {
       const b = e.target.closest('button'); if (!b) return; leerCampos();
       if (b.dataset.elige) { const k = norm(b.dataset.elige); eligiendo = eligiendo === k ? '' : k; pintarRes(); const i = document.getElementById('si-pq-in'); if (i) { i.focus({ preventScroll: true }); i.select(); i.closest('.si-pr').scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } return; }
+      if (b.dataset.mq) { const i = document.getElementById('si-mc'); if (i) { i.value = Math.max(1, Math.floor(num(i.value) || 1) + Number(b.dataset.mq)); manual.cantidad = Number(i.value); } return; }
       if (b.dataset.pq) { const i = document.getElementById('si-pq-in'); if (i) i.value = Math.max(1, Math.floor(num(i.value) || 1) + Number(b.dataset.pq)); return; }
       if (b.dataset.add) { const qi = document.getElementById('si-pq-in'), cant = Math.max(1, Math.min(9999, Math.floor(num(qi && qi.value) || 1))); eligiendo = ''; agregarLinea(lineas, { nombre: b.dataset.add, cantidad: cant }); if (lineas.length) { const l = lineas.find(x => norm(x.nombre) === norm(b.dataset.add)); if (l && b.dataset.id) l.insumoId = b.dataset.id; } busca = ''; pintarPide(); const sb = document.getElementById('si-bus'); if (sb) sb.focus({ preventScroll: true }); toast('Agregado', `${cant} × ${esc(b.dataset.add)}`, 'success'); }
       else if (b.id === 'si-noesta') { manualAbierto = true; manual.nombre = manual.nombre || busca.trim(); busca = ''; pintarPide(); const t = document.getElementById('si-mt'); if (t) { t.focus(); t.setSelectionRange(t.value.length, t.value.length); } }
@@ -426,6 +431,15 @@
   // ---------------- correlativo SOL-AAAA-NNNN ----------------
   // Quien pide no puede numerar (no accede a Contadores): el número oficial lo pone bodega al recibirla, en orden de llegada.
   let asignando = false;
+  /** Crea la solicitud con su N° SOL-AAAA-NNNN en una transacción con el contador del año. Lanza si no hay conexión. */
+  async function crearConCorrelativo(numero, data) {
+    const f = fs(); if (!f.runTransaction) throw new Error('sin transacciones');
+    const anio = String(new Date(data.creadoEn || Date.now()).getFullYear()), refC = f.doc(f.collection(db(), 'Contadores'), 'correlativo-solicitudes-' + anio), refS = f.doc(f.collection(db(), COL), numero);
+    let corr = '';
+    await f.runTransaction(db(), async (tx) => { const c = await tx.get(refC), v = (c.exists() ? num(c.data().valor) : 0) + 1; corr = `SOL-${anio}-${String(v).padStart(4, '0')}`;
+      tx.set(refC, { valor: v, actualizado: new Date().toISOString(), ultima: numero }); tx.set(refS, { ...data, correlativo: corr, correlativoN: v, correlativoAnio: anio }); });
+    return corr;
+  }
   async function asignarCorrelativos(lista) {
     if (asignando) return; const sin = (lista || solicitudes).filter(x => !x.correlativo && x._col === COL).sort((a, b) => String(a.creadoEn).localeCompare(String(b.creadoEn))); if (!sin.length) return;
     asignando = true; const f = fs();
@@ -433,7 +447,7 @@
       for (const x of sin) {
         const anio = new Date(x.creadoEn || Date.now()).getFullYear(), refC = f.doc(f.collection(db(), 'Contadores'), 'correlativo-solicitudes-' + anio), refS = f.doc(f.collection(db(), COL), x.numero);
         await f.runTransaction(db(), async (tx) => { const s1 = await tx.get(refS); if (!s1.exists() || s1.data().correlativo) return; const c = await tx.get(refC), v = (c.exists() ? num(c.data().valor) : 0) + 1;
-          tx.set(refC, { valor: v, actualizado: new Date().toISOString() }); tx.update(refS, { correlativo: `SOL-${anio}-${String(v).padStart(4, '0')}` }); });
+          tx.set(refC, { valor: v, actualizado: new Date().toISOString(), ultima: x.numero }); tx.update(refS, { correlativo: `SOL-${anio}-${String(v).padStart(4, '0')}`, correlativoN: v, correlativoAnio: String(anio) }); });
       }
     } catch (e) { console.warn('[Solicitudes] correlativo pendiente:', e && e.message); }
     finally { asignando = false; }

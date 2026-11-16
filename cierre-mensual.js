@@ -62,7 +62,7 @@
         const f = window.firebaseFirestore, db = window.firebaseDb, X = window.XLSX; if (!f || !db) throw new Error('Sin conexión con la base de datos.'); if (!X) throw new Error('La biblioteca de Excel no cargó. Recarga la página.');
         const [d0, d1] = rango(ym), leer = async (c, extra) => { const l = []; const sn = await f.getDocs(f.query(f.collection(db, c), ...(extra || []))); sn.forEach(d => l.push({ id: d.id, ...d.data() })); return l; };
         const [movs, insumos, actas, ocs] = await Promise.all([
-            leer('Historial_Movimientos', [f.where('date', '>=', new Date(d0)), f.where('date', '<', new Date(d1)), f.limit(20000)]), leer('Insumos', [f.limit(5000)]), leer('Actas_Entrega', [f.limit(2000)]), leer('Seguimiento_OC', [f.limit(1000)])]);
+            leer('Historial_Movimientos', [f.where('date', '>=', new Date(d0)), f.where('date', '<', new Date(d1)), f.limit(10000)]), leer('Insumos', [f.limit(5000)]), leer('Actas_Entrega', [f.limit(2000)]), leer('Seguimiento_OC', [f.limit(1000)])]);
         const rs = window.SAR_ResumenStock ? window.SAR_ResumenStock.resumen(insumos, new Date()) : { vencidos: [], urgentes: [], criticos: [] };
         const r = armarHojas({ movs, insumos, actas, ocs, resumenStock: rs }, ym), wb = X.utils.book_new();
         r.hojas.forEach(([nombre, filas]) => { const ws = X.utils.aoa_to_sheet(filas); ws['!cols'] = (filas.reduce((a, f2) => f2.length > a ? f2.length : a, 0) ? Array.from({ length: Math.max(...filas.map(x => x.length)) }, (_, i) => ({ wch: Math.min(60, Math.max(10, ...filas.slice(0, 200).map(x => String(x[i] == null ? '' : x[i]).length + 2))) })) : []); X.utils.book_append_sheet(wb, ws, nombre.slice(0, 31)); });

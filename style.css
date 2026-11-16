@@ -6529,3 +6529,6 @@ body[data-user-role="solicitante"] .superadmin-only { display: none !important; 
 .rc-doc .soc-fila{margin:0}.rc-doc-f{display:flex;align-items:flex-end;gap:10px;justify-content:space-between;flex-wrap:wrap}.rc-doc-f label{flex:1;min-width:200px}
 .rc-doc .rc-dq{color:#b91c1c;border-color:#fecaca}.rc-doc .rc-dq:hover{background:#fef2f2}
 .rc-doc-add{margin:0 0 10px;display:inline-flex;align-items:center;gap:6px}
+
+/* v21.227 · «Solicitud de insumos» (pedir) solo en el menú de quien pide; bodega usa «Solicitudes recibidas» y la página pública */
+body:not([data-user-role="solicitante"]) .menu-item[data-target="view-solicitud-insumos"] { display: none !important; }

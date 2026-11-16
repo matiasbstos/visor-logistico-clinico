@@ -91,6 +91,8 @@
 
   // ---------------- datos ----------------
   let insumos = [], bodegas = [], cargado = false;
+  /** v21.227: si no se pudo leer el inventario, avisarlo (antes se callaba y todo aparecía sin stock). */
+  function errorBase(e) { console.error('[Solicitudes] inventario no leído', e); toast('No pude leer el inventario', 'El stock que ves puede no estar al día: ' + ((e && e.message) || e) + '. Recarga la página.', 'error'); }
   async function cargarBase() {
     if (publica()) {
       const f = fs(), d = await f.getDoc(f.doc(f.collection(db(), COL), ID_PUB)); if (!d.exists()) throw new Error('Bodega aún no publica la lista de productos.');
@@ -98,8 +100,9 @@
       if (window.SAR_Imagenes && window.SAR_Imagenes.sumarIndice && x.fotos) window.SAR_Imagenes.sumarIndice(x.fotos);
       cargado = true; return;
     }
-    // todos los productos (antes solo 3000) y la ubicación aunque venga solo como bodegaNombre (v21.214)
-    const f = fs(), a = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(20000))), l = []; a.forEach(d => { const x = d.data(); l.push({ id: d.id, ...x, location: x.location || x.bodegaNombre || '' }); }); insumos = l;
+    // todos los productos y la ubicación aunque venga solo como bodegaNombre (v21.214). v21.227: Firestore admite máximo 10.000 por consulta
+    // (con 20.000 la lectura fallaba y la bandeja veía todo «sin stock» y el catálogo público no se actualizaba)
+    const f = fs(), a = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(10000))), l = []; a.forEach(d => { const x = d.data(); l.push({ id: d.id, ...x, location: x.location || x.bodegaNombre || '' }); }); insumos = l;
     try { const b = await f.getDocs(f.collection(db(), 'Bodegas')), n = []; destinosStaff = {}; b.forEach(d => { const x = d.data(), nm = x.nombre || x.name || d.id; n.push(nm); if (x.type === 'transitoria') { const ped = x.pedidos !== undefined ? x.pedidos : 'medico'; if (ped && !destinosStaff[ped]) destinosStaff[ped] = nm; } }); bodegas = n.filter(Boolean).sort(); } catch (e) { bodegas = []; }
     // también las ubicaciones que tienen productos aunque no estén en Bodegas (antes esos productos no salían en la lista pública)
     bodegas = [...new Set(bodegas.concat(insumos.map(i => i.location)).filter(b => b && b !== 'En tránsito'))].sort();
@@ -618,7 +621,7 @@
     try { const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), COL), n)), x = sn.exists() ? limpiarSol(sn.data(), n) : null;
       if (x && (x.lineas || []).filter(l => !l.soloConteo).every(movidaL) && x.estado !== 'LISTA' && x.estado !== 'ENTREGADA') { const ahora = new Date().toISOString(); await f.updateDoc(f.doc(f.collection(db(), COL), n), { estado: 'LISTA', historial: (x.historial || []).concat([{ estado: 'LISTA', por: usuario(), en: ahora }]) }); } } catch (e) { mal++; errs.push(e.message || String(e)); }
     ocupado.delete(n); if (prog) { if (mal) prog.error(); else prog.listo(repo ? `En camino a ${s.bodega}` : 'Entregado', { aviso: false }); }
-    try { await cargarBase(); } catch (e) { /* sigue */ } pintarBandeja();
+    try { await cargarBase(); } catch (e) { errorBase(e); } pintarBandeja();
     if (mal) { toast('Procesar', `${mal} lote(s) no se movieron: ${esc(errs.slice(0, 2).join(' · '))}. Revisa y toca «Reintentar».`, 'error'); return; }
     try { const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), COL), n)); if (sn.exists() && sn.data().estado === 'LISTA') correoSolicitud(limpiarSol(sn.data(), n), 'procesada'); } catch (e) { /* el correo es secundario */ }
     avisar({ titulo: `Solicitud ${s.correlativo || n} procesada`, texto: repo ? `${u} u. en camino a ${esc(s.bodega)}.` : `${esc(s.solicitante || '')} ya lo ve.`, estado: 'procesada' });
@@ -633,7 +636,7 @@
     for (const t of tareas) { try { await T.moverUno(t.tid, TRANSITO, s.bodega, [{ clave: t.x.clave, qty: num(t.x.qty) }], nota, { numero: n, i: t.i, grupo: t.g, campo: 'recibidos', nombre: t.l.nombre, ...(folioRec ? { folio: folioRec } : {}) }); } catch (e) { if (!e.ya) { mal++; toast('No se recibió', `${esc(t.l.nombre)}: ${esc(e.message || e)}`, 'error'); } } }
     try { const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), COL), n)), x = sn.exists() ? limpiarSol(sn.data(), n) : null;
       if (x && (x.lineas || []).every(recibidaL) && x.estado === 'LISTA') { const ahora = new Date().toISOString(); await f.updateDoc(f.doc(f.collection(db(), COL), n), { estado: 'ENTREGADA', recibidoEn: ahora, historial: (x.historial || []).concat([{ estado: 'ENTREGADA', por: usuario(), en: ahora, nota: 'Recibido en ' + s.bodega }]) }); } } catch (e) { mal++; }
-    ocupado.delete(n); try { await cargarBase(); } catch (e) { /* sigue */ } pintarBandeja();
+    ocupado.delete(n); try { await cargarBase(); } catch (e) { errorBase(e); } pintarBandeja();
     if (!mal) { try { const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), COL), n)); if (sn.exists() && sn.data().estado === 'ENTREGADA') correoSolicitud(limpiarSol(sn.data(), n), 'cerrada'); } catch (e) { /* secundario */ } avisar({ titulo: `Solicitud ${s.correlativo || n} cerrada`, texto: `Recibido en ${esc(s.bodega)}.`, estado: 'cerrada' }); }
   }
   async function cambiarEstado(n, e, callado) {
@@ -711,7 +714,7 @@
   }
   async function abrirBandeja() {
     const r = rootBandeja(); if (!r) return; enlazarBandeja();
-    if (!cargado) { r.innerHTML = window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando solicitudes…') : 'Cargando…'; try { await cargarBase(); } catch (e) { /* con lo guardado */ } }
+    if (!cargado) { r.innerHTML = window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando solicitudes…') : 'Cargando…'; try { await cargarBase(); } catch (e) { errorBase(e); } }
     cargarAlias().then(() => pintarBandeja()).catch(() => {});
     publicarCatalogo().catch((e) => console.warn('[Solicitudes] catálogo público no publicado:', e && e.message));
     if (desuscribir) { try { desuscribir(); } catch (e) { /* ya cerradas */ } }

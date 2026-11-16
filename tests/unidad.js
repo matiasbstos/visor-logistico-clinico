@@ -111,7 +111,10 @@ t('bultos: estado de impresión por etiqueta y por orden, y lo que falta etiquet
   assert.deepStrictEqual([b({}), b({ impresiones: 0 }), b({ impresiones: 1 }), b({ impresiones: 3 }), b({ impresiones: 1, editadoTrasImprimir: true })].map(B.estadoImp), ['legado', 'sin', 'impresa', 'reimpresa', 'editada']);
   assert.strictEqual(B.estadoOC([b({ impresiones: 1 }), b({ impresiones: 0 })], 0).t, 'Impresión parcial'); assert.strictEqual(B.estadoOC([b({ impresiones: 2 })], 0).k, 'reimpresa'); assert.strictEqual(B.estadoOC([b({ impresiones: 1 })], 5).k, 'faltan'); assert.strictEqual(B.estadoOC([b({ impresiones: 1 }), b({ impresiones: 1, editadoTrasImprimir: true })], 0).k, 'editada');
   const oc = { numeroOC: '1-X', proveedor: 'P', recepciones: [{ recId: 'REC-2026-00001', fecha: '2026-11-15', ingresoAStock: true, detalle: [{ insumoName: 'Guante', cantidad: 300, lote: 'L1' }] }, { recId: 'R0', fecha: '2026-11-01', anulada: true, ingresoAStock: true, detalle: [{ insumoName: 'Guante', cantidad: 99 }] }, { recId: 'R9', fecha: '2026-10-01', ingresoAStock: true, detalle: [{ insumoName: 'Gasa', cantidad: 10 }] }] };
-  const f = B.faltantesOC(oc, [b({}), b({})]); assert.deepStrictEqual(f.map(x => x.nombre + ':' + x.total), ['Guante:100', 'Gasa:10']); assert.strictEqual(f[0].oc, '1-X'); assert.strictEqual(f[0].lote, 'L1');
+  const f = B.faltantesOC(oc, [b({ lote: 'L1' }), b({ lote: 'L1' })]); assert.deepStrictEqual(f.map(x => x.nombre + ':' + x.total), ['Guante:100', 'Gasa:10']); assert.strictEqual(f[0].oc, '1-X'); assert.strictEqual(f[0].lote, 'L1');
+  assert.deepStrictEqual(B.faltantesOC(oc, [b({ lote: 'L1', inicial: 300, nombre: 'GUANTE NITRILO M', nombreOrig: 'Guante' })], '2026-11-14'), []);   /* renombrar la etiqueta no crea faltante */
+  const oc2 = { recepciones: [{ fecha: '2026-11-15', ingresoAStock: true, detalle: [{ insumoName: 'Guante', cantidad: 100, lote: 'L1' }, { insumoName: 'Guante', cantidad: 200, lote: 'L2', vence: '2028-01-01' }] }] };
+  assert.deepStrictEqual(B.faltantesOC(oc2, [b({ lote: 'L1' })]).map(x => x.lote + ':' + x.total + ':' + x.vence), ['L2:200:2028-01-01']);   /* no mezcla lotes */
   assert.deepStrictEqual(B.faltantesOC(oc, [], '2026-11-14').map(x => x.nombre), ['Guante']); });
 console.log(`\n${n} ok, ${mal} con falla`); process.exit(mal ? 1 : 0); });
 

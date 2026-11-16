@@ -106,6 +106,9 @@
   const ref = (folio) => fs().doc(fs().collection(db(), 'Contadores'), 'bulto-' + folio);
   async function leer(folio) { const s = await fs().getDoc(ref(folio)); return s.exists() ? s.data() : null; }
   async function guardar(b, cambios, accion, det) {
+    /* v21.223: relee la caja antes de escribir (otro equipo pudo abrirla, contarla o imprimirla) para no pisar su historial */
+    try { const fr = await Promise.race([leer(b.folio), new Promise(r => setTimeout(() => r(null), 2500))]); if (fr) Object.assign(b, fr); } catch (e) { /* sin conexión: sigue con lo local */ }
+    if (typeof cambios === 'function') cambios = cambios(b);
     const h = (b.historial || []).concat([{ accion, por: usuario(), en: new Date().toISOString(), ...(cambios.contenido != null ? { contenido: cambios.contenido } : {}), ...(det || {}) }]).slice(-40);
     const x = { ...cambios, historial: h, actualizado: new Date().toISOString() };
     await Promise.race([fs().setDoc(ref(b.folio), x, { merge: true }), new Promise(r => setTimeout(r, 2500))]); Object.assign(b, x); return b;
@@ -246,7 +249,7 @@
             if (a === 'abrir' || a === 'queda') pedirQueda(b, () => { ultimo = ''; procesar(folio); });
             else if (a === 'vacia') { await guardar(b, { contenido: 0, estado: 'VACIA' }, 'VACIA'); ultimo = ''; procesar(folio); }
             else if (a === 'cerrar') { await guardar(b, { contenido: b.inicial || b.porCaja, estado: 'CERRADA' }, 'CERRADA'); ultimo = ''; procesar(folio); }
-            else if (a === 're') pdf([b]).catch(e => toast('No se pudo', e.message, 'error'));
+            else if (a === 're') imprimir([b]).catch(e => toast('No se pudo', e.message, 'error'));
           });
           return;
         }
@@ -286,20 +289,21 @@
   }
   /** Lo recibido en las recepciones de la orden que aún no tiene etiqueta (por producto). */
   function faltantesOC(oc, bultos, desde) {
-    const rec = new Map(), et = new Map(), k = (t) => norm(t);
+    /* se compara por producto + lote tal como llegaron (nombreOrig/loteOrig: editar la etiqueta no crea faltantes falsos) */
+    const rec = new Map(), et = new Map(), k = (n, l) => norm(n) + '|' + norm(l || 'S/L');
     (oc.recepciones || []).filter(r => r && !r.anulada && r.ingresoAStock && (!desde || String(r.fecha || '').slice(0, 10) >= desde)).forEach(r => (r.detalle || []).forEach(d => {
-      const nombre = d.insumoName || d.descripcion || '', x = rec.get(k(nombre)) || { nombre, descripcion: d.descripcion || '', total: 0, lote: '', vence: '', recs: [], bodega: r.bodega || '', fecha: '' };
-      x.total += num(d.cantidad); if (d.lote) x.lote = d.lote; if (d.vence) x.vence = d.vence; if (r.recId && !x.recs.includes(r.recId)) x.recs.push(r.recId); x.fecha = String(r.fecha || '').slice(0, 10) || x.fecha; if (r.bodega) x.bodega = r.bodega; rec.set(k(nombre), x);
+      const nombre = d.insumoName || d.descripcion || '', key = k(nombre, d.lote), x = rec.get(key) || { nombre, descripcion: d.descripcion || '', total: 0, lote: d.lote || 'S/L', vence: '', recs: [], bodega: r.bodega || '', fecha: '' };
+      x.total += num(d.cantidad); if (d.vence) x.vence = d.vence; if (r.recId && !x.recs.includes(r.recId)) x.recs.push(r.recId); x.fecha = String(r.fecha || '').slice(0, 10) || x.fecha; if (r.bodega) x.bodega = r.bodega; rec.set(key, x);
     }));
-    (bultos || []).forEach(b => et.set(k(b.nombre), (et.get(k(b.nombre)) || 0) + num(b.inicial != null ? b.inicial : b.contenido)));
+    (bultos || []).forEach(b => { const key = k(b.nombreOrig || b.nombre, b.loteOrig || b.lote); et.set(key, (et.get(key) || 0) + num(b.inicial != null ? b.inicial : b.contenido)); });
     return [...rec.entries()].map(([key, x]) => ({ ...x, falta: Math.max(0, x.total - (et.get(key) || 0)) })).filter(x => x.falta > 0)
-      .map(x => ({ nombre: x.nombre, codigoMP: ((oc.lineas || []).find(l => l.descripcion === x.descripcion) || {}).codigoMP || '', total: x.falta, lote: x.lote || 'S/L', vence: x.vence, bodega: x.bodega, proveedor: oc.proveedor || '', oc: oc.numeroOC || '', rec: x.recs.join(' + '), fechaRecepcion: x.fecha || hoyISO() }));
+      .map(x => ({ nombre: x.nombre, codigoMP: ((oc.lineas || []).find(l => l.descripcion === x.descripcion) || {}).codigoMP || '', total: x.falta, lote: x.lote, vence: x.vence, bodega: x.bodega, proveedor: oc.proveedor || '', oc: oc.numeroOC || '', rec: x.recs.join(' + '), fechaRecepcion: x.fecha || hoyISO() }));
   }
   /** Anota que se imprimieron (1.ª vez = impresa; siguientes = reimpresa) y limpia la marca de «editada». */
   async function marcarImpresas(lista) {
     const ahora = new Date().toISOString();
-    await Promise.all((lista || []).map(b => { const n = num(b.impresiones) + 1;
-      return guardar(b, { impresiones: n, ultimaImpresion: ahora, primeraImpresion: b.primeraImpresion || ahora, editadoTrasImprimir: false }, n > 1 ? 'REIMPRESO' : 'IMPRESO').catch(() => null); }));
+    const r = await Promise.all((lista || []).map(b => guardar(b, (x) => ({ impresiones: num(x.impresiones) + 1, ultimaImpresion: ahora, primeraImpresion: x.primeraImpresion || ahora, editadoTrasImprimir: false }), num(b.impresiones) >= 1 ? 'REIMPRESO' : 'IMPRESO').then(() => true, () => false)));
+    const mal = r.filter(x => !x).length; if (mal) toast('Impresión no registrada', `${mal} etiqueta(s) se imprimieron pero no se pudo anotar la impresión (revisa la conexión o tu sesión).`, 'warning');
   }
   async function imprimir(lista, nombre) { if (!lista || !lista.length) return null; const r = await pdf(lista, nombre); await marcarImpresas(lista); return r; }
 
@@ -315,7 +319,7 @@
     const filas = () => {
       const porNum = new Map(); bultos.forEach(b => { const k = String(b.oc || '').trim() || SIN_OC; if (!porNum.has(k)) porNum.set(k, []); porNum.get(k).push(b); });
       const l = ocs.filter(o => (o.recepciones || []).some(r => r && !r.anulada && r.ingresoAStock) || porNum.has(String(o.numeroOC || '').trim()))
-        .map(o => { const bs = porNum.get(String(o.numeroOC || '').trim()) || [], fal = faltantesOC(o, bs), reciente = bs.length ? fal : faltantesOC(o, bs, DESDE_ETQ); return { oc: o, num: o.numeroOC || o.id, prov: o.proveedor || '', bultos: bs, faltan: fal, est: estadoOC(bs, reciente.reduce((t, x) => t + x.total, 0)), fecha: o.ultimaRecepcion || '' }; });
+        .map(o => { const bs = porNum.get(String(o.numeroOC || '').trim()) || [], fal = faltantesOC(o, bs, DESDE_ETQ); return { oc: o, num: o.numeroOC || o.id, prov: o.proveedor || '', bultos: bs, faltan: fal, est: estadoOC(bs, fal.reduce((t, x) => t + x.total, 0)), fecha: o.ultimaRecepcion || '' }; });
       const conocidas = new Set(l.map(x => String(x.num).trim()));
       porNum.forEach((bs, k) => { if (!conocidas.has(k)) l.push({ oc: { numeroOC: k === SIN_OC ? '' : k, proveedor: bs[0].proveedor || '' }, num: k, prov: bs[0].proveedor || '', bultos: bs, faltan: [], est: estadoOC(bs, 0), fecha: bs[0].fechaRecepcion || '' }); });
       const peso = { faltan: 0, editada: 1, sin: 2, legado: 3, reimpresa: 4, impresa: 5, vacia: 6 };
@@ -347,7 +351,7 @@
           ${ft ? `<div class="bu-falta"><b>Falta etiquetar ${ft} u.</b><small>${x.faltan.map(f => `${esc(f.nombre)} · ${f.total} u.`).join('<br>')}</small><button type="button" class="btn btn-primary btn-sm" id="bu-crea"><i class="ph-bold ph-tag"></i> Crear las que faltan</button></div>` : ''}
           <div class="fp-facc bu-ocacc"><button type="button" class="btn btn-primary" id="bu-pend"${pend.length ? '' : ' disabled'}><i class="ph-bold ph-printer"></i> Imprimir pendientes${pend.length ? ' (' + pend.length + ')' : ''}</button><button type="button" class="btn btn-secondary" id="bu-sel"${marcados.size ? '' : ' disabled'}><i class="ph-bold ph-arrows-clockwise"></i> Reimprimir seleccionadas${marcados.size ? ' (' + marcados.size + ')' : ''}</button><button type="button" class="btn btn-secondary btn-sm" id="bu-todas">${marcados.size === bs.length && bs.length ? 'Quitar selección' : 'Seleccionar todas'}</button></div>
           ${[...grupos.values()].map(g => { const a = g[0]; return `<div class="bu-grp"><div class="bu-grp-h"><span><b>${esc(a.nombre)}</b><small>lote ${esc(a.lote || 'S/L')}${a.vence ? ' · vence ' + esc(fechaCL(a.vence)) : ''} · ${g.length} caja${g.length === 1 ? '' : 's'} · ${g.reduce((t, b) => t + num(b.inicial != null ? b.inicial : b.contenido), 0)} u.${a.rec ? ' · ' + esc(a.rec) : ''}</small></span><button type="button" class="btn btn-secondary btn-sm" data-eg="${esc(a.grupo || a.folio)}"><i class="ph-bold ph-pencil-simple"></i> Editar datos</button></div>
-            ${g.map(b => `<label class="bu-fila bu-et"><input type="checkbox" data-f="${esc(b.folio)}"${marcados.has(b.folio) ? ' checked' : ''}><span><b>${esc(b.folio)}</b> · bulto ${b.n}/${b.de} · ${num(b.contenido)} u.<small>${b.ultimaImpresion ? 'Última impresión ' + esc(fechaCL(b.ultimaImpresion.slice(0, 10))) + ' ' + esc(new Date(b.ultimaImpresion).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })) : ''}</small></span><span class="bu-imp bu-imp-${estadoImp(b)}">${esc(textoImp(b))}</span><button type="button" class="bu-ed" data-eb="${esc(b.folio)}" aria-label="Editar etiqueta ${esc(b.folio)}"><i class="ph-bold ph-pencil-simple"></i></button></label>`).join('')}</div>`; }).join('') || '<p class="si-v">Esta orden aún no tiene etiquetas.</p>'}`;
+            ${g.map(b => `<label class="bu-fila bu-et"><input type="checkbox" data-f="${esc(b.folio)}"${marcados.has(b.folio) ? ' checked' : ''}><span><b>${esc(b.folio)}</b> · bulto ${num(b.n)}/${num(b.de)} · ${num(b.contenido)} u.<small>${b.ultimaImpresion ? 'Última impresión ' + esc(fechaCL(b.ultimaImpresion.slice(0, 10))) + ' ' + esc(new Date(b.ultimaImpresion).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })) : ''}</small></span><span class="bu-imp bu-imp-${estadoImp(b)}">${esc(textoImp(b))}</span><button type="button" class="bu-ed" data-eb="${esc(b.folio)}" aria-label="Editar etiqueta ${esc(b.folio)}"><i class="ph-bold ph-pencil-simple"></i></button></label>`).join('')}</div>`; }).join('') || '<p class="si-v">Esta orden aún no tiene etiquetas.</p>'}`;
         caja.querySelector('#bu-vol').onclick = lista;
         caja.querySelectorAll('[data-f]').forEach(c => c.onchange = () => { if (c.checked) marcados.add(c.dataset.f); else marcados.delete(c.dataset.f); pinta(); });
         caja.querySelector('#bu-todas').onclick = () => { if (marcados.size === bs.length) marcados.clear(); else bs.forEach(b => marcados.add(b.folio)); pinta(); };
@@ -389,7 +393,8 @@
       if (!conCambios.length) { ov.cerrar(); return; }
       e.target.disabled = true; const prog = window.SAR_Progreso ? window.SAR_Progreso.iniciar('Guardando los cambios de la etiqueta…', ['Actualizando ' + conCambios.length + ' etiqueta(s)…']) : null;
       try {
-        await Promise.all(conCambios.map(([b, c]) => guardar(b, { ...c, editadoTrasImprimir: estadoImp(b) !== 'sin' }, 'EDITADO', { campos: Object.keys(c) })));
+        const orig = (b, c) => ({ ...(c.nombre != null && b.nombreOrig == null ? { nombreOrig: b.nombre } : {}), ...(c.lote != null && b.loteOrig == null ? { loteOrig: b.lote } : {}) });
+        await Promise.all(conCambios.map(([b, c]) => guardar(b, (x) => { if (c.contenido != null && x.estado !== 'CERRADA') throw new Error(`La caja ${x.folio} ya se abrió en otro equipo: su cantidad se cambia al escanearla.`); return { ...c, ...orig(x, c), editadoTrasImprimir: estadoImp(x) !== 'sin' }; }, 'EDITADO', { campos: Object.keys(c) })));
         if (cant != null && conCambios.some(([, c]) => c.contenido != null)) {   // el total del lote y las unidades por caja salen en todas las etiquetas del grupo
           const tot = grupo.reduce((t, b) => t + num(b.inicial != null ? b.inicial : b.contenido), 0), pc = Math.max(...grupo.map(b => num(b.inicial != null ? b.inicial : b.contenido)));
           await Promise.all(grupo.filter(b => num(b.totalGrupo) !== tot || num(b.porCaja) !== pc).map(b => guardar(b, { totalGrupo: tot, porCaja: pc, editadoTrasImprimir: estadoImp(b) !== 'sin' }, 'EDITADO', { campos: ['totalGrupo'] })));

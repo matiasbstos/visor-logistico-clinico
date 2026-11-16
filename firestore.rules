@@ -169,7 +169,13 @@ service cloud.firestore {
         || (request.auth != null && (id == 'catalogo-publico' || resource.data.uid == request.auth.uid));
       allow create: if isStaff()
         || (request.auth != null
-            && request.resource.data.keys().hasOnly(['tipo', 'numero', 'estado', 'uid', 'requester', 'solicitante', 'correo', 'servicio', 'bodega', 'destino', 'categoria', 'nota', 'lineas', 'creadoEn', 'historial', 'origen', 'conteo'])
+            && request.resource.data.keys().hasOnly(['tipo', 'numero', 'estado', 'uid', 'requester', 'solicitante', 'correo', 'servicio', 'bodega', 'destino', 'categoria', 'nota', 'lineas', 'creadoEn', 'historial', 'origen', 'conteo', 'correlativo', 'correlativoN', 'correlativoAnio'])
+            // N° SOL al enviar (v21.219): solo si el contador del año queda apuntando a esta solicitud con ese mismo número
+            && (!('correlativo' in request.resource.data)
+                || (request.resource.data.correlativoAnio is string && request.resource.data.correlativoAnio.matches('^[0-9]{4}$')
+                    && request.resource.data.correlativo.matches('^SOL-' + request.resource.data.correlativoAnio + '-[0-9]{4,6}$')
+                    && getAfter(/databases/$(database)/documents/Contadores/$('correlativo-solicitudes-' + request.resource.data.correlativoAnio)).data.ultima == id
+                    && getAfter(/databases/$(database)/documents/Contadores/$('correlativo-solicitudes-' + request.resource.data.correlativoAnio)).data.valor == request.resource.data.correlativoN))
             && request.resource.data.numero == id
             && request.resource.data.tipo == 'SOLICITUD_INSUMOS'
             && request.resource.data.estado == 'NUEVA'
@@ -295,8 +301,16 @@ service cloud.firestore {
       }
     }
     match /Contadores/{id} {
-      allow read: if isStaff() || (isTransitoria() && id.matches('transitoria-.*'));
+      allow read: if isStaff() || (isTransitoria() && id.matches('transitoria-.*'))
+        || (request.auth != null && id.matches('correlativo-solicitudes-[0-9]{4}'));
       allow create, update: if isStaff();
+      // N° SOL al enviar desde «Pedir insumos» (v21.219): el contador sube de a 1 y solo junto con la solicitud que lleva ese número
+      allow create: if request.auth != null && id.matches('correlativo-solicitudes-[0-9]{4}')
+        && request.resource.data.keys().hasOnly(['valor', 'actualizado', 'ultima']) && request.resource.data.valor == 1
+        && getAfter(/databases/$(database)/documents/Solicitudes_Insumos/$(request.resource.data.ultima)).data.correlativoN == 1;
+      allow update: if request.auth != null && id.matches('correlativo-solicitudes-[0-9]{4}')
+        && request.resource.data.keys().hasOnly(['valor', 'actualizado', 'ultima']) && request.resource.data.valor == resource.data.valor + 1
+        && getAfter(/databases/$(database)/documents/Solicitudes_Insumos/$(request.resource.data.ultima)).data.correlativoN == request.resource.data.valor;
       allow delete: if false;
     }
     match /Config_Correo/{id} {

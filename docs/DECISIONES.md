@@ -1436,3 +1436,8 @@ Hallazgos de 4 agentes (UX, integridad de stock, seguridad, sin internet) y de u
 ## 4.270 · Búsqueda tolerante en Pedir insumos (v21.218)
 - Caso: «D-DIMMER» (dos M) no aparecía al buscar «d-dimer», «dimer» o «dímero d»: la búsqueda exigía la palabra exacta dentro del nombre.
 - Ahora (pedir insumos y «Asociar a producto del inventario»): sin tildes ni guiones, letras repetidas cuentan como una, y cada palabra de 4+ letras acepta 1 letra de diferencia (2 si tiene 8+), también contra el comienzo de una palabra. Números y palabras cortas siguen siendo exactos (suero 250 no encuentra suero 500).
+
+## 4.271 · N° SOL al enviar y cantidad en el ingreso a mano (v21.219)
+- El N° oficial **SOL-AAAA-NNNN sale al enviar**: el teléfono crea la solicitud y sube el contador del año en una sola transacción (`correlativo`, `correlativoN`, `correlativoAnio`; el contador guarda `ultima`). Las reglas solo lo aceptan si el contador queda en ese mismo número apuntando a esa solicitud (`getAfter` en ambos sentidos). Sin internet, o si las reglas no se han publicado, se guarda como antes y bodega asigna el N° al recibirla (también guarda `ultima`/`correlativoN`).
+- Ingreso a mano: «Nombre del producto» a lo ancho y **«Cantidad» con − / número / +** (antes un recuadro suelto sin etiqueta).
+- Requiere publicar `firestore.rules` (Contadores `correlativo-solicitudes-AAAA` y creación de Solicitudes_Insumos).

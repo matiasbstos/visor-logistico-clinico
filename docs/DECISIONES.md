@@ -1455,3 +1455,6 @@ Investigación de Murdock (SAP S/4HANA, Dynamics 365, Odoo, Directiva IVA UE 200
 
 ## 4.273 · Cuadro de carga en «Recepción conforme» (v21.221)
 Pedido del usuario: al guardar la recepción conforme no se veía que estaba trabajando (armar PDF, enviar correo con adjuntos, guardar archivos y rehacer los documentos REC puede tardar). Ahora, después de validar, el formulario se oculta y aparece el cuadro de carga del sitio (`SAR_Progreso`) con los pasos: armar el acta, enviar el correo, guardar archivos, registrar en la orden y bitácora. Si algo falla, el cuadro se cierra, el formulario vuelve con lo escrito y se muestra el error.
+
+## 4.274 · Códigos de error ERR-XXX-NNN (v21.222)
+Los códigos del catálogo de errores pasan de `SAR-XXX-NNN` a `ERR-XXX-NNN` (38 códigos, misma categoría y número: SAR-AUT-001 → ERR-AUT-001), porque se confundían con el código SAR del producto (SAR-NNNNNN). El registro de apariciones guardado en cada equipo se lee con el código nuevo y la búsqueda del Directorio sigue encontrando el código antiguo. Nomenclaturas actualizado.

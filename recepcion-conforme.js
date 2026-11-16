@@ -203,12 +203,19 @@
             if (!d.lineas.length) err.push('El detalle del acta no puede quedar vacío.');
             o.querySelector('#rc-error').innerHTML = err.map(e => `<div>${esc(e)}</div>`).join('');
             if (err.length) return false;
+            /* v21.221: cuadro de carga mientras se arma el acta, se envía el correo y se guarda */
+            const enviarSel = (o.querySelector('#rc-enviar') || {}).checked !== false;
+            const prog = window.SAR_Progreso ? window.SAR_Progreso.iniciar('Registrando la recepción conforme…', ['Armando el acta en PDF…']) : null, paso = (t) => { if (prog) prog.paso(t); };
+            o.style.visibility = 'hidden';
+            try {
             const PDFLib = await cargarPDFLib(); const logoBytes = await cargarLogo(); const firmaBytes = await cargarFirma();
             const acta = await generarActaPDF(oc, d, centro, { PDFLib, logoBytes, firmaBytes });
             const guia = new Uint8Array(await d.archivo.arrayBuffer());
             const adj = [{ name: nombreActa(oc), mime: 'application/pdf', base64: aBase64(acta) }, { name: nombreAdjunto(d.tipoDoc, d.numeroDoc), mime: 'application/pdf', base64: aBase64(guia) }];
-            const enviar = (o.querySelector('#rc-enviar') || {}).checked !== false;
+            const enviar = enviarSel;
+            if (enviar) paso(`Enviando el correo a ${d.to.length + d.cc.length} destinatario(s)…`);
             const correo = enviar ? await ctx.enviarCorreo(d.to, armarCorreo(oc, d, centro), { cc: d.cc, attachments: adj, respaldo: true }) : { estado: 'no_enviado', detalle: 'Se emitió sin enviar el correo.', destinatarios: [], cc: [] };
+            paso('Guardando el acta y la guía/factura en la orden…');
             if (ctx.guardarArchivo) {
                 try { await ctx.guardarArchivo(oc.id, { nombre: adj[0].name, categoria: 'Recepción conforme', bytes: acta }); await ctx.guardarArchivo(oc.id, { nombre: adj[1].name, categoria: d.tipoDoc === 'FACTURA' ? 'Factura' : 'Guía de despacho', bytes: guia }); }
                 catch (e) { toast('Archivos no guardados', e.message || String(e), 'warning'); }
@@ -217,16 +224,20 @@
             if (correo.estado === 'borrador') { bajar(acta, adj[0].name); bajar(guia, adj[1].name); toast('Adjunta los archivos', 'El envío automático no está configurado: se descargaron el acta y la guía/factura; adjúntalos al borrador.', 'warning'); }
             const resumen = { estado: correo.estado, to: correo.destinatarios || d.to, cc: correo.cc || d.cc, detalle: correo.detalle || '', fecha: hoyISO() };
             const textoEv = `Recepción conforme registrada (${d.tipoDoc === 'FACTURA' ? 'factura' : 'guía'} N° ${d.numeroDoc})${d.parcial ? ', parcial' : ''}. Correo: ${correo.estado}${correo.detalle ? ' — ' + correo.detalle : ''}.`;
+            paso('Registrando la recepción en la orden…');
             const ocRef = fs().doc(fs().collection(db(), 'Seguimiento_OC'), oc.id);
             await fs().updateDoc(ocRef, { recepcionConforme: { fecha: d.fecha, por: ctx.usuario, recibe: d.firmaNombre, contraparte: d.contraparte, conFirma: true, tipoDoc: d.tipoDoc, numeroDoc: d.numeroDoc, parcial: d.parcial, observaciones: d.observaciones, encabezado: d.encabezado, lineas: d.lineas, correo: resumen } });
             // v21.207: los documentos de cada recepción (REC-…) se rehacen ya con el timbre «RECEPCIÓN CONFORME»
             try { const rcN = { fecha: d.fecha, recibe: d.firmaNombre, tipoDoc: d.tipoDoc, numeroDoc: d.numeroDoc, parcial: d.parcial }, R = window.SAR_RecepConf;
                 if (R && R.guardarEnOrden) for (const rec of (oc.recepciones || []).filter(r => !r.anulada)) await R.guardarEnOrden({ oc: { ...oc, recepcionConforme: rcN }, rec, guardarArchivo: ctx.guardarArchivo, eliminarCategoria: ctx.eliminarCategoria }); }
             catch (e) { /* el acta principal ya quedó con timbre */ }
+            paso('Dejando el registro en la bitácora…');
             await fs().setDoc(fs().doc(fs().collection(db(), 'Seguimiento_OC', oc.id, 'Eventos')), { tipo: 'CONFORME', texto: textoEv, autor: ctx.usuario, fecha: fs().serverTimestamp(), correo: { estado: correo.estado, destinatarios: [...(correo.destinatarios || []), ...(correo.cc || [])], detalle: correo.detalle || '' } });
             if (correo.estado === 'enviado') toast('Correo enviado', `Acta y ${d.tipoDoc === 'FACTURA' ? 'factura' : 'guía'} enviadas a ${(correo.destinatarios || []).length + (correo.cc || []).length} destinatario(s).`, 'success');
             else if (correo.estado === 'programado') toast('Correo programado', correo.detalle, 'info');
             else if (correo.estado !== 'borrador' && enviar) toast('Revisa el correo', correo.detalle || 'El correo no se pudo enviar.', 'error');
+            if (prog) prog.listo('Recepción conforme registrada', { aviso: false });
+            } catch (e) { if (prog) prog.error(); o.style.visibility = ''; throw e; }
         });
         try { const sel = ov.querySelector('#rc-parcial'), enc = ov.querySelector('#rc-enc'); let tocado = false; enc.addEventListener('input', () => { tocado = true; }); sel.addEventListener('change', () => { if (!tocado) enc.value = encabezadoBase(sel.value === '1'); }); } catch (e) { /* sin sincronía */ }
         try { const h = ov && ov.querySelector('#rc-fec-hoy'); if (h) h.addEventListener('click', (ev) => { ev.preventDefault(); ov.querySelector('#rc-fec').value = hoyISO(); }); } catch (e) { /* sin atajo */ }

@@ -111,15 +111,17 @@
       if (prev.exists() && prev.data().aplicado) { if (!remoto) throw new Error('El conteo de hoy ya se cerró.'); cref = doc('Contadores', `transitoria-conteo-${b.id}-${fecha}-${remoto.numero}`); prev = await tx.get(cref); }
       const refs = [], leidos = new Map();
       for (const r of conF) for (const d of r.dB) if (!leidos.has(d.id)) { const ref = doc('Insumos', d.id); refs.push(ref); leidos.set(d.id, await tx.get(ref)); }
+      const ctrInv = conF.length && window.SAR_Folio ? await window.SAR_Folio.leer(tx, 'INV') : null;   /* folio INV-AAAA-NNNNN del conteo (estándar de correlativos) */
       const cambios = [];
       for (const r of conF) {
         const docs = r.dB.map(d => ({ id: d.id, quantity: num(leidos.get(d.id).data().quantity) })), rp = repartir(docs, uso(r));
         if (rp.sinCubrir > 0 && !remoto) throw new Error(`${r.o.nombre}: el stock cambió mientras contabas. Actualiza y vuelve a contar.`);   // remoto: se descuenta lo que hay (nunca negativo)
         rp.partes.forEach(p => { const d = leidos.get(p.id).data(), pl = SA.descontarFEFO(d, p.quitar); cambios.push({ id: p.id, d, pl, cant: p.quitar, nombre: r.o.nombre }); });
       }
+      const folioInv = ctrInv ? window.SAR_Folio.escribir(tx, ctrInv) : '';
       cambios.forEach(c => {
         tx.update(doc('Insumos', c.id), { quantity: c.pl.quantity, batches: c.pl.batches, updatedAt: f.serverTimestamp() });
-        tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: c.d.name, quantity: c.cant, type: 'TRANSITORIA_FALTANTE', user: por, date: f.serverTimestamp(), document: `CONTEO-${b.name}-${fecha}`, batch: c.pl.usados.length === 1 ? c.pl.usados[0].batch : 'MULTI-LOTE', origin: b.name, lotes: c.pl.usados, idInsumoOrigen: c.id, observacion: `Faltante en el conteo diario de ${b.name} (${fecha}): sale del stock total${remoto ? ' · inventario ' + remoto.numero : ''}` });
+        tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: c.d.name, quantity: c.cant, type: 'TRANSITORIA_FALTANTE', user: por, date: f.serverTimestamp(), document: folioInv || `CONTEO-${b.name}-${fecha}`, batch: c.pl.usados.length === 1 ? c.pl.usados[0].batch : 'MULTI-LOTE', origin: b.name, lotes: c.pl.usados, idInsumoOrigen: c.id, observacion: `Faltante en el conteo diario de ${b.name} (${fecha}): sale del stock total${remoto ? ' · inventario ' + remoto.numero : ''}` });
       });
       if (sref) { const x = sd.data(), ahora = new Date().toISOString(), est = x.estado === 'NUEVA' ? 'PREPARACION' : x.estado;
         tx.update(sref, { 'conteo.estado': 'aplicado', 'conteo.aplicadoEn': ahora, 'conteo.aplicadoPor': usuario(), 'conteo.descontado': conF.map(r => ({ k: r.k, nombre: r.o.nombre, sistema: (remoto.sisAl || {})[r.k] !== undefined ? remoto.sisAl[r.k] : r.sistema, contado: r.calc.contado, usado: uso(r) })), 'conteo.sobrantes': lista.filter(r => r.calc.sobrante > 0).map(r => ({ nombre: r.o.nombre, sobrante: r.calc.sobrante })),
@@ -131,7 +133,7 @@
     const b = bodegas.find(x => x.id === bodegaSel); const SA = window.SAR_ActasEntrega; if (!SA || !SA.descontarFEFO) throw new Error('El módulo de stock no está cargado.');
     const lista = filas().filter(r => r.calc.estado !== 'pendiente' && r.calc.reponible > 0);
     if (!lista.length) throw new Error('No hay nada para reponer (cuenta primero, o la Bodega Central no tiene stock).');
-    const f = fs(), fecha = hoy(), docTxt = `REPOSICION-${b.name}-${fecha}`;
+    const f = fs(), fecha = hoy(), docTxt = window.SAR_Folio ? await window.SAR_Folio.siguiente('REP') : `REPOSICION-${b.name}-${fecha}`;   // REP-AAAA-NNNNN
     await f.runTransaction(db(), async (tx) => {
       const leidos = new Map(), rd = async (id) => { if (!leidos.has(id)) leidos.set(id, await tx.get(doc('Insumos', id))); return leidos.get(id); };
       const trabajos = [];

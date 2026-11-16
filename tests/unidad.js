@@ -168,3 +168,27 @@ t('inventario v21.212: líneas propuestas y días de quiebre', () => { const I =
 t('búsqueda tolerante v21.218: D-DIMMER, dímero, letras repetidas y números exactos', () => { const c = require('../solicitudes-insumos.js')._prueba.coincide;
   ['d-dimer', 'dimer', 'dímero d', 'd dimmer'].forEach(q => assert.ok(c('D-DIMMER TEST RAPIDO', q), q)); assert.ok(c('Gasa estéril 10x10', 'gaza')); assert.ok(c('Sabanilla desechable', 'sabanila'));
   assert.ok(!c('Suero fisiológico 500 ml', 'suero 250')); assert.ok(!c('Jeringa 10 ml', 'gasa')); });
+t('correlativos v21.220: formato, corte 2027 y provisional', () => {
+  const F = require('../correlativos.js');
+  assert.strictEqual(F.formato('AE', 2026, 21, '2026-11-15T12:00:00Z'), 'AE-2026-0021');            // lo que ya existía sigue igual en 2026
+  assert.strictEqual(F.formato('REC', 2026, 15, '2026-11-15T12:00:00Z'), 'REC-2026-00015');         // lo nuevo ya usa 5 dígitos
+  assert.strictEqual(F.formato('AE', 2027, 21, '2027-01-01T03:01:00Z'), 'AE-2027-00021');           // desde 1-ene-2027 00:01 (Chile)
+  assert.strictEqual(F.nuevo('2027-01-01T03:00:59Z'), false); assert.strictEqual(F.nuevo('2027-01-01T03:01:00Z'), true);
+  assert.strictEqual(F.formato('BUL', 2027, 123, '2027-02-01'), 'BUL-2027-000123');
+  assert.strictEqual(F.anio('2027-01-01T02:00:00Z'), 2026);                                         // 23:00 del 31-dic en Chile
+  const p = F.provisional('AJU', '2026-11-15T12:00:00'); assert.ok(/^AJU-P-20261115-[0-9A-HJKMNP-TV-Z]{4}$/.test(p), p); assert.ok(F.esProvisional(p));
+});
+// contador con transacciones que se encolan: 20 pedidos simultáneos = 20 números distintos y seguidos (prueba asíncrona)
+(async () => {
+  const F = require('../correlativos.js'), DB = {}; let cola = Promise.resolve();
+  const w = (typeof window !== 'undefined' ? window : globalThis);
+  w.firebaseDb = {}; w.firebaseFirestore = { collection: (_, c) => ({ c }), doc: (c, id) => ({ id }),
+    runTransaction: (_, fn) => { const r = cola.then(() => fn({ get: async (x) => ({ exists: () => !!DB[x.id], data: () => DB[x.id] }), set: (x, d) => { DB[x.id] = d; } })); cola = r.catch(() => {}); return r; } };
+  try {
+    const r = await Promise.all(Array.from({ length: 20 }, () => F.siguiente('TRA', { fecha: '2026-11-15T12:00:00Z' })));
+    assert.strictEqual(new Set(r).size, 20); assert.strictEqual(r.sort()[19], 'TRA-2026-00020');
+    const v = await F.varios('REC', 3, { fecha: '2026-11-15T12:00:00Z' }); assert.deepStrictEqual(v, ['REC-2026-00001', 'REC-2026-00002', 'REC-2026-00003']);
+    delete w.firebaseFirestore.runTransaction; assert.ok(F.esProvisional(await F.siguiente('INV')));
+    console.log('OK   correlativos v21.220: contador sin repetidos (asíncrona)');
+  } catch (e) { console.log('FALLA correlativos v21.220 asíncrona → ' + e.message); process.exitCode = 1; }
+})();

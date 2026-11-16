@@ -108,7 +108,7 @@
     const i = lista.findIndex(x => x.id === id); if (i >= 0) lista[i] = { ...act }; else lista.unshift({ ...act });
     if (!silencioso) toast('Distribución guardada', act.nombre, 'success');
   }
-  const correlativo = (anio, n) => `DIST-${anio}-${String(n).padStart(4, '0')}`;
+  const correlativo = (anio, n) => (window.SAR_Folio ? window.SAR_Folio.formato('DIST', anio, n) : `DIST-${anio}-${String(n).padStart(4, '0')}`);
   /** Crea la distribución con su correlativo de seguimiento (DIST-AAAA-NNNN; contador por año en Contadores/dist-AAAA). */
   async function crear(nombre, modo, centros) {
     const f = fs(), anio = new Date().getFullYear(), ctr = f.doc(f.collection(db(), 'Contadores'), `dist-${anio}`); let corr = '';

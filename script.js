@@ -841,7 +841,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Función reutilizable para la transacción atómica directa de stock
                 window.ejecutarAjusteDirecto = async function (docId, stockActual, insumoNombre, cantidadParsed, justificacion, codigoAjuste = null) {
                     if (!codigoAjuste) {
-                        codigoAjuste = "ADJ-" + Math.floor(10000 + Math.random() * 90000);
+                        codigoAjuste = window.SAR_Folio ? window.SAR_Folio.provisional('AJU') : "ADJ-" + Math.floor(10000 + Math.random() * 90000);
                     }
                     let nuevoStock = stockActual + cantidadParsed;
                     let accionDetallada = "";
@@ -997,7 +997,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 window.location.href = `mailto:visor@tudominio.com?subject=Ajuste Critico ${res.codigoAjuste}&body=${encodeURIComponent(mailBody)}`;
                             } else {
                                 // Solicitar Aprobación
-                                const code = codigoGob || ("ADJ-" + Math.floor(10000 + Math.random() * 90000));
+                                const code = codigoGob || (window.SAR_Folio ? window.SAR_Folio.provisional('AJU') : "ADJ-" + Math.floor(10000 + Math.random() * 90000));
                                 await addDoc(collection(db, 'Solicitudes_Ajuste'), {
                                     code: code,
                                     insumoId: docId,
@@ -1290,7 +1290,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     // Se usan imports estáticos: doc, collection, addDoc, serverTimestamp
 
-                    const code = "REQ-" + Math.floor(1000 + Math.random() * 9000);
+                    const code = window.SAR_Folio ? await window.SAR_Folio.siguiente('SUG') : "REQ-" + Math.floor(1000 + Math.random() * 9000); /* SUG-AAAA-NNNNN */
                     await addDoc(collection(db, 'Solicitudes_Compra'), {
                         codigo: code,
                         insumoId: insumoId,
@@ -1320,7 +1320,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     let count = 0;
                     for (const ins of insumos) {
-                        const code = "REQ-" + Math.floor(1000 + Math.random() * 9000);
+                        const code = window.SAR_Folio ? await window.SAR_Folio.siguiente('SUG') : "REQ-" + Math.floor(1000 + Math.random() * 9000); /* SUG-AAAA-NNNNN */
                         await addDoc(collection(db, 'Solicitudes_Compra'), {
                             codigo: code,
                             insumoId: ins.id,
@@ -5599,7 +5599,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         actionDetails = { tipoSalida: 'CONSUMO' };
                     } else {
                         actionType = 'traspaso';
-                        docName = `TRASP-${fromName.substring(0, 3)}-${toName.substring(0, 3)}`;
+                        docName = window.SAR_Folio ? await window.SAR_Folio.siguiente('TRA') : `TRASP-${fromName.substring(0, 3)}-${toName.substring(0, 3)}`;
                     }
 
                     // Resolver el destino fuera de la transacción (no se permiten consultas dentro).
@@ -7632,6 +7632,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const refsMap = await Promise.all(fetchPromises);
 
                 // Transacción Atómica
+                const folioBAN = window.SAR_Folio ? await window.SAR_Folio.siguiente('BAN') : ''; /* BAN-AAAA-NNNNN (antes día-mes-hora, sin año) */
                 await window.firebaseFirestore.runTransaction(window.firebaseFirestore.db || window.db || db, async (transaction) => {
                     const updates = [];
                     for (const mapObj of refsMap) {
@@ -7706,7 +7707,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         });
                     } else {
                         const _now = new Date();
-                        const trackingNumber = `BAN-${String(_now.getDate()).padStart(2, '0')}${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getHours()).padStart(2, '0')}${String(_now.getMinutes()).padStart(2, '0')}`;
+                        const trackingNumber = folioBAN || `BAN-${String(_now.getDate()).padStart(2, '0')}${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getHours()).padStart(2, '0')}${String(_now.getMinutes()).padStart(2, '0')}`;
 
                         transaction.set(bandejaRef, {
                             tracking: trackingNumber,
@@ -13592,7 +13593,7 @@ function doGet(e) {
                 const prevStock = existingMatch ? (Number(existingMatch.quantity) || 0) : 0;
                 const totalAcumulado = prevStock + cant;
                 const formattedVto = isQuiebre && vto === 'N/A' ? 'N/A' : formatearMesAno(vto);
-                const recordId = 'INV-' + now.toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+                const recordId = window.SAR_Folio ? await window.SAR_Folio.siguiente('INV') : 'INV-' + now.toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
 
                 const newRecord = {
                     id: recordId,

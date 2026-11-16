@@ -92,7 +92,7 @@
     const cod = G ? await G.codigo('AJU') : null, just = `${d.justificacion} · hecho sin conexión el ${new Date(d.en).toLocaleString('es-CL')}`;
     if (G && d.motivo) await G.registrar({ nombre: d.nombre, delta: d.cantidad, codigo: cod, motivo: d.motivo, nota: d.nota, origen: 'AJUSTE', antes: stock, despues: stock + d.cantidad, insumoId: d.docId }).catch(() => {});
     if (d.directo) { if (!window.ejecutarAjusteDirecto) throw new Error('sin conexión: módulo de ajustes aún no cargado'); await window.ejecutarAjusteDirecto(d.docId, stock, d.nombre, d.cantidad, just, cod); }
-    else await f.setDoc(f.doc(f.collection(db, 'Solicitudes_Ajuste')), { code: cod || ('ADJ-' + Math.floor(10000 + Math.random() * 90000)), insumoId: d.docId, insumoName: d.nombre, cantidad: d.cantidad, justificacion: just, previousStock: stock, projectedStock: stock + d.cantidad, status: 'pendiente', date: f.serverTimestamp(), requester: usuario() });
+    else await f.setDoc(f.doc(f.collection(db, 'Solicitudes_Ajuste')), { code: cod || (window.SAR_Folio ? window.SAR_Folio.provisional('AJU') : 'ADJ-' + Math.floor(10000 + Math.random() * 90000)), insumoId: d.docId, insumoName: d.nombre, cantidad: d.cantidad, justificacion: just, previousStock: stock, projectedStock: stock + d.cantidad, status: 'pendiente', date: f.serverTimestamp(), requester: usuario() });
   });
 
   // ---------------- disparadores ----------------

@@ -134,7 +134,7 @@
         }
         return { batches: arr, quantity: num(d.quantity) + total };
     }
-    const numeroActa = (anio, n) => `AE-${anio}-${String(n).padStart(4, '0')}`;
+    const numeroActa = (anio, n) => (window.SAR_Folio ? window.SAR_Folio.formato('AE', anio, n) : `AE-${anio}-${String(n).padStart(4, '0')}`);   // 5 dígitos desde 2027 (estándar de correlativos)
     function validarBorrador(b) {
         const errores = [];
         if (!String(b.centro || '').trim()) errores.push('Indica a qué centro se entrega.');
@@ -793,14 +793,14 @@
         $$('.act-an').forEach(b => b.addEventListener('click', async () => {
             const motivo = (prompt(`Eliminar el acta ${b.dataset.n}: se borra su archivo, el stock vuelve a la bodega de origen y lo entregado vuelve a quedar pendiente en la orden. Queda el registro en el historial.\n\nMotivo:`, 'Acta mal generada') || '').trim();
             if (!motivo) return;
-            const prog = window.SAR_Progreso.iniciar('Eliminando el acta…', ['Devolviendo el stock a la bodega de origen…']);
+            const prog = window.SAR_Progreso.iniciar('Anulando el acta…', ['Devolviendo el stock a la bodega de origen…']);
             try {
                 const a = historial.find(x => x.numero === b.dataset.n);
                 await anular(b.dataset.n, motivo, usuarioEmail());
                 if (a && window.SAR_Avisos) window.SAR_Avisos.avisarActa('anulacion', a, { motivo }).catch(() => {});
                 prog.paso('Quitando el archivo de la orden…');
                 let arch = 0; if (a && a.oc && a.oc.id && window.SAR_SeguimientoOC && window.SAR_SeguimientoOC.eliminarArchivosActa) { try { arch = await window.SAR_SeguimientoOC.eliminarArchivosActa(a.oc.id, a.numero); } catch (e2) { toast('Archivo no eliminado', 'El stock se devolvió, pero el archivo de la orden no se pudo borrar: ' + (e2.message || e2), 'warning'); } }
-                prog.listo(`Acta ${b.dataset.n} eliminada: stock devuelto${arch ? ' y archivo borrado de la orden' : ''}`, { informe: true }); await Promise.all([cargarHistorial(), cargarStock()]); borrador.items = []; guardarBorrador(); pintar(); }
+                prog.listo(`Acta ${b.dataset.n} anulada (su N° queda registrado): stock devuelto${arch ? ' y archivo borrado de la orden' : ''}`, { informe: true }); await Promise.all([cargarHistorial(), cargarStock()]); borrador.items = []; guardarBorrador(); pintar(); }
             catch (e) { prog.error(); toast('No se anuló', e.message, 'error'); }
         }));
     }

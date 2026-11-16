@@ -6544,3 +6544,9 @@ body:not([data-user-role="solicitante"]) .menu-item[data-target="view-solicitud-
 .shi-aviso{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;padding:10px 12px}
 .shi-fila>div:first-child{min-width:0;flex:1}.shi-fila small{overflow-wrap:anywhere}
 @media(max-width:560px){.shi-fila{flex-direction:column;align-items:stretch}.shi-acc{justify-content:flex-start;flex-wrap:wrap;flex:initial}.shi-acc .btn,.shi-sel{flex:1 1 140px;min-width:0}.shi-acc>.btn:only-child,.shi-fila>.btn{width:100%}}
+
+/* v21.229 · Sub-ítem de menú (Existencias → Repetidos y salud) y aviso de stock en otra bodega en actas */
+.menu-item.menu-sub{padding-left:38px;font-size:.88em;opacity:.95}.menu-item.menu-sub i{font-size:1em}
+.sidebar.collapsed .menu-item.menu-sub{padding-left:inherit}
+.act-otra{display:inline-flex;align-items:center;gap:4px;color:#1d4ed8;font-weight:600}.act-otra i{color:#d97706}
+.act-cambia{margin-top:4px;padding:2px 10px;font-size:12px}

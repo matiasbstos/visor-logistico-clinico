@@ -2057,7 +2057,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'view-solicitud-insumos': 'Solicitud de insumos',
             'view-bultos': 'Bultos y etiquetas',
             'view-etiquetas': 'Impresión de etiquetas',
-            'view-salud-inventario': 'Salud del inventario',
+            'view-salud-inventario': 'Repetidos y salud del inventario',
             'view-solicitudes-insumos': 'Solicitudes recibidas',
             'view-bitacora-oc': 'Bitácora de órdenes',
             'view-duplicados': 'Revisar productos parecidos',

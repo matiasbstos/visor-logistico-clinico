@@ -1465,3 +1465,9 @@ Pedido del usuario: un apartado para ver las órdenes de compra y el estado de s
 - **Registro** en `Contadores/bulto-<folio>`: `impresiones`, `primeraImpresion`, `ultimaImpresion`, `editadoTrasImprimir`, `nombreOrig`/`loteOrig` (para comparar con la recepción) e historial IMPRESO/REIMPRESO/EDITADO. Se relee la caja antes de escribir (otro equipo pudo abrirla o imprimirla). Toda impresión (nueva, reimpresión, al recibir, desde el escáner) se registra; si no se pudo anotar, avisa.
 - Las etiquetas anteriores salen «Sin registro (anterior)». «Falta etiquetar» compara producto + lote y solo cuenta recepciones desde el 14-11-2026 (desde v21.205 existen las etiquetas por caja).
 - Revisión de Amy: 8 hallazgos corregidos (versión, OC trabada por recepciones antiguas, faltante fantasma al renombrar, mezcla de lotes, escrituras con datos viejos, reimpresión desde el escáner sin registro, falla silenciosa, escape de n/de).
+
+## 4.276 · «Impresión de etiquetas» en el menú lateral (v21.224)
+Pedido del usuario: un apartado propio en la barra lateral para imprimir después las etiquetas que no se imprimieron al recibir.
+- Nuevo ítem **Impresión de etiquetas** (Inventario, bajo Bultos y etiquetas; oculto para enfermería) que abre como página la vista «Etiquetas por orden de compra» (v21.223).
+- **Aviso en el menú**: número de órdenes con etiquetas pendientes (faltan, sin imprimir o editadas). Se calcula al entrar (una vez cada 30 min por pestaña) y al usar la página; se reinicia al crear o imprimir etiquetas.
+- «Falta etiquetar»: lo recibido sin lote (S/L) se cubre con cualquier etiqueta del mismo producto; lo recibido con lote, con etiquetas de ese lote. Órdenes recibidas antes de las etiquetas por caja: «Sin etiquetas (anterior)», en gris.

@@ -1,6 +1,6 @@
 # Identidad visual del Visor Logístico
 
-Guía viva para quien diseñe o revise pantallas (personas y el agente `ux-ui-flujo`). Base: la pantalla de **login**. Meta del usuario: un sitio **muy limpio, moderno y reconocible**, que no se vea «hecho con IA».
+Guía viva para quien diseñe o revise pantallas (personas y el agente `face`, antes `ux-ui-flujo`). Base: la pantalla de **login**. Meta del usuario: un sitio **muy limpio, moderno y reconocible**, que no se vea «hecho con IA».
 
 ## Principios
 1. **Limpio primero:** una sola idea por tarjeta, mucho aire, pocos colores a la vez. Si algo no ayuda a decidir, se quita.

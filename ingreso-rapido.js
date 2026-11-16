@@ -194,8 +194,9 @@
                 if (!ref) ref = f.doc(f.collection(db(), 'Insumos'), `inv_${slug(g.codigo || g.nombre)}__${slug(bodegaSel)}`);
                 await f.runTransaction(db(), async (tx) => {
                     const sn = await tx.get(ref), actual = sn.exists() ? sn.data() : null, m = mezclar(actual, g.ingresos), limite = num(actual && (actual.criticalLimit || actual.stock_minimo)) || 50;
-                    /* v21.228: lo adeudado (entregado antes sin stock en el sistema) se descuenta primero de lo que ingresa */
-                    const cq = window.SAR_CuadreIngreso ? window.SAR_CuadreIngreso.aplicar(f, db(), tx, { ref, antes: actual, quantity: m.quantity, batches: m.batches, documento: recId, bodega: bodegaSel, nombre: g.nombre, usuario: usuario() }) : null;
+                    /* v21.228: el ingreso rápido carga lo CONTADO físicamente: lo adeudado no se descuenta solo (ya salió de bodega);
+                       queda en «Salud del inventario» para descontar o regularizar. */
+                    const cq = null;
                     if (cq) { m.quantity = cq.quantity; m.batches = cq.batches; m.sobregiro = cq.sobregiro; m.sobregiroDetalle = cq.sobregiroDetalle; }
                     const prox = m.batches[0];
                     const base = { origenOC: true, origenIngreso: (actual && actual.origenIngreso) || 'INVENTARIO_RAPIDO', ...(ocRef ? { ultimaOC: ocRef } : {}), ...(g.codigo ? { codigoMP: g.codigo } : {}), quantity: m.quantity, batches: m.batches, ...(m.sobregiro != null ? { sobregiro: m.sobregiro, sobregiroDetalle: m.sobregiroDetalle } : {}), isCritical: m.quantity <= limite, batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', updatedAt: f.serverTimestamp() };

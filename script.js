@@ -146,7 +146,8 @@ window.SAR_buscarInsumoCentral = async function (nombre) {
     const snap = await F.getDocs(F.query(F.collection(d, 'Insumos'), F.where('name', '==', nombre), F.limit(25)));
     if (snap.empty) return null;
     /* v21.228: con repetidos del mismo nombre, el de Central con MÁS stock (antes el primero, que podía ser un provisional en 0) */
-    const docs = snap.docs.slice().sort((a, b) => (Number(b.data().quantity) || 0) - (Number(a.data().quantity) || 0));
+    const docs = snap.docs.filter(x => x.data().status !== 'CUARENTENA').sort((a, b) => (Number(b.data().quantity) || 0) - (Number(a.data().quantity) || 0));
+    if (!docs.length) return null;
     const central = docs.find(x => /central/i.test(String(x.data().location || ''))) || docs.find(x => !x.data().location) || docs[0];
     return { id: central.id, ref: F.doc(d, 'Insumos', central.id) };
 };

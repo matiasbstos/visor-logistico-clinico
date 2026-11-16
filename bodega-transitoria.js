@@ -290,7 +290,7 @@
   async function pendientesDe(nombreBodega, uid) {
     const out = {}; let l = [];
     try { const q = uid ? fs().query(fs().collection(db(), 'Solicitudes_Insumos'), fs().where('uid', '==', uid)) : fs().query(fs().collection(db(), 'Solicitudes_Insumos'), fs().where('origen', '==', 'transitoria'));
-      const sn = await fs().getDocs(q); sn.forEach(d => { const x = d.data(); if (x.origen === 'transitoria' && x.bodega === nombreBodega && (x.estado === 'LISTA' || x.estado === 'ENTREGADA')) l.push(x); }); } catch (e) { return out; }
+      const sn = await fs().getDocs(q); sn.forEach(d => { const x = d.data(); if (x.origen === 'transitoria' && String(x.bodega || '').trim() === String(nombreBodega || '').trim() && (x.estado === 'LISTA' || x.estado === 'ENTREGADA')) l.push(x); }); } catch (e) { return out; }
     const u = l.sort((a, b) => String(b.creadoEn).localeCompare(String(a.creadoEn)))[0]; if (!u) return out;
     (u.lineas || []).forEach(x => { if (!x.k || x.soloConteo) return; const e = x.estado || 'pendiente'; if (e === 'ok' && !(num(x.entregar) < num(x.cantidad))) return;
       out[x.k] = { pidio: num(x.cantidad), dio: num(x.entregar), est: e, dias: num(x.reiterado) || 1, fecha: String(u.creadoEn || '').slice(0, 10), sol: u.correlativo || u.numero }; });

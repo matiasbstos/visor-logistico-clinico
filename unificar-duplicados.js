@@ -71,17 +71,21 @@
     const f = fs(), sn = await f.getDocs(f.query(f.collection(db(), 'Actas_Entrega'), f.limit(5000))), set = new Set(quitar);   // v21.228: antes 600
     for (const d of sn.docs) {
       const items = d.data().items; if (!Array.isArray(items) || !items.some(i => set.has(i.id))) continue;
+      if (d.data().estado && d.data().estado !== 'EMITIDA') continue;   /* v21.228: las reglas solo dejan editar actas EMITIDA; las anuladas o de prueba quedan como registro histórico */
       await f.updateDoc(d.ref, { items: items.map(i => set.has(i.id) ? { ...i, id } : i) });
     }
   }
   async function unir(grupo, usuario) {
     const f = fs(), r = fusionar(grupo);
+    /* v21.228: no unir si algún registro tiene lotes que no suman su total (cambiaría el stock sin explicación) */
+    grupo.forEach(x => { const b = x.data.batches; if (Array.isArray(b) && b.length && b.reduce((t, l) => t + num(l.quantity), 0) !== num(x.data.quantity)) throw new Error(`«${x.data.name}» tiene lotes que no suman su total: corrígelo con un ajuste antes de unir.`); });
     const sols = await revisarSolicitudes(r.quitar);   // v21.228: bloquea si hay unidades en camino; luego reapunta solicitudes y cajas
     await repuntarActas(r.quitar, r.id); await repuntarSolicitudes(sols, r.quitar, r.id); await repuntarBultos(r.quitar, r.id);
     await f.runTransaction(db(), async (tx) => {
       const refs = [r.id].concat(r.quitar).map(i => f.doc(f.collection(db(), 'Insumos'), i)), snaps = [];
       for (const rf of refs) snaps.push(await tx.get(rf));
       const fresco = fusionar(snaps.map((s, k) => ({ id: refs[k].id, data: s.exists() ? s.data() : {} })).filter(x => x.data && x.data.name));
+      if (fresco.id !== r.id) throw new Error('El stock de estos registros cambió mientras se unían: vuelve a revisar y une de nuevo.');   /* v21.228: actas y solicitudes ya apuntan a r.id */
       tx.update(f.doc(f.collection(db(), 'Insumos'), fresco.id), { ...fresco.patch, updatedAt: f.serverTimestamp() });
       fresco.quitar.forEach(i => tx.delete(f.doc(f.collection(db(), 'Insumos'), i)));
       tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { type: 'UNIFICACION_STOCK', insumoName: grupo[0].data.name, insumoId: fresco.id, quantity: 0, batch: 'S/L', document: 'UNIFICACION', user: usuario, date: f.serverTimestamp(), observations: `Se unieron ${fresco.quitar.length + 1} registros repetidos en uno (stock ${fresco.patch.quantity}, sobregiro ${fresco.patch.sobregiro}).`, observacion: `Se unieron ${fresco.quitar.length + 1} registros repetidos en uno (stock ${fresco.patch.quantity}, adeudado ${fresco.patch.sobregiro}). Registros quitados: ${fresco.quitar.join(', ')}.`, origin: (grupo[0].data.location || ''), quitados: fresco.quitar });

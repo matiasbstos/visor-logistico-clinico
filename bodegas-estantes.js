@@ -184,7 +184,7 @@
                 let movidos = 0;
                 if (aMover.size) {      // el stock que estaba en la bodega sigue con ella
                     prog.paso(`Pasando ${aMover.size} producto(s) a «${nuevo}»…`);
-                    for (const d of aMover.values()) { const x = d.data(); await fs().updateDoc(d.ref, { location: nuevo, ...(x.bodegaNombre !== undefined ? { bodegaNombre: nuevo } : {}) }); movidos++; }
+                    for (const d of aMover.values()) { const x = d.data(); await fs().updateDoc(d.ref, { ...(variantes.includes(String(x.location || '')) ? { location: nuevo } : {}), ...(variantes.includes(String(x.bodegaNombre || '')) ? { bodegaNombre: nuevo } : {}) });   /* v21.228: cada campo solo si tenía el nombre anterior */ movidos++; }
                     try { await fs().setDoc(fs().doc(fs().collection(db(), 'Historial_Movimientos')), { type: 'RENOMBRE_BODEGA', insumoName: `Bodega: ${variantes.join(' / ')} → ${nuevo}`, quantity: 0, origin: variantes.join(' / '), dest: nuevo, user: (window.firebaseAuth && window.firebaseAuth.currentUser && window.firebaseAuth.currentUser.email) || '', date: fs().serverTimestamp(), document: 'Cambio de nombre de bodega', observacion: `${movidos} producto(s) pasaron de «${variantes.join('» / «')}» a «${nuevo}» (sin cambio de stock).` }); } catch (e) { /* el cambio ya quedó; solo falta la bitácora */ }
                 }
                 const leido = (await fs().getDoc(ref)).data() || {};

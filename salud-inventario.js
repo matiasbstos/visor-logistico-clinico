@@ -38,7 +38,7 @@
       productos: (insumos || []).filter(x => set.has(String(x.data.location || '')) || set.has(String(x.data.bodegaNombre || ''))).length,
       bien: (insumos || []).filter(x => String(x.data.location || '') === k).length }));
     // 2) con stock y sin bodega
-    const sinBodega = (insumos || []).filter(x => !limpia(ubic(x.data)) && conStock(x.data)).map(x => ({ id: x.id, nombre: x.data.name, cantidad: num(x.data.quantity), sobregiro: num(x.data.sobregiro) }));
+    const sinBodega = (insumos || []).filter(x => !limpia(x.data.location) && conStock(x.data)).map(x => ({ id: x.id, nombre: x.data.name, cantidad: num(x.data.quantity), sobregiro: num(x.data.sobregiro), sugerida: limpia(x.data.bodegaNombre) }));   /* sin location (aunque tenga bodegaNombre): actas, traspasos y unificar buscan por location */
     // 3) ubicación que no es ninguna bodega registrada (ni limpiando espacios)
     const fuera = (insumos || []).filter(x => { const u = limpia(ubic(x.data)); return u && u !== TRANSITO && !limpias.has(u) && conStock(x.data); }).map(x => ({ id: x.id, nombre: x.data.name, bodega: ubic(x.data), cantidad: num(x.data.quantity) }));
     // 4) repetidos por bodega (nombre limpio o ID de Mercado Público)
@@ -74,7 +74,7 @@
     const f = fs(), ref = f.doc(f.collection(db(), 'Insumos'), id);
     return f.runTransaction(db(), async (tx) => {
       const sn = await tx.get(ref); if (!sn.exists()) throw new Error('El producto ya no existe.'); const d = sn.data();
-      if (limpia(d.location || d.bodegaNombre)) throw new Error(`Ya tiene bodega: ${d.location || d.bodegaNombre}.`);
+      if (limpia(d.location)) throw new Error(`Ya tiene bodega: ${d.location}.`);
       tx.update(ref, { location: bodega, bodegaNombre: bodega, updatedAt: f.serverTimestamp() });
       hist(tx, { type: 'ASIGNACION_BODEGA', insumoName: d.name, item: d.name, quantity: 0, origin: '(sin bodega)', dest: bodega, idInsumoDestino: id, document: 'Salud del inventario', observacion: `Producto con ${num(d.quantity)} u. sin bodega asignado a ${bodega} (sin cambio de stock).` });
     });
@@ -117,7 +117,7 @@
       ${tarjeta('Nombres de bodega con espacios de más', 'Una misma bodega escrita con y sin espacio al final cuenta como dos: sus productos no se ven juntos, la reposición y los traspasos fallan.', a.nombres.length,
         a.nombres.map((c, i) => `<div class="shi-fila"><div><b>${esc(c.nombre)}</b><small>Escrita como ${c.formas.map(v => '«' + esc(v.replace(/ /g, '·')) + '»').join(', ')} (· = espacio) en ${c.bodega && c.bodega.nombre !== c.nombre ? 'la ficha de la bodega y ' : ''}${c.productos} producto(s); otros ${c.bien} producto(s) ya están como «${esc(c.nombre)}»</small></div><button type="button" class="btn btn-primary btn-sm" data-nom="${i}">Unificar nombre</button></div>`).join(''), 'nom')}
       ${tarjeta('Productos con stock sin bodega', 'No aparecen en actas, traspasos ni en la lista para pedir. Elige dónde están.', a.sinBodega.length,
-        a.sinBodega.map((c, i) => `<div class="shi-fila"><div><b>${esc(c.nombre)}</b><small>${c.cantidad} u.${c.sobregiro ? ' · adeudado ' + c.sobregiro : ''}</small></div><div class="shi-acc"><select class="si-in shi-sel" data-sb="${i}" aria-label="Bodega para ${esc(c.nombre)}">${opts('Bodega CAM')}</select><button type="button" class="btn btn-primary btn-sm" data-asig="${i}">Asignar</button></div></div>`).join(''), 'sb')}
+        a.sinBodega.map((c, i) => `<div class="shi-fila"><div><b>${esc(c.nombre)}</b><small>${c.cantidad} u.${c.sobregiro ? ' · adeudado ' + c.sobregiro : ''}</small></div><div class="shi-acc"><select class="si-in shi-sel" data-sb="${i}" aria-label="Bodega para ${esc(c.nombre)}">${opts(c.sugerida || 'Bodega CAM')}</select><button type="button" class="btn btn-primary btn-sm" data-asig="${i}">Asignar</button></div></div>`).join(''), 'sb')}
       ${tarjeta('Productos repetidos en una bodega', 'El mismo producto en varios registros (mismo nombre o mismo ID de Mercado Público). Al unir se suman stock, lotes y lo adeudado; actas, solicitudes y cajas pasan al registro que queda.', a.repetidos.length,
         a.repetidos.map((g, i) => `<div class="shi-fila"><div><b>${esc(g.grupo[0].data.name)}</b><small>${esc(g.bodega)} · ${g.grupo.length} registros · stock ${g.grupo.map(x => num(x.data.quantity)).join(' + ')} = ${g.stock}${g.adeudado ? ' · adeudado ' + g.adeudado : ''}${[...new Set(g.grupo.map(x => String(x.data.codigoMP || '')).filter(Boolean))].length > 1 ? ' · <b>con IDs distintos: ' + esc([...new Set(g.grupo.map(x => x.data.codigoMP).filter(Boolean))].join(', ')) + '</b>' : ''}${g.grupo.some(x => x.data.provisional) ? ' · ' + g.grupo.filter(x => x.data.provisional).length + ' provisional(es) creados por actas sin stock' : ''}</small></div><button type="button" class="btn btn-primary btn-sm" data-unir="${i}">Unir en uno</button></div>`).join(''), 'rep')}
       ${tarjeta('Unidades adeudadas en productos que ya tienen stock', 'Se entregaron con acta cuando no había stock en el sistema. «Descontar» las resta del stock; «Regularizar» las da por saldadas sin tocar el stock (cuando el conteo físico ya coincide con el sistema).', a.deudas.length,

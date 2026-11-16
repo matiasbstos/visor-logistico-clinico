@@ -665,7 +665,7 @@
                 <button type="button" class="btn btn-outline btn-sm" id="soc-fotos"><i class="ph-bold ph-images"></i> Buscar fotos de esta orden</button>
                 ${hayRecibido(oc) ? `<button type="button" class="btn btn-outline btn-sm" id="soc-lotes"><i class="ph-bold ph-barcode"></i> Lotes y vencimientos</button>
                 <button type="button" class="btn btn-outline btn-sm" id="soc-pend"><i class="ph-bold ph-file-csv"></i> Descargar pendientes</button>` : ''}</div>
-                ${oc.recepcionConforme ? `<p class="soc-card__sub">Recepción conforme registrada el ${fmtFecha(oc.recepcionConforme.fecha)} (${esc(oc.recepcionConforme.tipoDoc === 'FACTURA' ? 'factura' : 'guía')} ${esc(oc.recepcionConforme.numeroDoc)}). Correo: ${({ enviado: 'enviado', borrador: 'borrador abierto', error: 'NO se envió', sin_adjuntos: 'enviado SIN adjuntos', sin_destinatarios: 'sin destinatarios' })[(oc.recepcionConforme.correo || {}).estado] || '—'}.</p>` : ''}
+                ${oc.recepcionConforme ? `<p class="soc-card__sub">Recepción conforme registrada el ${fmtFecha(oc.recepcionConforme.fecha)} (${(oc.recepcionConforme.documentos || []).length > 1 ? esc(oc.recepcionConforme.documentos.map(x => (x.tipo === 'FACTURA' ? 'factura ' : 'guía ') + x.numero).join(', ')) : esc((oc.recepcionConforme.tipoDoc === 'FACTURA' ? 'factura' : 'guía') + ' ' + oc.recepcionConforme.numeroDoc)}). Correo: ${({ enviado: 'enviado', borrador: 'borrador abierto', error: 'NO se envió', sin_adjuntos: 'enviado SIN adjuntos', sin_destinatarios: 'sin destinatarios' })[(oc.recepcionConforme.correo || {}).estado] || '—'}.</p>` : ''}
                 <div class="soc-tabla"><table><thead><tr><th>Producto</th><th>Neto</th>${colsVis.map(c => `<th>${esc(c.centro)}<br><small>memo ${esc(c.memo)} · CDP ${esc(c.cdp)}</small></th>`).join('')}</tr></thead><tbody>
                 ${(oc.lineas || []).filter(l => colsVis.some(c => num(l.dist && l.dist[c.key]) || num(l.recibido && l.recibido[c.key]))).map(l => `<tr><td>${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(l.descripcion, { codigo: l.codigoMP, candidata: true }) : ''}${esc(l.descripcion)}${l.codigoMP ? `<small class="soc-id">ID ${esc(l.codigoMP)}</small>` : ''}</td><td>${peso(l.valorNeto)}</td>${colsVis.map(c => {
                     const p = num(l.dist && l.dist[c.key]), r = num(l.recibido && l.recibido[c.key]); if (!p && !r) return '<td class="soc-vacio">—</td>';
@@ -1274,6 +1274,8 @@
         det.forEach(d => { const l = lineas[d.i]; l.recibido[key] = num(l.recibido[key]) + d.cantidad; if (ingresaStock) l.ingresado[key] = num(l.ingresado[key]) + d.cantidad; if (d.insumoName) l.insumoName = d.insumoName; });
         return { lineas, incidencias: [...(data.incidencias || []), ...incidencias.map((n, k) => ({ id: `inc-${Date.now()}-${k}`, ...n, estado: 'ABIERTA', fecha: hoyISO(), ...(extra || {}) }))] };
     }
+    /** Fila de una guía de despacho en «Recibir productos» (v21.226: se pueden agregar varias). */
+    function filaGuiaR() { return `<div class="rc-doc"><div class="soc-fila"><label>N° guía de despacho<input type="text" class="r-gn" autocomplete="off"></label><label>Foto o PDF de la guía<input type="file" class="r-gf" accept="application/pdf,image/*"></label></div><div class="rc-doc-f"><button type="button" class="btn btn-outline btn-sm rc-dq" aria-label="Quitar esta guía"><i class="ph-bold ph-trash"></i> Quitar</button></div></div>`; }
     async function recepcionConStock(oc, { provDoc, extras, baseN, onPaso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar, ingresaStock, central, texto, titulo, textoCorreo }) {
         const f = fs(); const paso = (t) => { if (onPaso) onPaso(t); };
         const aplicadoLocal = aplicarRecepcion(oc, key, det, incidencias, null, ingresaStock);
@@ -1454,8 +1456,10 @@
         const ov = modal('Recibir mercadería', `
             <div class="r-mcs"${cols.length === 1 ? ' hidden' : ''}><div class="r-mcs-h"><span class="r-mcs-t">¿Qué memos se recibieron? <small>Marca los que llegan juntos: una sola recepción, una sola guía.</small></span>${cols.length > 1 ? `<label class="r-mc-todos"><input type="checkbox" id="r-mc-todos"> Todos</label>` : ''}</div><div class="r-mcs-g">${cols.map((c, n) => `<label class="r-mc-f"><input type="checkbox" class="r-mc" data-key="${esc(c.key)}"${n === 0 ? ' checked' : ''}><span class="r-mc-tx"><b>${esc(c.centro)} · memo ${esc(c.memo)}</b>${c.cdp ? `<small>CDP ${esc(c.cdp)}</small>` : ''}</span></label>`).join('')}</div></div>
             <div hidden><select id="r-col">${cols.map(c => `<option value="${esc(c.key)}">${esc(c.centro)} · memo ${esc(c.memo)}${c.cdp ? ' · CDP ' + esc(c.cdp) : ''}</option>`).join('')}</select></div>
-            <div class="soc-fila"><label>N° guía de despacho<input type="text" id="r-guia" autocomplete="off"></label><label>Fecha<input type="date" id="r-fecha" value="${hoyISO()}"></label></div>
-            <label>Guía de despacho (foto o PDF, opcional: queda guardada en la orden)<input type="file" id="r-file" accept="application/pdf,image/*"></label>
+            <div class="rc-docs-cab"><b>Guías de despacho</b><small>Si los productos llegaron en varias guías, agrega una por cada guía con su foto o PDF (opcional: queda guardada en la orden y se leen lote y vencimiento).</small></div>
+            <div id="r-guias">${filaGuiaR()}</div>
+            <button type="button" class="btn btn-outline btn-sm rc-doc-add" id="r-guia-add"><i class="ph-bold ph-plus"></i> Agregar otra guía</button>
+            <div class="soc-fila"><label>Fecha<input type="date" id="r-fecha" value="${hoyISO()}"></label></div>
             <div id="r-doc" class="r-doc" hidden></div>
             <div class="soc-barra-rec"><button type="button" class="btn btn-outline btn-sm" id="r-total"><i class="ph-bold ph-checks"></i> Marcar todo recibido</button><button type="button" class="btn btn-outline btn-sm" id="r-nada">Limpiar</button><span id="r-resumen" class="soc-resumen-rec"></span></div>
             <div id="r-lineas"></div>
@@ -1496,15 +1500,18 @@
                 }
                 const vencida = allDet.find(d => d.vence && d.vence < hoyISO());
                 if (vencida) { toast('Vencimiento pasado', `"${String(oc.lineas[vencida.i].descripcion).slice(0, 40)}" tiene un vencimiento anterior a hoy. Revisa la fecha.`, 'warning'); return false; }
-                const guia = q('#r-guia').value.trim(), fecha = q('#r-fecha').value || hoyISO(), obs = q('#r-obs').value.trim();
+                const filasG = [...o.querySelectorAll('#r-guias .rc-doc')].map(r => ({ n: r.querySelector('.r-gn').value.trim(), file: (r.querySelector('.r-gf').files || [])[0] || null }));
+                const guiasN = [...new Set(filasG.map(x => x.n).filter(Boolean))];   /* v21.226: varias guías en una misma recepción */
+                const guia = guiasN.join(' / '), fecha = q('#r-fecha').value || hoyISO(), obs = q('#r-obs').value.trim();
                 if (ingresaStock && allDet.some(d => !d.insumoName)) { toast('Falta el producto', 'Indica el producto del inventario de cada línea que recibes.', 'warning'); return false; }
                 const avisos = [], conoce = new Set(nombresInv.map(norm));
                 if (ingresaStock) {
                     const nuevos = allDet.filter(d => !conoce.has(norm(d.insumoName))).map(d => d.insumoName);
                     if (nuevos.length) avisos.push(`${nuevos.length} producto(s) no existen en el inventario y se crearían como nuevos: ${nuevos.slice(0, 3).join(', ')}${nuevos.length > 3 ? '…' : ''}`);
                 }
-                const guiaN = q('#r-guia').value.trim();
-                if (guiaN && eventos.some(e => e.tipo === 'RECEPCION' && String(e.guia || '') === guiaN)) avisos.push(`la guía N° ${guiaN} ya se registró en esta orden`);
+                const yaGuias = new Set(eventos.filter(e => e.tipo === 'RECEPCION').flatMap(e => String(e.guia || '').split(/\s*[\/,;]\s*/).map(x => x.trim()).filter(Boolean)));
+                const repetidas = guiasN.filter(n => yaGuias.has(n)); if (repetidas.length) avisos.push(`${repetidas.length === 1 ? 'la guía N° ' + repetidas[0] + ' ya se registró' : 'las guías N° ' + repetidas.join(', ') + ' ya se registraron'} en esta orden`);
+                if (filasG.filter(x => x.n).length !== guiasN.length) avisos.push('hay un N° de guía repetido en esta recepción');
                 const firma = avisos.join('|');
                 if (avisos.length && o.dataset.aviso !== firma) { o.dataset.aviso = firma; toast('Revisa antes de guardar', avisos.join('. ') + '. Si es correcto, pulsa Guardar recepción otra vez.', 'warning'); return false; }
                 const nRec0 = eventos.filter(e => e.tipo === 'RECEPCION').length, hora = new Date().toTimeString().slice(0, 5), base = `REC-${String(oc.numeroOC).replace(/[^A-Za-z0-9-]+/g, '')}`;
@@ -1517,7 +1524,7 @@
                 const prog = progresoRecepcion(o, ['Validando la recepción…']);
                 const recNuevas = [];
                 try {
-                const fGuia = (q('#r-file').files || [])[0];
+                const fGuias = filasG.filter(x => x.file);
                 for (let n = 0; n < activos.length; n++) {
                     const k = activos[n], g = porKey.get(k), col = cols.find(c => c.key === k), ultimo = n === activos.length - 1;
                     if (activos.length > 1) prog.paso(`Memo ${col.memo} (${n + 1} de ${activos.length})…`);
@@ -1527,7 +1534,7 @@
                     recNuevas.push({ recId: ids[n], fecha, hora, guia: guia || '', columna: k, unidades: g.det.reduce((t, d) => t + d.cantidad, 0), usuario: usuario(), ingresoAStock: !!ingresaStock, bodega: ingresaStock ? central : '', detalle: g.det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad })) });
                     oc.lineas = aplicarRecepcion(oc, k, g.det, [], null, ingresaStock).lineas;   // la copia local queda al día para el siguiente memo
                 }
-                if (fGuia) { prog.paso('Guardando la guía en la orden…'); await guardarFile(oc.id, fGuia, 'Guía de despacho ' + ids.join(' + ')); }
+                for (const [n, x] of fGuias.entries()) { prog.paso(fGuias.length > 1 ? `Guardando la guía ${n + 1} de ${fGuias.length} en la orden…` : 'Guardando la guía en la orden…'); await guardarFile(oc.id, x.file, 'Guía de despacho' + (x.n ? ' N° ' + x.n : '') + ' · ' + ids.join(' + ')); }
                 } catch (err) { prog.error(err); throw err; }
                 prog.listo(`Listo: ${ids.join(' + ')} · ${unidades} unidades${ingresaStock ? ` en ${central}` : ''}. Quedó registrada en Auditoría y en los informes contable y disponible.`);
                 await new Promise(r => setTimeout(r, 1400));
@@ -1577,7 +1584,12 @@
             if (e.target.closest('#r-total')) { ov.querySelectorAll('tr[data-i]').forEach(tr => { if (num(tr.dataset.pe)) tr.querySelector('.r-c').value = tr.dataset.pe; }); resumen(); }
             if (e.target.closest('#r-nada')) { ov.querySelectorAll('.r-c').forEach(i => { i.value = ''; }); resumen(); }
         });
-        ov.querySelector('#r-file').addEventListener('change', async (e) => {
+        const cajaG = ov.querySelector('#r-guias'), quitarG = () => { const n = cajaG.querySelectorAll('.rc-doc').length; cajaG.querySelectorAll('.rc-dq').forEach(b => { b.hidden = n < 2; }); };
+        ov.querySelector('#r-guia-add').addEventListener('click', () => { if (cajaG.querySelectorAll('.rc-doc').length >= 12) { toast('Máximo 12', 'Una recepción admite hasta 12 guías.', 'warning'); return; } cajaG.insertAdjacentHTML('beforeend', filaGuiaR()); quitarG(); const u = cajaG.lastElementChild.querySelector('.r-gn'); if (u) u.focus(); });
+        cajaG.addEventListener('click', (e) => { const b = e.target.closest('.rc-dq'); if (b) { b.closest('.rc-doc').remove(); quitarG(); } }); quitarG();
+        cajaG.addEventListener('change', async (e) => {
+            if (!e.target.classList || !e.target.classList.contains('r-gf')) return;
+            const filaG = e.target.closest('.rc-doc');
             const file = (e.target.files || [])[0], box = ov.querySelector('#r-doc'); docLeido = null; if (!file) { box.hidden = true; return; }
             const G = window.SAR_GuiaLector; if (!G) return;
             box.hidden = false; box.className = 'r-doc'; box.textContent = 'Leyendo el documento (lote, vencimiento y empresa)…';
@@ -1586,7 +1598,7 @@
                 const m = G.emparejar(oc.lineas, r.lineas), key = ov.querySelector('#r-col').value;
                 const lv = ov.querySelector('#r-lv'); if (!lv.checked) { lv.checked = true; if (!ov.querySelector('#r-stock').checked) ov.querySelector('#r-stock').checked = true; pintar(); resumen(); }
                 let n = 0; m.pares.forEach(p => { const tr = ov.querySelector(`tr[data-i="${p.i}"]`); if (!tr) return; const L = tr.querySelector('.r-l'), V = tr.querySelector('.r-v'), C = tr.querySelector('.r-c'); if (L && p.doc.lote) L.value = p.doc.lote; if (V && p.doc.vence) V.value = p.doc.vence; if (C && !C.value && p.doc.cantidad > 0) C.value = Math.min(p.doc.cantidad, num(tr.dataset.pe)); n++; });
-                const g = ov.querySelector('#r-guia'); if (g && !g.value && r.numero) g.value = r.numero;
+                const g = filaG && filaG.querySelector('.r-gn'); if (g && !g.value && r.numero) g.value = r.numero;
                 const f = ov.querySelector('#r-fecha'); if (f && r.fecha && r.fecha <= hoyISO() && f.value === hoyISO()) f.value = r.fecha;
                 resumen();
                 const aparte = m.extras.map(x => `${x.descripcion}: lote ${x.lote || '—'}${x.vence ? ' vence ' + x.vence : ''} (${x.cantidad} u.)`);

@@ -1476,3 +1476,8 @@ Pedido del usuario: un apartado propio en la barra lateral para imprimir despué
 Pedido del usuario: la sección «Impresión de etiquetas» guarda todas las etiquetas y se busca por orden de compra o por el nombre del producto o medicamento.
 - Dos vistas: **Por orden de compra** y **Por producto**. La búsqueda acepta varias palabras sin tildes ni mayúsculas; por orden también encuentra la OC por los productos que trae (aunque aún no tenga etiquetas) y por lote o folio.
 - Por producto: cada grupo de etiquetas (producto + lote) con su OC, cajas, unidades y estado, más lo recibido que aún no tiene etiqueta («Sin etiqueta»). Al tocarlo abre la orden y resalta ese producto.
+
+## 4.278 · Varias guías o facturas en una recepción (v21.226)
+Pedido del usuario: una misma orden puede recibirse en más de una guía; hay que poder agregar varias guías y subir varios archivos.
+- **Recibir productos**: bloque «Guías de despacho» con una fila por guía (N° + foto o PDF) y «Agregar otra guía» (hasta 12). Cada archivo se guarda en la orden con su N°; al subirlo se lee lote/vencimiento y completa el N° de esa fila. La recepción guarda `guia` como «1001 / 1002» (compatible con lo anterior) y avisa si alguna guía ya se registró o se repite.
+- **Recepción conforme**: «Guías o facturas del proveedor» con una fila por documento (tipo, N°, PDF), propuestas a partir de las guías registradas en las recepciones de la orden. El correo adjunta el acta y todos los documentos (máx. 8 MB c/u y 18 MB en total); cada uno se guarda en la orden. Se registra `documentos[{tipo, numero, archivo}]`; `tipoDoc` = GUIA/FACTURA o MIXTO y `numeroDoc` = números separados por coma. El documento de cada recepción (REC) usa su propia guía.

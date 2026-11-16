@@ -53,9 +53,15 @@
     }
     function validar(oc, d, centro) {
         const err = [];
-        if (!d.numeroDoc || !String(d.numeroDoc).trim()) err.push('Falta el número de la guía o factura.');
-        if (!d.archivo) err.push('Adjunta el PDF de la guía o factura.');
-        else if (d.archivo.size > MAX_MB * 1024 * 1024) err.push(`El PDF pesa más de ${MAX_MB} MB.`);
+        /* v21.226: una orden puede llegar en varias guías o facturas (d.docs); sin d.docs, el formato de un solo documento */
+        const docs = Array.isArray(d.docs) && d.docs.length ? d.docs : [{ tipo: d.tipoDoc, numero: d.numeroDoc, archivo: d.archivo }];
+        docs.forEach((x, i) => { const cual = docs.length > 1 ? ` (documento ${i + 1})` : '';
+            if (!x.numero || !String(x.numero).trim()) err.push('Falta el número de la guía o factura' + cual + '.');
+            if (!x.archivo) err.push('Adjunta el PDF de la guía o factura' + cual + '.');
+            else if (x.archivo.size > MAX_MB * 1024 * 1024) err.push(`El PDF${cual} pesa más de ${MAX_MB} MB.`); });
+        const nums = docs.map(x => String(x.tipo || '') + '|' + String(x.numero || '').trim()).filter(x => !/\|$/.test(x));
+        if (new Set(nums).size < nums.length) err.push('Hay un número de guía o factura repetido.');
+        const total = docs.reduce((t, x) => t + ((x.archivo && x.archivo.size) || 0), 0); if (total > 18 * 1024 * 1024) err.push('Entre todos los PDF pasan de 18 MB: el correo no saldría. Comprime alguno.');
         if (!(d.to || []).length) err.push('Indica al menos un destinatario en "Para".');
         if ([...(d.to || []), ...(d.cc || [])].some(x => !emailValido(x))) err.push('Hay un correo con formato no válido.');
         const abiertas = (oc.incidencias || []).filter(i => i.estado === 'ABIERTA');
@@ -177,12 +183,17 @@
         const lin = lineasActa(oc, centro), pend = lin.reduce((t, l) => t + Math.max(0, l.pedido - l.recibido), 0);
         const ultRec = (Array.isArray(oc.recepciones) ? oc.recepciones : []).filter(r => r && r.fecha).slice(-1)[0];
         const fechaRec = (ultRec && /^\d{4}-\d{2}-\d{2}/.test(String(ultRec.fecha)) ? String(ultRec.fecha).slice(0, 10) : '') || hoyISO();
+        /* guías ya registradas en las recepciones de la orden (una fila por guía) */
+        const guiasIni = (() => { const l = []; (oc.recepciones || []).filter(r => r && !r.anulada).forEach(r => String(r.guia || '').split(/\s*[\/,;]\s*/).forEach(n => { n = n.trim(); if (n && !l.includes(n)) l.push(n); })); if (!l.length) l.push(oc.ultimaGuia || ''); return l.slice(0, 12); })();
+        const filaDoc = (tipo, num) => `<div class="rc-doc"><div class="soc-fila"><label>Documento<select class="rc-dt"><option value="GUIA"${tipo !== 'FACTURA' ? ' selected' : ''}>Guía de despacho</option><option value="FACTURA"${tipo === 'FACTURA' ? ' selected' : ''}>Factura</option></select></label><label>N° del documento<input type="text" class="rc-dn" value="${esc(num || '')}" autocomplete="off"></label></div><div class="rc-doc-f"><label>PDF<input type="file" class="rc-df" accept="application/pdf"></label><button type="button" class="btn btn-outline btn-sm rc-dq" aria-label="Quitar este documento"><i class="ph-bold ph-trash"></i> Quitar</button></div></div>`;
         const f = (id, et, v, tipo, extra) => `<label>${et}<input type="${tipo || 'text'}" id="${id}" value="${esc(v == null ? '' : v)}" ${extra || ''}></label>`;
         const ov = modal('Recepción conforme', `
             <p class="cierre-hint">Genera el acta de recepción conforme y envía el correo con el acta y la guía/factura. Revisa los destinatarios.</p>
-            <div class="soc-fila"><label>Documento del proveedor<select id="rc-tipo"><option value="GUIA">Guía de despacho</option><option value="FACTURA">Factura</option></select></label>${f('rc-num', 'N° del documento', oc.ultimaGuia || '')}${f('rc-fec', '¿Con qué fecha se emite el acta?', fechaRec, 'date')}</div>
+            <div class="rc-docs-cab"><b>Guías o facturas del proveedor</b><small>Si la orden llegó en varias guías, agrega una por cada una con su PDF.</small></div>
+            <div id="rc-docs">${guiasIni.map(n => filaDoc('GUIA', n)).join('')}</div>
+            <button type="button" class="btn btn-outline btn-sm rc-doc-add" id="rc-doc-add"><i class="ph-bold ph-plus"></i> Agregar otra guía o factura</button>
+            <div class="soc-fila">${f('rc-fec', '¿Con qué fecha se emite el acta?', fechaRec, 'date')}</div>
             <p class="cierre-hint" id="rc-fec-ayuda">${fechaRec !== hoyISO() ? `Se propone el <b>${fechaCorta(fechaRec)}</b>, día en que se registró la recepción de los productos (hoy es ${fechaCorta(hoyISO())}). ` : ''}Si los productos llegaron otro día, cambia la fecha: el acta llevará la fecha que indiques. <a href="#" id="rc-fec-hoy">Usar hoy</a></p>
-            <label>PDF de la guía o factura<input type="file" id="rc-file" accept="application/pdf"></label>
             <label>Tipo de recepción<select id="rc-parcial"><option value="0"${pend > 0 ? '' : ' selected'}>Total</option><option value="1"${pend > 0 ? ' selected' : ''}>Parcial${pend > 0 ? ` (faltan ${pend} unidades)` : ''}</option></select></label>
             <label>Encabezado del acta (editable)<textarea id="rc-enc" rows="2">${escA(encabezadoBase(pend > 0))}</textarea></label>
             <p class="cierre-hint">Detalle del acta: quita, corrige o cambia cantidades. Se ve igual en el PDF.</p>
@@ -196,11 +207,14 @@
             <label>Cc<input type="text" id="rc-cc" value="${esc(cc.join(', '))}"></label>
             <div id="rc-error" class="cierre-error"></div>`, async (o) => {
             const g = (id) => (o.querySelector('#' + id) || {}).value || '';
-            const d = { tipoDoc: g('rc-tipo'), numeroDoc: g('rc-num').trim(), fecha: g('rc-fec') || hoyISO(), archivo: (o.querySelector('#rc-file').files || [])[0] || null, parcial: (o.querySelector('#rc-parcial') || {}).value === '1',
+            const docs = [...o.querySelectorAll('#rc-docs .rc-doc')].map(r => ({ tipo: r.querySelector('.rc-dt').value, numero: r.querySelector('.rc-dn').value.trim(), archivo: (r.querySelector('.rc-df').files || [])[0] || null }));
+            const tipos = [...new Set(docs.map(x => x.tipo))];
+            const d = { docs, tipoDoc: tipos.length === 1 ? tipos[0] : 'MIXTO', numeroDoc: docs.map(x => x.numero).filter(Boolean).join(', '), fecha: g('rc-fec') || hoyISO(), archivo: (docs[0] || {}).archivo || null, parcial: (o.querySelector('#rc-parcial') || {}).value === '1',
                 contraparte: g('rc-ct').trim() || CONTRAPARTE_BASE, conFirma: true, firmaNombre: g('rc-fn').trim() || FIRMA_BASE.nombre, firmaCargo: g('rc-fc').trim() || FIRMA_BASE.cargo, observaciones: g('rc-obs').trim(), to: lista(g('rc-to')), cc: lista(g('rc-cc')), encabezado: g('rc-enc').trim(), lineas: leerDetalle(o, 'rc') };
             const err = validar(oc, d, centro);
             if (!d.fecha) err.push('Indica la fecha del acta.');
             if (!d.lineas.length) err.push('El detalle del acta no puede quedar vacío.');
+            if (!docs.length) err.push('Agrega al menos una guía o factura.');
             o.querySelector('#rc-error').innerHTML = err.map(e => `<div>${esc(e)}</div>`).join('');
             if (err.length) return false;
             /* v21.221: cuadro de carga mientras se arma el acta, se envía el correo y se guarda */
@@ -210,35 +224,40 @@
             try {
             const PDFLib = await cargarPDFLib(); const logoBytes = await cargarLogo(); const firmaBytes = await cargarFirma();
             const acta = await generarActaPDF(oc, d, centro, { PDFLib, logoBytes, firmaBytes });
-            const guia = new Uint8Array(await d.archivo.arrayBuffer());
-            const adj = [{ name: nombreActa(oc), mime: 'application/pdf', base64: aBase64(acta) }, { name: nombreAdjunto(d.tipoDoc, d.numeroDoc), mime: 'application/pdf', base64: aBase64(guia) }];
+            const usados = new Set(), docsB = [];
+            for (const x of d.docs) { let nom = nombreAdjunto(x.tipo, x.numero), k = 2; while (usados.has(nom)) nom = nombreAdjunto(x.tipo, x.numero + '-' + (k++)); usados.add(nom); docsB.push({ ...x, nombre: nom, bytes: new Uint8Array(await x.archivo.arrayBuffer()) }); }
+            const adj = [{ name: nombreActa(oc), mime: 'application/pdf', base64: aBase64(acta) }, ...docsB.map(x => ({ name: x.nombre, mime: 'application/pdf', base64: aBase64(x.bytes) }))];
+            const cualDocs = docsB.length > 1 ? `${docsB.length} documentos` : (d.tipoDoc === 'FACTURA' ? 'factura' : 'guía'), listaDocs = docsB.map(x => `${x.tipo === 'FACTURA' ? 'factura' : 'guía'} N° ${x.numero}`).join(', ');
             const enviar = enviarSel;
             if (enviar) paso(`Enviando el correo a ${d.to.length + d.cc.length} destinatario(s)…`);
             const correo = enviar ? await ctx.enviarCorreo(d.to, armarCorreo(oc, d, centro), { cc: d.cc, attachments: adj, respaldo: true }) : { estado: 'no_enviado', detalle: 'Se emitió sin enviar el correo.', destinatarios: [], cc: [] };
-            paso('Guardando el acta y la guía/factura en la orden…');
+            paso(docsB.length > 1 ? `Guardando el acta y los ${docsB.length} documentos en la orden…` : 'Guardando el acta y la guía/factura en la orden…');
             if (ctx.guardarArchivo) {
-                try { await ctx.guardarArchivo(oc.id, { nombre: adj[0].name, categoria: 'Recepción conforme', bytes: acta }); await ctx.guardarArchivo(oc.id, { nombre: adj[1].name, categoria: d.tipoDoc === 'FACTURA' ? 'Factura' : 'Guía de despacho', bytes: guia }); }
+                try { await ctx.guardarArchivo(oc.id, { nombre: adj[0].name, categoria: 'Recepción conforme', bytes: acta }); for (const x of docsB) await ctx.guardarArchivo(oc.id, { nombre: x.nombre, categoria: x.tipo === 'FACTURA' ? 'Factura' : 'Guía de despacho', bytes: x.bytes }); }
                 catch (e) { toast('Archivos no guardados', e.message || String(e), 'warning'); }
             }
             if (!enviar) { bajar(acta, adj[0].name); toast('Acta emitida', 'Quedó guardada en la orden. No se envió correo.', 'success'); }
-            if (correo.estado === 'borrador') { bajar(acta, adj[0].name); bajar(guia, adj[1].name); toast('Adjunta los archivos', 'El envío automático no está configurado: se descargaron el acta y la guía/factura; adjúntalos al borrador.', 'warning'); }
+            if (correo.estado === 'borrador') { bajar(acta, adj[0].name); docsB.forEach(x => bajar(x.bytes, x.nombre)); toast('Adjunta los archivos', `El envío automático no está configurado: se descargaron el acta y ${docsB.length > 1 ? 'los ' + docsB.length + ' documentos' : 'la guía/factura'}; adjúntalos al borrador.`, 'warning'); }
             const resumen = { estado: correo.estado, to: correo.destinatarios || d.to, cc: correo.cc || d.cc, detalle: correo.detalle || '', fecha: hoyISO() };
-            const textoEv = `Recepción conforme registrada (${d.tipoDoc === 'FACTURA' ? 'factura' : 'guía'} N° ${d.numeroDoc})${d.parcial ? ', parcial' : ''}. Correo: ${correo.estado}${correo.detalle ? ' — ' + correo.detalle : ''}.`;
+            const textoEv = `Recepción conforme registrada (${listaDocs})${d.parcial ? ', parcial' : ''}. Correo: ${correo.estado}${correo.detalle ? ' — ' + correo.detalle : ''}.`;
             paso('Registrando la recepción en la orden…');
             const ocRef = fs().doc(fs().collection(db(), 'Seguimiento_OC'), oc.id);
-            await fs().updateDoc(ocRef, { recepcionConforme: { fecha: d.fecha, por: ctx.usuario, recibe: d.firmaNombre, contraparte: d.contraparte, conFirma: true, tipoDoc: d.tipoDoc, numeroDoc: d.numeroDoc, parcial: d.parcial, observaciones: d.observaciones, encabezado: d.encabezado, lineas: d.lineas, correo: resumen } });
+            await fs().updateDoc(ocRef, { recepcionConforme: { fecha: d.fecha, por: ctx.usuario, recibe: d.firmaNombre, contraparte: d.contraparte, conFirma: true, tipoDoc: d.tipoDoc, numeroDoc: d.numeroDoc, documentos: docsB.map(x => ({ tipo: x.tipo, numero: x.numero, archivo: x.nombre })), parcial: d.parcial, observaciones: d.observaciones, encabezado: d.encabezado, lineas: d.lineas, correo: resumen } });
             // v21.207: los documentos de cada recepción (REC-…) se rehacen ya con el timbre «RECEPCIÓN CONFORME»
             try { const rcN = { fecha: d.fecha, recibe: d.firmaNombre, tipoDoc: d.tipoDoc, numeroDoc: d.numeroDoc, parcial: d.parcial }, R = window.SAR_RecepConf;
-                if (R && R.guardarEnOrden) for (const rec of (oc.recepciones || []).filter(r => !r.anulada)) await R.guardarEnOrden({ oc: { ...oc, recepcionConforme: rcN }, rec, guardarArchivo: ctx.guardarArchivo, eliminarCategoria: ctx.eliminarCategoria }); }
+                if (R && R.guardarEnOrden) for (const rec of (oc.recepciones || []).filter(r => !r.anulada)) await R.guardarEnOrden({ oc: { ...oc, recepcionConforme: { ...rcN, ...(rec.guia ? { tipoDoc: 'GUIA', numeroDoc: rec.guia } : rcN.tipoDoc === 'MIXTO' ? { tipoDoc: 'GUIA' } : {}) } }, rec, guardarArchivo: ctx.guardarArchivo, eliminarCategoria: ctx.eliminarCategoria }); }
             catch (e) { /* el acta principal ya quedó con timbre */ }
             paso('Dejando el registro en la bitácora…');
             await fs().setDoc(fs().doc(fs().collection(db(), 'Seguimiento_OC', oc.id, 'Eventos')), { tipo: 'CONFORME', texto: textoEv, autor: ctx.usuario, fecha: fs().serverTimestamp(), correo: { estado: correo.estado, destinatarios: [...(correo.destinatarios || []), ...(correo.cc || [])], detalle: correo.detalle || '' } });
-            if (correo.estado === 'enviado') toast('Correo enviado', `Acta y ${d.tipoDoc === 'FACTURA' ? 'factura' : 'guía'} enviadas a ${(correo.destinatarios || []).length + (correo.cc || []).length} destinatario(s).`, 'success');
+            if (correo.estado === 'enviado') toast('Correo enviado', `Acta y ${cualDocs} enviadas a ${(correo.destinatarios || []).length + (correo.cc || []).length} destinatario(s).`, 'success');
             else if (correo.estado === 'programado') toast('Correo programado', correo.detalle, 'info');
             else if (correo.estado !== 'borrador' && enviar) toast('Revisa el correo', correo.detalle || 'El correo no se pudo enviar.', 'error');
             if (prog) prog.listo('Recepción conforme registrada', { aviso: false });
             } catch (e) { if (prog) prog.error(); o.style.visibility = ''; throw e; }
         });
+        try { const box = ov.querySelector('#rc-docs'), quitar = () => { const n = box.querySelectorAll('.rc-doc').length; box.querySelectorAll('.rc-dq').forEach(b => { b.hidden = n < 2; }); };
+            ov.querySelector('#rc-doc-add').addEventListener('click', () => { if (box.querySelectorAll('.rc-doc').length >= 12) { toast('Máximo 12', 'Una recepción conforme admite hasta 12 guías o facturas.', 'warning'); return; } box.insertAdjacentHTML('beforeend', filaDoc('GUIA', '')); quitar(); const ult = box.lastElementChild.querySelector('.rc-dn'); if (ult) ult.focus(); });
+            box.addEventListener('click', (ev) => { const b = ev.target.closest('.rc-dq'); if (b) { b.closest('.rc-doc').remove(); quitar(); } }); quitar(); } catch (e) { /* sin documentos múltiples */ }
         try { const sel = ov.querySelector('#rc-parcial'), enc = ov.querySelector('#rc-enc'); let tocado = false; enc.addEventListener('input', () => { tocado = true; }); sel.addEventListener('change', () => { if (!tocado) enc.value = encabezadoBase(sel.value === '1'); }); } catch (e) { /* sin sincronía */ }
         try { const h = ov && ov.querySelector('#rc-fec-hoy'); if (h) h.addEventListener('click', (ev) => { ev.preventDefault(); ov.querySelector('#rc-fec').value = hoyISO(); }); } catch (e) { /* sin atajo */ }
         return ov;

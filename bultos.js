@@ -1,5 +1,5 @@
 /* ==========================================================================
-   BULTOS Y ETIQUETAS (v21.205)
+   BULTOS Y ETIQUETAS (v21.205 · por orden de compra y registro de impresión v21.223)
    Como en el retail (orden → despacho/recepción → bulto): una ORDEN DE COMPRA llega en una RECEPCIÓN (REC-…, la guía)
    y cada caja física es un BULTO con su propio folio BUL-AAAA-NNNNNN y «bulto 3 de 10».
    · Etiqueta Zebra 100×60 mm a página completa: logo Visor, producto, lote, vencimiento, proveedor, OC, recepción,
@@ -105,8 +105,11 @@
   // ---------------- datos ----------------
   const ref = (folio) => fs().doc(fs().collection(db(), 'Contadores'), 'bulto-' + folio);
   async function leer(folio) { const s = await fs().getDoc(ref(folio)); return s.exists() ? s.data() : null; }
-  async function guardar(b, cambios, accion) {
-    const h = (b.historial || []).concat([{ accion, por: usuario(), en: new Date().toISOString(), ...(cambios.contenido != null ? { contenido: cambios.contenido } : {}) }]).slice(-40);
+  async function guardar(b, cambios, accion, det) {
+    /* v21.223: relee la caja antes de escribir (otro equipo pudo abrirla, contarla o imprimirla) para no pisar su historial */
+    try { const fr = await Promise.race([leer(b.folio), new Promise(r => setTimeout(() => r(null), 2500))]); if (fr) Object.assign(b, fr); } catch (e) { /* sin conexión: sigue con lo local */ }
+    if (typeof cambios === 'function') cambios = cambios(b);
+    const h = (b.historial || []).concat([{ accion, por: usuario(), en: new Date().toISOString(), ...(cambios.contenido != null ? { contenido: cambios.contenido } : {}), ...(det || {}) }]).slice(-40);
     const x = { ...cambios, historial: h, actualizado: new Date().toISOString() };
     await Promise.race([fs().setDoc(ref(b.folio), x, { merge: true }), new Promise(r => setTimeout(r, 2500))]); Object.assign(b, x); return b;
   }
@@ -118,7 +121,7 @@
     const ini = await f.runTransaction(db(), async (tx) => { const s = await tx.get(rc), v = s.exists() ? num(s.data().valor) : 0; tx.set(rc, { valor: v + cajas.length, actualizado: new Date().toISOString() }); return v + 1; });
     const ahora = new Date().toISOString(), grupo = `BUL-${anio}-${String(ini).padStart(6, '0')}`;
     const lista = cajas.map((q, i) => ({ tipo: 'bulto', folio: `BUL-${anio}-${String(ini + i).padStart(6, '0')}`, grupo, n: i + 1, de: cajas.length, contenido: q, inicial: q, porCaja: num(g.cajas) > 0 ? Math.max(...cajas) : num(g.porCaja), totalGrupo: cajas.reduce((s, x) => s + x, 0), estado: 'CERRADA',
-      nombre: g.nombre, insumoId: g.insumoId || '', codigoMP: g.codigoMP || '', bodega: g.bodega || '', lote: g.lote || 'S/L', vence: g.vence || '', proveedor: g.proveedor || '', oc: g.oc || '', rec: g.rec || '', fechaRecepcion: g.fechaRecepcion || hoyISO(), creadoEn: ahora, creadoPor: usuario(), historial: [{ accion: 'CREADO', por: usuario(), en: ahora }] }));
+      nombre: g.nombre, insumoId: g.insumoId || '', codigoMP: g.codigoMP || '', bodega: g.bodega || '', lote: g.lote || 'S/L', vence: g.vence || '', proveedor: g.proveedor || '', oc: g.oc || '', rec: g.rec || '', fechaRecepcion: g.fechaRecepcion || hoyISO(), creadoEn: ahora, creadoPor: usuario(), impresiones: 0, historial: [{ accion: 'CREADO', por: usuario(), en: ahora }] }));
     for (const b of lista) await f.setDoc(ref(b.folio), b);
     return lista;
   }
@@ -129,12 +132,12 @@
   async function cargarInsumos() { if (insumos) return insumos; const f = fs(), sn = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(5000))), l = []; sn.forEach(d => l.push({ id: d.id, ...d.data() })); insumos = l; return l; }
   const lotesDe = (d) => (Array.isArray(d.batches) && d.batches.length ? d.batches : [{ batch: d.batch || 'S/L', quantity: d.quantity, expirationDate: d.expirationDate || '' }]).filter(b => num(b.quantity) > 0);
 
-  function ventana(titulo, html) {
-    document.querySelectorAll('.bu-ov').forEach(x => x.remove());
+  function ventana(titulo, html, opc) {
+    if (!(opc && opc.encima)) document.querySelectorAll('.bu-ov').forEach(x => x.remove());
     const ov = document.createElement('div'); ov.className = 'bu-ov'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
     ov.innerHTML = `<div class="bu-c"><div class="bu-cab"><h3>${esc(titulo)}</h3><button type="button" class="fp-x bu-x" aria-label="Cerrar">×</button></div><div class="bu-b">${html}</div></div>`;
     const cerrar = () => { ov.remove(); document.removeEventListener('keydown', tecla, true); if (ov._fin) ov._fin(); };
-    const tecla = (e) => { if (e.key === 'Escape') { e.stopPropagation(); cerrar(); } };
+    const tecla = (e) => { if (e.key !== 'Escape') return; const v = document.querySelectorAll('.bu-ov'); if (v[v.length - 1] !== ov) return; e.stopPropagation(); cerrar(); };   /* con dos ventanas, Escape cierra solo la de arriba */
     ov.addEventListener('click', (e) => { if (e.target === ov || e.target.closest('.bu-x')) cerrar(); }); document.addEventListener('keydown', tecla, true);
     document.body.appendChild(ov); ov.cerrar = cerrar; return ov;
   }
@@ -142,7 +145,7 @@
   /** pref: {nombre, insumoId, codigoMP, bodega, lote, vence, total, proveedor, oc, rec, fechaRecepcion, lineas:[…mismos campos]} */
   async function etiquetar(pref) {
     const p = pref || {}, lineas = Array.isArray(p.lineas) && p.lineas.length ? p.lineas : null;
-    const ov = ventana('Etiquetas de bulto', `<div class="bu-tabs"><button type="button" class="on" data-t="nueva">Nuevas etiquetas</button><button type="button" data-t="re">Reimprimir existentes</button></div><div class="bu-pane" data-p="nueva"></div><div class="bu-pane" data-p="re" hidden></div>`);
+    const ov = ventana('Etiquetas de bulto', `<div class="bu-tabs"><button type="button" class="on" data-t="nueva">Nuevas etiquetas</button><button type="button" data-t="re">Reimprimir existentes</button></div><div class="bu-pane" data-p="nueva"></div><div class="bu-pane" data-p="re" hidden></div>`, { encima: !!p.encima });
     ov.querySelectorAll('.bu-tabs button').forEach(b => b.onclick = () => { ov.querySelectorAll('.bu-tabs button').forEach(x => x.classList.toggle('on', x === b)); ov.querySelectorAll('.bu-pane').forEach(x => { x.hidden = x.dataset.p !== b.dataset.t; }); if (b.dataset.t === 're') pintarReimprimir(ov.querySelector('[data-p="re"]')); });
     const pane = ov.querySelector('[data-p="nueva"]');
     let sel = lineas ? { ...lineas[0], idx: 0 } : { ...p };
@@ -171,7 +174,7 @@
         leer2(); if (!sel.nombre) { toast('Etiquetas', 'Elige el producto.', 'warning'); return; }
         e.target.disabled = true;
         try {
-          const l = await crear(sel); await pdf(l);
+          const l = await crear(sel); await imprimir(l);
           if (lineas) { lineas[sel.idx].hecho = true; const sig = lineas.findIndex(x => !x.hecho); if (sig >= 0) { sel = { ...lineas[sig], idx: sig }; } }
           if (window.SAR_Progreso && window.SAR_Progreso.exito) window.SAR_Progreso.exito({ titulo: `${l.length} etiqueta${l.length === 1 ? '' : 's'} lista${l.length === 1 ? '' : 's'}`, texto: esc(l[0].folio) + (l.length > 1 ? ' a ' + esc(l[l.length - 1].folio) : '') });
           pintar();
@@ -179,6 +182,7 @@
       };
     };
     pintar();
+    return ov;
   }
   async function pintarReimprimir(el) {
     el.innerHTML = '<p class="si-v">Cargando bultos…</p>';
@@ -189,7 +193,7 @@
       el.innerHTML = `<input class="si-in" id="bu-rq" placeholder="Folio, producto, lote u OC…" value="${esc(q)}"><div class="bu-lista">${l.map(b => `<label class="bu-fila"><input type="checkbox" data-f="${esc(b.folio)}"${marcados.has(b.folio) ? ' checked' : ''}><span><b>${esc(b.folio)}</b> · bulto ${b.n}/${b.de} · ${esc(b.nombre)}<small>lote ${esc(b.lote)} · ${b.contenido} u. · ${esc(b.estado)}${b.bodega ? ' · ' + esc(b.bodega) : ''}</small></span></label>`).join('') || '<p class="si-v">Sin bultos.</p>'}</div><div class="fp-facc"><button type="button" class="btn btn-primary" id="bu-rp"${marcados.size ? '' : ' disabled'}>Reimprimir ${marcados.size || ''}</button></div>`;
       const i = el.querySelector('#bu-rq'); i.oninput = () => { q = i.value; const p0 = i.selectionStart; pinta(); const j = el.querySelector('#bu-rq'); j.focus(); j.setSelectionRange(p0, p0); };
       el.querySelectorAll('[data-f]').forEach(c => c.onchange = () => { if (c.checked) marcados.add(c.dataset.f); else marcados.delete(c.dataset.f); el.querySelector('#bu-rp').disabled = !marcados.size; el.querySelector('#bu-rp').textContent = 'Reimprimir ' + (marcados.size || ''); });
-      el.querySelector('#bu-rp').onclick = async () => { try { await pdf(todos.filter(b => marcados.has(b.folio)).sort((a, b) => a.folio.localeCompare(b.folio))); } catch (e) { toast('No se pudo', e.message, 'error'); } };
+      el.querySelector('#bu-rp').onclick = async () => { try { await imprimir(todos.filter(b => marcados.has(b.folio)).sort((a, b) => a.folio.localeCompare(b.folio))); } catch (e) { toast('No se pudo', e.message, 'error'); } };
     };
     pinta();
   }
@@ -245,7 +249,7 @@
             if (a === 'abrir' || a === 'queda') pedirQueda(b, () => { ultimo = ''; procesar(folio); });
             else if (a === 'vacia') { await guardar(b, { contenido: 0, estado: 'VACIA' }, 'VACIA'); ultimo = ''; procesar(folio); }
             else if (a === 'cerrar') { await guardar(b, { contenido: b.inicial || b.porCaja, estado: 'CERRADA' }, 'CERRADA'); ultimo = ''; procesar(folio); }
-            else if (a === 're') pdf([b]).catch(e => toast('No se pudo', e.message, 'error'));
+            else if (a === 're') imprimir([b]).catch(e => toast('No se pudo', e.message, 'error'));
           });
           return;
         }
@@ -263,15 +267,153 @@
   }
 
   // ---------------- pantalla «Bultos y etiquetas» ----------------
+  // ---------------- registro de impresión (v21.223) ----------------
+  /** Estado de impresión de una etiqueta: sin | impresa | reimpresa | editada | legado (creada antes de llevar el registro). */
+  function estadoImp(b) {
+    if (!b || b.impresiones == null) return b && b.editadoTrasImprimir ? 'editada' : 'legado';
+    if (b.editadoTrasImprimir) return 'editada';
+    const n = num(b.impresiones); return n <= 0 ? 'sin' : n === 1 ? 'impresa' : 'reimpresa';
+  }
+  const ETQ_IMP = { sin: 'Sin imprimir', impresa: 'Impresa', reimpresa: 'Reimpresa', editada: 'Editada · reimprimir', legado: 'Sin registro (anterior)' };
+  const textoImp = (b) => { const e = estadoImp(b); return e === 'reimpresa' ? `Reimpresa ${num(b.impresiones) - 1} ${num(b.impresiones) - 1 === 1 ? 'vez' : 'veces'}` : ETQ_IMP[e]; };
+  /** Estado de toda una orden: lo más urgente primero. */
+  function estadoOC(bultos, faltan) {
+    const e = (bultos || []).map(estadoImp), hay = (k) => e.includes(k);
+    if (num(faltan) > 0) return { k: 'faltan', t: bultos && bultos.length ? 'Faltan etiquetas' : 'Sin etiquetas' };
+    if (!e.length) return { k: 'vacia', t: 'Sin etiquetas' };
+    if (hay('editada')) return { k: 'editada', t: 'Cambios por reimprimir' };
+    if (hay('sin')) return { k: 'sin', t: e.every(x => x === 'sin') ? 'Sin imprimir' : 'Impresión parcial' };
+    if (e.every(x => x === 'legado')) return { k: 'legado', t: 'Sin registro (anterior)' };
+    if (hay('reimpresa')) return { k: 'reimpresa', t: 'Reimpresa' };
+    return { k: 'impresa', t: 'Impresa' };
+  }
+  /** Lo recibido en las recepciones de la orden que aún no tiene etiqueta (por producto). */
+  function faltantesOC(oc, bultos, desde) {
+    /* se compara por producto + lote tal como llegaron (nombreOrig/loteOrig: editar la etiqueta no crea faltantes falsos) */
+    const rec = new Map(), et = new Map(), k = (n, l) => norm(n) + '|' + norm(l || 'S/L');
+    (oc.recepciones || []).filter(r => r && !r.anulada && r.ingresoAStock && (!desde || String(r.fecha || '').slice(0, 10) >= desde)).forEach(r => (r.detalle || []).forEach(d => {
+      const nombre = d.insumoName || d.descripcion || '', key = k(nombre, d.lote), x = rec.get(key) || { nombre, descripcion: d.descripcion || '', total: 0, lote: d.lote || 'S/L', vence: '', recs: [], bodega: r.bodega || '', fecha: '' };
+      x.total += num(d.cantidad); if (d.vence) x.vence = d.vence; if (r.recId && !x.recs.includes(r.recId)) x.recs.push(r.recId); x.fecha = String(r.fecha || '').slice(0, 10) || x.fecha; if (r.bodega) x.bodega = r.bodega; rec.set(key, x);
+    }));
+    (bultos || []).forEach(b => { const key = k(b.nombreOrig || b.nombre, b.loteOrig || b.lote); et.set(key, (et.get(key) || 0) + num(b.inicial != null ? b.inicial : b.contenido)); });
+    return [...rec.entries()].map(([key, x]) => ({ ...x, falta: Math.max(0, x.total - (et.get(key) || 0)) })).filter(x => x.falta > 0)
+      .map(x => ({ nombre: x.nombre, codigoMP: ((oc.lineas || []).find(l => l.descripcion === x.descripcion) || {}).codigoMP || '', total: x.falta, lote: x.lote, vence: x.vence, bodega: x.bodega, proveedor: oc.proveedor || '', oc: oc.numeroOC || '', rec: x.recs.join(' + '), fechaRecepcion: x.fecha || hoyISO() }));
+  }
+  /** Anota que se imprimieron (1.ª vez = impresa; siguientes = reimpresa) y limpia la marca de «editada». */
+  async function marcarImpresas(lista) {
+    const ahora = new Date().toISOString();
+    const r = await Promise.all((lista || []).map(b => guardar(b, (x) => ({ impresiones: num(x.impresiones) + 1, ultimaImpresion: ahora, primeraImpresion: x.primeraImpresion || ahora, editadoTrasImprimir: false }), num(b.impresiones) >= 1 ? 'REIMPRESO' : 'IMPRESO').then(() => true, () => false)));
+    const mal = r.filter(x => !x).length; if (mal) toast('Impresión no registrada', `${mal} etiqueta(s) se imprimieron pero no se pudo anotar la impresión (revisa la conexión o tu sesión).`, 'warning');
+  }
+  async function imprimir(lista, nombre) { if (!lista || !lista.length) return null; const r = await pdf(lista, nombre); await marcarImpresas(lista); return r; }
+
+  // ---------------- etiquetas por orden de compra (v21.223) ----------------
+  async function leerOCs() { const f = fs(), sn = await f.getDocs(f.query(f.collection(db(), 'Seguimiento_OC'), f.limit(1500))), l = []; sn.forEach(d => l.push({ id: d.id, ...d.data() })); return l; }
+  const SIN_OC = '(sin orden de compra)', DESDE_ETQ = '2026-11-14';   /* las etiquetas por caja existen desde v21.205: lo recibido antes no cuenta como «falta etiquetar» */
+  async function porOC() {
+    const ov = ventana('Etiquetas por orden de compra', '<p class="si-v">Cargando órdenes y etiquetas…</p>');
+    const caja = ov.querySelector('.bu-b');
+    let ocs = [], bultos = [];
+    try { [ocs, bultos] = await Promise.all([leerOCs().catch(() => []), listar(5000)]); }
+    catch (e) { caja.innerHTML = '<p class="si-v">No pude leer las etiquetas.</p>'; return ov; }
+    const filas = () => {
+      const porNum = new Map(); bultos.forEach(b => { const k = String(b.oc || '').trim() || SIN_OC; if (!porNum.has(k)) porNum.set(k, []); porNum.get(k).push(b); });
+      const l = ocs.filter(o => (o.recepciones || []).some(r => r && !r.anulada && r.ingresoAStock) || porNum.has(String(o.numeroOC || '').trim()))
+        .map(o => { const bs = porNum.get(String(o.numeroOC || '').trim()) || [], fal = faltantesOC(o, bs, DESDE_ETQ); return { oc: o, num: o.numeroOC || o.id, prov: o.proveedor || '', bultos: bs, faltan: fal, est: estadoOC(bs, fal.reduce((t, x) => t + x.total, 0)), fecha: o.ultimaRecepcion || '' }; });
+      const conocidas = new Set(l.map(x => String(x.num).trim()));
+      porNum.forEach((bs, k) => { if (!conocidas.has(k)) l.push({ oc: { numeroOC: k === SIN_OC ? '' : k, proveedor: bs[0].proveedor || '' }, num: k, prov: bs[0].proveedor || '', bultos: bs, faltan: [], est: estadoOC(bs, 0), fecha: bs[0].fechaRecepcion || '' }); });
+      const peso = { faltan: 0, editada: 1, sin: 2, legado: 3, reimpresa: 4, impresa: 5, vacia: 6 };
+      return l.sort((a, b) => (peso[a.est.k] - peso[b.est.k]) || String(b.fecha).localeCompare(String(a.fecha)));
+    };
+    let q = '', filtro = '';
+    const lista = () => {
+      const t = norm(q), todas = filas(), cuenta = (k) => todas.filter(x => x.est.k === k).length;
+      const vis = todas.filter(x => (!filtro || x.est.k === filtro || (filtro === 'pend' && ['faltan', 'editada', 'sin'].includes(x.est.k))) && (!t || norm(x.num + ' ' + x.prov + ' ' + x.bultos.map(b => b.nombre + ' ' + b.folio).join(' ')).includes(t)));
+      caja.innerHTML = `<p class="si-v">Cada orden con sus etiquetas de bulto: si ya se imprimieron, si se reimprimieron o si falta etiquetar algo. Entra a una orden para imprimir, reimprimir o corregir datos.</p>
+        <div class="bu-ocbar"><input class="si-in" id="bu-oq" type="search" placeholder="N° de OC, proveedor, producto o folio…" value="${esc(q)}">
+        <div class="bu-chips">${[['', 'Todas', todas.length], ['pend', 'Pendientes', todas.filter(x => ['faltan', 'editada', 'sin'].includes(x.est.k)).length], ['impresa', 'Impresas', cuenta('impresa')], ['reimpresa', 'Reimpresas', cuenta('reimpresa')]].map(([k, n, c]) => `<button type="button" class="bu-chip${filtro === k ? ' on' : ''}" data-fl="${k}">${n} <b>${c}</b></button>`).join('')}</div></div>
+        <div class="bu-ocs">${vis.slice(0, 200).map((x, i) => { const tot = x.bultos.length, imp = x.bultos.filter(b => ['impresa', 'reimpresa'].includes(estadoImp(b))).length, ft = x.faltan.reduce((t, f) => t + f.total, 0);
+          return `<button type="button" class="bu-oc" data-i="${todas.indexOf(x)}"><span class="bu-oc-n"><b>${esc(x.num === SIN_OC ? 'Sin orden de compra' : 'OC ' + x.num)}</b><small>${esc(x.prov)}${x.fecha ? ' · recibida ' + esc(fechaCL(String(x.fecha).slice(0, 10))) : ''}</small></span>
+            <span class="bu-oc-c"><small>${tot} etiqueta${tot === 1 ? '' : 's'}${tot ? ` · ${imp} impresa${imp === 1 ? '' : 's'}` : ''}${ft ? ` · faltan ${ft} u.` : ''}</small><span class="bu-imp bu-imp-${x.est.k}">${esc(x.est.t)}</span></span><i class="ph-bold ph-caret-right"></i></button>`; }).join('') || '<p class="si-v">Sin órdenes que coincidan.</p>'}</div>`;
+      const i = caja.querySelector('#bu-oq'); i.oninput = () => { q = i.value; const p0 = i.selectionStart; lista(); const j = caja.querySelector('#bu-oq'); j.focus(); j.setSelectionRange(p0, p0); };
+      caja.querySelectorAll('[data-fl]').forEach(b => b.onclick = () => { filtro = b.dataset.fl; lista(); });
+      caja.querySelectorAll('.bu-oc').forEach(b => b.onclick = () => detalle(todas[Number(b.dataset.i)]));
+    };
+    const detalle = (x) => {
+      const marcados = new Set();
+      const pinta = () => {
+        const fila = filas().find(y => y.num === x.num) || x; x = fila;
+        const bs = x.bultos.slice().sort((a, b) => String(a.folio).localeCompare(String(b.folio))), grupos = new Map();
+        bs.forEach(b => { const k = b.grupo || b.folio; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(b); });
+        const pend = bs.filter(b => ['sin', 'editada'].includes(estadoImp(b))), ft = x.faltan.reduce((t, f) => t + f.total, 0);
+        caja.innerHTML = `<button type="button" class="btn btn-secondary btn-sm" id="bu-vol"><i class="ph-bold ph-arrow-left"></i> Órdenes</button>
+          <div class="bu-ochead"><div><h4>${esc(x.num === SIN_OC ? 'Sin orden de compra' : 'OC ' + x.num)}</h4><p class="si-v">${esc(x.prov)} · ${bs.length} etiqueta${bs.length === 1 ? '' : 's'}</p></div><span class="bu-imp bu-imp-${x.est.k}">${esc(x.est.t)}</span></div>
+          ${ft ? `<div class="bu-falta"><b>Falta etiquetar ${ft} u.</b><small>${x.faltan.map(f => `${esc(f.nombre)} · ${f.total} u.`).join('<br>')}</small><button type="button" class="btn btn-primary btn-sm" id="bu-crea"><i class="ph-bold ph-tag"></i> Crear las que faltan</button></div>` : ''}
+          <div class="fp-facc bu-ocacc"><button type="button" class="btn btn-primary" id="bu-pend"${pend.length ? '' : ' disabled'}><i class="ph-bold ph-printer"></i> Imprimir pendientes${pend.length ? ' (' + pend.length + ')' : ''}</button><button type="button" class="btn btn-secondary" id="bu-sel"${marcados.size ? '' : ' disabled'}><i class="ph-bold ph-arrows-clockwise"></i> Reimprimir seleccionadas${marcados.size ? ' (' + marcados.size + ')' : ''}</button><button type="button" class="btn btn-secondary btn-sm" id="bu-todas">${marcados.size === bs.length && bs.length ? 'Quitar selección' : 'Seleccionar todas'}</button></div>
+          ${[...grupos.values()].map(g => { const a = g[0]; return `<div class="bu-grp"><div class="bu-grp-h"><span><b>${esc(a.nombre)}</b><small>lote ${esc(a.lote || 'S/L')}${a.vence ? ' · vence ' + esc(fechaCL(a.vence)) : ''} · ${g.length} caja${g.length === 1 ? '' : 's'} · ${g.reduce((t, b) => t + num(b.inicial != null ? b.inicial : b.contenido), 0)} u.${a.rec ? ' · ' + esc(a.rec) : ''}</small></span><button type="button" class="btn btn-secondary btn-sm" data-eg="${esc(a.grupo || a.folio)}"><i class="ph-bold ph-pencil-simple"></i> Editar datos</button></div>
+            ${g.map(b => `<label class="bu-fila bu-et"><input type="checkbox" data-f="${esc(b.folio)}"${marcados.has(b.folio) ? ' checked' : ''}><span><b>${esc(b.folio)}</b> · bulto ${num(b.n)}/${num(b.de)} · ${num(b.contenido)} u.<small>${b.ultimaImpresion ? 'Última impresión ' + esc(fechaCL(b.ultimaImpresion.slice(0, 10))) + ' ' + esc(new Date(b.ultimaImpresion).toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' })) : ''}</small></span><span class="bu-imp bu-imp-${estadoImp(b)}">${esc(textoImp(b))}</span><button type="button" class="bu-ed" data-eb="${esc(b.folio)}" aria-label="Editar etiqueta ${esc(b.folio)}"><i class="ph-bold ph-pencil-simple"></i></button></label>`).join('')}</div>`; }).join('') || '<p class="si-v">Esta orden aún no tiene etiquetas.</p>'}`;
+        caja.querySelector('#bu-vol').onclick = lista;
+        caja.querySelectorAll('[data-f]').forEach(c => c.onchange = () => { if (c.checked) marcados.add(c.dataset.f); else marcados.delete(c.dataset.f); pinta(); });
+        caja.querySelector('#bu-todas').onclick = () => { if (marcados.size === bs.length) marcados.clear(); else bs.forEach(b => marcados.add(b.folio)); pinta(); };
+        const correr = async (btn, l, txt) => { btn.disabled = true; const prog = window.SAR_Progreso ? window.SAR_Progreso.iniciar(txt, ['Armando el PDF de etiquetas…']) : null;
+          try { await pdf(l); if (prog) prog.paso('Registrando la impresión…'); await marcarImpresas(l); if (prog) prog.listo(`${l.length} etiqueta${l.length === 1 ? '' : 's'} para imprimir`); marcados.clear(); pinta(); }
+          catch (e) { if (prog) prog.error(); toast('No se pudo', e.message || String(e), 'error'); btn.disabled = false; } };
+        caja.querySelector('#bu-pend').onclick = (e) => correr(e.currentTarget, pend, 'Imprimiendo etiquetas pendientes…');
+        caja.querySelector('#bu-sel').onclick = (e) => correr(e.currentTarget, bs.filter(b => marcados.has(b.folio)), 'Reimprimiendo etiquetas…');
+        caja.querySelectorAll('[data-eg]').forEach(b => b.onclick = () => editar(bs.filter(y => (y.grupo || y.folio) === b.dataset.eg), false, pinta));
+        caja.querySelectorAll('[data-eb]').forEach(b => b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); const un = bs.find(y => y.folio === b.dataset.eb); editar(bs.filter(y => (y.grupo || y.folio) === (un.grupo || un.folio)), un, pinta); });
+        const cr = caja.querySelector('#bu-crea'); if (cr) cr.onclick = async () => {   /* abre «Nuevas etiquetas» con lo que falta: ahí se indican las cajas de cada producto */
+          const ve = await etiquetar({ lineas: x.faltan.map(f => ({ ...f })), encima: true });
+          if (ve) ve._fin = async () => { try { bultos = await listar(5000); } catch (e) { /* queda lo que había */ } pinta(); };
+        };
+      };
+      pinta();
+    };
+    lista();
+    return ov;
+  }
+  /** Corrige los datos impresos de una etiqueta o de todo su grupo (mismo producto y lote). No cambia el stock. */
+  function editar(grupo, uno, alGuardar) {
+    const a = uno || grupo[0], unaSola = !!uno, puedeCant = unaSola && a.estado === 'CERRADA';
+    const ov = ventana(unaSola ? `Editar etiqueta ${a.folio}` : `Editar ${grupo.length} etiqueta${grupo.length === 1 ? '' : 's'}`, `
+      <p class="si-v">Cambia solo lo que dice la etiqueta, no el stock. ${unaSola ? '' : 'Se aplica a todas las cajas de este producto y lote. '}Después queda marcada «Editada · reimprimir».</p>
+      <label class="bu-l">Producto (como sale en la etiqueta)<input id="be-nom" class="si-in" value="${esc(a.nombre || '')}"></label>
+      <div class="bu-g3"><label class="bu-l">Lote<input id="be-lote" class="si-in" value="${esc(a.lote || '')}"></label><label class="bu-l">Vence<input id="be-vence" type="date" class="si-in" value="${esc(a.vence || '')}"></label><label class="bu-l">Bodega<input id="be-bod" class="si-in" value="${esc(a.bodega || '')}"></label></div>
+      <div class="bu-g3"><label class="bu-l">Proveedor<input id="be-prov" class="si-in" value="${esc(a.proveedor || '')}"></label><label class="bu-l">Fecha de recepción<input id="be-fr" type="date" class="si-in" value="${esc(a.fechaRecepcion || '')}"></label>${puedeCant ? `<label class="bu-l">Unidades en esta caja<input id="be-cant" type="number" min="1" class="si-in" inputmode="numeric" value="${num(a.contenido)}"></label>` : ''}</div>
+      ${unaSola && !puedeCant ? '<p class="si-v">La caja ya está abierta: su cantidad se cambia al escanearla.</p>' : ''}
+      <div class="fp-facc"><button type="button" class="btn btn-secondary" id="be-x">Cancelar</button><button type="button" class="btn btn-primary" id="be-ok">Guardar cambios</button></div>`, { encima: true });
+    const v = (id) => { const e = ov.querySelector('#' + id); return e ? e.value.trim() : null; };
+    ov.querySelector('#be-x').onclick = () => ov.cerrar();
+    ov.querySelector('#be-ok').onclick = async (e) => {
+      const nuevo = { nombre: v('be-nom'), lote: v('be-lote') || 'S/L', vence: v('be-vence'), bodega: v('be-bod'), proveedor: v('be-prov'), fechaRecepcion: v('be-fr') };
+      if (!nuevo.nombre) { toast('Etiqueta', 'El producto no puede quedar vacío.', 'warning'); return; }
+      const cant = puedeCant ? Math.floor(num(v('be-cant'))) : null; if (puedeCant && cant < 1) { toast('Etiqueta', 'Indica las unidades de la caja (1 o más).', 'warning'); return; }
+      const objetivo = unaSola ? [a] : grupo, cambiosDe = (b) => { const c = {}; Object.keys(nuevo).forEach(k => { if (String(b[k] || '') !== String(nuevo[k] || '')) c[k] = nuevo[k]; }); if (cant != null && b === a && cant !== num(b.contenido)) { c.contenido = cant; c.inicial = cant; } return c; };
+      const conCambios = objetivo.map(b => [b, cambiosDe(b)]).filter(([, c]) => Object.keys(c).length);
+      if (!conCambios.length) { ov.cerrar(); return; }
+      e.target.disabled = true; const prog = window.SAR_Progreso ? window.SAR_Progreso.iniciar('Guardando los cambios de la etiqueta…', ['Actualizando ' + conCambios.length + ' etiqueta(s)…']) : null;
+      try {
+        const orig = (b, c) => ({ ...(c.nombre != null && b.nombreOrig == null ? { nombreOrig: b.nombre } : {}), ...(c.lote != null && b.loteOrig == null ? { loteOrig: b.lote } : {}) });
+        await Promise.all(conCambios.map(([b, c]) => guardar(b, (x) => { if (c.contenido != null && x.estado !== 'CERRADA') throw new Error(`La caja ${x.folio} ya se abrió en otro equipo: su cantidad se cambia al escanearla.`); return { ...c, ...orig(x, c), editadoTrasImprimir: estadoImp(x) !== 'sin' }; }, 'EDITADO', { campos: Object.keys(c) })));
+        if (cant != null && conCambios.some(([, c]) => c.contenido != null)) {   // el total del lote y las unidades por caja salen en todas las etiquetas del grupo
+          const tot = grupo.reduce((t, b) => t + num(b.inicial != null ? b.inicial : b.contenido), 0), pc = Math.max(...grupo.map(b => num(b.inicial != null ? b.inicial : b.contenido)));
+          await Promise.all(grupo.filter(b => num(b.totalGrupo) !== tot || num(b.porCaja) !== pc).map(b => guardar(b, { totalGrupo: tot, porCaja: pc, editadoTrasImprimir: estadoImp(b) !== 'sin' }, 'EDITADO', { campos: ['totalGrupo'] })));
+        }
+        if (prog) prog.listo('Etiqueta corregida · queda para reimprimir'); ov.cerrar(); if (alGuardar) alGuardar();
+      } catch (er) { if (prog) prog.error(); toast('No se guardó', er.message || String(er), 'error'); e.target.disabled = false; }
+    };
+    return ov;
+  }
+
   async function abrir() {
     const r = document.getElementById('bu-root'); if (!r) return;
     r.innerHTML = `<div class="si-wrap si-ancho"><div class="si-cab"><div><h2 class="si-t">Bultos y etiquetas</h2><p class="si-s">Cada caja con su etiqueta: producto, lote, vencimiento, cuántas unidades trae y «bulto 3 de 10». Se lee con el teléfono (QR) o con pistola (código de barras).</p></div></div>
-      <div class="bu-acc"><button type="button" class="bu-big" data-x="nueva"><i class="ph-bold ph-tag"></i><b>Crear etiquetas</b><small>Para un producto y lote (o reimprimir)</small></button><button type="button" class="bu-big" data-x="ver"><i class="ph-bold ph-scan"></i><b>Escanear bulto</b><small>Ver qué tiene, abrir la caja, cuánto queda</small></button><button type="button" class="bu-big" data-x="contar"><i class="ph-bold ph-barcode"></i><b>Contar por bultos</b><small>Pistolea las cajas: las cerradas suman solas</small></button></div>
+      <div class="bu-acc"><button type="button" class="bu-big" data-x="oc"><i class="ph-bold ph-clipboard-text"></i><b>Etiquetas por orden de compra</b><small>Estado de impresión, reimprimir o corregir datos</small></button><button type="button" class="bu-big" data-x="nueva"><i class="ph-bold ph-tag"></i><b>Crear etiquetas</b><small>Para un producto y lote (o reimprimir)</small></button><button type="button" class="bu-big" data-x="ver"><i class="ph-bold ph-scan"></i><b>Escanear bulto</b><small>Ver qué tiene, abrir la caja, cuánto queda</small></button><button type="button" class="bu-big" data-x="contar"><i class="ph-bold ph-barcode"></i><b>Contar por bultos</b><small>Pistolea las cajas: las cerradas suman solas</small></button></div>
       <h3 class="si-h">Bultos registrados</h3><div id="bu-tab"><p class="si-v">Cargando…</p></div></div>`;
-    r.querySelectorAll('[data-x]').forEach(b => b.onclick = () => { const x = b.dataset.x; if (x === 'nueva') etiquetar({}); else escanear(x === 'contar' ? 'conteo' : 'ver').then(ov => { if (ov) { const o = ov._fin; ov._fin = () => { o(); abrir(); }; } }); });
+    r.querySelectorAll('[data-x]').forEach(b => b.onclick = () => { const x = b.dataset.x; if (x === 'oc') porOC().then(ov => { if (ov) { const o = ov._fin; ov._fin = () => { if (o) o(); abrir(); }; } }); else if (x === 'nueva') etiquetar({}); else escanear(x === 'contar' ? 'conteo' : 'ver').then(ov => { if (ov) { const o = ov._fin; ov._fin = () => { o(); abrir(); }; } }); });
     try {
       const l = await listar(), t = r.querySelector('#bu-tab'), est = (e) => l.filter(b => b.estado === e).length;
-      t.innerHTML = l.length ? `<p class="si-v">${l.length} bulto(s): ${est('CERRADA')} cerrados · ${est('ABIERTA')} abiertos · ${est('VACIA')} vacíos.</p><div class="fp-tw"><table class="si-tb"><thead><tr><th>Folio</th><th>Producto</th><th>Lote</th><th>Bulto</th><th>Contenido</th><th>Estado</th><th>Bodega</th></tr></thead><tbody>${l.slice(0, 300).map(b => `<tr><td>${esc(b.folio)}</td><td>${esc(b.nombre)}</td><td>${esc(b.lote)}</td><td>${b.n}/${b.de}</td><td>${b.contenido}/${b.inicial || b.porCaja}</td><td><span class="bu-est bu-est-${esc(b.estado)}">${esc(b.estado)}</span></td><td>${esc(b.bodega)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="si-v">Aún no hay bultos etiquetados.</p>';
+      t.innerHTML = l.length ? `<p class="si-v">${l.length} bulto(s): ${est('CERRADA')} cerrados · ${est('ABIERTA')} abiertos · ${est('VACIA')} vacíos.</p><div class="fp-tw"><table class="si-tb"><thead><tr><th>Folio</th><th>Producto</th><th>Lote</th><th>Bulto</th><th>Contenido</th><th>Estado</th><th>Etiqueta</th><th>Bodega</th></tr></thead><tbody>${l.slice(0, 300).map(b => `<tr><td>${esc(b.folio)}</td><td>${esc(b.nombre)}</td><td>${esc(b.lote)}</td><td>${b.n}/${b.de}</td><td>${b.contenido}/${b.inicial || b.porCaja}</td><td><span class="bu-est bu-est-${esc(b.estado)}">${esc(b.estado)}</span></td><td><span class="bu-imp bu-imp-${estadoImp(b)}">${esc(textoImp(b))}</span></td><td>${esc(b.bodega)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="si-v">Aún no hay bultos etiquetados.</p>';
     } catch (e) { r.querySelector('#bu-tab').innerHTML = '<p class="si-v">No pude leer los bultos.</p>'; }
   }
 
@@ -293,8 +435,8 @@
         for (const [k, l] of con.entries()) { if (bg) bg.paso(`${k + 1} de ${con.length}: ${String(l.nombre).slice(0, 40)} (${l.cajas} cajas)`); todas.push(...await crear(l)); }
         if (bg) bg.listo(`${todas.length} etiqueta(s) creadas: ${todas[0].folio}${todas.length > 1 ? ' a ' + todas[todas.length - 1].folio : ''}`);
         const P = window.SAR_Progreso, ok = P && P.confirmar ? await P.confirmar({ titulo: `${todas.length} etiqueta${todas.length === 1 ? '' : 's'} lista${todas.length === 1 ? '' : 's'}`, texto: `Una por caja de la recepción <b>${esc(o.rec || '')}</b>.`, lineas: con.map(l => `${esc(l.nombre)} · <b>${l.cajas}</b> caja(s) · ${num(l.total)} u.`), si: 'Imprimir ahora', no: 'Después' }) : true;
-        if (ok) await pdf(todas, `bultos-${String(o.rec || '').replace(/[^A-Za-z0-9-]+/g, '_')}.pdf`);
-        else toast('Etiquetas guardadas', 'Las puedes imprimir cuando quieras en Bultos y etiquetas → Crear etiquetas → Reimprimir.', 'info');
+        if (ok) await imprimir(todas, `bultos-${String(o.rec || '').replace(/[^A-Za-z0-9-]+/g, '_')}.pdf`);
+        else toast('Etiquetas guardadas', 'Quedan «sin imprimir» en Bultos y etiquetas → Etiquetas por orden de compra.', 'info');
       } catch (e) { if (bg) bg.error(e.message || String(e)); toast('Etiquetas', e.message || String(e), 'error'); }
     }
     if (sin.length) ofrecerRecepcion({ rec: o.rec, lineas: sin });
@@ -303,6 +445,6 @@
   function revisarHash() { const m = /bulto=([A-Z0-9-]+)/i.exec(window.location.hash || ''); if (!m) return; const folio = folioDe(m[1]); history.replaceState(null, '', window.location.pathname + '#view-bultos'); let k = 0; const t = setInterval(() => { k++; if (!(usuario() && fs() && db()) && k < 60) return; clearInterval(t); escanear('ver').then(ov => { const i = ov && ov.querySelector('#bu-in'); if (i) { i.value = folio; ov.querySelector('#bu-ok').click(); } }); }, 1000); }
   if (typeof module === 'undefined' && typeof window.addEventListener === 'function') { window.addEventListener('hashchange', revisarHash); if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', revisarHash); else revisarHash(); }
 
-  window.SAR_Bultos = { desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
+  window.SAR_Bultos = { porOC, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_Bultos;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null, addEventListener() {} });

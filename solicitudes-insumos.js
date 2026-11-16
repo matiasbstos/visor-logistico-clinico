@@ -192,7 +192,17 @@
   let eligiendo = '';
   function listaCat() { const m = new Map(); bodegas.forEach(b => listaDe(b, catSel).forEach(p => { const k = norm(p.nombre); if (!m.has(k)) m.set(k, { ...p, bodega: b }); })); return [...m.values()].sort((x, y) => x.nombre.localeCompare(y.nombre, 'es')); }
   /** Búsqueda por palabras: cada palabra escrita debe estar en el nombre (en cualquier orden, «cat 22» encuentra «Catéter … 22G»). */
-  function buscarEn(lista, texto) { const t = norm(texto).split(' ').filter(Boolean); if (!t.length) return []; return lista.filter(p => { const n = norm(p.nombre); return t.every(w => n.includes(w)); }).sort((x, y) => (norm(y.nombre).startsWith(t[0]) ? 1 : 0) - (norm(x.nombre).startsWith(t[0]) ? 1 : 0)); }
+  // Búsqueda tolerante (v21.218): sin tildes ni guiones, letras repetidas cuentan como una («D-DIMMER» = «d dimer»)
+  // y cada palabra acepta una letra de diferencia («dímero» encuentra «DIMMER»; dos si la palabra es larga).
+  const plano = (t) => norm(t).replace(/[^a-z0-9]+/g, ' ').replace(/([a-z])\1+/g, '$1').trim();
+  function dist(a, b, max) { if (Math.abs(a.length - b.length) > max) return max + 1; let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+    for (let i = 1; i <= a.length; i++) { const cur = [i]; let min = i; for (let j = 1; j <= b.length; j++) { cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); if (cur[j] < min) min = cur[j]; } if (min > max) return max + 1; prev = cur; } return prev[b.length]; }
+  function calzaPalabra(w, nombrePlano, palabras) {
+    if (nombrePlano.includes(w)) return true; if (w.length < 4) return false; const max = w.length >= 8 ? 2 : 1;
+    return palabras.some(p => dist(w, p, max) <= max || (p.length > w.length && dist(w, p.slice(0, w.length), max) <= max));
+  }
+  function coincide(nombre, texto) { const n = plano(nombre), ps = n.split(' '), t = plano(texto).split(' ').filter(Boolean); return t.length > 0 && t.every(w => calzaPalabra(w, n, ps)); }
+  function buscarEn(lista, texto) { const t = norm(texto).split(' ').filter(Boolean); if (!t.length) return []; return lista.filter(p => coincide(p.nombre, texto)).sort((x, y) => (norm(y.nombre).startsWith(t[0]) ? 1 : 0) - (norm(x.nombre).startsWith(t[0]) ? 1 : 0)); }
   /** Bodega a la que va la solicitud: la que tiene más de los productos pedidos; si son todos a mano, la que tiene más productos de ese tipo. */
   /** Bodega transitoria (destino de los insumos médicos que se piden): del catálogo público o de Bodegas. */
   let destinosStaff = {};
@@ -465,7 +475,7 @@
   // ---- asociar lo pedido (nombre escrito por quien pide) a un producto del inventario (v21.210) ----
   let asoc = null, alias = {}; const ALIAS_ID = 'solicitudes-alias';
   const aliasDe = (l) => { const a = alias[norm(l.nombre)]; return a && insumos.some(i => norm(i.name) === norm(a)) ? a : ''; };
-  function productosInv(q) { const t = norm(q).split(' ').filter(Boolean); if (!t.length) return []; const m = new Map(); insumos.forEach(i => { if (i.status === 'CUARENTENA') return; const k = norm(i.name); if (!t.every(w => k.includes(w))) return; const e = m.get(k) || { nombre: i.name, id: i.id, total: 0, bods: new Set() }; e.total += num(i.quantity); if (num(i.quantity) > 0 && i.location) e.bods.add(i.location); m.set(k, e); }); return [...m.values()].sort((a, b) => b.total - a.total).slice(0, 10); }
+  function productosInv(q) { const t = norm(q).split(' ').filter(Boolean); if (!t.length) return []; const m = new Map(); insumos.forEach(i => { if (i.status === 'CUARENTENA') return; const k = norm(i.name); if (!coincide(i.name, q)) return; const e = m.get(k) || { nombre: i.name, id: i.id, total: 0, bods: new Set() }; e.total += num(i.quantity); if (num(i.quantity) > 0 && i.location) e.bods.add(i.location); m.set(k, e); }); return [...m.values()].sort((a, b) => b.total - a.total).slice(0, 10); }
   function resAsoc(q) { if (norm(q).length < 2) return '<p class="si-v">Escribe parte del nombre como está en el inventario.</p>'; const l = productosInv(q); return l.length ? l.map(p => `<button type="button" class="si-p" data-asocsi="${asoc ? asoc.i : ''}" data-nom="${esc(p.nombre)}"><span>${esc(p.nombre)}<br><small>${p.total} u. · ${esc([...p.bods].join(', ') || 'sin stock')}</small></span><b>✓</b></button>`).join('') : '<p class="si-v">Sin coincidencias.</p>'; }
   async function cargarAlias() { try { const d = await fs().getDoc(fs().doc(fs().collection(db(), 'Contadores'), ALIAS_ID)); alias = d.exists() ? (d.data().items || {}) : {}; } catch (e) { alias = {}; } }
   async function asociar(n, i, nombreInv) {
@@ -771,6 +781,6 @@
   }
 
   function recordarMia(n) { try { const m = JSON.parse(localStorage.getItem('si-mias') || '[]'); m.unshift(n); localStorage.setItem('si-mias', JSON.stringify(m.slice(0, 20))); } catch (e) { /* sin almacenamiento */ } }
-  window.SAR_Solicitudes = { _prueba: { procesar, recibir, correoSolicitud, limpiarSol, movidaL, recibidaL, set solicitudes(v) { solicitudes = v; } }, repintar: () => pintarPide(), recordarMia, misSolicitudes: () => misLista.slice(), limpiarSol, TIPO, COL, abrirPide, abrirBandeja, publicarCatalogo, numeroSolicitud, agregarLinea, textoPicking, infoLinea, lotesCandidatos, repartir, estadoLinea, comprometido, filasInforme, parecidos, CAB_INFORME, leerTodas, pintarAuditoria };
+  window.SAR_Solicitudes = { _prueba: { procesar, recibir, correoSolicitud, coincide, limpiarSol, movidaL, recibidaL, set solicitudes(v) { solicitudes = v; } }, repintar: () => pintarPide(), recordarMia, misSolicitudes: () => misLista.slice(), limpiarSol, TIPO, COL, abrirPide, abrirBandeja, publicarCatalogo, numeroSolicitud, agregarLinea, textoPicking, infoLinea, lotesCandidatos, repartir, estadoLinea, comprometido, filasInforme, parecidos, CAB_INFORME, leerTodas, pintarAuditoria };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_Solicitudes;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null });

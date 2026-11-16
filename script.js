@@ -7632,7 +7632,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const refsMap = await Promise.all(fetchPromises);
 
                 // Transacción Atómica
-                const folioBAN = window.SAR_Folio ? await window.SAR_Folio.siguiente('BAN') : ''; /* BAN-AAAA-NNNNN (antes día-mes-hora, sin año) */
+                const folioBAN = !modoEdicionId && window.SAR_Folio ? await window.SAR_Folio.siguiente('BAN') : ''; /* BAN-AAAA-NNNNN (antes día-mes-hora, sin año) */
                 await window.firebaseFirestore.runTransaction(window.firebaseFirestore.db || window.db || db, async (transaction) => {
                     const updates = [];
                     for (const mapObj of refsMap) {
@@ -13593,7 +13593,7 @@ function doGet(e) {
                 const prevStock = existingMatch ? (Number(existingMatch.quantity) || 0) : 0;
                 const totalAcumulado = prevStock + cant;
                 const formattedVto = isQuiebre && vto === 'N/A' ? 'N/A' : formatearMesAno(vto);
-                const recordId = window.SAR_Folio ? await window.SAR_Folio.siguiente('INV') : 'INV-' + now.toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
+                const recordId = 'INV-' + now.toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.random().toString(36).substring(2, 6).toUpperCase();
 
                 const newRecord = {
                     id: recordId,

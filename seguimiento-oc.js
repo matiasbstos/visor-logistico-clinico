@@ -244,7 +244,7 @@
         } catch (e) { return { estado: 'error', detalle: 'No se pudo dejar el correo en cola: ' + String((e && e.message) || e) }; }
     }
     /** v21.122: cuando un correo de la cola sale, el aviso del acta (Contadores/aviso-<acta>-<evento>) pasa a «enviado» con la hora real. */
-    const EVENTO_POR_TITULO = [['Acta de entrega emitida', 'emision'], ['Entrega confirmada', 'confirmacion'], ['Acta firmada guardada', 'firmada'], ['Acta de entrega eliminada', 'anulacion']];
+    const EVENTO_POR_TITULO = [['Acta de entrega emitida', 'emision'], ['Entrega confirmada', 'confirmacion'], ['Acta firmada guardada', 'firmada'], ['Acta de entrega eliminada', 'anulacion'], ['Acta de entrega anulada', 'anulacion']];
     async function marcarAvisoEnviado(item, r) {
         let id = '';
         try { id = (JSON.parse(item.carga).extra || {}).avisoId || ''; } catch (e) { /* sin carga */ }

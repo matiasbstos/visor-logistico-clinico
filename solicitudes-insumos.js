@@ -436,7 +436,7 @@
     const f = fs(); if (!f.runTransaction) throw new Error('sin transacciones');
     const anio = String(new Date(data.creadoEn || Date.now()).getFullYear()), refC = f.doc(f.collection(db(), 'Contadores'), 'correlativo-solicitudes-' + anio), refS = f.doc(f.collection(db(), COL), numero);
     let corr = '';
-    await f.runTransaction(db(), async (tx) => { const c = await tx.get(refC), v = (c.exists() ? num(c.data().valor) : 0) + 1; corr = window.SAR_Folio ? window.SAR_Folio.formato('SOL', anio, v) : `SOL-${anio}-${String(v).padStart(4, '0')}`;
+    await f.runTransaction(db(), async (tx) => { const c = await tx.get(refC), v = (c.exists() ? num(c.data().valor) : 0) + 1; corr = window.SAR_Folio ? window.SAR_Folio.formato('SOL', anio, v, data.creadoEn) : `SOL-${anio}-${String(v).padStart(4, '0')}`;
       tx.set(refC, { valor: v, actualizado: new Date().toISOString(), ultima: numero }); tx.set(refS, { ...data, correlativo: corr, correlativoN: v, correlativoAnio: anio }); });
     return corr;
   }
@@ -447,7 +447,7 @@
       for (const x of sin) {
         const anio = new Date(x.creadoEn || Date.now()).getFullYear(), refC = f.doc(f.collection(db(), 'Contadores'), 'correlativo-solicitudes-' + anio), refS = f.doc(f.collection(db(), COL), x.numero);
         await f.runTransaction(db(), async (tx) => { const s1 = await tx.get(refS); if (!s1.exists() || s1.data().correlativo) return; const c = await tx.get(refC), v = (c.exists() ? num(c.data().valor) : 0) + 1;
-          tx.set(refC, { valor: v, actualizado: new Date().toISOString(), ultima: x.numero }); tx.update(refS, { correlativo: window.SAR_Folio ? window.SAR_Folio.formato('SOL', anio, v) : `SOL-${anio}-${String(v).padStart(4, '0')}`, correlativoN: v, correlativoAnio: String(anio) }); });
+          tx.set(refC, { valor: v, actualizado: new Date().toISOString(), ultima: x.numero }); tx.update(refS, { correlativo: window.SAR_Folio ? window.SAR_Folio.formato('SOL', anio, v, x.creadoEn) : `SOL-${anio}-${String(v).padStart(4, '0')}`, correlativoN: v, correlativoAnio: String(anio) }); });
       }
     } catch (e) { console.warn('[Solicitudes] correlativo pendiente:', e && e.message); }
     finally { asignando = false; }

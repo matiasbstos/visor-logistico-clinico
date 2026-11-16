@@ -77,7 +77,7 @@
     /** evento: 'emision' | 'confirmacion' | 'firmada' | 'anulacion'. extra: { pdf:{bytes,nombre}, firmada:{bytes,mime,nombre}, motivo } */
     function avisarActa(evento, a, extra) {
         extra = extra || {};
-        const T = { emision: 'Acta de entrega emitida', confirmacion: 'Entrega confirmada · stock descontado', firmada: 'Acta firmada guardada', anulacion: 'Acta de entrega eliminada' }[evento];
+        const T = { emision: 'Acta de entrega emitida', confirmacion: 'Entrega confirmada · stock descontado', firmada: 'Acta firmada guardada', anulacion: 'Acta de entrega anulada' }[evento];
         const notas = [];
         if (evento === 'emision') notas.push('El stock sigue en bodega (reservado) hasta que se suba el acta firmada y se confirme la entrega.');
         if (evento === 'confirmacion') notas.push(`Entrega confirmada el ${fechaHora()} por ${usuario()}. Se descontó el stock de ${a.bodegaOrigen}.`);

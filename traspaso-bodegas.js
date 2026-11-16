@@ -76,6 +76,7 @@
     return ref;
   }
   async function moverUno(id, desde, hasta, sel, nota, marca) {
+    hasta = String(hasta || '').trim().replace(/\s+/g, ' ');   /* v21.228: el destino nunca con espacios de más (partía el stock en dos «bodegas») */
     sel = sel.map(x => ({ ...x, qty: Math.max(0, Math.floor(num(x.qty))) })); const qty = sel.reduce((s, x) => s + x.qty, 0);
     if (!(qty > 0)) throw new Error('Cantidad inválida.');
     const F = fs(), D = db();
@@ -185,7 +186,7 @@
   }
   function iniciar() {
     const el = root(); if (!el || el.dataset.ok) return; el.dataset.ok = '1';
-    el.addEventListener('change', async (e) => { if (e.target.id === 'tb-desde') { await cargarItems(e.target.value).catch(() => { items = []; }); pintar(); } else if (e.target.id === 'tb-hasta') { const h = e.target.value; pintar(); const s = document.getElementById('tb-hasta'); if (s) s.value = h; } });
+    el.addEventListener('change', async (e) => { if (e.target.id === 'tb-desde') { await cargarItems(e.target.value).catch((er) => { items = []; if (window.showToast) window.showToast('No pude leer el stock', 'La bodega puede tener productos aunque la lista salga vacía: ' + ((er && er.message) || er) + '. Vuelve a elegirla o recarga.', 'error'); });   /* v21.228: antes se callaba y parecía «sin stock» */ pintar(); } else if (e.target.id === 'tb-hasta') { const h = e.target.value; pintar(); const s = document.getElementById('tb-hasta'); if (s) s.value = h; } });
     el.addEventListener('input', (e) => { if (e.target.id === 'tb-buscar') { const v = e.target.value; pintar(); const b = document.getElementById('tb-buscar'); if (b) { b.value = v; b.focus(); b.setSelectionRange(v.length, v.length); } } });
     el.addEventListener('click', (e) => { if (e.target.closest('#tb-ir')) ir(); if (e.target.closest('#tb-todo')) el.querySelectorAll('.tb-chk:not(:disabled)').forEach(c => { c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); }); });
     window.addEventListener('hashchange', () => { if (window.location.hash !== '#view-transferencias') limpiar(); });

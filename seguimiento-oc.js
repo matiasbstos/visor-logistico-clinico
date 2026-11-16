@@ -1289,7 +1289,8 @@
             for (const d of det) {
                 const nombre = String(d.insumoName || '').trim(); if (!nombre) throw new Error('Indica el producto del inventario de cada línea recibida.');
                 const snap = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('name', '==', nombre), f.limit(10)));
-                let ref = null; snap.forEach(x => { const l = x.data().location; if (!ref && (l === central || !l)) ref = f.doc(f.collection(db(), 'Insumos'), x.id); });
+                /* v21.228: si hay repetidos con el mismo nombre, se suma al de esa bodega con más stock (antes: al primero, que podía ser un provisional en 0) */
+                let ref = null, mejor = -1; snap.forEach(x => { const dx = x.data(), l = String(dx.location || '').trim(), p = (l === String(central).trim() ? 1e9 : 0) + num(dx.quantity); if ((l === String(central).trim() || !l) && p > mejor) { mejor = p; ref = f.doc(f.collection(db(), 'Insumos'), x.id); } });
                 const cod = String((oc.lineas[d.i] || {}).codigoMP || '').trim();
                 // Si el producto ya estaba en el sistema con ese ID (p. ej. ingresado a mano en un acta), se suma a ese mismo insumo
                 if (!ref && cod) { const s2 = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('codigoMP', '==', cod), f.limit(10))); s2.forEach(x => { const l = x.data().location; if (!ref && (l === central || !l)) ref = f.doc(f.collection(db(), 'Insumos'), x.id); }); }
@@ -1314,7 +1315,11 @@
                 const actual = snap.exists() ? snap.data() : null, m = mezclarIngreso(actual, g.ingresos);
                 const limite = num(actual && (actual.criticalLimit || actual.stock_minimo)) || 50;
                 const prox = m.batches[0];
-                const base = { origenOC: true, ...(g.codigo ? { codigoMP: g.codigo } : {}), quantity: m.quantity, batches: m.batches, isCritical: m.quantity <= limite, batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', provider: oc.proveedor || provDoc || (actual && actual.provider) || 'S/I', updatedAt: f.serverTimestamp() };
+                /* v21.228: lo adeudado (entregado antes sin stock en el sistema) se descuenta primero de lo que ingresa */
+                const cq = window.SAR_CuadreIngreso ? window.SAR_CuadreIngreso.aplicar(f, db(), tx, { ref: g.ref, antes: actual, quantity: m.quantity, batches: m.batches, documento: `${recId} · OC ${oc.numeroOC}`, bodega: central, nombre: g.nombre, usuario: usuario() }) : null;
+                if (cq) { m.quantity = cq.quantity; m.batches = cq.batches; }
+                const prox2 = m.batches[0];
+                const base = { origenOC: true, ...(g.codigo ? { codigoMP: g.codigo } : {}), quantity: m.quantity, batches: m.batches, isCritical: m.quantity <= limite, batch: prox2 ? prox2.batch : '', expirationDate: prox2 ? prox2.expirationDate : 'N/A', provider: oc.proveedor || provDoc || (actual && actual.provider) || 'S/I', ...(cq ? { sobregiro: cq.sobregiro, sobregiroDetalle: cq.sobregiroDetalle } : {}), ...(actual && !actual.location ? { location: central, bodegaNombre: central } : {}), updatedAt: f.serverTimestamp() };
                 if (actual) tx.update(g.ref, base); else tx.set(g.ref, { name: g.nombre, name_lowercase: String(g.nombre).toLowerCase(), location: central, criticalLimit: 50, ...base });
                 g.ingresos.forEach(ing => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), {
                     insumoName: g.nombre, item: g.nombre, quantity: ing.cantidad, type: 'INGRESO_OC', batch: ing.lote, expirationDate: ing.vence, destination: central, dest: central, origin: oc.proveedor || 'Proveedor',

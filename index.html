@@ -257,6 +257,9 @@
                     <a href="#" class="menu-item normal" data-target="view-etiquetas" data-title="Impresión de etiquetas">
                         <i class="ph-bold ph-printer"></i><span class="menu-label">Impresión de etiquetas <span id="etq-badge" class="home-badge" style="display:none"></span></span>
                     </a>
+                    <a href="#" class="menu-item normal admin-only" data-target="view-salud-inventario" data-title="Salud del inventario">
+                        <i class="ph-bold ph-heartbeat"></i><span class="menu-label">Salud del inventario <span id="sal-badge" class="home-badge" style="display:none"></span></span>
+                    </a>
                     <a href="#" class="menu-item normal admin-only" data-target="view-bodegas" data-title="Bodegas">
                         <i class="ph-bold ph-buildings"></i><span class="menu-label">Bodegas</span>
                     </a>
@@ -2681,6 +2684,10 @@
 
             <section id="view-bultos" class="view-section" style="display:none;">
                 <div class="dashboard-container" id="bu-root"></div>
+            </section>
+
+            <section id="view-salud-inventario" class="view-section" style="display:none;">
+                <div class="dashboard-container" id="sal-root"></div>
             </section>
 
             <section id="view-etiquetas" class="view-section" style="display:none;">
@@ -5963,6 +5970,8 @@
     <script src="monitor-errores.js?v=21.227"></script>
     <script src="lotes-alertas.js?v=21.227"></script>
     <script src="correlativos.js?v=21.227"></script>
+    <script src="cuadre-ingreso.js?v=21.227"></script>
+    <script src="salud-inventario.js?v=21.227"></script>
     <script src="codigo-sar.js?v=21.227"></script>
     <script src="categorias.js?v=21.227"></script>
     <script src="gobernanza.js?v=21.227"></script>

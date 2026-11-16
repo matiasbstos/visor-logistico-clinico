@@ -145,7 +145,8 @@ window.SAR_buscarInsumoCentral = async function (nombre) {
     const F = window.firebaseFirestore, d = window.firebaseDb;
     const snap = await F.getDocs(F.query(F.collection(d, 'Insumos'), F.where('name', '==', nombre), F.limit(25)));
     if (snap.empty) return null;
-    const docs = snap.docs;
+    /* v21.228: con repetidos del mismo nombre, el de Central con MÁS stock (antes el primero, que podía ser un provisional en 0) */
+    const docs = snap.docs.slice().sort((a, b) => (Number(b.data().quantity) || 0) - (Number(a.data().quantity) || 0));
     const central = docs.find(x => /central/i.test(String(x.data().location || ''))) || docs.find(x => !x.data().location) || docs[0];
     return { id: central.id, ref: F.doc(d, 'Insumos', central.id) };
 };
@@ -2055,6 +2056,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'view-solicitud-insumos': 'Solicitud de insumos',
             'view-bultos': 'Bultos y etiquetas',
             'view-etiquetas': 'Impresión de etiquetas',
+            'view-salud-inventario': 'Salud del inventario',
             'view-solicitudes-insumos': 'Solicitudes recibidas',
             'view-bitacora-oc': 'Bitácora de órdenes',
             'view-duplicados': 'Revisar productos parecidos',
@@ -2099,8 +2101,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Control de acceso por rol (espejo de las reglas CSS del menú; la barrera real son las reglas de Firestore)
             const VISTAS_BLOQUEADAS = {
                 enfermero: ['view-historial', 'view-ajustes', 'view-compras', 'view-informes', 'view-bodegas',
-                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-compras-agiles', 'view-ingreso-rapido', 'view-pendientes-entrega', 'view-distribucion-centros', 'view-transitoria', 'view-sustituciones', 'view-solicitudes-insumos', 'view-bultos', 'view-etiquetas', 'view-bitacora-oc', 'view-duplicados', 'view-actas-entrega', 'view-auditoria', 'view-oxigeno', 'view-errores'],
-                operador: ['view-compras', 'view-usuarios', 'view-configuracion', 'view-errores']
+                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-compras-agiles', 'view-ingreso-rapido', 'view-pendientes-entrega', 'view-distribucion-centros', 'view-transitoria', 'view-sustituciones', 'view-solicitudes-insumos', 'view-bultos', 'view-etiquetas', 'view-salud-inventario', 'view-bitacora-oc', 'view-duplicados', 'view-actas-entrega', 'view-auditoria', 'view-oxigeno', 'view-errores'],
+                operador: ['view-compras', 'view-usuarios', 'view-configuracion', 'view-errores', 'view-salud-inventario']
             };
             const rolActual = String(document.body.dataset.userRole || '').toLowerCase();
             // Rol «transitoria»: solo puede ver la Bodega transitoria (cualquier otra vista la devuelve ahí)
@@ -2175,6 +2177,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (window.SAR_Bitacora) window.SAR_Bitacora.abrir();
                 } else if (hash === 'view-bultos') {
                     if (window.SAR_Bultos) window.SAR_Bultos.abrir();
+                } else if (hash === 'view-salud-inventario') {
+                    if (window.SAR_Salud) window.SAR_Salud.abrir();
                 } else if (hash === 'view-etiquetas') {
                     if (window.SAR_Bultos) window.SAR_Bultos.abrirEtiquetas();
                 } else if (hash === 'view-solicitud-insumos') {
@@ -3000,8 +3004,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const insumosRef = collection(db, 'Insumos');
                 let snapshot = await getDocs(insumosRef);
 
-                // Auto-Sincronización: Si Firestore Insumos está vacío pero hay datos en la sesión local
-                if (snapshot.empty) {
+                // Auto-Sincronización: Si Firestore Insumos está vacío pero hay datos en la sesión local.
+                // v21.228: solo si la respuesta vino del servidor (vacío real), nunca desde la caché sin conexión: si no, al volver
+                // internet se duplicaría todo el inventario con un respaldo viejo del teléfono.
+                if (snapshot.empty && snapshot.metadata && snapshot.metadata.fromCache === false) {
                     try {
                         const localSession = JSON.parse(localStorage.getItem('SAR_TOMA_INVENTARIO_ITEMS_v2') || localStorage.getItem('visor_toma_backup_vault') || '[]');
                         if (localSession.length > 0) {
@@ -4856,10 +4862,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             // FEFO: Ordenar array por fecha de vencimiento ascendente
                             currentBatches.sort(window.fefoCompare);
+                            /* v21.228: lo adeudado (entregado antes con acta sin stock en el sistema) se descuenta primero de lo que ingresa */
+                            const cq = window.SAR_CuadreIngreso ? window.SAR_CuadreIngreso.aplicar({ doc, collection, serverTimestamp }, db, transaction, { ref: insumoRef, antes: dataAnterior, quantity: (Number(dataAnterior.quantity) || 0) + quantity, batches: currentBatches, documento: codigoIngreso || 'Ingreso', bodega: dataAnterior.location || destinoNombre, nombre: dataAnterior.name, usuario: (auth.currentUser && auth.currentUser.email) || '' }) : null;
 
                             transaction.update(insumoRef, {
-                                quantity: increment(quantity),
-                                batches: currentBatches,
+                                ...(cq ? { quantity: cq.quantity, batches: cq.batches, sobregiro: cq.sobregiro, sobregiroDetalle: cq.sobregiroDetalle } : { quantity: increment(quantity), batches: currentBatches }),
                                 provider: data.providerId || insumoSnap.data().provider,
                                 purchaseType: data.purchaseType || insumoSnap.data().purchaseType,
                                 ...(!dataAnterior.codigoSAR && codigoSAR ? { codigoSAR } : {}),
@@ -5774,7 +5781,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 bodegaData.managerId = bodegaData.managerName.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
                 try {
-                    await addDoc(collection(db, 'Bodegas'), {
+                    bodegaData.name = String(bodegaData.name || '').trim().replace(/\s+/g, ' ');   /* v21.228: sin espacios sobrantes (una «Bodega Transitoria » con espacio final partió el stock en dos) */
+                if (!bodegaData.name) { showToast('Falta el nombre', 'Escribe el nombre de la bodega.', 'warning'); return; }
+                await addDoc(collection(db, 'Bodegas'), {
                         ...bodegaData,
                         isActive: bodegaData.isActive === 'true',
                         usaEstantes: bodegaData.usaEstantes === 'true',

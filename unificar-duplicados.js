@@ -13,11 +13,17 @@
   const clave = (d) => { const mp = String(d.codigoMP || '').replace(/\D/g, ''); return mp ? 'mp:' + mp : 'n:' + norm(d.name); };
   const lotesDe = (d) => (Array.isArray(d.batches) && d.batches.length ? d.batches : (num(d.quantity) > 0 ? [{ batch: d.batch || 'S/L', quantity: num(d.quantity), expirationDate: d.expirationDate || '' }] : []));
 
-  /** Puro: grupos de duplicados dentro de una lista [{id, data}] (misma bodega). */
+  /** Puro: grupos de duplicados dentro de una lista [{id, data}] (misma bodega).
+   *  v21.228: repetido = mismo ID de Mercado Público O mismo nombre (sin tildes ni espacios). Antes solo por ID cuando lo había:
+   *  la sabanilla con 3 registros 4623811 y 1 registro 4623804, todos con el mismo nombre, no se juntaba. */
   function detectar(docs) {
-    const m = new Map();
-    (docs || []).forEach(x => { if (!x.data || !String(x.data.name || '').trim()) return; const k = clave(x.data); if (!m.has(k)) m.set(k, []); m.get(k).push(x); });
-    return [...m.values()].filter(g => g.length > 1);
+    const l = (docs || []).filter(x => x.data && String(x.data.name || '').trim() && x.data.status !== 'CUARENTENA'), padre = l.map((_, i) => i);
+    const raiz = (i) => { while (padre[i] !== i) { padre[i] = padre[padre[i]]; i = padre[i]; } return i; }, une = (a, b) => { a = raiz(a); b = raiz(b); if (a !== b) padre[b] = a; };
+    const porN = new Map(), porMp = new Map();
+    l.forEach((x, i) => { const n = norm(x.data.name), mp = String(x.data.codigoMP || '').replace(/\D/g, '');
+      if (porN.has(n)) une(porN.get(n), i); else porN.set(n, i); if (mp) { if (porMp.has(mp)) une(porMp.get(mp), i); else porMp.set(mp, i); } });
+    const g = new Map(); l.forEach((x, i) => { const r = raiz(i); if (!g.has(r)) g.set(r, []); g.get(r).push(x); });
+    return [...g.values()].filter(x => x.length > 1);
   }
   /** Puro: junta un grupo en un solo producto. Sobrevive el que tiene más stock (a igualdad, el que no es provisional y luego el primero). */
   function fusionar(grupo) {
@@ -36,11 +42,33 @@
   }
 
   async function insumosDe(bodega) {
-    const f = fs(), sn = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('location', '==', bodega), f.limit(1500))), l = [];
+    const f = fs(), sn = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('location', '==', bodega), f.limit(5000))), l = [];
     sn.forEach(d => l.push({ id: d.id, data: d.data() })); return l;
   }
+  /** v21.228: no se puede unir si una solicitud tiene unidades «En tránsito» o por recibir de un registro que se borraría. */
+  async function revisarSolicitudes(quitar) {
+    const f = fs(), set = new Set(quitar), sn = await f.getDocs(f.query(f.collection(db(), 'Solicitudes_Insumos'), f.limit(2000))), cambiar = [];
+    for (const d of sn.docs) {
+      const x = d.data(); if (!Array.isArray(x.lineas)) continue; let toca = false;
+      x.lineas.forEach(l => { if (set.has(l.insumoId) || (l.seleccion || []).some(z => set.has(z.insumoId)) || Object.values(l.transito || {}).some(v => set.has(v))) toca = true; });
+      if (!toca) continue;
+      const abierta = !['ENTREGADA', 'ANULADA'].includes(x.estado);
+      if (abierta && x.lineas.some(l => Object.values(l.transito || {}).some(v => set.has(v)) || (l.seleccion || []).some(z => set.has(z.insumoId) && (l.movidos || []).length > (l.recibidos || []).length)))
+        throw new Error(`La solicitud ${x.correlativo || d.id} tiene unidades en camino de uno de estos registros: márcala «Recibido» antes de unir.`);
+      cambiar.push(d);
+    }
+    return cambiar;
+  }
+  async function repuntarSolicitudes(docs, quitar, id) {
+    const f = fs(), set = new Set(quitar), cambia = (v) => set.has(v) ? id : v;
+    for (const d of docs) { const x = d.data(); await f.updateDoc(d.ref, { lineas: x.lineas.map(l => ({ ...l, ...(l.insumoId ? { insumoId: cambia(l.insumoId) } : {}), ...(Array.isArray(l.seleccion) ? { seleccion: l.seleccion.map(z => ({ ...z, insumoId: cambia(z.insumoId) })) } : {}) })), actualizadoEn: new Date().toISOString() }); }
+  }
+  async function repuntarBultos(quitar, id) {
+    const f = fs(), set = new Set(quitar); let sn; try { sn = await f.getDocs(f.query(f.collection(db(), 'Contadores'), f.where('tipo', '==', 'bulto'), f.limit(5000))); } catch (e) { return; }
+    for (const d of sn.docs) if (set.has(d.data().insumoId)) await f.setDoc(d.ref, { insumoId: id }, { merge: true });
+  }
   async function repuntarActas(quitar, id) {
-    const f = fs(), sn = await f.getDocs(f.query(f.collection(db(), 'Actas_Entrega'), f.limit(600))), set = new Set(quitar);
+    const f = fs(), sn = await f.getDocs(f.query(f.collection(db(), 'Actas_Entrega'), f.limit(5000))), set = new Set(quitar);   // v21.228: antes 600
     for (const d of sn.docs) {
       const items = d.data().items; if (!Array.isArray(items) || !items.some(i => set.has(i.id))) continue;
       await f.updateDoc(d.ref, { items: items.map(i => set.has(i.id) ? { ...i, id } : i) });
@@ -48,14 +76,15 @@
   }
   async function unir(grupo, usuario) {
     const f = fs(), r = fusionar(grupo);
-    await repuntarActas(r.quitar, r.id);
+    const sols = await revisarSolicitudes(r.quitar);   // v21.228: bloquea si hay unidades en camino; luego reapunta solicitudes y cajas
+    await repuntarActas(r.quitar, r.id); await repuntarSolicitudes(sols, r.quitar, r.id); await repuntarBultos(r.quitar, r.id);
     await f.runTransaction(db(), async (tx) => {
       const refs = [r.id].concat(r.quitar).map(i => f.doc(f.collection(db(), 'Insumos'), i)), snaps = [];
       for (const rf of refs) snaps.push(await tx.get(rf));
       const fresco = fusionar(snaps.map((s, k) => ({ id: refs[k].id, data: s.exists() ? s.data() : {} })).filter(x => x.data && x.data.name));
       tx.update(f.doc(f.collection(db(), 'Insumos'), fresco.id), { ...fresco.patch, updatedAt: f.serverTimestamp() });
       fresco.quitar.forEach(i => tx.delete(f.doc(f.collection(db(), 'Insumos'), i)));
-      tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { type: 'UNIFICACION_STOCK', insumoName: grupo[0].data.name, insumoId: fresco.id, quantity: 0, batch: 'S/L', document: 'UNIFICACION', user: usuario, date: f.serverTimestamp(), observations: `Se unieron ${fresco.quitar.length + 1} registros repetidos en uno (stock ${fresco.patch.quantity}, sobregiro ${fresco.patch.sobregiro}).` });
+      tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { type: 'UNIFICACION_STOCK', insumoName: grupo[0].data.name, insumoId: fresco.id, quantity: 0, batch: 'S/L', document: 'UNIFICACION', user: usuario, date: f.serverTimestamp(), observations: `Se unieron ${fresco.quitar.length + 1} registros repetidos en uno (stock ${fresco.patch.quantity}, sobregiro ${fresco.patch.sobregiro}).`, observacion: `Se unieron ${fresco.quitar.length + 1} registros repetidos en uno (stock ${fresco.patch.quantity}, adeudado ${fresco.patch.sobregiro}). Registros quitados: ${fresco.quitar.join(', ')}.`, origin: (grupo[0].data.location || ''), quitados: fresco.quitar });
     });
     return r;
   }
@@ -83,7 +112,7 @@
     };
   }
   if (document) document.addEventListener('click', (e) => { const b = e.target && e.target.closest && e.target.closest('[data-unificar-bodega]'); if (b) abrir(b.dataset.unificarBodega, () => { if (window.SAR_ActasEntrega && window.SAR_ActasEntrega.recargarStock) window.SAR_ActasEntrega.recargarStock(); }); });
-  const api = { detectar, fusionar, abrir, insumosDe };
+  const api = { detectar, fusionar, abrir, insumosDe, unir };
   window.SAR_Unificar = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : null);

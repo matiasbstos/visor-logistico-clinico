@@ -171,16 +171,21 @@
                 let repetido = false; todas.forEach(d => { if (d.id !== bodega.id && String(d.data().name || '').trim().toLowerCase() === nuevo.toLowerCase()) repetido = true; });
                 if (repetido) throw new Error('Ya existe otra bodega con ese nombre.');
                 if (!antes) { let hayCentral = false; todas.forEach(d => { if (d.id !== bodega.id && /^bodega central$/i.test(String(d.data().name || '').trim())) hayCentral = true; }); if (!hayCentral) antes = 'Bodega Central'; }   // solo la bodega original, sin nombre, equivale a «Bodega Central»
-                if (antes && antes.toLowerCase() !== nuevo.toLowerCase()) {
-                    const n0 = await fs().getDocs(fs().query(fs().collection(db(), 'Insumos'), fs().where('location', '==', antes), fs().limit(1500)));
-                    if (n0.size && !confirm(`Al cambiar el nombre de «${antes}» a «${nuevo}», ${n0.size} producto(s) con stock pasarán a llamarse «${nuevo}».\n\n¿Es lo que quieres?`)) throw new Error('Cancelado: el nombre no se cambió.');
+                /* v21.228: se trasladan TODAS las formas del nombre anterior (con espacios de más incluidas) a la nueva; antes se comparaba
+                   recortado y «Bodega Transitoria » → «Bodega Transitoria» no movía nada (quedaban dos bodegas) */
+                const crudo = String(bodega.name || ''), variantes = [...new Set([crudo, antes, crudo.trim().replace(/\s+/g, ' ')].filter(v => v && v !== nuevo))];
+                const aMover = new Map();
+                if (antes) for (const v of variantes) for (const campo of ['location', 'bodegaNombre']) {
+                    const sn = await fs().getDocs(fs().query(fs().collection(db(), 'Insumos'), fs().where(campo, '==', v), fs().limit(5000))); sn.forEach(d => aMover.set(d.id, d));
                 }
+                if (aMover.size && !confirm(`Al guardar el nombre «${nuevo}», ${aMover.size} producto(s) que estaban como «${variantes.join('» / «')}» pasarán a «${nuevo}».\n\n¿Es lo que quieres?`)) throw new Error('Cancelado: el nombre no se cambió.');
                 const ref = fs().doc(fs().collection(db(), 'Bodegas'), bodega.id);
                 await fs().setDoc(ref, { name: nuevo, ...(bodega.type ? {} : { type: 'principal' }) }, { merge: true });
                 let movidos = 0;
-                if (antes && antes.toLowerCase() !== nuevo.toLowerCase()) {      // el stock que estaba en la bodega sigue con ella
-                    const ins = await fs().getDocs(fs().query(fs().collection(db(), 'Insumos'), fs().where('location', '==', antes), fs().limit(1500)));
-                    for (const d of ins.docs) { await fs().updateDoc(d.ref, { location: nuevo }); movidos++; }
+                if (aMover.size) {      // el stock que estaba en la bodega sigue con ella
+                    prog.paso(`Pasando ${aMover.size} producto(s) a «${nuevo}»…`);
+                    for (const d of aMover.values()) { const x = d.data(); await fs().updateDoc(d.ref, { location: nuevo, ...(x.bodegaNombre !== undefined ? { bodegaNombre: nuevo } : {}) }); movidos++; }
+                    try { await fs().setDoc(fs().doc(fs().collection(db(), 'Historial_Movimientos')), { type: 'RENOMBRE_BODEGA', insumoName: `Bodega: ${variantes.join(' / ')} → ${nuevo}`, quantity: 0, origin: variantes.join(' / '), dest: nuevo, user: (window.firebaseAuth && window.firebaseAuth.currentUser && window.firebaseAuth.currentUser.email) || '', date: fs().serverTimestamp(), document: 'Cambio de nombre de bodega', observacion: `${movidos} producto(s) pasaron de «${variantes.join('» / «')}» a «${nuevo}» (sin cambio de stock).` }); } catch (e) { /* el cambio ya quedó; solo falta la bitácora */ }
                 }
                 const leido = (await fs().getDoc(ref)).data() || {};
                 if (leido.name !== nuevo) throw new Error('el dato no quedó guardado');

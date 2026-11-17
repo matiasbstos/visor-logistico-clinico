@@ -1300,10 +1300,13 @@
             }
         }
         paso(`Guardando la recepción ${recId} y subiendo ${det.reduce((t, d) => t + d.cantidad, 0)} unidades al stock…`);
+        let yaRegistrada = false;
         await f.runTransaction(db(), async (tx) => {
             const os = await tx.get(ocRef); if (!os.exists()) throw new Error('La orden ya no existe.');
             const lecturas = []; for (const g of grupos.values()) lecturas.push([g, await tx.get(g.ref)]);
             const fresca = os.data();
+            /* v21.230: si esta recepción (mismo N° REC) ya quedó guardada —reintento tras un corte—, no se vuelve a ingresar */
+            if ((fresca.recepciones || []).some(r => r && r.recId === recId)) { yaRegistrada = true; return; }
             if (extras && extras.length) {   // productos agregados en la recepción: se suman a las líneas de la orden
                 if ((fresca.lineas || []).length !== baseN) throw new Error('La orden cambió mientras recibías. Cierra la ventana y vuelve a abrir la recepción.');
                 fresca.lineas = [...(fresca.lineas || []), ...extras.map(l => ({ ...l, agregadaPor: usuario(), agregadaEn: hoyISO() }))];
@@ -1317,7 +1320,7 @@
                 const prox = m.batches[0];
                 /* v21.228: lo adeudado (entregado antes sin stock en el sistema) se descuenta primero de lo que ingresa */
                 const cq = window.SAR_CuadreIngreso ? window.SAR_CuadreIngreso.aplicar(f, db(), tx, { ref: g.ref, antes: actual, quantity: m.quantity, batches: m.batches, documento: `${recId} · OC ${oc.numeroOC}`, bodega: central, nombre: g.nombre, usuario: usuario() }) : null;
-                if (cq) { m.quantity = cq.quantity; m.batches = cq.batches; cuadresEv.push({ idInsumo: g.ref.id, nombre: g.nombre, cuadrado: cq.cuadrado, cubiertas: cq.cubiertas }); }
+                if (cq) { m.quantity = cq.quantity; m.batches = cq.batches; cuadresEv.push({ idInsumo: g.ref.id, nombre: g.nombre, cuadrado: cq.cuadrado, cubiertas: cq.cubiertas, usados: cq.usados }); }
                 const prox2 = m.batches[0];
                 const base = { origenOC: true, ...(g.codigo ? { codigoMP: g.codigo } : {}), quantity: m.quantity, batches: m.batches, isCritical: m.quantity <= limite, batch: prox2 ? prox2.batch : '', expirationDate: prox2 ? prox2.expirationDate : 'N/A', provider: oc.proveedor || provDoc || (actual && actual.provider) || 'S/I', ...(cq ? { sobregiro: cq.sobregiro, sobregiroDetalle: cq.sobregiroDetalle } : {}), ...(actual && !actual.location && !actual.bodegaNombre ? { location: central, bodegaNombre: central } : {}), updatedAt: f.serverTimestamp() };
                 if (actual) tx.update(g.ref, base); else tx.set(g.ref, { name: g.nombre, name_lowercase: String(g.nombre).toLowerCase(), location: central, criticalLimit: 50, ...base });
@@ -1327,6 +1330,7 @@
             });
             tx.set(evRef, { tipo: 'RECEPCION', ...(cuadresEv.length ? { cuadres: cuadresEv } : {}), texto, autor: usuario(), fecha: f.serverTimestamp(), ...(correo ? { correo } : {}), columna: key, guia, recId, horaLlegada: hora, bodegaDestino: central, fechaRecepcion: fecha, ingresoAStock: !!ingresaStock, detalle: det.map(d => ({ i: d.i, ...(d._ref ? { idInsumo: d._ref } : {}), bodega: central, insumoName: d.insumoName || '', descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })), incidencias: incidencias.map(n => ({ producto: n.producto, tipo: n.tipo, detalle: n.detalle })) });
         });
+        if (yaRegistrada) return null;
         if (notificar) { paso('Enviando el aviso por correo…'); try { correo = await enviarCorreo(DESTINO_RECEPCION, armarCorreo({ ...oc, ...aplicadoLocal }, titulo, textoCorreo || texto, usuario())); } catch (e) { toast('Recepción guardada', 'No se pudo preparar el correo: ' + e.message, 'warning'); } }
         return correo;
     }
@@ -1365,6 +1369,8 @@
             const fresca = os.data();
             const r0 = (fresca.recepciones || []).find(r => r.recId === recId); if (!r0 || r0.anulada) throw new Error('Esa recepción ya estaba anulada.');
             const lecturas = []; for (const g of grupos.values()) lecturas.push([g, await tx.get(g.ref)]);
+            /* v21.230: estado actual de las actas cuya deuda se cuadró al recibir (una anulada no vuelve a ser deuda) */
+            const estadoActa = {}; for (const a of [...new Set((Array.isArray(ev.cuadres) ? ev.cuadres : []).flatMap(c => (c.cubiertas || []).map(x => x.acta)).filter(x => x && x !== '(sin acta)'))]) { try { const sa = await tx.get(f.doc(f.collection(db(), 'Actas_Entrega'), a)); estadoActa[a] = sa.exists() ? (sa.data().estado || 'EMITIDA') : 'EMITIDA'; } catch (e) { estadoActa[a] = 'EMITIDA'; } }
             const lineas = (fresca.lineas || []).map(l => ({ ...l, recibido: { ...(l.recibido || {}) }, ingresado: { ...(l.ingresado || {}) }, entregado: { ...(l.entregado || {}) } }));
             ev.detalle.forEach(d => {
                 const l = lineas[d.i]; if (!l) throw new Error('Una línea de la recepción ya no existe en la orden.');
@@ -1377,12 +1383,16 @@
                 if (!snap.exists()) throw new Error(`"${g.nombre}" ya no existe en el stock.`);
                 const d = snap.data(); let lotes = (Array.isArray(d.batches) ? d.batches : []).map(b => ({ ...b }));
                 if (!lotes.length && num(d.quantity) > 0) lotes = [{ batch: d.batch || 'S/L', quantity: num(d.quantity), expirationDate: d.expirationDate || 'N/A' }];
-                /* v21.228: si al recibir se descontó lo adeudado, esas unidades no están en el stock: se vuelven a dejar como adeudadas */
-                const cu = (Array.isArray(ev.cuadres) ? ev.cuadres : []).filter(c => c.idInsumo === g.ref.id), cuad = cu.reduce((t, c) => t + num(c.cuadrado), 0);
-                let porCuadre = cuad;
+                /* v21.230: si al recibir se descontó lo adeudado, se deshace exacto: vuelven a los MISMOS lotes las unidades cuadradas
+                   (de actas aún vigentes), vuelven a quedar como adeudadas, y luego se retira todo lo que entró con la recepción. */
+                const cu = (Array.isArray(ev.cuadres) ? ev.cuadres : []).filter(c => c.idInsumo === g.ref.id);
+                const vigentes = cu.flatMap(c => (c.cubiertas || []).filter(x => (estadoActa[x.acta] || 'EMITIDA') === 'EMITIDA').map(x => ({ acta: x.acta, qty: num(x.qty) })));
+                let porVolver = vigentes.reduce((t, x) => t + x.qty, 0); const cuad = porVolver;
+                cu.flatMap(c => c.usados || []).forEach(u => { const k = Math.min(porVolver, num(u.used)); if (!(k > 0)) return; porVolver -= k;
+                    const ex = lotes.find(b => b.batch === u.batch && (b.expirationDate || '') === (u.expirationDate || '')); if (ex) ex.quantity = num(ex.quantity) + k; else lotes.push({ batch: u.batch, quantity: k, expirationDate: u.expirationDate || '' }); });
+                if (porVolver > 0) { const sl = lotes.find(b => b.batch === 'S/L'); if (sl) sl.quantity = num(sl.quantity) + porVolver; else lotes.push({ batch: 'S/L', quantity: porVolver, expirationDate: 'N/A' }); porVolver = 0; }
                 g.quitar.forEach(q => {
-                    const ya = Math.min(porCuadre, q.cantidad); porCuadre -= ya;
-                    let falta = q.cantidad - ya;
+                    let falta = q.cantidad;
                     const sacar = (b) => { const t = Math.min(falta, num(b.quantity)); b.quantity = num(b.quantity) - t; falta -= t; };
                     lotes.filter(b => b.batch === ((q.lote || '').trim().toUpperCase() || 'S/L') && (b.expirationDate || 'N/A') === (q.vence || 'N/A')).forEach(b => { if (falta > 0) sacar(b); });
                     if (falta > 0) lotes.filter(b => b.batch === 'S/L').forEach(b => { if (falta > 0) sacar(b); });
@@ -1391,7 +1401,7 @@
                 });
                 lotes = lotes.filter(b => num(b.quantity) > 0);
                 const total = lotes.reduce((t, b) => t + num(b.quantity), 0), prox = lotes[0];
-                const devuelve = cuad > 0 ? { sobregiro: num(d.sobregiro) + cuad, sobregiroDetalle: (Array.isArray(d.sobregiroDetalle) ? d.sobregiroDetalle : []).concat(cu.flatMap(c => (c.cubiertas || []).map(x => ({ acta: x.acta, qty: num(x.qty) })))) } : {};
+                const devuelve = cuad > 0 ? { sobregiro: num(d.sobregiro) + cuad, sobregiroDetalle: (Array.isArray(d.sobregiroDetalle) ? d.sobregiroDetalle : []).concat(vigentes) } : {};
                 nuevas.push([g, { quantity: total, batches: lotes, ...devuelve, isCritical: total <= (num(d.criticalLimit || d.stock_minimo) || 50), batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', updatedAt: f.serverTimestamp() }]);
             });
             tx.update(ocRef, { lineas, recepciones: (fresca.recepciones || []).map(r => r.recId === recId ? { ...r, anulada: true, anuladaPor: usuario(), anuladaMotivo: motivo, anuladaFecha: hoyISO() } : r), actualizadoEn: f.serverTimestamp() });
@@ -1530,7 +1540,8 @@
                 const textoDe = (k, recId) => { const col = cols.find(c => c.key === k), g = porKey.get(k), det = g.det, incidencias = g.incidencias; return `${recId} · Recepción en ${col.centro}${col.memo ? ' (memo ' + col.memo + (col.cdp ? ', CDP ' + col.cdp : '') + ')' : ''} el ${fmtFecha(fecha)} a las ${hora}${guia ? ' · guía N° ' + guia : ''}:\n` +
                     (det.length ? det.map(d => `- ${oc.lineas[d.i].descripcion}${oc.lineas[d.i].agregada ? ' (agregado en la recepción)' : ''}: ${d.cantidad} un.${d.lote ? ' · lote ' + d.lote : ''}${d.vence ? ' · vence ' + fmtFecha(d.vence) : ''}`).join('\n') : '- (sin unidades recibidas)') +
                     (incidencias.length ? '\nINCIDENCIAS:\n' + incidencias.map(n => `- ${n.producto}: ${INCIDENCIAS[n.tipo]}${n.detalle ? ' — ' + n.detalle : ''}`).join('\n') : '') + (obs ? '\nObs.: ' + obs : '') + (ingresaStock ? `\nIngresado al stock de ${central}.` : ''); };
-                const ids = window.SAR_Folio ? await window.SAR_Folio.varios('REC', activos.length) : activos.map((k, n) => idDe(n)), /* REC-AAAA-NNNNN: la OC queda como dato aparte; el archivo RC_<orden> no cambia */ unidades = allDet.reduce((t, d) => t + d.cantidad, 0), hayInc = activos.some(k => porKey.get(k).incidencias.length);
+                const firmaRec = activos.join('|'); if (!o._recIds || o._recFirma !== firmaRec) { o._recIds = window.SAR_Folio ? await window.SAR_Folio.varios('REC', activos.length) : activos.map((k, n) => idDe(n)); o._recFirma = firmaRec; }   /* v21.230: los mismos N° REC si se reintenta en la misma ventana */
+                const ids = o._recIds, /* REC-AAAA-NNNNN: la OC queda como dato aparte; el archivo RC_<orden> no cambia */ unidades = allDet.reduce((t, d) => t + d.cantidad, 0), hayInc = activos.some(k => porKey.get(k).incidencias.length);
                 const textoCorreo = activos.map((k, n) => textoDe(k, ids[n])).join('\n\n'), tituloCorreo = (hayInc ? 'Recepción con incidencias' : 'Recepción') + (activos.length > 1 ? ` de ${activos.length} memos` : ` en ${(cols.find(c => c.key === activos[0]) || {}).centro}`);
                 const prog = progresoRecepcion(o, ['Validando la recepción…']);
                 const recNuevas = [];

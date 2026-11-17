@@ -85,14 +85,16 @@
   // ---------------- ejecutores ----------------
   // idMov = id de la operación: si dos pestañas o un reintento la aplican, la segunda ve el movimiento ya creado y no mueve de nuevo (v21.212)
   registrar('traspaso', async (d, op) => { if (!window.SAR_Traspaso || !window.SAR_Traspaso.moverUno) throw new Error('sin conexión: módulo de transferencias aún no cargado'); try { await window.SAR_Traspaso.moverUno(d.id, d.desde, d.hasta, d.lotes, (d.nota ? d.nota + ' · ' : '') + 'hecho sin conexión el ' + new Date(d.en || Date.now()).toLocaleString('es-CL'), { idMov: op && op.id }); } catch (e) { if (!e.ya) throw e; } });
-  registrar('ajuste', async (d) => {
+  registrar('ajuste', async (d, op) => {   /* v21.230: idempotente con op.id (un reintento tras corte no descuenta dos veces) */
     const f = window.firebaseFirestore, db = window.firebaseDb, G = window.SAR_Gobernanza;
     const snap = await f.getDoc(f.doc(f.collection(db, 'Insumos'), d.docId)); if (!snap.exists()) throw new Error('El producto ya no existe.');
     const stock = Number(snap.data().quantity) || 0; if (stock + d.cantidad < 0) throw new Error(`Hoy hay ${stock}: el ajuste de ${d.cantidad} dejaría stock negativo.`);
-    const cod = G ? await G.codigo('AJU') : null, just = `${d.justificacion} · hecho sin conexión el ${new Date(d.en).toLocaleString('es-CL')}`;
-    if (G && d.motivo) await G.registrar({ nombre: d.nombre, delta: d.cantidad, codigo: cod, motivo: d.motivo, nota: d.nota, origen: 'AJUSTE', antes: stock, despues: stock + d.cantidad, insumoId: d.docId }).catch(() => {});
-    if (d.directo) { if (!window.ejecutarAjusteDirecto) throw new Error('sin conexión: módulo de ajustes aún no cargado'); await window.ejecutarAjusteDirecto(d.docId, stock, d.nombre, d.cantidad, just, cod); }
-    else await f.setDoc(f.doc(f.collection(db, 'Solicitudes_Ajuste')), { code: cod || (window.SAR_Folio ? window.SAR_Folio.provisional('AJU') : 'ADJ-' + Math.floor(10000 + Math.random() * 90000)), insumoId: d.docId, insumoName: d.nombre, cantidad: d.cantidad, justificacion: just, previousStock: stock, projectedStock: stock + d.cantidad, status: 'pendiente', date: f.serverTimestamp(), requester: usuario() });
+    const cod = d.codigo || (G ? await G.codigo('AJU') : null), just = `${d.justificacion} · hecho sin conexión el ${new Date(d.en).toLocaleString('es-CL')}`;
+    if (!d.codigo && cod) guardar(leer().map(x => x.id === (op && op.id) ? { ...x, datos: { ...x.datos, codigo: cod } } : x));   /* el mismo código en cada reintento */
+    let aplicado = true;
+    if (d.directo) { if (!window.ejecutarAjusteDirecto) throw new Error('sin conexión: módulo de ajustes aún no cargado'); try { await window.ejecutarAjusteDirecto(d.docId, stock, d.nombre, d.cantidad, just, cod, { idMov: op && op.id }); } catch (e) { if (!e.ya) throw e; aplicado = false; } }
+    else { const ref = f.doc(f.collection(db, 'Solicitudes_Ajuste'), 'cola-' + ((op && op.id) || Date.now())); const ya = await f.getDoc(ref).catch(() => null); if (ya && ya.exists()) aplicado = false; else await f.setDoc(ref, { code: cod || (window.SAR_Folio ? window.SAR_Folio.provisional('AJU') : 'ADJ-' + Math.floor(10000 + Math.random() * 90000)), insumoId: d.docId, insumoName: d.nombre, cantidad: d.cantidad, justificacion: just, previousStock: stock, projectedStock: stock + d.cantidad, status: 'pendiente', date: f.serverTimestamp(), requester: usuario() }); }
+    if (aplicado && G && d.motivo) await G.registrar({ nombre: d.nombre, delta: d.cantidad, codigo: cod, motivo: d.motivo, nota: d.nota, origen: 'AJUSTE', antes: stock, despues: stock + d.cantidad, insumoId: d.docId }).catch(() => {});   // después del ajuste, una sola vez
   });
 
   // ---------------- disparadores ----------------

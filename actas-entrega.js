@@ -102,8 +102,8 @@
         return { usados, cuadreUsados, batches: lotes.filter(l => l.quantity > 0), quantity: q, sobregiro: sg, sobregiroDetalle: det, cubiertas, faltante, cuadrado };
     }
     /** Cuadre explícito (sin entrega): descuenta del stock lo ya entregado sin respaldo. */
-    function cuadrar(d) {
-        const q = num(d.quantity), sg = num(d.sobregiro), n = Math.min(q, sg);
+    function cuadrar(d, max) {   /* v21.230: max = tope (p. ej. solo lo que ingresa ahora) */
+        const q = num(d.quantity), sg = num(d.sobregiro), n = Math.min(q, sg, max == null ? Infinity : Math.max(0, num(max)));
         if (!(n > 0)) return { cuadrado: 0, batches: lotesDeDoc(d), quantity: q, sobregiro: sg, sobregiroDetalle: detalleDe(d), cubiertas: [], usados: [] };
         const cmp = typeof window.fefoCompare === 'function' ? window.fefoCompare : () => 0;
         const lotes = lotesDeDoc(d).sort(cmp), usados = [];
@@ -367,6 +367,8 @@
             else if (q2 && !q2.empty) { i.id = q2.docs[0].id; i.nombre = q2.docs[0].data().name || nombre; }
             else { i.nuevo = true; i.nombre = nombre; }
         }
+        /* v21.230: el mismo producto en dos líneas haría que un descuento pise al otro (el acta diría 10 y el stock bajaría 5) */
+        { const vistos = new Map(); for (const i of items) { const k = i.nuevo ? 'n:' + String(i.nombre || '').toLowerCase().replace(/\s+/g, ' ').trim() : 'i:' + i.id; if (vistos.has(k)) throw new Error(`«${i.nombre}» está dos veces en el acta (${vistos.get(k)} y ${num(i.cantidad)} u.). Déjalo en una sola línea con el total.`); vistos.set(k, num(i.cantidad)); } }
         const refs = items.map(i => ({ i, ref: i.nuevo ? f.doc(f.collection(db(), 'Insumos')) : f.doc(f.collection(db(), 'Insumos'), i.id), hist: f.doc(f.collection(db(), 'Historial_Movimientos')), histC: f.doc(f.collection(db(), 'Historial_Movimientos')) }));
         const resultado = await f.runTransaction(db(), async (tx) => {
             let n = 0, numero = opc.numero || numHist;
@@ -724,7 +726,7 @@
             if (!(c > 0 || (c === 0 && solC > 0))) { toast('Cantidad', 'Indica una cantidad mayor que 0 (o 0 con el pedido, para dejarlo pendiente).', 'warning'); return; }
             if (borrador.items.length >= MAX_ITEMS) { toast('Límite', `Máximo ${MAX_ITEMS} productos por acta.`, 'warning'); return; }
             const nom = String(c0.descripcion || c0.insumoName || '').toUpperCase(), cod = c0.codigoMP ? String(c0.codigoMP) : '';
-            borrador.items.push({ id: null, manual: true, nombre: nom, codigo: cod, cantidad: c, solicitado: solC > c ? solC : 0, stock: 0, ...(c0.imagen ? { imagen: c0.imagen } : {}) }); refrescar();
+            if (borrador.items.some(i => normN(i.nombre) === normN(nom))) { toast('Ya está en el acta', 'Ese producto ya está agregado: cambia su cantidad en la lista del acta.', 'warning'); return; } borrador.items.push({ id: null, manual: true, nombre: nom, codigo: cod, cantidad: c, solicitado: solC > c ? solC : 0, stock: 0, ...(c0.imagen ? { imagen: c0.imagen } : {}) }); refrescar();
         }));
         $$('.act-add').forEach(b => b.addEventListener('click', () => {
             const s = stock.find(x => x.id === b.dataset.id); const inp = r.querySelector(`.act-qty[data-qid="${CSS.escape(b.dataset.id)}"]`);
@@ -734,7 +736,7 @@
             if (borrador.items.length >= MAX_ITEMS) { toast('Límite', `Máximo ${MAX_ITEMS} productos por acta.`, 'warning'); return; }
             if (s.controlado && c > s.disp) { toast('Medicamento controlado', 'No puede entregarse sin stock en sistema.', 'error'); return; }
             const sp = r.querySelector(`.act-qty[data-sid="${CSS.escape(b.dataset.id)}"]`), sol = Math.floor(num(sp && sp.value));
-            borrador.items.push({ id: s.id, nombre: s.name, codigo: s.codigo || '', cantidad: c, solicitado: sol > c ? sol : 0, stock: s.disp, controlado: s.controlado }); refrescar();
+            if (borrador.items.some(i => normN(i.nombre) === normN(s.name))) { toast('Ya está en el acta', 'Ese producto ya está agregado: cambia su cantidad en la lista del acta.', 'warning'); return; } borrador.items.push({ id: s.id, nombre: s.name, codigo: s.codigo || '', cantidad: c, solicitado: sol > c ? sol : 0, stock: s.disp, controlado: s.controlado }); refrescar();
         }));
         // Sugerencias con foto: al escribir una letra aparece el nombre sugerido, su ID y su fotografía (stock de la bodega + catálogo, incluidos los ingresados manualmente)
         const fuenteSug = () => {
@@ -777,7 +779,7 @@
             if (par) { toast('Ya existe', `"${par.name}" ya está en esta bodega: agrégalo desde la lista.`, 'warning'); return; }
             if (!cod && !confirm('No indicaste el ID del producto. Sirve para asociar la foto y la orden de compra después. ¿Agregar sin ID?')) return;
             const sol = Math.floor(num($('#act-ms').value));
-            borrador.items.push({ id: null, manual: true, nombre: n, codigo: cod, cantidad: c, solicitado: sol > c ? sol : 0, stock: 0, ...(manualImg ? { imagen: manualImg } : {}) }); manualImg = ''; refrescar();
+            if (borrador.items.some(i => normN(i.nombre) === normN(n))) { toast('Ya está en el acta', 'Ese producto ya está agregado: cambia su cantidad en la lista del acta.', 'warning'); return; } borrador.items.push({ id: null, manual: true, nombre: n, codigo: cod, cantidad: c, solicitado: sol > c ? sol : 0, stock: 0, ...(manualImg ? { imagen: manualImg } : {}) }); manualImg = ''; refrescar();
         });
         $('#act-padd').addEventListener('click', () => {
             const n = $('#act-pn').value.trim(); const c = Math.floor(num($('#act-pq').value));

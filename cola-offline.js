@@ -43,7 +43,7 @@
     if (!usuario() || !(await hayConexion())) return { ok: 0, error: 0, quedan: pendientes().length, sinRed: true };
     procesando = true; pintarChip(); let ok = 0, err = 0;
     try {
-      for (const op of leer().filter(x => x.estado === 'pendiente' || (o.reintentarErrores && x.estado === 'error'))) {
+      for (const op of leer().filter(x => (x.estado === 'pendiente' || (o.reintentarErrores && x.estado === 'error')) && (!x.por || x.por === usuario()))) {   /* v21.231: cada uno aplica lo suyo (el historial queda a nombre de quien lo hizo) */
         const fn = ejecutores[op.tipo]; if (!fn) continue;
         try { await fn(op.datos, op); ok++; guardar(leer().filter(x => x.id !== op.id)); }
         catch (e) {
@@ -71,7 +71,7 @@
   function abrirPanel() {
     const ov = document.createElement('div'); ov.className = 'sar-conf'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
     const pinta = () => { const l = pendientes(); ov.innerHTML = `<div class="sar-conf__c cola-pan"><h3 class="sar-conf__t">Hecho sin conexión</h3><p class="sar-conf__x">Se aplica solo al volver internet (y cada 30 minutos). Si algo quedó «para revisar», el stock cambió entre medio: reintenta o descártalo.</p>
-      <ul class="sar-conf__l">${l.map(x => `<li><b>${esc(x.titulo)}</b><br><small>${esc(new Date(x.creadoEn).toLocaleString('es-CL'))}${x.estado === 'error' ? ` · <span class="cola-e">Para revisar: ${esc(x.error)}</span>` : ' · pendiente'}</small>${x.estado === 'error' ? ` <button type="button" class="btn btn-secondary btn-sm" data-des="${esc(x.id)}">Descartar</button>` : ''}</li>`).join('') || '<li>Todo sincronizado.</li>'}</ul>
+      <ul class="sar-conf__l">${l.map(x => `<li><b>${esc(x.titulo)}</b><br><small>${esc(new Date(x.creadoEn).toLocaleString('es-CL'))}${x.estado === 'error' ? ` · <span class="cola-e">Para revisar: ${esc(x.error)}</span>` : ' · pendiente'}${x.por && x.por !== usuario() ? ` · <b>de ${esc(x.por)}</b>: se aplica cuando esa persona entre en este equipo` : ''}</small>${x.estado === 'error' ? ` <button type="button" class="btn btn-secondary btn-sm" data-des="${esc(x.id)}">Descartar</button>` : ''}</li>`).join('') || '<li>Todo sincronizado.</li>'}</ul>
       <div class="sar-conf__b"><button type="button" class="btn btn-secondary" data-cer="1">Cerrar</button><button type="button" class="btn btn-primary" data-sync="1">Sincronizar ahora</button></div></div>`; };
     pinta();
     ov.addEventListener('click', async (e) => {

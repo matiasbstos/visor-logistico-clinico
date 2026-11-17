@@ -121,6 +121,10 @@ t('salud del inventario: nombres con espacios, sin bodega, repetidos por nombre 
   assert.deepStrictEqual(a.nombres.map(c => c.nombre + ':' + c.productos + ':' + c.bien), ['Bodega Transitoria:1:1']); assert.deepStrictEqual(a.sinBodega.map(c => c.id), ['b1']); assert.deepStrictEqual(a.fuera.map(c => c.id), ['x1']);
   assert.deepStrictEqual(a.repetidos.map(g => g.grupo.map(x => x.id).sort().join('+')).sort(), ['k1+k2', 's1+s2']); assert.deepStrictEqual(a.deudas.map(c => c.id + ':' + c.sobregiro), ['s1:10']);
   assert.ok(a.bodegas.includes('Bodega Transitoria')); assert.strictEqual(S.limpia('  Bodega   Transitoria '), 'Bodega Transitoria'); });
+t('kárdex: efecto real de cada movimiento sobre el stock (v21.231)', () => { const V = require('../vida-producto.js'), d = V.deltaDe;
+  assert.strictEqual(d({ type: 'ENTREGA_ACTA', quantity: 5, sinRespaldo: 3 }), -2); assert.strictEqual(d({ type: 'CUADRE_SOBREGIRO', quantity: 3 }), -3); assert.strictEqual(d({ type: 'REGULARIZA_SOBREGIRO', quantity: 100 }), 0);
+  assert.strictEqual(d({ type: 'traspaso', quantity: 9 }), 0); assert.strictEqual(d({ type: 'SALIDA_SOLICITUD', quantity: 4 }), -4); assert.strictEqual(d({ type: 'RETORNO_BANDEJA', quantity: 2 }), 2);
+  assert.strictEqual(d({ type: 'merma_inventario', quantity: -6 }), -6); assert.strictEqual(d({ type: 'ANULACION_ACTA', quantity: 5, devueltoStock: 2 }), 2); assert.strictEqual(d({ type: 'carga masiva', quantity: 7, delta: 0 }), 0); assert.strictEqual(d({ type: 'X', delta: -8 }), -8); });
 t('Firestore: ninguna consulta pide más de 10.000 documentos (el máximo; más falla la lectura entera) (v21.227)', () => { const fs2 = require('fs'), path = require('path'), dir = path.join(__dirname, '..'), malos = [];
   fs2.readdirSync(dir).filter(n => n.endsWith('.js')).forEach(n => { const t = fs2.readFileSync(path.join(dir, n), 'utf8'); (t.match(/limit\((\d+)\)/g) || []).forEach(m => { if (Number(m.replace(/\D/g, '')) > 10000) malos.push(n + ': ' + m); }); });
   assert.deepStrictEqual(malos, []); });

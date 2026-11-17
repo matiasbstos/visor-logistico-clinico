@@ -421,9 +421,9 @@
                 const prox = c.batches[0];
                 const cambios = { ...(r.i.codigoNuevo && r.i.codigo && !d.codigoMP ? { codigoMP: String(r.i.codigo) } : {}), quantity: c.quantity, batches: c.batches, sobregiro: c.sobregiro, sobregiroDetalle: c.sobregiroDetalle, isCritical: c.quantity <= limite, ...(prox ? { batch: prox.batch, expirationDate: prox.expirationDate || '' } : {}), updatedAt: f.serverTimestamp() };
                 if (ultimo.get(r.clave) === k) { if (r.i.nuevo) tx.set(r.ref, { ...d, ...cambios }); else tx.update(r.ref, cambios); }   // una escritura por producto, con lo acumulado
-                c.cubiertas.forEach(cu => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name, quantity: cu.qty, type: 'CUADRE_SOBREGIRO', user: usuario, date: f.serverTimestamp(), document: numero, batch: 'MULTI-LOTE', origin: b.origen, idInsumoOrigen: r.ref.id, observacion: `Cuadre automático al ${opc.numero ? 'confirmar' : 'emitir'} ${numero}: ${cu.qty} u. del acta ${cu.acta} ya estaban entregadas sin respaldo`, actaId: cu.acta, cuadradoPor: numero }));
+                c.cubiertas.forEach(cu => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name, quantity: cu.qty, type: 'CUADRE_SOBREGIRO', delta: -num(cu.qty), user: usuario, date: f.serverTimestamp(), document: numero, batch: 'MULTI-LOTE', origin: b.origen, idInsumoOrigen: r.ref.id, observacion: `Cuadre automático al ${opc.numero ? 'confirmar' : 'emitir'} ${numero}: ${cu.qty} u. del acta ${cu.acta} ya estaban entregadas sin respaldo`, actaId: cu.acta, cuadradoPor: numero }));
                 tx.set(r.hist, {
-                    insumoName: d.name, quantity: num(r.i.cantidad), type: 'ENTREGA_ACTA', user: usuario, date: f.serverTimestamp(), document: numero,
+                    insumoName: d.name, quantity: num(r.i.cantidad), type: 'ENTREGA_ACTA', delta: -(num(r.i.cantidad) - num(c.faltante)), user: usuario, date: f.serverTimestamp(), document: numero,
                     batch: c.usados.length === 1 ? c.usados[0].batch : (c.usados.length ? 'MULTI-LOTE' : 'SIN-RESPALDO'), origin: b.origen, dest: b.centro, lotes: c.usados, ...(opc.historica ? { fechaDocumento: fecha, historica: true } : {}),
                     idInsumoOrigen: r.ref.id, sinRespaldo: c.faltante,
                     observacion: `${opc.historica ? 'Acta histórica (anterior al sistema, del ' + fecha + ') ' : 'Acta de entrega '}${numero}${c.faltante > 0 ? ` · ${c.faltante} u. sin respaldo en sistema (sobregiro)` : ''}${r.i.nuevo ? ' · insumo provisional' : ''}`, actaId: numero
@@ -505,7 +505,7 @@
                 const limite = num(d.criticalLimit || d.stock_minimo || 50);
                 if (ultimoA.get(r.i.id) === k) tx.update(r.ref, { quantity: res.quantity, batches: res.batches, sobregiro: res.sobregiro, sobregiroDetalle: res.sobregiroDetalle, isCritical: res.quantity <= limite, updatedAt: f.serverTimestamp() });
                 tx.set(r.hist, {
-                    insumoName: d.name, quantity: num(r.i.cantidad), type: 'ANULACION_ACTA', user: usuario, date: f.serverTimestamp(), document: numero,
+                    insumoName: d.name, quantity: num(r.i.cantidad), type: 'ANULACION_ACTA', devueltoStock: res.quantity - num(d.quantity), delta: res.quantity - num(d.quantity), user: usuario, date: f.serverTimestamp(), document: numero,
                     batch: 'MULTI-LOTE', origin: a.centro, dest: a.bodegaOrigen, lotes: r.i.lotes || [], idInsumoDestino: r.i.id,
                     observacion: `Anulación de acta ${numero}: ${motivo}`, actaId: numero
                 });

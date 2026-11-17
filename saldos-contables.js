@@ -48,7 +48,7 @@
             if (!(c.cuadrado > 0)) throw new Error('No hay nada que cuadrar (aún no ingresa stock al sistema).');
             const limite = num(d.criticalLimit || d.stock_minimo || 50);
             tx.update(insRef, { quantity: c.quantity, batches: c.batches, sobregiro: c.sobregiro, sobregiroDetalle: c.sobregiroDetalle, isCritical: c.quantity <= limite, updatedAt: f.serverTimestamp() });
-            c.cubiertas.forEach((cu, k) => tx.set(k === 0 ? hist : f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name, quantity: cu.qty, type: 'CUADRE_SOBREGIRO', user: usuario(), date: f.serverTimestamp(), document: ref || '', batch: 'MULTI-LOTE', origin: d.location || '', idInsumoOrigen: id, observacion: `Cuadre del acta ${cu.acta}${ref ? ' con ' + ref : ''}: ${cu.qty} u. ya entregadas se descuentan del stock ingresado`, actaId: cu.acta }));
+            c.cubiertas.forEach((cu, k) => tx.set(k === 0 ? hist : f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name, quantity: cu.qty, type: 'CUADRE_SOBREGIRO', delta: -num(cu.qty), user: usuario(), date: f.serverTimestamp(), document: ref || '', batch: 'MULTI-LOTE', origin: d.location || '', idInsumoOrigen: id, observacion: `Cuadre del acta ${cu.acta}${ref ? ' con ' + ref : ''}: ${cu.qty} u. ya entregadas se descuentan del stock ingresado`, actaId: cu.acta }));
             return c;
         });
     }

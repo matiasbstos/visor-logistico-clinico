@@ -1403,13 +1403,14 @@
                 lotes = lotes.filter(b => num(b.quantity) > 0);
                 const total = lotes.reduce((t, b) => t + num(b.quantity), 0), prox = lotes[0];
                 const devuelve = cuad > 0 ? { sobregiro: num(d.sobregiro) + cuad, sobregiroDetalle: (Array.isArray(d.sobregiroDetalle) ? d.sobregiroDetalle : []).concat(vigentes) } : {};
-                nuevas.push([g, { quantity: total, batches: lotes, ...devuelve, isCritical: total <= (num(d.criticalLimit || d.stock_minimo) || 50), batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', updatedAt: f.serverTimestamp() }]);
+                nuevas.push([g, { quantity: total, batches: lotes, ...devuelve, isCritical: total <= (num(d.criticalLimit || d.stock_minimo) || 50), batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', updatedAt: f.serverTimestamp() }, cuad]);
             });
             tx.update(ocRef, { lineas, recepciones: (fresca.recepciones || []).map(r => r.recId === recId ? { ...r, anulada: true, anuladaPor: usuario(), anuladaMotivo: motivo, anuladaFecha: hoyISO() } : r), actualizadoEn: f.serverTimestamp() });
             tx.set(f.doc(f.collection(db(), 'Seguimiento_OC', oc.id, 'Eventos')), { tipo: 'RECEPCION_ANULADA', texto: `Recepción ${recId} ANULADA (${r0.unidades} u.). Motivo: ${motivo}`, autor: usuario(), fecha: f.serverTimestamp(), recId, columna: key });
-            nuevas.forEach(([g, cambios]) => {
+            nuevas.forEach(([g, cambios, cuadG]) => { const x = { cuad: num(cuadG) };
                 tx.update(g.ref, cambios);
-                g.quitar.forEach(q => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: g.nombre, item: g.nombre, quantity: q.cantidad, type: 'ANULACION_RECEPCION', batch: (q.lote || '').trim().toUpperCase() || 'S/L', expirationDate: q.vence || 'N/A', origin: central, user: usuario(), date: f.serverTimestamp(), document: `${recId} · OC ${oc.numeroOC}`, observacion: `Recepción ${recId} anulada: ${motivo}`, ocId: oc.id, idInsumoOrigen: g.ref.id }));
+                if (x.cuad > 0) tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: g.nombre, item: g.nombre, quantity: x.cuad, delta: x.cuad, type: 'REVERSA_CUADRE', batch: 'MULTI-LOTE', document: ev.recId || '', idInsumoDestino: g.ref.id, user: usuario(), date: f.serverTimestamp(), observacion: `Anulación de ${ev.recId || 'la recepción'}: ${x.cuad} u. que se habían descontado de lo adeudado vuelven al stock y quedan otra vez como adeudadas.` });
+                g.quitar.forEach(q => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: g.nombre, item: g.nombre, quantity: q.cantidad, type: 'ANULACION_RECEPCION', delta: -num(q.cantidad), batch: (q.lote || '').trim().toUpperCase() || 'S/L', expirationDate: q.vence || 'N/A', origin: central, user: usuario(), date: f.serverTimestamp(), document: `${recId} · OC ${oc.numeroOC}`, observacion: `Recepción ${recId} anulada: ${motivo}`, ocId: oc.id, idInsumoOrigen: g.ref.id }));
             });
         });
     }

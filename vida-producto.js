@@ -34,11 +34,26 @@
     merma_despacho: ['Merma', 'baj'], merma_inventario: ['Merma de inventario', 'baj'], eliminacion_inventario: ['Eliminación de inventario', 'baj'],
     ajuste: ['Ajuste de inventario', 'aju'], AJUSTE_CRITICO: ['Ajuste crítico', 'aju'], auditoria_modificacion_inventario: ['Modificación de inventario', 'aju'], toma_inventario: ['Toma de inventario', 'aju'],
     ANULACION_ACTA: ['Acta anulada (stock devuelto)', 'ing'], salida: ['Salida', 'sal'], TRANSITORIA_FALTANTE: ['Faltante de bodega transitoria', 'baj'], TRANSITORIA_REPOSICION: ['Reposición a bodega transitoria', 'mov'],
-    INGRESO_OC: ['Ingreso por orden de compra', 'ing'], UNIFICACION_STOCK: ['Unificación de stock', 'mov'], CAMBIO_CONTROLADO: ['Cambio con código de seguimiento', 'aju']
+    INGRESO_OC: ['Ingreso por orden de compra', 'ing'], UNIFICACION_STOCK: ['Unificación de stock', 'mov'], CAMBIO_CONTROLADO: ['Cambio con código de seguimiento', 'aju'],
+    SALIDA_SOLICITUD: ['Salida por solicitud de insumos', 'sal'], DESPACHO_BANDEJA: ['Despacho a bandeja de turno', 'sal'], RETORNO_BANDEJA: ['Retorno de bandeja', 'ing'], ANULACION_BANDEJA: ['Bandeja anulada (stock devuelto)', 'ing'], DEVOLUCION_ANULACION_BANDEJA: ['Devolución de bandeja anulada', 'ing'],
+    ANULACION_RECEPCION: ['Recepción anulada (stock retirado)', 'baj'], REVERSA_CUADRE: ['Vuelve a adeudado (recepción anulada)', 'mov'], DEVOLUCION_PRESTAMO: ['Devolución de préstamo a otro centro', 'sal'], REGULARIZA_SOBREGIRO: ['Adeudado regularizado (sin cambio de stock)', 'mov'],
+    EDICION_ACTA: ['Acta modificada', 'mov'], CIERRE_BODEGA: ['Cierre de bodega (traslado)', 'mov'], TRASPASO: ['Traspaso entre bodegas', 'mov'], ASIGNACION_BODEGA: ['Bodega asignada', 'mov'], RENOMBRE_BODEGA: ['Bodega renombrada', 'mov']
   };
-  const ENTRAN = ['INGRESO_PROVEEDOR', 'INGRESO_OC', 'INGRESO_INVENTARIO', 'entrada', 'carga masiva', 'ANULACION_ACTA'], SALEN = ['ENTREGA_ACTA', 'CUADRE_SOBREGIRO', 'merma_despacho', 'merma_inventario', 'eliminacion_inventario', 'salida', 'TRANSITORIA_FALTANTE'];
-  /** Efecto del movimiento sobre el stock total del producto (0 = no cambia el total o no es confiable). */
-  function deltaDe(h) { const q = num(h.quantity), t = h.type; if (ENTRAN.includes(t)) return q; if (SALEN.includes(t)) return -Math.abs(q); if (t === 'AJUSTE_CRITICO') return q; if (t === 'CAMBIO_CONTROLADO') return h.origen === 'EDITAR_INSUMO' ? q : 0; return 0; }
+  /* v21.231: efecto REAL de cada movimiento sobre el stock total del producto (todas sus bodegas). Si el movimiento trae `delta` (desde
+     v21.231 los principales lo guardan) se usa ese; si no, se deduce por tipo. Traspasos, cierres, unificaciones y renombres no cambian el total.
+     Lo entregado sin stock (sobregiro) no baja el stock al entregar: baja después, con el CUADRE_SOBREGIRO. */
+  const ENTRAN = ['INGRESO_PROVEEDOR', 'INGRESO_OC', 'INGRESO_INVENTARIO', 'entrada', 'carga masiva', 'toma_inventario', 'RETORNO_BANDEJA', 'ANULACION_BANDEJA', 'DEVOLUCION_ANULACION_BANDEJA', 'REVERSA_CUADRE'];
+  const SALEN = ['CUADRE_SOBREGIRO', 'merma_despacho', 'merma_inventario', 'eliminacion_inventario', 'salida', 'TRANSITORIA_FALTANTE', 'SALIDA_SOLICITUD', 'DESPACHO_BANDEJA', 'ANULACION_RECEPCION', 'DEVOLUCION_PRESTAMO'];
+  const FIRMADOS = ['AJUSTE_CRITICO', 'ajuste', 'auditoria_modificacion_inventario'];
+  function deltaDe(h) {
+    if (h.delta != null && h.delta !== '' && isFinite(Number(h.delta))) return Number(h.delta);
+    const q = num(h.quantity), t = h.type;
+    if (t === 'ENTREGA_ACTA') return -Math.max(0, Math.abs(q) - num(h.sinRespaldo));
+    if (t === 'ANULACION_ACTA') return h.devueltoStock != null ? num(h.devueltoStock) : Math.abs(q);
+    if (ENTRAN.includes(t)) return Math.abs(q); if (SALEN.includes(t)) return -Math.abs(q); if (FIRMADOS.includes(t)) return q;
+    if (t === 'CAMBIO_CONTROLADO') return h.origen === 'EDITAR_INSUMO' ? q : 0;
+    return 0;
+  }
 
   /**
    * Arma la línea de tiempo. datos: { ocs:[…], historial:[…], actas:[…], insumos:[…] }, p: {codigos, nombres}.
@@ -111,7 +126,11 @@
     const [ocs, actas, historial] = await Promise.all([
       f.getDocs(f.collection(db(), 'Seguimiento_OC')).then(sn => { const l = []; sn.forEach(d => l.push({ id: d.id, ...d.data() })); return l; }).catch(() => []),
       f.getDocs(f.query(f.collection(db(), 'Actas_Entrega'), f.orderBy('creadoEn', 'desc'), f.limit(400))).then(sn => { const l = []; sn.forEach(d => l.push(d.data())); return l; }).catch(() => []),
-      nombresReales.length ? f.getDocs(f.query(f.collection(db(), 'Historial_Movimientos'), f.where('insumoName', 'in', nombresReales), f.limit(600))).then(sn => { const l = []; sn.forEach(d => l.push(d.data())); return l; }).catch(() => []) : Promise.resolve([])
+      /* v21.231: también los movimientos que guardan el producto como `item` (ajustes, bandejas) o solo por su id */
+      (async () => { if (!nombresReales.length) return []; const H = f.collection(db(), 'Historial_Movimientos'), ids = [...new Set(insumos.map(i => i.id).filter(Boolean))].slice(0, 10), vistos = new Map();
+        const qs = [f.query(H, f.where('insumoName', 'in', nombresReales), f.limit(1000)), f.query(H, f.where('item', 'in', nombresReales), f.limit(1000))];
+        if (ids.length) ['idInsumoOrigen', 'idInsumoDestino', 'insumoId'].forEach(c => qs.push(f.query(H, f.where(c, 'in', ids), f.limit(1000))));
+        const r = await Promise.all(qs.map(q => f.getDocs(q).catch(() => null))); r.forEach(sn => sn && sn.forEach(d => vistos.set(d.id, d.data()))); return [...vistos.values()]; })().catch(() => [])
     ]);
     return { p, datos: { ocs, actas, historial, insumos } };
   }

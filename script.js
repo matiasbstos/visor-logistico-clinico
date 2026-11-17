@@ -151,6 +151,16 @@ window.SAR_buscarInsumoCentral = async function (nombre) {
     const central = docs.find(x => /central/i.test(String(x.data().location || ''))) || docs.find(x => !x.data().location) || docs[0];
     return { id: central.id, ref: F.doc(d, 'Insumos', central.id) };
 };
+/** v21.230: aplica un cambio de stock a los LOTES (no solo a la cantidad). delta < 0 saca por FEFO; delta > 0 devuelve al lote
+ *  que vence primero (o S/L). Devuelve { quantity, batches } coherentes. Usado por bandejas de turno y carro. */
+window.SAR_lotesAjuste = function (data, delta) {
+    const d = data || {}, q0 = Number(d.quantity) || 0, cmp = typeof window.fefoCompare === 'function' ? window.fefoCompare : () => 0;
+    let lotes = (Array.isArray(d.batches) && d.batches.length ? d.batches : (q0 > 0 ? [{ batch: d.batch || 'S/L', quantity: q0, expirationDate: d.expirationDate || '' }] : [])).map(b => ({ ...b, quantity: Number(b.quantity) || 0 })).sort(cmp);
+    const n = Math.abs(Number(delta) || 0);
+    if (delta < 0) { let falta = n; for (const l of lotes) { if (falta <= 0) break; const t = Math.min(l.quantity, falta); l.quantity -= t; falta -= t; } lotes = lotes.filter(l => l.quantity > 0); }
+    else if (delta > 0) { if (lotes.length) lotes[0].quantity += n; else lotes.push({ batch: 'S/L', quantity: n, expirationDate: '' }); }
+    return { quantity: Math.max(0, q0 + (Number(delta) || 0)), batches: lotes };
+};
 window.fefoCompare = function(a, b) {
     const t = (x) => {
         const d = window.SAR_Utils.parseDate(x && x.expirationDate);
@@ -841,7 +851,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 // Función reutilizable para la transacción atómica directa de stock
-                window.ejecutarAjusteDirecto = async function (docId, stockActual, insumoNombre, cantidadParsed, justificacion, codigoAjuste = null) {
+                window.ejecutarAjusteDirecto = async function (docId, stockActual, insumoNombre, cantidadParsed, justificacion, codigoAjuste = null, opts = {}) {   /* v21.230: opts.solicitudId (aprobar en la misma transacción) · opts.idMov (no aplicar dos veces) */
                     if (!codigoAjuste) {
                         codigoAjuste = window.SAR_Folio ? window.SAR_Folio.provisional('AJU') : "ADJ-" + Math.floor(10000 + Math.random() * 90000);
                     }
@@ -862,6 +872,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (!insumoSnap.exists()) {
                             throw new Error("El insumo no existe en la base de datos.");
                         }
+                        /* v21.230: la solicitud se lee y se marca aprobada DENTRO de la transacción (dos clics o dos personas no la aplican dos veces) */
+                        const solRef = opts && opts.solicitudId ? doc(db, 'Solicitudes_Ajuste', opts.solicitudId) : null;
+                        if (solRef) { const ss = await transaction.get(solRef); if (!ss.exists()) throw new Error('La solicitud no existe.'); if (ss.data().status !== 'pendiente') { const e = new Error('Esta solicitud ya fue procesada.'); e.ya = true; throw e; } }
+                        const movRef = opts && opts.idMov ? doc(db, 'Historial_Movimientos', 'aju-' + opts.idMov) : doc(collection(db, 'Historial_Movimientos'));
+                        if (opts && opts.idMov) { const ms = await transaction.get(movRef); if (ms.exists()) { const e = new Error('Este ajuste ya estaba aplicado.'); e.ya = true; throw e; } }
 
                         const dataActual = insumoSnap.data();
                         const stockReal = dataActual.quantity || 0;
@@ -917,9 +932,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             lastUpdated: serverTimestamp()
                         });
 
-                        const newLogRef = doc(collection(db, 'Historial_Movimientos'));
-                        transaction.set(newLogRef, {
+                        if (solRef) transaction.update(solRef, { status: 'aprobado', dateActioned: serverTimestamp(), actioner: auth.currentUser.email });
+                        transaction.set(movRef, {
                             type: 'AJUSTE_CRITICO',
+                            insumoName: insumoNombre, insumoId: docId, idInsumoOrigen: docId, document: codigoAjuste, bodega: dataActual.location || '',
                             item: insumoNombre,
                             quantity: cantidadParsed,
                             user: auth.currentUser.email,
@@ -1225,18 +1241,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             reqData.insumoName,
                             reqData.cantidad,
                             reqData.justificacion,
-                            reqData.code
+                            reqData.code,
+                            { solicitudId: docId }   // v21.230: se marca aprobada en la misma transacción del ajuste
                         );
-
-                        // Actualizar la solicitud como aprobada
-                        await updateDoc(reqRef, {
-                            status: 'aprobado',
-                            dateActioned: serverTimestamp(),
-                            actioner: auth.currentUser.email
-                        });
 
                         window.showToast("Solicitud Aprobada", `El ajuste ${reqData.code} fue ejecutado con éxito.`, "success");
                     } catch (error) {
+                        if (error && error.ya) { window.showToast("Solicitud ya procesada", "Esta solicitud ya quedó aprobada (no se aplicó dos veces).", "info"); return; }   // v21.230
                         console.error("Error aprobando solicitud:", error);
                         window.showAlertCenter("Error", `No se pudo aprobar la solicitud: ${error.message || error}`);
                     }
@@ -4843,14 +4854,13 @@ document.addEventListener('DOMContentLoaded', () => {
                                 });
                             }
 
-                            const batchIndex = currentBatches.findIndex(b => b.batch === cleanBatch);
+                            /* v21.230: mismo lote = mismo número Y mismo vencimiento (antes se sumaba por número y se pisaba el vencimiento del stock que ya estaba) */
+                            const vNorm = (v) => { const t = String(v || '').trim(); return /^(n\/?a|s\/v|-)?$/i.test(t) ? '' : t; };
+                            const batchIndex = currentBatches.findIndex(b => b.batch === cleanBatch && (!formattedDate || !vNorm(b.expirationDate) || vNorm(b.expirationDate) === vNorm(formattedDate)));
                             if (batchIndex !== -1) {
                                 currentBatches[batchIndex].quantity += quantity;
                                 if (!currentBatches[batchIndex].codigoLote && codigoLote) currentBatches[batchIndex].codigoLote = codigoLote;
-                                // Actualizar fecha de exp si la mandaron de nuevo
-                                if (formattedDate) {
-                                    currentBatches[batchIndex].expirationDate = formattedDate;
-                                }
+                                if (formattedDate && !vNorm(currentBatches[batchIndex].expirationDate)) currentBatches[batchIndex].expirationDate = formattedDate;   // solo completa si no tenía
                             } else {
                                 currentBatches.push({
                                     batch: cleanBatch,
@@ -7673,6 +7683,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (delta !== 0) {
                             updates.push({
                                 ref: mapObj.ref,
+                                lotes: window.SAR_lotesAjuste(insumoDoc.data(), -delta),   // v21.230: también los lotes (FEFO)
                                 newStock: currentStock - delta,
                                 name: mapObj.name,
                                 delta: delta,
@@ -7684,7 +7695,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const activeAuth = window.firebaseAuth || window.auth || auth;
                     for (const update of updates) {
                         transaction.update(update.ref, {
-                            quantity: update.newStock,
+                            quantity: update.lotes.quantity, batches: update.lotes.batches,
                             lastUpdated: window.firebaseFirestore.serverTimestamp()
                         });
 
@@ -8866,6 +8877,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!snap.exists()) throw new Error("La bandeja no existe.");
 
                     const data = snap.data();
+                    /* v21.230: se leen los productos antes de escribir, para devolver también a sus lotes */
+                    const insData = {}; for (const [k, r] of Object.entries(insumosRefsMap)) { const s0 = await transaction.get(r); if (s0.exists()) insData[k] = s0.data(); }
                     // Evita reintegrar dos veces: una bandeja ya cerrada, anulada o en recepción no se vuelve a cerrar
                     if (['CERRADA_FINAL', 'CERRADA_BODEGA', 'ANULADA', 'EN_RECEPCION'].includes(data.estado)) {
                         throw new Error('La bandeja ya fue cerrada o está en recepción (estado: ' + data.estado + '). No se modificó el stock.');
@@ -8902,9 +8915,8 @@ document.addEventListener('DOMContentLoaded', () => {
                             });
 
                             if (insumosRefsMap[med.nombreInsumo]) {
-                                transaction.update(insumosRefsMap[med.nombreInsumo], {
-                                    quantity: window.firebaseFirestore.increment(sobrante)
-                                });
+                                const lt = window.SAR_lotesAjuste(insData[med.nombreInsumo] || {}, sobrante); insData[med.nombreInsumo] = { ...(insData[med.nombreInsumo] || {}), ...lt };
+                                transaction.update(insumosRefsMap[med.nombreInsumo], { quantity: lt.quantity, batches: lt.batches });
                             }
                         }
                         return { ...med, cantidadRetornada: sobrante };
@@ -9097,15 +9109,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 await runTransaction(db, async (transaction) => {
                     const snap = await transaction.get(docRef);
                     if (!snap.exists()) throw new Error("La bandeja no existe.");
+                    const insData = {}; for (const [k, id] of Object.entries(docIdsMap)) { const s0 = await transaction.get(doc(db, 'Insumos', id)); if (s0.exists()) insData[k] = s0.data(); }   /* v21.230 */
 
                     // 2. Sumar stock a retornar al Insumos
                     for (const item of stockARetornar) {
                         const key = item.nombre.toLowerCase().trim();
                         if (docIdsMap[key]) {
                             const itemRef = doc(db, 'Insumos', docIdsMap[key]);
-                            transaction.update(itemRef, {
-                                quantity: window.firebaseFirestore.increment(item.cantidad)
-                            });
+                            const lt = window.SAR_lotesAjuste(insData[key] || {}, Number(item.cantidad) || 0); insData[key] = { ...(insData[key] || {}), ...lt };
+                            transaction.update(itemRef, { quantity: lt.quantity, batches: lt.batches });
                         } else {
                             // Si no existiera en inventario central, se crea el item
                             const newItemRef = doc(collection(db, 'Insumos'));
@@ -10011,8 +10023,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const nombres = [...new Set((previa.data().medicamentos || []).map(m => m.nombreInsumo || m.nombre))];
                 const insumoRefs = {};
                 for (const nombre of nombres) {
-                    const s = await FS.getDocs(FS.query(FS.collection(safeDb, 'Insumos'), FS.where('name', '==', nombre), FS.limit(1)));
-                    if (!s.empty) insumoRefs[nombre] = s.docs[0].ref;
+                    const h = await window.SAR_buscarInsumoCentral(nombre);   /* v21.230: el mismo registro del que salió al despachar */
+                    if (h) insumoRefs[nombre] = h.ref;
                 }
 
                 // 2) Una sola transacción: verifica estado, repone stock, historial y marca ANULADA
@@ -10039,13 +10051,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (!ref) throw new Error('INSUMO_NO_ENCONTRADO:' + nombre);
                         const iSnap = await transaction.get(ref);
                         if (!iSnap.exists()) throw new Error('INSUMO_NO_ENCONTRADO:' + nombre);
-                        updates.push({ ref, nombre, qty, stock: Number(iSnap.data().quantity) || 0 });
+                        updates.push({ ref, nombre, qty, stock: Number(iSnap.data().quantity) || 0, lotes: window.SAR_lotesAjuste(iSnap.data(), qty) });
                     }
 
                     // Escrituras
                     for (const u of updates) {
                         transaction.update(u.ref, {
-                            quantity: u.stock + u.qty,
+                            quantity: u.lotes.quantity, batches: u.lotes.batches,
                             lastUpdated: FS.serverTimestamp()
                         });
                         transaction.set(FS.doc(FS.collection(safeDb, 'Historial_Movimientos')), {
@@ -12780,89 +12792,73 @@ function doGet(e) {
         }
     }
 
-    // Sincronización en Firestore con suma acumulativa
-    async function syncToFirestore(item) {
+
+    /** v21.230: el registro al que suma/resta la toma de inventario: mismo nombre y misma bodega (en Bodega Central también el que no tiene bodega),
+     *  sin cuarentena, el de más stock. Igual para contar, corregir y mermar (antes la corrección podía caer en otra bodega). */
+    async function tomaRegistro(nombre, ubic) {
+        const u = String(ubic || 'Bodega Central').trim(), sn = await getDocs(query(collection(db, 'Insumos'), where('name_lowercase', '==', String(nombre || '').trim().toLowerCase()), limit(10)));
+        const ok = sn.docs.filter(d => { const x = d.data(), l = String(x.location || '').trim(); return x.status !== 'CUARENTENA' && (l === u || (!l && /central/i.test(u))); })
+            .sort((a, b) => (String(b.data().location || '').trim() === u) - (String(a.data().location || '').trim() === u) || (Number(b.data().quantity) || 0) - (Number(a.data().quantity) || 0));
+        return { empty: !ok.length, docs: ok.slice(0, 1) };
+    }
+    /* v21.230: conteos que no llegaron por falta de conexión: quedan en el equipo y se reintentan al volver internet */
+    const TOMA_PEND = 'sar-toma-pendientes';
+    const tomaPend = () => { try { return JSON.parse(localStorage.getItem(TOMA_PEND) || '[]'); } catch (e) { return []; } };
+    const tomaPendGuardar = (l) => { try { localStorage.setItem(TOMA_PEND, JSON.stringify(l)); } catch (e) { /* sin almacenamiento */ } };
+    async function tomaReintentar() {
+        const l = tomaPend(); if (!l.length || navigator.onLine === false) return; tomaPendGuardar([]);
+        let ok = 0; for (const it of l) { if (await syncToFirestore(it, true)) ok++; }
+        if (ok && typeof window.showToast === 'function') window.showToast('Conteos sincronizados', `${ok} conteo(s) hechos sin conexión ya están en el inventario.`, 'success');
+    }
+    window.addEventListener('online', () => setTimeout(tomaReintentar, 3000));
+    setTimeout(tomaReintentar, 15000);
+    // Sincronización en Firestore con suma acumulativa.
+    // v21.230: stock, lotes e historial en UNA transacción (antes updateDoc con increment y luego addDoc aparte: sin conexión o al
+    // cerrar la pestaña el stock podía quedar sumado sin historial, y los lotes no cuadraban con la cantidad).
+    async function syncToFirestore(item, reintento) {
         try {
             const cleanName = (item.name || '').trim();
             if (!cleanName) return;
-
             const insumosRef = collection(db, 'Insumos');
-            const q = query(
-                insumosRef,
-                where('name_lowercase', '==', cleanName.toLowerCase()),
-                limit(1)
-            );
-            const snap = await getDocs(q);
-
+            const ubic = item.location || 'Bodega Central';
+            const existente = (await tomaRegistro(cleanName, ubic)).docs[0] || null;
             const addedQty = Number(item.quantity) || 0;
             const limitVal = Number(item.criticalLimit) || 50;
-
-            if (!snap.empty) {
-                const existingDoc = snap.docs[0];
-                const oldQty = Number(existingDoc.data().quantity) || 0;
-                const finalQty = oldQty + addedQty;
-
-                await updateDoc(doc(db, 'Insumos', existingDoc.id), {
-                    quantity: increment(addedQty),
-                    isCritical: finalQty <= limitVal,
-                    batch: item.batch || existingDoc.data().batch || 'N/A',
-                    expirationDate: item.expirationDate || existingDoc.data().expirationDate || 'N/A',
-                    category: item.category || existingDoc.data().category || 'General',
-                    location: item.location || existingDoc.data().location || 'Bodega Central',
-                    unitPrice: Number(item.unitPrice) || existingDoc.data().unitPrice || 0,
-                    criticalLimit: limitVal,
-                    updatedAt: serverTimestamp()
+            const lote = String(item.batch || 'S/L').trim().toUpperCase() || 'S/L', vence = item.expirationDate || 'N/A';
+            let finalQty = addedQty, autoCode = '';
+            await runTransaction(db, async (tx) => {
+                const ref = existente ? existente.ref : doc(insumosRef);
+                const ds = existente ? await tx.get(ref) : null, d = ds && ds.exists() ? ds.data() : null;
+                const q0 = d ? Number(d.quantity) || 0 : 0;
+                let lotes = d ? (Array.isArray(d.batches) && d.batches.length ? d.batches.map(b => ({ ...b })) : (q0 > 0 ? [{ batch: d.batch || 'S/L', quantity: q0, expirationDate: d.expirationDate || 'N/A' }] : [])) : [];
+                const ex = lotes.find(b => b.batch === lote && String(b.expirationDate || 'N/A') === String(vence));
+                if (ex) ex.quantity = (Number(ex.quantity) || 0) + addedQty; else if (addedQty > 0) lotes.push({ batch: lote, quantity: addedQty, expirationDate: vence });
+                if (typeof window.fefoCompare === 'function') lotes.sort(window.fefoCompare);
+                finalQty = q0 + addedQty;
+                if (d) {
+                    tx.update(ref, { quantity: finalQty, batches: lotes, isCritical: finalQty <= limitVal, criticalLimit: limitVal, ...(item.category ? { category: item.category } : {}), ...(Number(item.unitPrice) ? { unitPrice: Number(item.unitPrice) } : {}), updatedAt: serverTimestamp() });
+                } else {
+                    autoCode = item.code || ("SAR-" + Math.random().toString(36).substring(2, 7).toUpperCase());
+                    tx.set(ref, { code: autoCode, name: cleanName, name_lowercase: cleanName.toLowerCase(), quantity: addedQty, batches: lotes, isCritical: addedQty <= limitVal,
+                        batch: lote, expirationDate: vence, category: item.category || 'General', location: ubic, bodegaNombre: ubic, unitPrice: Number(item.unitPrice) || 0, criticalLimit: limitVal, updatedAt: serverTimestamp() });
+                }
+                tx.set(doc(collection(db, 'Historial_Movimientos')), {
+                    date: serverTimestamp(), type: 'toma_inventario', fase: item.fase || '1ra Toma (Inicial)', insumoName: cleanName, insumoId: ref.id,
+                    user: item.user || (auth.currentUser ? auth.currentUser.email : 'Operador'), batch: lote, quantity: addedQty, destination: ubic, dest: ubic,
+                    category: item.category || 'General', expirationDate: vence, observations: `[${item.fase || 'Toma Inventario'}] ${item.observations ? item.observations : 'Conteo físico'}`
                 });
-
-                const cached = tomaCatalogCache.find(it => it.name.toLowerCase() === cleanName.toLowerCase());
-                if (cached) cached.quantity = finalQty;
-
-            } else {
-                const autoCode = item.code || ("SAR-" + Math.random().toString(36).substring(2, 7).toUpperCase());
-                await addDoc(insumosRef, {
-                    code: autoCode,
-                    name: cleanName,
-                    name_lowercase: cleanName.toLowerCase(),
-                    quantity: addedQty,
-                    isCritical: addedQty <= limitVal,
-                    batch: item.batch || 'N/A',
-                    expirationDate: item.expirationDate || 'N/A',
-                    category: item.category || 'General',
-                    location: item.location || 'Bodega Central',
-                    unitPrice: Number(item.unitPrice) || 0,
-                    criticalLimit: limitVal,
-                    updatedAt: serverTimestamp()
-                });
-
-                tomaCatalogCache.push({
-                    name: cleanName,
-                    code: autoCode,
-                    category: item.category,
-                    quantity: addedQty,
-                    unitPrice: item.unitPrice,
-                    criticalLimit: limitVal,
-                    location: item.location
-                });
-            }
-
-            // Registrar movimiento en Historial_Movimientos con la Fase correspondiente
-            await addDoc(collection(db, 'Historial_Movimientos'), {
-                date: serverTimestamp(),
-                type: 'toma_inventario',
-                fase: item.fase || '1ra Toma (Inicial)',
-                insumoName: cleanName,
-                user: item.user || (auth.currentUser ? auth.currentUser.email : 'Operador'),
-                batch: item.batch || 'N/A',
-                quantity: addedQty,
-                destination: item.location || 'Bodega Central',
-                category: item.category || 'General',
-                expirationDate: item.expirationDate || 'N/A',
-                observations: `[${item.fase || 'Toma Inventario'}] ${item.observations ? item.observations : 'Conteo físico'}`
             });
-
+            const cached = tomaCatalogCache.find(it => it.name.toLowerCase() === cleanName.toLowerCase());
+            if (cached) cached.quantity = finalQty;
+            else tomaCatalogCache.push({ name: cleanName, code: autoCode, category: item.category, quantity: addedQty, unitPrice: item.unitPrice, criticalLimit: limitVal, location: item.location });
             console.log("[TomaInventario] Sincronizado y acumulado exitosamente en Firestore.");
+            return true;
         } catch (fsErr) {
             console.error("[TomaInventario] Error sincronizando en Firestore:", fsErr);
+            const red = navigator.onLine === false || /unavailable|offline|network|deadline|failed to get/i.test(String((fsErr && (fsErr.code || '')) + ' ' + (fsErr && fsErr.message)));
+            if (red) { tomaPendGuardar(tomaPend().concat([item])); if (!reintento && typeof window.showToast === 'function') window.showToast('Guardado en el equipo', 'Sin conexión: el conteo de «' + (item.name || '') + '» se sumará al inventario solo cuando vuelva internet.', 'warning'); }
+            else if (typeof window.showToast === 'function') window.showToast('No se guardó en la nube', 'El conteo de «' + (item.name || '') + '» quedó en este equipo pero no en el inventario: ' + ((fsErr && fsErr.message) || fsErr), 'error');
+            return false;
         }
     }
 
@@ -13742,27 +13738,17 @@ function doGet(e) {
                 // 1. Actualizar en Firestore
                 try {
                     const insumosRef = collection(db, 'Insumos');
-                    const q = query(
-                        insumosRef,
-                        where('name_lowercase', '==', newMed.toLowerCase()),
-                        limit(1)
-                    );
-                    const snap = await getDocs(q);
-
+                    if (navigator.onLine === false) throw new Error('Sin conexión: la corrección necesita internet.');
+                    const snap = await tomaRegistro(newMed, target.location || newUbic);
+                    /* v21.230: stock (con sus lotes) e historial en una sola transacción; ya no se pisa la bodega ni el lote del producto entero */
+                    await runTransaction(db, async (tx) => {
                     if (!snap.empty) {
-                        const existingDoc = snap.docs[0];
-                        await updateDoc(doc(db, 'Insumos', existingDoc.id), {
-                            quantity: increment(diffQty),
-                            category: newCat,
-                            batch: newLote,
-                            expirationDate: newVto,
-                            location: newUbic,
-                            updatedAt: serverTimestamp()
-                        });
+                        const existingDoc = snap.docs[0], ds = await tx.get(existingDoc.ref);
+                        if (ds.exists()) { const lt = window.SAR_lotesAjuste(ds.data(), diffQty); tx.update(existingDoc.ref, { quantity: lt.quantity, batches: lt.batches, category: newCat, updatedAt: serverTimestamp() }); }
                     }
 
                     // Registrar Auditoría Completa en Historial_Movimientos
-                    await addDoc(collection(db, 'Historial_Movimientos'), {
+                    tx.set(doc(collection(db, 'Historial_Movimientos')), {
                         date: serverTimestamp(),
                         type: 'auditoria_modificacion_inventario',
                         insumoName: newMed,
@@ -13777,8 +13763,10 @@ function doGet(e) {
                         cambiosRealizados: changes,
                         observations: `[Auditoría Toma Inventario] ${motivo} (${auditDetail})`
                     });
+                    });
                 } catch (err) {
                     console.error("Error aplicando edición en Firestore:", err);
+                    if (typeof window.showToast === 'function') window.showToast('No se guardó en la nube', 'La corrección quedó en este equipo pero no en el inventario: ' + ((err && err.message) || err), 'error');
                 }
 
                 const oldMedName = target.name;
@@ -13858,23 +13846,17 @@ function doGet(e) {
                 // 1. Descontar en Firestore (Insumos, Incidencias y Historial_Movimientos)
                 try {
                     const insumosRef = collection(db, 'Insumos');
-                    const q = query(
-                        insumosRef,
-                        where('name_lowercase', '==', medName.toLowerCase()),
-                        limit(1)
-                    );
-                    const snap = await getDocs(q);
-
+                    if (navigator.onLine === false) throw new Error('Sin conexión: la merma necesita internet.');
+                    const snap = await tomaRegistro(medName, target.location || ubic);
+                    /* v21.230: descuento (con lotes), incidencia e historial en una sola transacción */
+                    await runTransaction(db, async (tx) => {
                     if (!snap.empty) {
-                        const existingDoc = snap.docs[0];
-                        await updateDoc(doc(db, 'Insumos', existingDoc.id), {
-                            quantity: increment(-mermadaQty),
-                            updatedAt: serverTimestamp()
-                        });
+                        const existingDoc = snap.docs[0], ds = await tx.get(existingDoc.ref);
+                        if (ds.exists()) { const lt = window.SAR_lotesAjuste(ds.data(), -mermadaQty); tx.update(existingDoc.ref, { quantity: lt.quantity, batches: lt.batches, updatedAt: serverTimestamp() }); }
                     }
 
                     // Registrar en Colección Incidencias
-                    await addDoc(collection(db, 'Incidencias'), {
+                    tx.set(doc(collection(db, 'Incidencias')), {
                         fecha: serverTimestamp(),
                         tipo: tipoInc,
                         medicamento: medName,
@@ -13889,7 +13871,7 @@ function doGet(e) {
                     });
 
                     // Registrar en Historial_Movimientos
-                    await addDoc(collection(db, 'Historial_Movimientos'), {
+                    tx.set(doc(collection(db, 'Historial_Movimientos')), {
                         date: serverTimestamp(),
                         type: 'merma_inventario',
                         insumoName: medName,
@@ -13900,8 +13882,10 @@ function doGet(e) {
                         category: cat,
                         observations: `[Incidencia en Toma: ${tipoInc}] ${detalle} (-${mermadaQty} un.)`
                     });
+                    });
                 } catch (err) {
                     console.error("Error registrando incidencia en Firestore:", err);
+                    if (typeof window.showToast === 'function') window.showToast('No se guardó en la nube', 'La merma quedó en este equipo pero no en el inventario: ' + ((err && err.message) || err), 'error');
                 }
 
                 // 2. Actualizar sesión local

@@ -573,7 +573,10 @@
       L[i] = { ...nueva, ...(act.movidos ? { movidos: act.movidos } : {}), ...(act.recibidos ? { recibidos: act.recibidos } : {}), ...(act.transito ? { transito: act.transito } : {}) };
       const cambios = { lineas: L }; if (x.estado === 'NUEVA') { cambios.estado = 'PREPARACION'; cambios.historial = (x.historial || []).concat([{ estado: 'PREPARACION', por: usuario(), en: ahora }]); } return cambios; };
     try { let c; await f.runTransaction(db(), async (tx) => { const sn = await tx.get(ref); if (!sn.exists()) throw new Error('La solicitud ya no existe.'); c = aplicar(sn.data()); tx.update(ref, c); }); return c; }
-    catch (e) { if (!/offline|unavailable|network|failed to get/i.test(String(e && (e.code || '') + ' ' + (e.message || '')))) throw e; const c = aplicar(s); await Promise.race([f.updateDoc(ref, c), new Promise(r => setTimeout(r, 2500))]); return c; }
+    catch (e) { if (!/offline|unavailable|network|failed to get/i.test(String(e && (e.code || '') + ' ' + (e.message || '')))) throw e;
+      /* v21.230: sin conexión NO se guarda con la copia local: al volver internet reemplazaría las líneas y borraría las marcas de lo ya movido
+         (y el stock podría moverse dos veces). */
+      throw new Error('Sin conexión: no se guardó el cambio. Vuelve a intentarlo cuando haya internet.'); }
   }
   /** Guarda el resultado de una línea (y pasa la solicitud a «Procesando»). */
   async function decidirLinea(n, i, noHay, cards) {

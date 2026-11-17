@@ -85,12 +85,12 @@
     const d0 = snap.data(), refD = await buscarDestino(F, D, d0, hasta);
     // idMov (cola sin conexión): el movimiento usa ese id; si ya existe, la operación ya se aplicó (otra pestaña o reintento)
     const refH = marca && marca.idMov ? F.doc(D, 'Historial_Movimientos', marca.idMov) : F.doc(F.collection(D, 'Historial_Movimientos'));
-    await F.runTransaction(D, async (tx) => {
+    try { await F.runTransaction(D, async (tx) => {
       const o = await tx.get(refO); if (!o.exists()) throw new Error('El producto ya no existe.');
       const d = o.data(); const sd = await tx.get(refD); const m = await leerMarca(tx, F, D, marca);
       // Folio TRA-AAAA-NNNNN (estándar de correlativos): uno por operación si viene dado; si no, se toma aquí, en la misma transacción
       const ctr = !(marca && marca.folio) && window.SAR_Folio ? await window.SAR_Folio.leer(tx, 'TRA') : null;
-      if (marca && marca.idMov) { const h = await tx.get(refH); if (h.exists()) throw Object.assign(new Error('Ya estaba hecho.'), { ya: true }); }
+      { const h = await tx.get(refH); if (h.exists()) throw Object.assign(new Error('Ya estaba hecho.'), { ya: true }); }   /* v21.230: siempre (un reintento del SDK tras confirmar no vuelve a mover) */
       if (d.status === 'CUARENTENA') throw new Error('En CUARENTENA: no se puede mover.');
       if (qty > num(d.quantity)) throw new Error('Stock insuficiente.');
       const { lotes, movidos } = sacarLotes(d, sel);
@@ -105,7 +105,12 @@
       }
       tx.set(refH, { insumoName: d.name, quantity: qty, type: 'traspaso', user: ((window.firebaseAuth || window.auth || {}).currentUser || {}).email || 'Usuario', date: F.serverTimestamp(), document: (marca && marca.folio) || (ctr ? window.SAR_Folio.escribir(tx, ctr) : `TRASP-${String(desde).substring(0, 3)}-${String(hasta).substring(0, 3)}`), batch: movidos.length === 1 ? movidos[0].batch : 'MULTI-LOTE', origin: desde, dest: hasta, lotes: movidos, idInsumoOrigen: id, idInsumoDestino: refD.id, ...(nota ? { nota } : {}), ...(marca && marca.numero ? { solicitud: marca.numero } : {}) });
       escribirMarca(tx, F, m, marca, { transitoId: marca && marca.transito ? refD.id : '' });
-    });
+    }); } catch (e) {
+      if (e && e.ya && !(marca && (marca.idMov || marca.numero))) return { destinoId: refD.id, yaHecho: true };   /* reintento automático tras confirmar: ya se hizo */
+      /* v21.230: con mala señal la confirmación puede llegar al servidor aunque el teléfono reciba error: si el movimiento existe, ya se hizo */
+      if (!e.ya && /unavailable|deadline|network|offline|timeout/i.test(String((e && (e.code || '')) + ' ' + (e && e.message)))) { try { const h = await F.getDoc(refH); if (h.exists()) return { destinoId: refD.id, yaHecho: true }; } catch (e2) { /* sigue el error original */ } }
+      throw e;
+    }
     return { destinoId: refD.id };
   }
   /** Salida por lote elegido (pedidos que se consumen y no van a una bodega de uso): descuenta y deja el movimiento. */

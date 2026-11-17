@@ -1499,3 +1499,18 @@ Decisiones del usuario: lo adeudado existe porque había unidades no ingresadas;
 Caso del usuario: en Actas, con origen Bodega CAM, la sabanilla (550 en Bodega Central) salía «Sin stock en esta bodega» y se agregaba como manual · provisional (sin respaldo): el acta habría dejado deuda en CAM y no habría descontado de Central.
 - Actas lee el stock de todas las bodegas (hasta 10.000) y, para lo que no está en el origen, muestra «Hay N en <bodega>» con **Usar <bodega>** (cambia el origen y vuelve a buscar en esa bodega lo ya agregado, con su stock). Al agregar sin stock algo que sí está en otra bodega, pide confirmación. La búsqueda también muestra productos de otras bodegas aunque no estén en el catálogo.
 - El menú «Salud del inventario» pasa a ser un sub-ítem de **Existencias → Repetidos y salud** (solo admin) para revisar y unificar en todo el sistema.
+
+## 4.282 · Movimientos de stock robustos (v21.230)
+Verificación de B.A. (simulación de todos los flujos) y Frankie (sin conexión / reintentos) tras pedido del usuario; corregido todo por prioridad (decisión del usuario), revisado por Amy.
+- **Ajustes**: aprobar lee y marca la solicitud en la misma transacción (doble clic o dos personas no lo aplican dos veces); el de la cola sin conexión es idempotente (`Historial_Movimientos/aju-<op>` o `Solicitudes_Ajuste/cola-<op>`, mismo código AJU en cada intento, Gobernanza una vez).
+- **Actas**: el mismo producto en dos líneas (p. ej. dos líneas de una OC) se planifica en orden y se escribe una vez con lo acumulado, al emitir y al anular; al agregar a mano se avisa si ya está.
+- **Recepción de OC**: idempotente por N° REC (reintento tras corte no reingresa; mismos N° REC en la misma ventana); el cuadre de lo adeudado es a lo más lo que ingresa; anular devuelve los mismos lotes y vuelve a adeudar solo actas aún EMITIDA; si Firestore reintenta tras confirmar, el correo igual sale.
+- **Bandejas y carro**: despacho, retorno, devolución y anulación mueven también los lotes (FEFO) (`SAR_lotesAjuste`); la anulación usa el mismo registro que el despacho.
+- **Transferencias**: siempre se revisa si el movimiento ya existe (reintento automático) y ante error de red se verifica si quedó hecho.
+- **Solicitudes**: sin conexión no se guardan cambios de líneas con la copia local (borraba las marcas de lo movido).
+- **Bodega transitoria**: «Reponer» lleva marca por día y por conteo (no repone dos veces lo mismo; un reconteo empieza de nuevo); folio REP dentro de la transacción.
+- **Cierre de bodega**: lo adeudado viaja a la bodega destino (también registros en 0 con deuda).
+- **Ingreso manual**: mismo lote = número y vencimiento (no pisa el vencimiento del stock existente).
+- **Toma de inventario** (conteo, corrección, merma): stock con lotes, incidencia e historial en una transacción; el mismo registro (nombre + bodega; en Central también el sin bodega) para contar, corregir y mermar; conteos sin conexión quedan en el equipo y se suman al volver internet; corrección y merma piden conexión.
+- **Unir repetidos**: por ID de Mercado Público solo si un nombre contiene al otro.
+- Pendiente: kárdex con «cambio real» por movimiento (delta firmado), importación masiva desde Excel, escrituras pendientes al cerrar sesión por inactividad.

@@ -21,7 +21,7 @@
     const raiz = (i) => { while (padre[i] !== i) { padre[i] = padre[padre[i]]; i = padre[i]; } return i; }, une = (a, b) => { a = raiz(a); b = raiz(b); if (a !== b) padre[b] = a; };
     const porN = new Map(), porMp = new Map();
     l.forEach((x, i) => { const n = norm(x.data.name), mp = String(x.data.codigoMP || '').replace(/\D/g, '');
-      if (porN.has(n)) une(porN.get(n), i); else porN.set(n, i); if (mp) { if (porMp.has(mp)) une(porMp.get(mp), i); else porMp.set(mp, i); } });
+      if (porN.has(n)) une(porN.get(n), i); else porN.set(n, i); if (mp) { const l2 = porMp.get(mp) || []; l2.forEach(([j, nj]) => { if (n.startsWith(nj) || nj.startsWith(n)) une(j, i); }); l2.push([i, n]); porMp.set(mp, l2); } });   /* v21.230: mismo ID solo junta si un nombre contiene al otro (p. ej. «X» y «X RM»); tallas o presentaciones distintas con el mismo ID no se unen */
     const g = new Map(); l.forEach((x, i) => { const r = raiz(i); if (!g.has(r)) g.set(r, []); g.get(r).push(x); });
     return [...g.values()].filter(x => x.length > 1);
   }

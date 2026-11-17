@@ -70,7 +70,7 @@
         const items = [];
         snap.forEach(d => {
             const data = d.data();
-            if (num(data.quantity) <= 0) return;
+            if (num(data.quantity) <= 0 && !(num(data.sobregiro) > 0)) return;   /* v21.230: también lo adeudado sin stock (viaja a la bodega destino) */
             items.push({ id: d.id, ref: d.ref, name: data.name, quantity: num(data.quantity), lotes: lotesAMover(data),
                 controlado: !!data.controlado, cuarentena: data.status === 'CUARENTENA' });
         });
@@ -95,7 +95,7 @@
             const o = sO.data();
             const sD = await tx.get(it.destRef);
             const qty = num(o.quantity);
-            if (qty <= 0) return 0;                       // ya se había movido: no hace nada
+            if (qty <= 0 && !(num(o.sobregiro) > 0)) return 0;                       // ya se había movido: no hace nada
             if (o.status === 'CUARENTENA') throw new Error('Producto en CUARENTENA: resuélvelo antes de cerrar.');
             const movidos = lotesAMover(o);
             const dData = sD.exists() ? sD.data() : null;
@@ -105,11 +105,15 @@
             const dQty = num(dData && dData.quantity) + qty;
             const prox = [...dLotes].sort(typeof window.fefoCompare === 'function' ? window.fefoCompare : () => 0)[0];
             // Escrituras (después de todas las lecturas)
-            tx.update(it.ref, { quantity: 0, batches: [], isCritical: true, updatedAt: f.serverTimestamp() });
+            /* v21.230: lo adeudado (sobregiro) viaja con el stock: se suma en el destino y queda en 0 en el origen (antes se duplicaba) */
+            const sgO = num(o.sobregiro), detO = Array.isArray(o.sobregiroDetalle) ? o.sobregiroDetalle : [];
+            const sgD = sgO > 0 ? { sobregiro: num(dData && dData.sobregiro) + sgO, sobregiroDetalle: (dData && Array.isArray(dData.sobregiroDetalle) ? dData.sobregiroDetalle : []).concat(detO) } : {};
+            tx.update(it.ref, { quantity: 0, batches: [], isCritical: true, ...(sgO > 0 ? { sobregiro: 0, sobregiroDetalle: [] } : {}), updatedAt: f.serverTimestamp() });
             if (dData) {
-                tx.update(it.destRef, { quantity: dQty, isCritical: dQty <= dLimite, batches: dLotes, updatedAt: f.serverTimestamp() });
+                tx.update(it.destRef, { quantity: dQty, isCritical: dQty <= dLimite, batches: dLotes, ...sgD, updatedAt: f.serverTimestamp() });
             } else {
-                tx.set(it.destRef, { ...o, location: destino.name, quantity: dQty, isCritical: dQty <= dLimite, criticalLimit: dLimite, batches: dLotes,
+                const { bodegaId: _bi, provisional: _pv, ...oSin } = o;
+                tx.set(it.destRef, { ...oSin, ...sgD, status: o.status === 'CUARENTENA' ? 'CUARENTENA' : (o.status || 'ACTIVO'), bodegaNombre: destino.name, location: destino.name, quantity: dQty, isCritical: dQty <= dLimite, criticalLimit: dLimite, batches: dLotes,
                     batch: prox ? prox.batch : (o.batch || ''), expirationDate: prox && prox.expirationDate ? prox.expirationDate : (o.expirationDate || ''), updatedAt: f.serverTimestamp() });
             }
             tx.set(histRef, {

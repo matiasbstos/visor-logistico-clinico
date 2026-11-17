@@ -16,14 +16,16 @@
   function aplicar(f, db, tx, o) {
     const A = window.SAR_ActasEntrega;
     if (!o || !o.antes || !(num(o.antes.sobregiro) > 0) || !A || typeof A.cuadrar !== 'function') return null;
-    const c = A.cuadrar({ ...o.antes, quantity: num(o.quantity), batches: o.batches || [] });
+    /* v21.230: se cuadra a lo más lo que INGRESA ahora (no el stock que ya había), para que anular la recepción lo deshaga exacto */
+    const ingresa = Math.max(0, num(o.quantity) - num(o.antes.quantity));
+    const c = A.cuadrar({ ...o.antes, quantity: num(o.quantity), batches: o.batches || [] }, ingresa);
     if (!c || !(c.cuadrado > 0)) return null;
     (c.cubiertas || []).forEach(cu => tx.set(f.doc(f.collection(db, 'Historial_Movimientos')), {
       insumoName: o.nombre || o.antes.name || '', item: o.nombre || o.antes.name || '', quantity: cu.qty, type: 'CUADRE_SOBREGIRO', user: o.usuario || '',
       date: f.serverTimestamp(), document: o.documento || '', batch: 'MULTI-LOTE', origin: o.bodega || o.antes.location || '', idInsumoOrigen: o.ref.id,
       observacion: `Cuadre automático al ingresar (${o.documento || 'ingreso'}): ${cu.qty} u. entregadas antes con el acta ${cu.acta} sin stock en el sistema se descuentan de lo ingresado.`,
       actaId: cu.acta, automatico: true }));
-    return { quantity: c.quantity, batches: c.batches, sobregiro: c.sobregiro, sobregiroDetalle: c.sobregiroDetalle, cuadrado: c.cuadrado, cubiertas: c.cubiertas };
+    return { quantity: c.quantity, batches: c.batches, sobregiro: c.sobregiro, sobregiroDetalle: c.sobregiroDetalle, cuadrado: c.cuadrado, cubiertas: c.cubiertas, usados: (c.usados || []).map(u => ({ batch: u.batch, expirationDate: u.expirationDate || '', used: num(u.used) })) };
   }
   window.SAR_CuadreIngreso = { aplicar };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_CuadreIngreso;

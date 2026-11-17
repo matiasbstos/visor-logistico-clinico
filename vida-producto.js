@@ -35,19 +35,20 @@
     ajuste: ['Ajuste de inventario', 'aju'], AJUSTE_CRITICO: ['Ajuste crítico', 'aju'], auditoria_modificacion_inventario: ['Modificación de inventario', 'aju'], toma_inventario: ['Toma de inventario', 'aju'],
     ANULACION_ACTA: ['Acta anulada (stock devuelto)', 'ing'], salida: ['Salida', 'sal'], TRANSITORIA_FALTANTE: ['Faltante de bodega transitoria', 'baj'], TRANSITORIA_REPOSICION: ['Reposición a bodega transitoria', 'mov'],
     INGRESO_OC: ['Ingreso por orden de compra', 'ing'], UNIFICACION_STOCK: ['Unificación de stock', 'mov'], CAMBIO_CONTROLADO: ['Cambio con código de seguimiento', 'aju'],
-    SALIDA_SOLICITUD: ['Salida por solicitud de insumos', 'sal'], DESPACHO_BANDEJA: ['Despacho a bandeja de turno', 'sal'], RETORNO_BANDEJA: ['Retorno de bandeja', 'ing'], ANULACION_BANDEJA: ['Bandeja anulada (stock devuelto)', 'ing'], DEVOLUCION_ANULACION_BANDEJA: ['Devolución de bandeja anulada', 'ing'],
+    SALIDA_SOLICITUD: ['Salida por solicitud de insumos', 'sal'], DESPACHO_BANDEJA: ['Despacho a bandeja de turno', 'sal'], RETORNO_BANDEJA: ['Retorno de bandeja', 'ing'], ANULACION_BANDEJA: ['Bandeja anulada (stock devuelto)', 'ing'], DEVOLUCION_ANULACION_BANDEJA: ['Devolución de bandeja anulada', 'ing'], DEVOLUCION_EDICION_BANDEJA: ['Devolución por edición de bandeja', 'ing'],
     ANULACION_RECEPCION: ['Recepción anulada (stock retirado)', 'baj'], REVERSA_CUADRE: ['Vuelve a adeudado (recepción anulada)', 'mov'], DEVOLUCION_PRESTAMO: ['Devolución de préstamo a otro centro', 'sal'], REGULARIZA_SOBREGIRO: ['Adeudado regularizado (sin cambio de stock)', 'mov'],
     EDICION_ACTA: ['Acta modificada', 'mov'], CIERRE_BODEGA: ['Cierre de bodega (traslado)', 'mov'], TRASPASO: ['Traspaso entre bodegas', 'mov'], ASIGNACION_BODEGA: ['Bodega asignada', 'mov'], RENOMBRE_BODEGA: ['Bodega renombrada', 'mov']
   };
   /* v21.231: efecto REAL de cada movimiento sobre el stock total del producto (todas sus bodegas). Si el movimiento trae `delta` (desde
      v21.231 los principales lo guardan) se usa ese; si no, se deduce por tipo. Traspasos, cierres, unificaciones y renombres no cambian el total.
      Lo entregado sin stock (sobregiro) no baja el stock al entregar: baja después, con el CUADRE_SOBREGIRO. */
-  const ENTRAN = ['INGRESO_PROVEEDOR', 'INGRESO_OC', 'INGRESO_INVENTARIO', 'entrada', 'carga masiva', 'toma_inventario', 'RETORNO_BANDEJA', 'ANULACION_BANDEJA', 'DEVOLUCION_ANULACION_BANDEJA', 'REVERSA_CUADRE'];
+  const ENTRAN = ['DEVOLUCION_EDICION_BANDEJA', 'INGRESO_PROVEEDOR', 'INGRESO_OC', 'INGRESO_INVENTARIO', 'entrada', 'carga masiva', 'toma_inventario', 'RETORNO_BANDEJA', 'ANULACION_BANDEJA', 'DEVOLUCION_ANULACION_BANDEJA', 'REVERSA_CUADRE'];
   const SALEN = ['CUADRE_SOBREGIRO', 'merma_despacho', 'merma_inventario', 'eliminacion_inventario', 'salida', 'TRANSITORIA_FALTANTE', 'SALIDA_SOLICITUD', 'DESPACHO_BANDEJA', 'ANULACION_RECEPCION', 'DEVOLUCION_PRESTAMO'];
   const FIRMADOS = ['AJUSTE_CRITICO', 'ajuste', 'auditoria_modificacion_inventario'];
   function deltaDe(h) {
     if (h.delta != null && h.delta !== '' && isFinite(Number(h.delta))) return Number(h.delta);
     const q = num(h.quantity), t = h.type;
+    if (['MERMA_DESPACHO', 'ARQUEO_PARCIAL'].includes(h.tipoAccion)) return 0;   /* solo mueven la bandeja de turno, no el stock de bodega */
     if (t === 'ENTREGA_ACTA') return -Math.max(0, Math.abs(q) - num(h.sinRespaldo));
     if (t === 'ANULACION_ACTA') return h.devueltoStock != null ? num(h.devueltoStock) : Math.abs(q);
     if (ENTRAN.includes(t)) return Math.abs(q); if (SALEN.includes(t)) return -Math.abs(q); if (FIRMADOS.includes(t)) return q;

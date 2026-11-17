@@ -88,13 +88,19 @@
   registrar('ajuste', async (d, op) => {   /* v21.230: idempotente con op.id (un reintento tras corte no descuenta dos veces) */
     const f = window.firebaseFirestore, db = window.firebaseDb, G = window.SAR_Gobernanza;
     const snap = await f.getDoc(f.doc(f.collection(db, 'Insumos'), d.docId)); if (!snap.exists()) throw new Error('El producto ya no existe.');
-    const stock = Number(snap.data().quantity) || 0; if (stock + d.cantidad < 0) throw new Error(`Hoy hay ${stock}: el ajuste de ${d.cantidad} dejaría stock negativo.`);
+    const stock = Number(snap.data().quantity) || 0;
+    /* v21.230: primero se mira si ya quedó aplicado en un intento anterior (la respuesta pudo perderse) */
+    const marca = op && op.id ? (d.directo ? f.doc(f.collection(db, 'Historial_Movimientos'), 'aju-' + op.id) : f.doc(f.collection(db, 'Solicitudes_Ajuste'), 'cola-' + op.id)) : null;
+    const yaEstaba = marca ? await f.getDoc(marca).then(x => x.exists(), () => false) : false;
+    const anotarGob = async (antes) => { if (!G || !d.motivo || d.gobOk) return; try { await G.registrar({ nombre: d.nombre, delta: d.cantidad, codigo: d.codigo || null, motivo: d.motivo, nota: d.nota, origen: 'AJUSTE', antes, despues: antes + d.cantidad, insumoId: d.docId }); guardar(leer().map(x => x.id === (op && op.id) ? { ...x, datos: { ...x.datos, gobOk: true } } : x)); } catch (e) { /* queda para el próximo intento */ } };
+    if (yaEstaba) { await anotarGob(stock - d.cantidad); return; }
+    if (stock + d.cantidad < 0) throw new Error(`Hoy hay ${stock}: el ajuste de ${d.cantidad} dejaría stock negativo.`);
     const cod = d.codigo || (G ? await G.codigo('AJU') : null), just = `${d.justificacion} · hecho sin conexión el ${new Date(d.en).toLocaleString('es-CL')}`;
     if (!d.codigo && cod) guardar(leer().map(x => x.id === (op && op.id) ? { ...x, datos: { ...x.datos, codigo: cod } } : x));   /* el mismo código en cada reintento */
     let aplicado = true;
     if (d.directo) { if (!window.ejecutarAjusteDirecto) throw new Error('sin conexión: módulo de ajustes aún no cargado'); try { await window.ejecutarAjusteDirecto(d.docId, stock, d.nombre, d.cantidad, just, cod, { idMov: op && op.id }); } catch (e) { if (!e.ya) throw e; aplicado = false; } }
     else { const ref = f.doc(f.collection(db, 'Solicitudes_Ajuste'), 'cola-' + ((op && op.id) || Date.now())); const ya = await f.getDoc(ref).catch(() => null); if (ya && ya.exists()) aplicado = false; else await f.setDoc(ref, { code: cod || (window.SAR_Folio ? window.SAR_Folio.provisional('AJU') : 'ADJ-' + Math.floor(10000 + Math.random() * 90000)), insumoId: d.docId, insumoName: d.nombre, cantidad: d.cantidad, justificacion: just, previousStock: stock, projectedStock: stock + d.cantidad, status: 'pendiente', date: f.serverTimestamp(), requester: usuario() }); }
-    if (aplicado && G && d.motivo) await G.registrar({ nombre: d.nombre, delta: d.cantidad, codigo: cod, motivo: d.motivo, nota: d.nota, origen: 'AJUSTE', antes: stock, despues: stock + d.cantidad, insumoId: d.docId }).catch(() => {});   // después del ajuste, una sola vez
+    d.codigo = d.codigo || cod; await anotarGob(aplicado ? stock : stock - d.cantidad);   // después del ajuste, una sola vez (aunque el primer intento se haya cortado)
   });
 
   // ---------------- disparadores ----------------

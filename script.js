@@ -1247,6 +1247,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         window.showToast("Solicitud Aprobada", `El ajuste ${reqData.code} fue ejecutado con éxito.`, "success");
                     } catch (error) {
+                        if (error && error.ya) { window.showToast("Solicitud ya procesada", "Esta solicitud ya quedó aprobada (no se aplicó dos veces).", "info"); return; }   // v21.230
                         console.error("Error aprobando solicitud:", error);
                         window.showAlertCenter("Error", `No se pudo aprobar la solicitud: ${error.message || error}`);
                     }
@@ -12791,19 +12792,36 @@ function doGet(e) {
         }
     }
 
+
+    /** v21.230: el registro al que suma/resta la toma de inventario: mismo nombre y misma bodega (en Bodega Central también el que no tiene bodega),
+     *  sin cuarentena, el de más stock. Igual para contar, corregir y mermar (antes la corrección podía caer en otra bodega). */
+    async function tomaRegistro(nombre, ubic) {
+        const u = String(ubic || 'Bodega Central').trim(), sn = await getDocs(query(collection(db, 'Insumos'), where('name_lowercase', '==', String(nombre || '').trim().toLowerCase()), limit(10)));
+        const ok = sn.docs.filter(d => { const x = d.data(), l = String(x.location || '').trim(); return x.status !== 'CUARENTENA' && (l === u || (!l && /central/i.test(u))); })
+            .sort((a, b) => (String(b.data().location || '').trim() === u) - (String(a.data().location || '').trim() === u) || (Number(b.data().quantity) || 0) - (Number(a.data().quantity) || 0));
+        return { empty: !ok.length, docs: ok.slice(0, 1) };
+    }
+    /* v21.230: conteos que no llegaron por falta de conexión: quedan en el equipo y se reintentan al volver internet */
+    const TOMA_PEND = 'sar-toma-pendientes';
+    const tomaPend = () => { try { return JSON.parse(localStorage.getItem(TOMA_PEND) || '[]'); } catch (e) { return []; } };
+    const tomaPendGuardar = (l) => { try { localStorage.setItem(TOMA_PEND, JSON.stringify(l)); } catch (e) { /* sin almacenamiento */ } };
+    async function tomaReintentar() {
+        const l = tomaPend(); if (!l.length || navigator.onLine === false) return; tomaPendGuardar([]);
+        let ok = 0; for (const it of l) { if (await syncToFirestore(it, true)) ok++; }
+        if (ok && typeof window.showToast === 'function') window.showToast('Conteos sincronizados', `${ok} conteo(s) hechos sin conexión ya están en el inventario.`, 'success');
+    }
+    window.addEventListener('online', () => setTimeout(tomaReintentar, 3000));
+    setTimeout(tomaReintentar, 15000);
     // Sincronización en Firestore con suma acumulativa.
     // v21.230: stock, lotes e historial en UNA transacción (antes updateDoc con increment y luego addDoc aparte: sin conexión o al
     // cerrar la pestaña el stock podía quedar sumado sin historial, y los lotes no cuadraban con la cantidad).
-    async function syncToFirestore(item) {
+    async function syncToFirestore(item, reintento) {
         try {
             const cleanName = (item.name || '').trim();
             if (!cleanName) return;
             const insumosRef = collection(db, 'Insumos');
             const ubic = item.location || 'Bodega Central';
-            const snap = await getDocs(query(insumosRef, where('name_lowercase', '==', cleanName.toLowerCase()), limit(10)));
-            const enBodega = snap.docs.filter(d => String(d.data().location || '').trim() === String(ubic).trim() && d.data().status !== 'CUARENTENA')
-                .sort((a, b) => (Number(b.data().quantity) || 0) - (Number(a.data().quantity) || 0));
-            const existente = enBodega[0] || null;
+            const existente = (await tomaRegistro(cleanName, ubic)).docs[0] || null;
             const addedQty = Number(item.quantity) || 0;
             const limitVal = Number(item.criticalLimit) || 50;
             const lote = String(item.batch || 'S/L').trim().toUpperCase() || 'S/L', vence = item.expirationDate || 'N/A';
@@ -12834,9 +12852,13 @@ function doGet(e) {
             if (cached) cached.quantity = finalQty;
             else tomaCatalogCache.push({ name: cleanName, code: autoCode, category: item.category, quantity: addedQty, unitPrice: item.unitPrice, criticalLimit: limitVal, location: item.location });
             console.log("[TomaInventario] Sincronizado y acumulado exitosamente en Firestore.");
+            return true;
         } catch (fsErr) {
             console.error("[TomaInventario] Error sincronizando en Firestore:", fsErr);
-            if (typeof window.showToast === 'function') window.showToast('No se guardó en la nube', 'El conteo de «' + (item.name || '') + '» quedó en este equipo pero no en el inventario: ' + ((fsErr && fsErr.message) || fsErr), 'error');
+            const red = navigator.onLine === false || /unavailable|offline|network|deadline|failed to get/i.test(String((fsErr && (fsErr.code || '')) + ' ' + (fsErr && fsErr.message)));
+            if (red) { tomaPendGuardar(tomaPend().concat([item])); if (!reintento && typeof window.showToast === 'function') window.showToast('Guardado en el equipo', 'Sin conexión: el conteo de «' + (item.name || '') + '» se sumará al inventario solo cuando vuelva internet.', 'warning'); }
+            else if (typeof window.showToast === 'function') window.showToast('No se guardó en la nube', 'El conteo de «' + (item.name || '') + '» quedó en este equipo pero no en el inventario: ' + ((fsErr && fsErr.message) || fsErr), 'error');
+            return false;
         }
     }
 
@@ -13716,12 +13738,8 @@ function doGet(e) {
                 // 1. Actualizar en Firestore
                 try {
                     const insumosRef = collection(db, 'Insumos');
-                    const q = query(
-                        insumosRef,
-                        where('name_lowercase', '==', newMed.toLowerCase()),
-                        limit(1)
-                    );
-                    const snap = await getDocs(q);
+                    if (navigator.onLine === false) throw new Error('Sin conexión: la corrección necesita internet.');
+                    const snap = await tomaRegistro(newMed, target.location || newUbic);
                     /* v21.230: stock (con sus lotes) e historial en una sola transacción; ya no se pisa la bodega ni el lote del producto entero */
                     await runTransaction(db, async (tx) => {
                     if (!snap.empty) {
@@ -13828,12 +13846,8 @@ function doGet(e) {
                 // 1. Descontar en Firestore (Insumos, Incidencias y Historial_Movimientos)
                 try {
                     const insumosRef = collection(db, 'Insumos');
-                    const q = query(
-                        insumosRef,
-                        where('name_lowercase', '==', medName.toLowerCase()),
-                        limit(1)
-                    );
-                    const snap = await getDocs(q);
+                    if (navigator.onLine === false) throw new Error('Sin conexión: la merma necesita internet.');
+                    const snap = await tomaRegistro(medName, target.location || ubic);
                     /* v21.230: descuento (con lotes), incidencia e historial en una sola transacción */
                     await runTransaction(db, async (tx) => {
                     if (!snap.empty) {

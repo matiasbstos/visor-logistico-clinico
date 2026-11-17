@@ -1300,13 +1300,14 @@
             }
         }
         paso(`Guardando la recepción ${recId} y subiendo ${det.reduce((t, d) => t + d.cantidad, 0)} unidades al stock…`);
-        let yaRegistrada = false;
+        let yaRegistrada = false, intentoPropio = false;
         await f.runTransaction(db(), async (tx) => {
             const os = await tx.get(ocRef); if (!os.exists()) throw new Error('La orden ya no existe.');
             const lecturas = []; for (const g of grupos.values()) lecturas.push([g, await tx.get(g.ref)]);
             const fresca = os.data();
             /* v21.230: si esta recepción (mismo N° REC) ya quedó guardada —reintento tras un corte—, no se vuelve a ingresar */
             if ((fresca.recepciones || []).some(r => r && r.recId === recId)) { yaRegistrada = true; return; }
+            intentoPropio = true;   // si Firestore reintenta tras confirmar, la vuelta siguiente la ve registrada pero el correo igual debe salir
             if (extras && extras.length) {   // productos agregados en la recepción: se suman a las líneas de la orden
                 if ((fresca.lineas || []).length !== baseN) throw new Error('La orden cambió mientras recibías. Cierra la ventana y vuelve a abrir la recepción.');
                 fresca.lineas = [...(fresca.lineas || []), ...extras.map(l => ({ ...l, agregadaPor: usuario(), agregadaEn: hoyISO() }))];
@@ -1330,7 +1331,7 @@
             });
             tx.set(evRef, { tipo: 'RECEPCION', ...(cuadresEv.length ? { cuadres: cuadresEv } : {}), texto, autor: usuario(), fecha: f.serverTimestamp(), ...(correo ? { correo } : {}), columna: key, guia, recId, horaLlegada: hora, bodegaDestino: central, fechaRecepcion: fecha, ingresoAStock: !!ingresaStock, detalle: det.map(d => ({ i: d.i, ...(d._ref ? { idInsumo: d._ref } : {}), bodega: central, insumoName: d.insumoName || '', descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })), incidencias: incidencias.map(n => ({ producto: n.producto, tipo: n.tipo, detalle: n.detalle })) });
         });
-        if (yaRegistrada) return null;
+        if (yaRegistrada && !intentoPropio) return null;
         if (notificar) { paso('Enviando el aviso por correo…'); try { correo = await enviarCorreo(DESTINO_RECEPCION, armarCorreo({ ...oc, ...aplicadoLocal }, titulo, textoCorreo || texto, usuario())); } catch (e) { toast('Recepción guardada', 'No se pudo preparar el correo: ' + e.message, 'warning'); } }
         return correo;
     }

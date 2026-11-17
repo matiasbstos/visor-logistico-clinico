@@ -367,9 +367,10 @@
             else if (q2 && !q2.empty) { i.id = q2.docs[0].id; i.nombre = q2.docs[0].data().name || nombre; }
             else { i.nuevo = true; i.nombre = nombre; }
         }
-        /* v21.230: el mismo producto en dos líneas haría que un descuento pise al otro (el acta diría 10 y el stock bajaría 5) */
-        { const vistos = new Map(); for (const i of items) { const k = i.nuevo ? 'n:' + String(i.nombre || '').toLowerCase().replace(/\s+/g, ' ').trim() : 'i:' + i.id; if (vistos.has(k)) throw new Error(`«${i.nombre}» está dos veces en el acta (${vistos.get(k)} y ${num(i.cantidad)} u.). Déjalo en una sola línea con el total.`); vistos.set(k, num(i.cantidad)); } }
-        const refs = items.map(i => ({ i, ref: i.nuevo ? f.doc(f.collection(db(), 'Insumos')) : f.doc(f.collection(db(), 'Insumos'), i.id), hist: f.doc(f.collection(db(), 'Historial_Movimientos')), histC: f.doc(f.collection(db(), 'Historial_Movimientos')) }));
+        /* v21.230: el mismo producto puede venir en dos líneas (p. ej. dos líneas de una OC con el mismo insumo): se planifica en orden
+           sobre el stock que va quedando y se escribe UNA vez por producto con el resultado acumulado (antes un descuento pisaba al otro). */
+        const claveIt = (i) => i.nuevo ? 'n:' + String(i.nombre || '').toLowerCase().replace(/\s+/g, ' ').trim() : 'i:' + i.id, refPorClave = new Map();
+        const refs = items.map(i => ({ i, clave: claveIt(i), ref: refPorClave.get(claveIt(i)) || (refPorClave.set(claveIt(i), i.nuevo ? f.doc(f.collection(db(), 'Insumos')) : f.doc(f.collection(db(), 'Insumos'), i.id)), refPorClave.get(claveIt(i))), hist: f.doc(f.collection(db(), 'Historial_Movimientos')), histC: f.doc(f.collection(db(), 'Historial_Movimientos')) }));
         const resultado = await f.runTransaction(db(), async (tx) => {
             let n = 0, numero = opc.numero || numHist;
             if (!numero) { const cs = await tx.get(ctrRef); n = (cs.exists() ? num(cs.data().ultimo) : 0) + 1; numero = numeroActa(anio, n); }
@@ -405,8 +406,11 @@
                 if (d.status === 'CUARENTENA') throw new Error(`${r.i.nombre} está en CUARENTENA.`);
                 return d;
             });
+            const vivo = new Map(), ultimo = new Map(); refs.forEach((r, k) => ultimo.set(r.clave, k));
             const calc = refs.map((r, k) => {
-                const p = planificar({ ...datos[k], name: datos[k].name }, r.i.cantidad, numero);
+                const d0 = vivo.get(r.clave) || datos[k];
+                const p = planificar({ ...d0, name: datos[k].name }, r.i.cantidad, numero);
+                vivo.set(r.clave, { ...d0, quantity: p.quantity, batches: p.batches, sobregiro: p.sobregiro, sobregiroDetalle: p.sobregiroDetalle });
                 if (datos[k].controlado && p.faltante > 0) throw new Error(`${r.i.nombre} es medicamento controlado: no puede entregarse sin stock en sistema.`);
                 return p;
             });
@@ -416,7 +420,7 @@
                 const limite = num(d.criticalLimit || d.stock_minimo || 50);
                 const prox = c.batches[0];
                 const cambios = { ...(r.i.codigoNuevo && r.i.codigo && !d.codigoMP ? { codigoMP: String(r.i.codigo) } : {}), quantity: c.quantity, batches: c.batches, sobregiro: c.sobregiro, sobregiroDetalle: c.sobregiroDetalle, isCritical: c.quantity <= limite, ...(prox ? { batch: prox.batch, expirationDate: prox.expirationDate || '' } : {}), updatedAt: f.serverTimestamp() };
-                if (r.i.nuevo) tx.set(r.ref, { ...d, ...cambios }); else tx.update(r.ref, cambios);
+                if (ultimo.get(r.clave) === k) { if (r.i.nuevo) tx.set(r.ref, { ...d, ...cambios }); else tx.update(r.ref, cambios); }   // una escritura por producto, con lo acumulado
                 c.cubiertas.forEach(cu => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name, quantity: cu.qty, type: 'CUADRE_SOBREGIRO', user: usuario, date: f.serverTimestamp(), document: numero, batch: 'MULTI-LOTE', origin: b.origen, idInsumoOrigen: r.ref.id, observacion: `Cuadre automático al ${opc.numero ? 'confirmar' : 'emitir'} ${numero}: ${cu.qty} u. del acta ${cu.acta} ya estaban entregadas sin respaldo`, actaId: cu.acta, cuadradoPor: numero }));
                 tx.set(r.hist, {
                     insumoName: d.name, quantity: num(r.i.cantidad), type: 'ENTREGA_ACTA', user: usuario, date: f.serverTimestamp(), document: numero,
@@ -493,11 +497,13 @@
                 ocRef = f.doc(f.collection(db(), 'Seguimiento_OC'), a.oc.id); const os = await tx.get(ocRef);
                 if (os.exists()) { ocLineas = (os.data().lineas || []).map(l => ({ ...l, entregado: { ...(l.entregado || {}) } })); a.items.forEach(i => { const l = ocLineas[i.ocI]; if (l) l.entregado[a.oc.columna] = Math.max(0, num(l.entregado[a.oc.columna]) - num(i.cantidad)); }); }
             }
+            const vivoA = new Map(), ultimoA = new Map(); refs.forEach((r, k) => ultimoA.set(r.i.id, k));   /* v21.230: mismo producto en dos líneas: se devuelve acumulado */
             refs.forEach((r, k) => {
                 if (!snaps[k].exists()) throw new Error(`${r.i.nombre} ya no existe: no se puede devolver el stock.`);
-                const d = snaps[k].data(), res = restaurarConSobregiro(d, r.i.lotes, r.i.sinRespaldo, numero);
+                const d = vivoA.get(r.i.id) || snaps[k].data(), res = restaurarConSobregiro(d, r.i.lotes, r.i.sinRespaldo, numero);
+                vivoA.set(r.i.id, { ...d, quantity: res.quantity, batches: res.batches, sobregiro: res.sobregiro, sobregiroDetalle: res.sobregiroDetalle });
                 const limite = num(d.criticalLimit || d.stock_minimo || 50);
-                tx.update(r.ref, { quantity: res.quantity, batches: res.batches, sobregiro: res.sobregiro, sobregiroDetalle: res.sobregiroDetalle, isCritical: res.quantity <= limite, updatedAt: f.serverTimestamp() });
+                if (ultimoA.get(r.i.id) === k) tx.update(r.ref, { quantity: res.quantity, batches: res.batches, sobregiro: res.sobregiro, sobregiroDetalle: res.sobregiroDetalle, isCritical: res.quantity <= limite, updatedAt: f.serverTimestamp() });
                 tx.set(r.hist, {
                     insumoName: d.name, quantity: num(r.i.cantidad), type: 'ANULACION_ACTA', user: usuario, date: f.serverTimestamp(), document: numero,
                     batch: 'MULTI-LOTE', origin: a.centro, dest: a.bodegaOrigen, lotes: r.i.lotes || [], idInsumoDestino: r.i.id,

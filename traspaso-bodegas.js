@@ -106,6 +106,7 @@
       tx.set(refH, { insumoName: d.name, quantity: qty, type: 'traspaso', user: ((window.firebaseAuth || window.auth || {}).currentUser || {}).email || 'Usuario', date: F.serverTimestamp(), document: (marca && marca.folio) || (ctr ? window.SAR_Folio.escribir(tx, ctr) : `TRASP-${String(desde).substring(0, 3)}-${String(hasta).substring(0, 3)}`), batch: movidos.length === 1 ? movidos[0].batch : 'MULTI-LOTE', origin: desde, dest: hasta, lotes: movidos, idInsumoOrigen: id, idInsumoDestino: refD.id, ...(nota ? { nota } : {}), ...(marca && marca.numero ? { solicitud: marca.numero } : {}) });
       escribirMarca(tx, F, m, marca, { transitoId: marca && marca.transito ? refD.id : '' });
     }); } catch (e) {
+      if (e && e.ya && !(marca && (marca.idMov || marca.numero))) return { destinoId: refD.id, yaHecho: true };   /* reintento automático tras confirmar: ya se hizo */
       /* v21.230: con mala señal la confirmación puede llegar al servidor aunque el teléfono reciba error: si el movimiento existe, ya se hizo */
       if (!e.ya && /unavailable|deadline|network|offline|timeout/i.test(String((e && (e.code || '')) + ' ' + (e && e.message)))) { try { const h = await F.getDoc(refH); if (h.exists()) return { destinoId: refD.id, yaHecho: true }; } catch (e2) { /* sigue el error original */ } }
       throw e;

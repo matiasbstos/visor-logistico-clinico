@@ -133,15 +133,17 @@
     const b = bodegas.find(x => x.id === bodegaSel); const SA = window.SAR_ActasEntrega; if (!SA || !SA.descontarFEFO) throw new Error('El módulo de stock no está cargado.');
     const lista = filas().filter(r => r.calc.estado !== 'pendiente' && r.calc.reponible > 0);
     if (!lista.length) throw new Error('No hay nada para reponer (cuenta primero, o la Bodega Central no tiene stock).');
-    const f = fs(), fecha = hoy(), docTxt = window.SAR_Folio ? await window.SAR_Folio.siguiente('REP') : `REPOSICION-${b.name}-${fecha}`;   // REP-AAAA-NNNNN
+    const f = fs(), fecha = hoy(); let docTxt = `REPOSICION-${b.name}-${fecha}`;   // REP-AAAA-NNNNN, tomado dentro de la transacción (v21.230: un clic rechazado no gasta número)
     /* v21.230: lo ya repuesto hoy (sobre el mismo conteo) se descuenta de lo que falta: reponer dos veces no duplica */
     const marcaRef = doc('Contadores', `transitoria-repos-${b.id}-${fecha}`); let repuesto = {};
     await f.runTransaction(db(), async (tx) => {
       const ms = await tx.get(marcaRef), ya = ms.exists() ? (ms.data().items || {}) : {}; repuesto = {};
+      const ctrRep = window.SAR_Folio ? await window.SAR_Folio.leer(tx, 'REP') : null;
+      const yaDe = (r) => { const y = ya[r.k]; return y && typeof y === 'object' && String(y.c) === String(r.contado) ? num(y.n) : 0; };   /* solo cuenta lo repuesto sobre ESTE mismo conteo (un reconteo empieza de nuevo) */
       const leidos = new Map(), rd = async (id) => { if (!leidos.has(id)) leidos.set(id, await tx.get(doc('Insumos', id))); return leidos.get(id); };
       const trabajos = [];
       for (const r of lista) {
-        const falta = r.calc.reponible - num(ya[r.k]); if (falta <= 0) continue;
+        const falta = r.calc.reponible - yaDe(r); if (falta <= 0) continue;
         for (const d of r.dC) await rd(d.id); for (const d of r.dB) await rd(d.id);
         const rp = repartir(r.dC.map(d => ({ id: d.id, quantity: num(leidos.get(d.id).data().quantity) })), falta), movidos = [];
         const total = falta - rp.sinCubrir; if (total <= 0) continue;
@@ -149,7 +151,8 @@
         trabajos.push({ r, movidos, total });
       }
       if (!trabajos.length) throw new Error(Object.keys(ya).length ? 'Lo que faltaba ya se repuso hoy.' : 'La Bodega Central no tiene stock de lo que falta reponer.');
-      const items = { ...ya }; trabajos.forEach(({ r, total }) => { items[r.k] = num(items[r.k]) + total; repuesto[r.k] = total; });
+      if (ctrRep) docTxt = window.SAR_Folio.escribir(tx, ctrRep);
+      const items = { ...ya }; trabajos.forEach(({ r, total }) => { items[r.k] = { n: yaDe(r) + total, c: String(r.contado) }; repuesto[r.k] = total; });
       tx.set(marcaRef, { tipo: 'transitoria-reposicion', bodegaId: b.id, bodega: b.name, fecha, items, documentos: (ms.exists() ? (ms.data().documentos || []) : []).concat([docTxt]), por: usuario(), actualizado: new Date().toISOString() });
       trabajos.forEach(({ r, movidos, total }) => {
         const usados = movidos.flatMap(m => m.pl.usados).map(u => ({ batch: u.batch, quantity: u.used, expirationDate: u.expirationDate || '' }));

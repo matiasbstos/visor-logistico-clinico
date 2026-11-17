@@ -70,7 +70,7 @@
         const items = [];
         snap.forEach(d => {
             const data = d.data();
-            if (num(data.quantity) <= 0) return;
+            if (num(data.quantity) <= 0 && !(num(data.sobregiro) > 0)) return;   /* v21.230: también lo adeudado sin stock (viaja a la bodega destino) */
             items.push({ id: d.id, ref: d.ref, name: data.name, quantity: num(data.quantity), lotes: lotesAMover(data),
                 controlado: !!data.controlado, cuarentena: data.status === 'CUARENTENA' });
         });
@@ -95,7 +95,7 @@
             const o = sO.data();
             const sD = await tx.get(it.destRef);
             const qty = num(o.quantity);
-            if (qty <= 0) return 0;                       // ya se había movido: no hace nada
+            if (qty <= 0 && !(num(o.sobregiro) > 0)) return 0;                       // ya se había movido: no hace nada
             if (o.status === 'CUARENTENA') throw new Error('Producto en CUARENTENA: resuélvelo antes de cerrar.');
             const movidos = lotesAMover(o);
             const dData = sD.exists() ? sD.data() : null;

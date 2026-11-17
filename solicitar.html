@@ -8,7 +8,7 @@
     <link rel="manifest" href="manifest-solicitar.json">
     <link rel="icon" href="assets/favicon-32.png">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-    <link rel="stylesheet" href="style.css?v=21.231">
+    <link rel="stylesheet" href="style.css?v=21.232">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body.sp { margin: 0; background: #f5f7fb; font-family: 'Outfit', system-ui, sans-serif; min-height: 100vh; }
@@ -97,12 +97,12 @@
             bi.addEventListener('click', async () => { if (!evt) return; evt.prompt(); await evt.userChoice.catch(() => {}); evt = null; bi.hidden = true; });
         })();
     </script>
-    <script src="progreso.js?v=21.231"></script>
-    <script src="imagenes-producto.js?v=21.231"></script>
-    <script src="solicitudes-insumos.js?v=21.231"></script>
-    <script src="correlativos.js?v=21.231"></script>
-    <script src="bodega-transitoria.js?v=21.231"></script>
-    <script src="inventario-movil.js?v=21.231"></script>
+    <script src="progreso.js?v=21.232"></script>
+    <script src="imagenes-producto.js?v=21.232"></script>
+    <script src="solicitudes-insumos.js?v=21.232"></script>
+    <script src="correlativos.js?v=21.232"></script>
+    <script src="bodega-transitoria.js?v=21.232"></script>
+    <script src="inventario-movil.js?v=21.232"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";

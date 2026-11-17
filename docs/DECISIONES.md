@@ -1514,3 +1514,6 @@ Verificación de B.A. (simulación de todos los flujos) y Frankie (sin conexión
 - **Toma de inventario** (conteo, corrección, merma): stock con lotes, incidencia e historial en una transacción; el mismo registro (nombre + bodega; en Central también el sin bodega) para contar, corregir y mermar; conteos sin conexión quedan en el equipo y se suman al volver internet; corrección y merma piden conexión.
 - **Unir repetidos**: por ID de Mercado Público solo si un nombre contiene al otro.
 - Pendiente: kárdex con «cambio real» por movimiento (delta firmado), importación masiva desde Excel, escrituras pendientes al cerrar sesión por inactividad.
+
+## 4.283 · Impresión de etiquetas: detalle de la orden más claro (v21.231)
+Pedido del usuario: mejorar la distribución y la visual del detalle de una orden. Botón «← Órdenes» alineado a la izquierda; tarjeta con N° de OC, proveedor, fecha y N° REC, estado y 4 cifras (recibidas, etiquetas creadas, por imprimir, sin etiqueta); «Falta etiquetar» como lista legible (nombre corto, el completo al pasar el cursor; lote, vencimiento y unidades) con «Crear las que faltan» en su cabecera; la barra Imprimir/Reimprimir solo aparece si hay etiquetas, y si no hay, un estado vacío que dice qué hacer.

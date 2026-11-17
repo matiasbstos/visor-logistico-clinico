@@ -91,11 +91,11 @@
         const c = A.cuadrar(d); if (!(c.cuadrado > 0)) throw new Error('No hay stock para descontar.');
         const limite = num(d.criticalLimit || d.stock_minimo || 50);
         tx.update(ref, { quantity: c.quantity, batches: c.batches, sobregiro: c.sobregiro, sobregiroDetalle: c.sobregiroDetalle, isCritical: c.quantity <= limite, updatedAt: f.serverTimestamp() });
-        c.cubiertas.forEach(cu => hist(tx, { type: 'CUADRE_SOBREGIRO', insumoName: d.name, item: d.name, quantity: cu.qty, batch: 'MULTI-LOTE', origin: d.location || '', idInsumoOrigen: id, document: cu.acta, actaId: cu.acta, observacion: `Salud del inventario: ${cu.qty} u. entregadas con el acta ${cu.acta} sin stock en el sistema se descuentan del stock.` }));
+        c.cubiertas.forEach(cu => hist(tx, { type: 'CUADRE_SOBREGIRO', delta: -num(cu.qty), insumoName: d.name, item: d.name, quantity: cu.qty, batch: 'MULTI-LOTE', origin: d.location || '', idInsumoOrigen: id, document: cu.acta, actaId: cu.acta, observacion: `Salud del inventario: ${cu.qty} u. entregadas con el acta ${cu.acta} sin stock en el sistema se descuentan del stock.` }));
         return { modo, unidades: c.cuadrado };
       }
       tx.update(ref, { sobregiro: 0, sobregiroDetalle: [], sobregiroRegularizado: (Array.isArray(d.sobregiroRegularizado) ? d.sobregiroRegularizado : []).concat([{ qty: sg, actas: det.map(s => ({ acta: s.acta, qty: num(s.qty) })), por: usuario(), en: new Date().toISOString(), stock: num(d.quantity) }]).slice(-20), updatedAt: f.serverTimestamp() });
-      hist(tx, { type: 'REGULARIZA_SOBREGIRO', insumoName: d.name, item: d.name, quantity: sg, origin: d.location || '', idInsumoOrigen: id, document: det.map(s => s.acta).join(', ') || 'Salud del inventario', observacion: `Regularizado por conteo físico: ${sg} u. entregadas con acta(s) ${det.map(s => s.acta + ' (' + num(s.qty) + ')').join(', ') || '(sin acta)'} salieron de stock que no estaba ingresado; el stock (${num(d.quantity)}) no cambia.` });
+      hist(tx, { type: 'REGULARIZA_SOBREGIRO', delta: 0, insumoName: d.name, item: d.name, quantity: sg, origin: d.location || '', idInsumoOrigen: id, document: det.map(s => s.acta).join(', ') || 'Salud del inventario', observacion: `Regularizado por conteo físico: ${sg} u. entregadas con acta(s) ${det.map(s => s.acta + ' (' + num(s.qty) + ')').join(', ') || '(sin acta)'} salieron de stock que no estaba ingresado; el stock (${num(d.quantity)}) no cambia.` });
       return { modo, unidades: sg };
     });
   }

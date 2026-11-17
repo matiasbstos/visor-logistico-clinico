@@ -1,7 +1,7 @@
 // Importación de Firebase desde la CDN (Módulo)
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
-import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, runTransaction, writeBatch, serverTimestamp, getDoc, setDoc, query, where, orderBy, limit, limitToLast, startAfter, endBefore, startAt, endAt, getDocs as _getDocs, deleteDoc, addDoc, updateDoc, increment, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+import { waitForPendingWrites, getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, runTransaction, writeBatch, serverTimestamp, getDoc, setDoc, query, where, orderBy, limit, limitToLast, startAfter, endBefore, startAt, endAt, getDocs as _getDocs, deleteDoc, addDoc, updateDoc, increment, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 import { generarPlantillaExcel, procesarExcelCargaMasiva, excelSerialDateToJS, exportarInventarioResguardo } from './excelUtils.js';
 const SAR_IdMatch = (n, t) => !!(window.SAR_IdProducto && window.SAR_IdProducto.coincide(n, t));   // búsqueda por ID (id-producto.js)
 
@@ -333,6 +333,9 @@ export const secondaryAuth = getAuth(secondaryApp);
 export const db = initializeFirestore(app, {
     localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()})
 });
+/** v21.231: espera a que las escrituras guardadas en el equipo lleguen al servidor (máx. ms). true = todo enviado. */
+window.SAR_enviarPendientes = async (ms) => { try { await Promise.race([waitForPendingWrites(db), new Promise((_, r) => setTimeout(() => r(new Error('tiempo')), ms || 10000))]); return true; } catch (e) { return false; } };
+
 
 // La persistencia offline ahora se maneja nativamente por persistentLocalCache
 
@@ -686,6 +689,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (window.inactivityTimeout) clearTimeout(window.inactivityTimeout);
                     // 30 minutos = 1,800,000 ms
                     window.inactivityTimeout = setTimeout(async () => {
+                        /* v21.231: sin conexión NO se cierra la sesión (no se podría volver a entrar y lo pendiente quedaría atrapado);
+                           con conexión, primero se envía lo pendiente de este usuario. */
+                        if (navigator.onLine === false || (window.SAR_Cola && window.SAR_Cola.pendientes().some(x => x.estado === 'pendiente' && (!x.por || x.por === (auth.currentUser && auth.currentUser.email))))) { console.warn('Inactividad: sesión abierta (sin conexión o con trabajo pendiente).'); window.resetInactivityTimer(); return; }
+                        if (window.SAR_enviarPendientes && !(await window.SAR_enviarPendientes(15000))) { window.resetInactivityTimer(); return; }
                         console.warn("Cerrando sesión por inactividad prolongada (30m).");
                         await signOut(auth);
                         window.location.reload();
@@ -2112,7 +2119,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Control de acceso por rol (espejo de las reglas CSS del menú; la barrera real son las reglas de Firestore)
             const VISTAS_BLOQUEADAS = {
-                enfermero: ['view-historial', 'view-ajustes', 'view-compras', 'view-informes', 'view-bodegas',
+                enfermero: ['view-movimientos', 'view-historial', 'view-ajustes', 'view-compras', 'view-informes', 'view-bodegas',
                             'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-compras-agiles', 'view-ingreso-rapido', 'view-pendientes-entrega', 'view-distribucion-centros', 'view-transitoria', 'view-sustituciones', 'view-solicitudes-insumos', 'view-bultos', 'view-etiquetas', 'view-salud-inventario', 'view-bitacora-oc', 'view-duplicados', 'view-actas-entrega', 'view-auditoria', 'view-oxigeno', 'view-errores'],
                 operador: ['view-compras', 'view-usuarios', 'view-configuracion', 'view-errores', 'view-salud-inventario']
             };
@@ -2321,9 +2328,15 @@ document.addEventListener('DOMContentLoaded', () => {
                 // Tratamiento de botones sin routing (Logout, Config)
                 if (!targetId) {
                     if (item.classList.contains('danger')) {
-                        showToast('Cierre de Sesión', 'Cerrando sesión y liberando recursos...', 'warning');
-                        clearAllListeners(); // Limpiar memoria antes de salir
-                        signOut(auth); // Cerramos sesión de Firebase
+                        (async () => {
+                            /* v21.231: antes de salir se envía lo que quedó pendiente (si no, quedaría atrapado en este equipo hasta que vuelvas a entrar) */
+                            const colaPend = window.SAR_Cola ? window.SAR_Cola.pendientes().filter(x => x.estado === 'pendiente' && (!x.por || x.por === (auth.currentUser && auth.currentUser.email))).length : 0;
+                            if (navigator.onLine === false || colaPend) { if (!confirm(navigator.onLine === false ? 'No hay conexión: si hiciste cambios que aún no se envían, Si sales ahora quedan guardados en este equipo y se enviarán cuando vuelvas a entrar aquí.\n\n¿Salir igual?' : `Tienes ${colaPend} operación(es) hechas sin conexión sin aplicar. Espera a que se sincronicen (o toca «Sincronizar ahora»).\n\n¿Salir igual?`)) return; }
+                            else { showToast('Cierre de Sesión', 'Enviando cambios pendientes…', 'info'); if (window.SAR_enviarPendientes && !(await window.SAR_enviarPendientes(15000)) && !confirm('Algunos cambios aún no se confirman con el servidor. ¿Salir igual?')) return; }
+                            showToast('Cierre de Sesión', 'Cerrando sesión y liberando recursos...', 'warning');
+                            clearAllListeners(); // Limpiar memoria antes de salir
+                            signOut(auth); // Cerramos sesión de Firebase
+                        })();
                     } else {
                         showToast('Configuración', 'Preparando entorno de configuración...', 'info');
                     }
@@ -3559,72 +3572,59 @@ document.addEventListener('DOMContentLoaded', () => {
                 return text.toString().replace(/[\n\r]+/g, ' ').replace(/\s\s+/g, ' ').trim();
             };
 
-            // Procesamiento por bloques (Senior Scalability Pattern)
-            for (let i = 0; i < data.length; i += CHUNK_SIZE) {
-                const chunk = data.slice(i, i + CHUNK_SIZE);
-                showToast('Carga Masiva', `Subiendo bloque ${Math.floor(i / CHUNK_SIZE) + 1} de ${Math.ceil(data.length / CHUNK_SIZE)}...`, 'info');
-
-                const chunkPromises = chunk.map(async (item) => {
-                    try {
-                        const cleanName = sanitizeText(item.descripcion);
-                        if (!cleanName) throw new Error("Descripción inválida");
-
-                        const cleanBatch = sanitizeText(item.lote) || "N/A";
-                        const finalId = item.id_producto ? item.id_producto.toString().trim() : null;
-
-                        const insumosRef = collection(db, 'Insumos');
-                        let q;
-                        if (finalId) {
-                            q = query(insumosRef, where('code', '==', finalId), where('batch', '==', cleanBatch), limit(1));
-                        } else {
-                            q = query(insumosRef, where('name', '==', cleanName), where('batch', '==', cleanBatch), limit(1));
-                        }
-
-                        const querySnapshot = await getDocs(q);
-
-                        if (!querySnapshot.empty) {
-                            const existingDoc = querySnapshot.docs[0];
-                            const oldQty = Number(existingDoc.data().quantity) || 0;
-                            const addedQty = Number(item.cantidad) || 0;
-                            const finalQty = oldQty + addedQty;
-                            const limitVal = Number(existingDoc.data().criticalLimit || existingDoc.data().stock_minimo || 50);
-
-                            await updateDoc(doc(db, 'Insumos', existingDoc.id), {
-                                quantity: increment(addedQty),
-                                isCritical: finalQty <= limitVal,
-                                unitPrice: Number(item.costo_unitario) || existingDoc.data().unitPrice,
-                                location: bodegaDestino || sanitizeText(item.ubicacion) || existingDoc.data().location,
-                                updatedAt: serverTimestamp()
-                            });
-                            productosActualizados++;
-                        } else {
-                            const autoId = "AUTO-" + Math.random().toString(36).substring(2, 7).toUpperCase();
-                            const addedQty = Number(item.cantidad) || 0;
-                            const limitVal = Number(item.stock_minimo) || 50;
-
-                            await addDoc(insumosRef, {
-                                code: finalId || autoId,
-                                name: cleanName,
-                                quantity: addedQty,
-                                isCritical: addedQty <= limitVal,
-                                unitPrice: Number(item.costo_unitario) || 0,
-                                batch: cleanBatch,
-                                expirationDate: item.vencimiento || "N/A",
-                                location: bodegaDestino || sanitizeText(item.ubicacion) || "Bodega Central",
-                                category: sanitizeText(item.categoria) || "General",
-                                criticalLimit: limitVal,
-                                updatedAt: serverTimestamp(),
-                                name_lowercase: cleanName.toLowerCase()
-                            });
-                            nuevosIngresos++;
-                        }
-                    } catch (rowError) {
-                        failedItems.push({ ...item, Motivo_Error: rowError.message });
-                    }
-                });
-
-                await Promise.all(chunkPromises);
+            /* v21.231: cada fila en UNA transacción (stock + lotes + historial); se suma al registro de esa bodega (sin cambiarle la
+               bodega ni el lote al producto entero); filas en orden (dos filas del mismo producto no chocan); un mismo archivo no se
+               carga dos veces sin confirmar. */
+            const huella = (() => { let h = 5381; const t = JSON.stringify(data) + '|' + String(bodegaDestino || ''); for (let k = 0; k < t.length; k++) h = ((h << 5) + h + t.charCodeAt(k)) | 0; return 'import-' + (h >>> 0).toString(36) + '-' + data.length; })();
+            const importId = 'XLSX-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+            try {
+                const ya = await getDoc(doc(db, 'Contadores', huella));
+                if (ya.exists() && ya.data().estado !== 'fallida' && !confirm(`${ya.data().estado === 'en curso' ? 'Una carga de este mismo archivo quedó A MEDIAS' : 'Este mismo archivo ya se cargó'} el ${new Date(ya.data().en || Date.now()).toLocaleString('es-CL')} (${ya.data().importId || ''}).\n\nSi lo cargas de nuevo, las cantidades se SUMAN otra vez. ¿Cargar igual?`)) { showToast('Carga cancelada', 'No se cargó nada.', 'info'); return; }
+            } catch (e) { /* sin lectura: sigue */ }
+            if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) { showToast('Sin conexión', 'La carga masiva necesita internet: no se cargó nada.', 'error'); return; }
+            if (data.length > 200) showToast('Carga Masiva', `Son ${data.length} filas: tomará unos ${Math.ceil(data.length * 0.4 / 60)} minuto(s). No cierres la página.`, 'info');
+            try { await setDoc(doc(db, 'Contadores', huella), { tipo: 'carga-masiva', importId, en: new Date().toISOString(), filas: data.length, estado: 'en curso', por: auth.currentUser ? auth.currentUser.email : '' }); } catch (e) { /* solo la marca */ }
+            const lotesDe = (d) => { const q0 = Number(d.quantity) || 0; return (Array.isArray(d.batches) && d.batches.length ? d.batches.map(b => ({ ...b })) : (q0 > 0 ? [{ batch: d.batch || 'S/L', quantity: q0, expirationDate: d.expirationDate || 'N/A' }] : [])); };
+            for (let i = 0; i < data.length; i++) {
+                const item = data[i];
+                if (i % 25 === 0) showToast('Carga Masiva', `Fila ${i + 1} de ${data.length}...`, 'info');
+                try {
+                    const cleanName = sanitizeText(item.descripcion);
+                    if (!cleanName) throw new Error("Descripción inválida");
+                    const cleanBatch = (sanitizeText(item.lote) || "S/L").toUpperCase();
+                    const vence = item.vencimiento || "N/A";
+                    const finalId = item.id_producto ? item.id_producto.toString().trim() : null;
+                    const bodega = String(bodegaDestino || sanitizeText(item.ubicacion) || "Bodega Central").trim().replace(/\s+/g, ' ');
+                    const addedQty = Number(item.cantidad) || 0;
+                    if (!(addedQty > 0)) throw new Error("Cantidad inválida");
+                    const insumosRef = collection(db, 'Insumos');
+                    const sn = await getDocs(query(insumosRef, finalId ? where('code', '==', finalId) : where('name_lowercase', '==', cleanName.toLowerCase()), limit(20)));
+                    const sn2 = finalId ? null : await getDocs(query(insumosRef, where('name', '==', cleanName), limit(20))).catch(() => null);   /* registros antiguos sin name_lowercase */
+                    const docsI = [...new Map([...sn.docs, ...(sn2 ? sn2.docs : [])].map(d => [d.id, d])).values()];
+                    const cand = docsI.filter(d => { const x = d.data(), l = String(x.location || '').trim(); return x.status !== 'CUARENTENA' && (l === bodega || (!l && /central/i.test(bodega))); })
+                        .sort((a, b) => (Number(b.data().quantity) || 0) - (Number(a.data().quantity) || 0));
+                    const ref = cand.length ? cand[0].ref : doc(insumosRef);
+                    let nuevo = false;
+                    await runTransaction(db, async (tx) => {
+                        const ds = cand.length ? await tx.get(ref) : null, d = ds && ds.exists() ? ds.data() : null; nuevo = !d;
+                        const lotes = d ? lotesDe(d) : [], ex = lotes.find(b => b.batch === cleanBatch && String(b.expirationDate || 'N/A') === String(vence));
+                        if (ex) ex.quantity = (Number(ex.quantity) || 0) + addedQty; else lotes.push({ batch: cleanBatch, quantity: addedQty, expirationDate: vence });
+                        if (typeof window.fefoCompare === 'function') lotes.sort(window.fefoCompare);
+                        const q1 = (d ? Number(d.quantity) || 0 : 0) + addedQty, limitVal = Number((d && (d.criticalLimit || d.stock_minimo)) || item.stock_minimo) || 50;
+                        if (d) tx.update(ref, { quantity: q1, batches: lotes, isCritical: q1 <= limitVal, ...(Number(item.costo_unitario) ? { unitPrice: Number(item.costo_unitario) } : {}), updatedAt: serverTimestamp() });
+                        else tx.set(ref, { code: finalId || ("AUTO-" + Math.random().toString(36).substring(2, 7).toUpperCase()), name: cleanName, name_lowercase: cleanName.toLowerCase(), quantity: q1, batches: lotes,
+                            isCritical: q1 <= limitVal, unitPrice: Number(item.costo_unitario) || 0, batch: cleanBatch, expirationDate: vence, location: bodega, bodegaNombre: bodega,
+                            category: sanitizeText(item.categoria) || "General", criticalLimit: limitVal, updatedAt: serverTimestamp() });
+                        tx.set(doc(collection(db, 'Historial_Movimientos')), { date: serverTimestamp(), type: 'carga masiva', insumoName: d ? (d.name || cleanName) : cleanName, insumoId: ref.id, idInsumoDestino: ref.id,
+                            quantity: addedQty, delta: addedQty, batch: cleanBatch, expirationDate: vence, dest: bodega, destination: bodega, document: importId, fila: i + 2,
+                            user: auth.currentUser ? auth.currentUser.email : 'Admin Local', observations: `Carga masiva Excel ${importId}, fila ${i + 2}` });
+                    });
+                    if (nuevo) nuevosIngresos++; else productosActualizados++;
+                } catch (rowError) {
+                    failedItems.push({ ...item, Motivo_Error: rowError.message });
+                }
             }
+            try { if (nuevosIngresos + productosActualizados > 0) await setDoc(doc(db, 'Contadores', huella), { tipo: 'carga-masiva', importId, en: new Date().toISOString(), filas: data.length, ok: nuevosIngresos + productosActualizados, estado: 'terminada', por: auth.currentUser ? auth.currentUser.email : '' }); else await setDoc(doc(db, 'Contadores', huella), { tipo: 'carga-masiva', importId, en: new Date().toISOString(), filas: data.length, ok: 0, estado: 'fallida', por: auth.currentUser ? auth.currentUser.email : '' }); } catch (e) { /* solo la marca */ }
 
             try {
                 if (failedItems.length > 0 || productosActualizados > 0) {
@@ -3636,7 +3636,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         batch: 'MASIVO',
                         quantity: productosActualizados + nuevosIngresos,
                         document: 'XLSX-IMPORT',
-                        totalFilas: data.length,
+                        totalFilas: data.length, delta: 0, resumen: true,   // v21.231: el resumen no mueve stock (cada fila tiene su movimiento)
                         actualizados: productosActualizados,
                         nuevos: nuevosIngresos,
                         errores: failedItems.length

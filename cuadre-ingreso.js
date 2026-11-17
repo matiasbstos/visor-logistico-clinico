@@ -21,7 +21,7 @@
     const c = A.cuadrar({ ...o.antes, quantity: num(o.quantity), batches: o.batches || [] }, ingresa);
     if (!c || !(c.cuadrado > 0)) return null;
     (c.cubiertas || []).forEach(cu => tx.set(f.doc(f.collection(db, 'Historial_Movimientos')), {
-      insumoName: o.nombre || o.antes.name || '', item: o.nombre || o.antes.name || '', quantity: cu.qty, type: 'CUADRE_SOBREGIRO', user: o.usuario || '',
+      insumoName: o.nombre || o.antes.name || '', item: o.nombre || o.antes.name || '', quantity: cu.qty, type: 'CUADRE_SOBREGIRO', delta: -num(cu.qty), user: o.usuario || '',
       date: f.serverTimestamp(), document: o.documento || '', batch: 'MULTI-LOTE', origin: o.bodega || o.antes.location || '', idInsumoOrigen: o.ref.id,
       observacion: `Cuadre automático al ingresar (${o.documento || 'ingreso'}): ${cu.qty} u. entregadas antes con el acta ${cu.acta} sin stock en el sistema se descuentan de lo ingresado.`,
       actaId: cu.acta, automatico: true }));

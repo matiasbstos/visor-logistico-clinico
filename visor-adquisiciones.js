@@ -365,12 +365,27 @@
             return entry ? entry.searchBlob.includes(qNorm) : true;
         }
 
+        /**
+         * Obtiene la OC asociada a una SDC mediante búsqueda en el índice en memoria.
+         */
+        function getOCBySdcId(sdcId) {
+            if (!sdcId) return null;
+            const entry = indices.kanbanSearchEntries.find(e => e.sdcId === sdcId);
+            if (entry && entry.oc) return entry.oc;
+            if (typeof estadoMemoria !== 'undefined' && Array.isArray(estadoMemoria.ocList)) {
+                return estadoMemoria.ocList.find(o => o.sdc_id === sdcId) || null;
+            }
+            return null;
+        }
+
         return {
             rebuildCatalogIndex,
             rebuildKanbanIndex,
             queryCatalog,
             matchesKanbanQuery,
             normalizarTexto,
+            getOCBySdcId,
+            getOcBySdcId: getOCBySdcId,
             getIndexMetadata: () => ({
                 catalogIndexedCount: indices.catalogoBySku.size,
                 kanbanIndexedCount: indices.kanbanBySdcId.size,

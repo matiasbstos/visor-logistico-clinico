@@ -137,6 +137,7 @@
         if (q === '' || !(Number(q) >= 0) || Math.floor(Number(q)) !== Number(q)) { err.textContent = 'La cantidad debe ser un número entero, 0 o mayor.'; return; }
         const G = window.SAR_Gobernanza; let gob = null;
         const cambiaStock = Math.floor(Number(q)) !== num(m.quantity) || (up(g('ei-lote')) || 'S/L') !== (m.batch || 'S/L') || (g('ei-vence') || '') !== soloFecha(m.expirationDate);
+        let motivoGob = null;
         if (G && cambiaStock) {
           b.disabled = true; err.textContent = 'Verificando…';
           try {
@@ -146,19 +147,23 @@
           err.textContent = ''; b.disabled = false;
           const r = await G.pedirMotivo('¿Por qué corriges este ingreso?', esc(m.insumoName || m.item) + ': cantidad ' + num(m.quantity) + ' → ' + Math.floor(Number(q)) + '.');
           if (!r) return;
-          gob = { ...r, codigo: await G.codigo('CAM') };
+          motivoGob = r;
         }
         b.disabled = true; err.textContent = '';
         try {
+          if (G && motivoGob) gob = { ...motivoGob, codigo: await G.codigo('CAM') };
           await guardar(m, ins, { quantity: q, batch: g('ei-lote'), expirationDate: g('ei-vence'), fecha: g('ei-fecha'), provider: g('ei-prov').trim(), purchaseType: g('ei-compra').trim(), document: g('ei-doc').trim(), tipoInsumo: g('ei-tipo'), observations: g('ei-obs').trim() });
           if (gob) await G.registrar({ nombre: m.insumoName || m.item, lote: up(g('ei-lote')), delta: Math.floor(Number(q)) - num(m.quantity), codigo: gob.codigo, motivo: gob.motivo, nota: gob.nota, origen: 'EDITAR_INGRESO', antes: { cantidad: num(m.quantity), lote: m.batch || '', vence: soloFecha(m.expirationDate) }, despues: { cantidad: Math.floor(Number(q)), lote: up(g('ei-lote')), vence: g('ei-vence') || '' }, insumoId: ins ? ins.id : '' });
           cerrar(); toast('Ingreso actualizado', gob ? 'Código de seguimiento: ' + gob.codigo : 'Se corrigió el movimiento y el stock quedó ajustado.', 'success');
           // El Historial se actualiza solo (escucha en tiempo real); Existencias se recarga aquí
           if (typeof window.loadFirstPage === 'function') window.loadFirstPage();
           document.dispatchEvent(new CustomEvent('sar:ingreso-editado', { detail: { id } }));
-        } catch (e) { err.textContent = e.message || String(e); b.disabled = false; }
+        } catch (e) {
+          err.textContent = window.SAR_AjusteLotes ? window.SAR_AjusteLotes.mensajeErrorAmigable(e) : (e.message || String(e));
+          b.disabled = false;
+        }
       };
-    } catch (e) { toast('No se pudo abrir', e.message || String(e), 'error'); }
+    } catch (e) { toast('No se pudo abrir', window.SAR_AjusteLotes ? window.SAR_AjusteLotes.mensajeErrorAmigable(e) : (e.message || String(e)), 'error'); }
   }
 
   document.addEventListener('click', (e) => {

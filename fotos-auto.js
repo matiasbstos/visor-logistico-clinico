@@ -42,7 +42,7 @@
   }
   if (typeof module === 'undefined' && typeof document.addEventListener === 'function') {   // solo en el navegador
     setTimeout(ciclo, 90 * 1000);            // un rato después de abrir (que cargue todo)
-    setInterval(ciclo, 10 * 60 * 1000);      // revisa cada 10 min si ya toca
+    setInterval(() => { if (!document.hidden) ciclo(); }, 30 * 60 * 1000);      // revisa cada 30 min si ya toca (y no en pestañas ocultas)
   }
   window.SAR_FotosAuto = { tocaAhora, ciclo };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_FotosAuto;

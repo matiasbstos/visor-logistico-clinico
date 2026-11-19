@@ -9,7 +9,7 @@
   const fs = () => window.firebaseFirestore, db = () => window.firebaseDb;
   const usuario = () => { const a = window.firebaseAuth; return (a && a.currentUser && a.currentUser.email) || ''; };
   const rol = () => String((document.body && document.body.getAttribute('data-user-role')) || '').toLowerCase();
-  const CLAVE = 'sar-sync-ult', MIN_ENTRE = 10 * 60 * 1000;
+  const CLAVE = 'sar-sync-ult', MIN_ENTRE = 60 * 60 * 1000;   // v21.234: 1 h entre sincronizaciones automáticas para cuidar la cuota de Firestore
   // [colección, etiqueta, límite, ordenar por fecha desc]
   const PARTES_STAFF = [['Insumos', 'Inventario', 5000], ['Bodegas', 'Bodegas', 200], ['Asignaciones_Ubicacion', 'Ubicaciones', 5000], ['Catalogo_Productos', 'Catálogo', 3000],
     ['Solicitudes_Insumos', 'Solicitudes', 1000], ['Actas_Entrega', 'Actas', 800], ['Seguimiento_OC', 'Órdenes', 400], ['Contadores', 'Distribuciones y contadores', 2000],
@@ -39,11 +39,10 @@
       if (window.SAR_Cola) { badge('bajando', 'Subiendo lo hecho sin conexión…'); await window.SAR_Cola.procesar().catch(() => {}); }
       for (const [col, txt, lim, ord] of partes) {
         badge('bajando', `Descargando ${txt} (${++k}/${partes.length})`);
-        try { const q = ord ? f.query(f.collection(db(), col), f.orderBy(ord, 'desc'), f.limit(lim)) : f.query(f.collection(db(), col), f.limit(lim)); const sn = await f.getDocs(q); n += sn.size; if (col === 'Catalogo_Productos' && window.SAR_CatalogoVista && window.SAR_CatalogoVista.faltaFoto) { let k2 = 0; sn.forEach(d => { if (window.SAR_CatalogoVista.faltaFoto(d.data())) k2++; }); window.SAR_SinFoto = k2; } } catch (e) { /* sin permiso para esa colección: sigue */ }
+        try { const q = ord ? f.query(f.collection(db(), col), f.orderBy(ord, 'desc'), f.limit(lim)) : f.query(f.collection(db(), col), f.limit(lim)); const sn = await f.getDocs(q); n += sn.size; if (col === 'Catalogo_Productos') { let k2 = 0, pc2 = 0; sn.forEach(d => { const x = d.data(); if (window.SAR_CatalogoVista && window.SAR_CatalogoVista.faltaFoto && window.SAR_CatalogoVista.faltaFoto(x)) k2++; if (x && x.fotoEstado === 'por_confirmar') pc2++; }); window.SAR_SinFoto = k2; window.SAR_FotosPorConfirmar = pc2; } } catch (e) { /* sin permiso para esa colección: sigue */ }
       }
       if (window.SAR_Solicitudes && window.SAR_Solicitudes.publicarCatalogo && partes === PARTES_STAFF) await window.SAR_Solicitudes.publicarCatalogo().catch(() => {});
-      if (window.SAR_Imagenes) await window.SAR_Imagenes.cargar(true).catch(() => {});
-      if (partes === PARTES_STAFF) { try { const pc = await f.getDocs(f.query(f.collection(db(), 'Catalogo_Productos'), f.where('fotoEstado', '==', 'por_confirmar'), f.limit(2000))); window.SAR_FotosPorConfirmar = pc.size; } catch (e) { /* sin permiso */ } }
+      if (window.SAR_Imagenes) await window.SAR_Imagenes.cargar(false).catch(() => {});
       window.dispatchEvent(new Event('sar-avisos'));
       try { localStorage.setItem(CLAVE, new Date().toISOString()); } catch (e) { /* sin almacenamiento */ }
       if (o.aviso && window.showToast) window.showToast('Sincronizado', `${n} registros guardados en este equipo y cambios subidos.`, 'success');
@@ -51,11 +50,11 @@
   }
 
   if (typeof module === 'undefined' && typeof document.addEventListener === 'function') {   // solo en el navegador
-    const arrancar = () => { let i = 0; const t = setInterval(() => { i++; if (usuario() || i > 90) { clearInterval(t); if (usuario()) setTimeout(() => sincronizar({ forzar: true }), 15000); } }, 2000); };
+    const arrancar = () => { let i = 0; const t = setInterval(() => { i++; if (usuario() || i > 90) { clearInterval(t); if (usuario()) setTimeout(() => sincronizar({ forzar: false }), 15000); } }, 2000); };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', arrancar); else arrancar();
-    window.addEventListener('online', () => { pintarReposo(); setTimeout(() => sincronizar({ forzar: true }), 3000); });
+    window.addEventListener('online', () => { pintarReposo(); setTimeout(() => sincronizar({ forzar: false }), 3000); });
     window.addEventListener('offline', pintarReposo);
-    setInterval(() => sincronizar({ forzar: true }), 30 * 60 * 1000);
+    setInterval(() => { if (!document.hidden) sincronizar({ forzar: false }); }, 60 * 60 * 1000);
   }
   window.SAR_Sync = { sincronizar };
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null });

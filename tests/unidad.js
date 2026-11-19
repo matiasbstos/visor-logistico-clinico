@@ -209,6 +209,67 @@ t('correlativos v21.220: formato, corte 2027 y provisional', () => {
   assert.strictEqual(F.anio('2027-01-01T02:00:00Z'), 2026);                                         // 23:00 del 31-dic en Chile
   const p = F.provisional('AJU', '2026-11-15T12:00:00'); assert.ok(/^AJU-P-20261115-[0-9A-HJKMNP-TV-Z]{4}$/.test(p), p); assert.ok(F.esProvisional(p));
 });
+t('ajuste por lote v21.234: listar lotes, sumar/restar lote específico, lote nuevo y detección de cuota', () => {
+  const A = require('../ajuste-lotes.js');
+  const ins = { quantity: 750, batches: [{ batch: 'L2', quantity: 500, expirationDate: '2028-06-30' }, { batch: 'L1', quantity: 250, expirationDate: '2027-01-15' }] };
+  const lotes = A.listarLotes(ins);
+  assert.deepStrictEqual(lotes.map(l => l.batch), ['L1', 'L2']);
+  // Sumar a L2 específicamente (no al primer lote L1)
+  const rSum = A.aplicarAjusteEnLotes(ins, 1000, { key: lotes[1].key, batch: 'L2', expirationDate: '2028-06-30', esNuevo: false });
+  assert.strictEqual(rSum.nuevoStock, 1750);
+  assert.strictEqual(rSum.batches.find(b => b.batch === 'L2').quantity, 1500);
+  assert.strictEqual(rSum.batches.find(b => b.batch === 'L1').quantity, 250);
+  assert.strictEqual(rSum.loteAfectado.batch, 'L2');
+  // Restar de L2 sin tocar L1
+  const rRes = A.aplicarAjusteEnLotes(ins, -100, { key: lotes[1].key, batch: 'L2', expirationDate: '2028-06-30', esNuevo: false });
+  assert.strictEqual(rRes.nuevoStock, 650);
+  assert.strictEqual(rRes.batches.find(b => b.batch === 'L2').quantity, 400);
+  assert.strictEqual(rRes.batches.find(b => b.batch === 'L1').quantity, 250);
+  // No permite restar más que el stock del lote elegido
+  assert.throws(() => A.aplicarAjusteEnLotes(ins, -300, { key: lotes[0].key, batch: 'L1', expirationDate: '2027-01-15', esNuevo: false }), /Stock insuficiente en el lote L1/);
+  // Crear lote nuevo al sumar
+  const rNuevo = A.aplicarAjusteEnLotes(ins, 50, { batch: 'L3', expirationDate: '2029-01-01', esNuevo: true });
+  assert.strictEqual(rNuevo.nuevoStock, 800);
+  assert.strictEqual(rNuevo.batches.find(b => b.batch === 'L3').quantity, 50);
+  // No permite lote nuevo con cantidad negativa
+  assert.throws(() => A.aplicarAjusteEnLotes(ins, -10, { batch: 'L3', esNuevo: true }), /lote nuevo/);
+  // Detección de error de cuota de Firestore
+  assert.strictEqual(A.esErrorCuota({ code: 'resource-exhausted', message: 'Quota exceeded.' }), true);
+  assert.strictEqual(A.esErrorCuota(new Error('Quota exceeded.')), true);
+  assert.strictEqual(A.esErrorCuota(new Error('Network error')), false);
+  assert.ok(A.mensajeErrorAmigable(new Error('Quota exceeded.')).includes('ERR-DAT-006'));
+});
+t('etiquetas jerárquicas v21.234: caja completa → cajas individuales, folios Code 128 pares y sin doble conteo', () => {
+  const B = require('../bultos.js');
+  // Folios de subcaja con longitud par de dígitos (Code 128 C) y lectura de vuelta
+  assert.strictEqual(B.folioSubcaja('BUL-2026-000123', 3, 10), 'BUL-2026-000123-03');
+  assert.strictEqual(B.digitos('BUL-2026-000123-03').length, 12);
+  assert.strictEqual(B.folioDe('202600012303'), 'BUL-2026-000123-03');
+  assert.strictEqual(B.folioDe('https://sarinventario.web.app/#bulto=BUL-2026-000123-03'), 'BUL-2026-000123-03');
+  assert.strictEqual(B.folioSubcaja('BUL-2026-000123', 105, 120), 'BUL-2026-000123-0105');
+  assert.strictEqual(B.folioDe('20260001230105'), 'BUL-2026-000123-0105');
+  // Armado de subcajas desde una caja completa
+  const padre = { folio: 'BUL-2026-000123', nivel: 'master', n: 1, de: 2, inicial: 1000, contenido: 1000, totalGrupo: 2000, nombre: 'GUANTE NITRILO M', lote: 'L1', bodega: 'Bodega Central', estado: 'CERRADA' };
+  const subs = B.armarSubcajas(padre, 10, 100);
+  assert.strictEqual(subs.length, 10);
+  assert.strictEqual(subs[0].folio, 'BUL-2026-000123-01');
+  assert.strictEqual(subs[9].folio, 'BUL-2026-000123-10');
+  assert.strictEqual(subs[0].padreFolio, 'BUL-2026-000123');
+  assert.strictEqual(B.esSubcaja(subs[0]), true);
+  assert.strictEqual(B.esMaster(padre), true);
+  // Sin doble conteo en conflictoJerarquia y resumirConteo
+  assert.strictEqual(B.conflictoJerarquia([padre], subs[0]).bloqueo, true);
+  assert.strictEqual(B.conflictoJerarquia([subs[0]], padre).bloqueo, true);
+  assert.strictEqual(B.conflictoJerarquia([], { ...padre, estado: 'DESGLOSADA' }).bloqueo, true);
+  assert.strictEqual(B.conflictoJerarquia([subs[0]], subs[1]).bloqueo, false);
+  const res = B.resumirConteo([padre, subs[0], subs[1]]);
+  assert.strictEqual(res[0].unidades, 200);   // cuenta solo las 2 subcajas, no suma los 1000 del padre encima
+  // faltantesOC no duplica las unidades de master + subcajas
+  const oc = { recepciones: [{ fecha: '2026-11-18', ingresoAStock: true, detalle: [{ insumoName: 'GUANTE NITRILO M', cantidad: 1500, lote: 'L1' }] }] };
+  const falt = B.faltantesOC(oc, [padre, ...subs], '2026-11-14');
+  assert.strictEqual(falt.length, 1);
+  assert.strictEqual(falt[0].total, 500);     // 1500 recibidos - 1000 del padre = 500 (no 0 por sumar subcajas!)
+});
 // contador con transacciones que se encolan: 20 pedidos simultáneos = 20 números distintos y seguidos (prueba asíncrona)
 (async () => {
   const F = require('../correlativos.js'), DB = {}; let cola = Promise.resolve();

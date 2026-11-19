@@ -313,8 +313,8 @@
     function iniciar() {
         const b = document.getElementById('btn-notificaciones'); if (b) b.addEventListener('click', () => { if (!cargado) traer().then(abrirPanel).catch(() => abrirPanel()); else abrirPanel(); });
         const ok = () => ['admin', 'administrador', 'global', 'superadmin', 'operador'].includes(rol()) && window.firebaseDb && window.firebaseAuth && window.firebaseAuth.currentUser;
-        const ciclo = () => { if (ok()) traer().catch(() => { /* sin aviso */ }); };
-        setTimeout(ciclo, 8000); setInterval(ciclo, 10 * 60 * 1000);
+        const ciclo = () => { if (ok() && !document.hidden) traer().catch(() => { /* sin aviso */ }); };
+        setTimeout(ciclo, 8000); setInterval(ciclo, 60 * 60 * 1000);
         setInterval(pintarCampana, 60 * 1000); setTimeout(pintarCampana, 6000);
     }
     if (typeof document !== 'undefined' && document.addEventListener) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar(); }

@@ -35,8 +35,8 @@
         const card = document.createElement('div'); card.className = 'erp-card home-only-staff'; card.id = 'home-ingresos';
         card.innerHTML = '<div class="hc-cab"><h3>Stock agregado últimamente</h3><span data-n class="badge">…</span></div><div data-lista><div class="home-empty">Cargando…</div></div>';
         anchor.parentNode.insertBefore(card, anchor);
-        const cargar = () => fs.getDocs(fs.query(fs.collection(db, 'Historial_Movimientos'), fs.orderBy('date', 'desc'), fs.limit(120))).then(sn => { movs = []; sn.forEach(d => movs.push(d.data())); pintar(); }).catch(() => { /* sin permiso */ });
-        cargar(); setInterval(cargar, 5 * 60 * 1000); pintar();
+        const cargar = () => { if (document.hidden) return; fs.getDocs(fs.query(fs.collection(db, 'Historial_Movimientos'), fs.orderBy('date', 'desc'), fs.limit(120))).then(sn => { movs = []; sn.forEach(d => movs.push(d.data())); pintar(); }).catch(() => { /* sin permiso */ }); };
+        cargar(); setInterval(cargar, 30 * 60 * 1000); pintar();
     }
     const t = typeof document.body === 'undefined' ? 0 : setInterval(() => { const r = String(document.body.dataset.userRole || '').toLowerCase(); if (STAFF.includes(r)) { clearInterval(t); iniciar(); } }, 1500);
     window.SAR_HomeIngresos = { ingresos, hace };

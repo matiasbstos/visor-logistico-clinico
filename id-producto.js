@@ -18,7 +18,7 @@
         mapa = m; cargadoEn = Date.now();
     }
     async function cargar(forzar) {
-        if (!forzar && cargadoEn && Date.now() - cargadoEn < 5 * 60 * 1000) return;
+        if (!forzar && cargadoEn && Date.now() - cargadoEn < 60 * 60 * 1000) return;
         if (cargando) return cargando;
         const f = window.firebaseFirestore, db = window.firebaseDb; if (!f || !db) return;
         cargando = (async () => {
@@ -39,8 +39,8 @@
     }
     if (typeof document !== 'undefined' && document.addEventListener) {
         const ok = () => window.firebaseAuth && window.firebaseAuth.currentUser;
-        const ciclo = () => { if (ok()) cargar(true); };
-        setTimeout(ciclo, 7000); setInterval(ciclo, 10 * 60 * 1000);
+        const ciclo = () => { if (ok() && !document.hidden) cargar(false); };
+        setTimeout(ciclo, 7000); setInterval(ciclo, 60 * 60 * 1000);
     }
     window.SAR_IdProducto = { cargar, codigos, coincide, indexar };
     if (typeof module !== 'undefined') module.exports = window.SAR_IdProducto;

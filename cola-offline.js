@@ -29,7 +29,7 @@
     guardar(l); return id;
   }
   function registrar(tipo, fn) { ejecutores[tipo] = fn; }
-  const esDeRed = (e) => /unavailable|offline|network|failed to fetch|deadline|timeout|lento|sin conexi/i.test(String((e && (e.code || '')) + ' ' + (e && e.message || e)));
+  const esDeRed = (e) => /unavailable|offline|network|failed to fetch|deadline|timeout|lento|sin conexi|resource-exhausted|quota\s*exceeded/i.test(String((e && (e.code || '')) + ' ' + (e && e.message || e)));
 
   /** Aplica lo pendiente, en el orden en que se hizo. Devuelve {ok, error, quedan}. */
   /** Una sola pestaña a la vez aplica la cola (Web Locks; si el navegador no lo tiene, sigue como antes). */
@@ -92,14 +92,14 @@
     /* v21.230: primero se mira si ya quedó aplicado en un intento anterior (la respuesta pudo perderse) */
     const marca = op && op.id ? (d.directo ? f.doc(f.collection(db, 'Historial_Movimientos'), 'aju-' + op.id) : f.doc(f.collection(db, 'Solicitudes_Ajuste'), 'cola-' + op.id)) : null;
     const yaEstaba = marca ? await f.getDoc(marca).then(x => x.exists(), () => false) : false;
-    const anotarGob = async (antes) => { if (!G || !d.motivo || d.gobOk) return; try { await G.registrar({ nombre: d.nombre, delta: d.cantidad, codigo: d.codigo || null, motivo: d.motivo, nota: d.nota, origen: 'AJUSTE', antes, despues: antes + d.cantidad, insumoId: d.docId }); guardar(leer().map(x => x.id === (op && op.id) ? { ...x, datos: { ...x.datos, gobOk: true } } : x)); } catch (e) { /* queda para el próximo intento */ } };
+    const anotarGob = async (antes) => { if (!G || !d.motivo || d.gobOk) return; try { await G.registrar({ nombre: d.nombre, lote: (d.lote && d.lote.batch) || '', delta: d.cantidad, codigo: d.codigo || null, motivo: d.motivo, nota: d.nota, origen: 'AJUSTE', antes, despues: antes + d.cantidad, insumoId: d.docId }); guardar(leer().map(x => x.id === (op && op.id) ? { ...x, datos: { ...x.datos, gobOk: true } } : x)); } catch (e) { /* queda para el próximo intento */ } };
     if (yaEstaba) { await anotarGob(stock - d.cantidad); return; }
     if (stock + d.cantidad < 0) throw new Error(`Hoy hay ${stock}: el ajuste de ${d.cantidad} dejaría stock negativo.`);
     const cod = d.codigo || (G ? await G.codigo('AJU') : null), just = `${d.justificacion} · hecho sin conexión el ${new Date(d.en).toLocaleString('es-CL')}`;
     if (!d.codigo && cod) guardar(leer().map(x => x.id === (op && op.id) ? { ...x, datos: { ...x.datos, codigo: cod } } : x));   /* el mismo código en cada reintento */
     let aplicado = true;
-    if (d.directo) { if (!window.ejecutarAjusteDirecto) throw new Error('sin conexión: módulo de ajustes aún no cargado'); try { await window.ejecutarAjusteDirecto(d.docId, stock, d.nombre, d.cantidad, just, cod, { idMov: op && op.id }); } catch (e) { if (!e.ya) throw e; aplicado = false; } }
-    else { const ref = f.doc(f.collection(db, 'Solicitudes_Ajuste'), 'cola-' + ((op && op.id) || Date.now())); const ya = await f.getDoc(ref).catch(() => null); if (ya && ya.exists()) aplicado = false; else await f.setDoc(ref, { code: cod || (window.SAR_Folio ? window.SAR_Folio.provisional('AJU') : 'ADJ-' + Math.floor(10000 + Math.random() * 90000)), insumoId: d.docId, insumoName: d.nombre, cantidad: d.cantidad, justificacion: just, previousStock: stock, projectedStock: stock + d.cantidad, status: 'pendiente', date: f.serverTimestamp(), requester: usuario() }); }
+    if (d.directo) { if (!window.ejecutarAjusteDirecto) throw new Error('sin conexión: módulo de ajustes aún no cargado'); try { await window.ejecutarAjusteDirecto(d.docId, stock, d.nombre, d.cantidad, just, cod, { idMov: op && op.id, lote: d.lote || null }); } catch (e) { if (!e.ya) throw e; aplicado = false; } }
+    else { const ref = f.doc(f.collection(db, 'Solicitudes_Ajuste'), 'cola-' + ((op && op.id) || Date.now())); const ya = await f.getDoc(ref).catch(() => null); if (ya && ya.exists()) aplicado = false; else await f.setDoc(ref, { code: cod || (window.SAR_Folio ? window.SAR_Folio.provisional('AJU') : 'ADJ-' + Math.floor(10000 + Math.random() * 90000)), insumoId: d.docId, insumoName: d.nombre, bodega: d.bodega || '', lote: (d.lote && d.lote.batch) || '', vencimiento: (d.lote && d.lote.expirationDate) || '', loteKey: (d.lote && d.lote.key) || '', esNuevoLote: !!(d.lote && d.lote.esNuevo), cantidad: d.cantidad, justificacion: just, previousStock: stock, projectedStock: stock + d.cantidad, status: 'pendiente', date: f.serverTimestamp(), requester: usuario() }); }
     d.codigo = d.codigo || cod; await anotarGob(aplicado ? stock : stock - d.cantidad);   // después del ajuste, una sola vez (aunque el primer intento se haya cortado)
   });
 

@@ -59,8 +59,13 @@ window.addEventListener('error', function (event) {
 });
 window.addEventListener('unhandledrejection', function (event) {
     console.error("Promesa Rechazada No Manejada:", event.reason);
-    if (window.showToast && event.reason && event.reason.message) {
-        window.__sarAvisarError('Error Interno', 'Una operación no se pudo completar. Revisa tu conexión y reintenta.', window.__sarDetalleError(event.reason.message, '', ''));
+    if (window.showToast && event.reason) {
+        const esCuota = window.SAR_AjusteLotes ? window.SAR_AjusteLotes.esErrorCuota(event.reason) : /resource-exhausted|quota\s*exceeded/i.test(String(event.reason.code || '') + ' ' + String(event.reason.message || event.reason));
+        if (esCuota) {
+            window.__sarAvisarError('Cuota de base de datos agotada', 'Se alcanzó el límite diario de operaciones de Firebase Firestore. Cierra pestañas duplicadas y reintenta al restablecerse la cuota.', window.__sarDetalleError(event.reason.message || 'Quota exceeded', '', ''));
+        } else if (event.reason.message) {
+            window.__sarAvisarError('Error Interno', 'Una operación no se pudo completar. Revisa tu conexión y reintenta.', window.__sarDetalleError(event.reason.message, '', ''));
+        }
     }
 });
 
@@ -346,10 +351,7 @@ window.onerror = function (message, source, lineno, colno, error) {
     return false;
 };
 
-window.onunhandledrejection = function (event) {
-    console.error("[Unhandled Rejection]:", event.reason);
-    if (window.showToast) window.showToast('Error de Red/Datos', 'La operación no pudo completarse. Verifique su conexión.', 'warning');
-};
+// Nota: unhandledrejection ya es manejado de forma centralizada en el listener global superior (evita toasts duplicados).
 
 /**
  * SERVICIO ARQUITECTURA DE BACKEND: Trazabilidad inmutable usando runTransaction
@@ -747,24 +749,150 @@ document.addEventListener('DOMContentLoaded', () => {
             if (userRole === 'admin' || userRole === 'administrador' || userRole === 'global' || userRole === 'superadmin' || userRole === 'operador') {
                 const btnAbrirAjuste = document.getElementById('btn-abrir-ajuste') || document.querySelector('#view-configuracion .btn-warning');
                 const selectInsumo = document.getElementById('ajuste-insumo');
+                const selectLote = document.getElementById('ajuste-lote');
+                const grupoLoteNuevo = document.getElementById('grupo-ajuste-lote-nuevo');
+                const inputLoteNuevo = document.getElementById('ajuste-lote-nuevo');
+                const inputLoteVence = document.getElementById('ajuste-lote-vence');
                 const buscadorAjuste = document.getElementById('buscador-ajuste');
                 const btnEjecutarAjuste = document.getElementById('btn-ejecutar-ajuste');
+                const insumosAjusteMap = new Map();
+
+                function actualizarCalculadoraAjuste() {
+                    const selectedOption = selectInsumo ? selectInsumo.options[selectInsumo.selectedIndex] : null;
+                    const stockTotal = (selectedOption && selectedOption.value !== '') ? (Number(selectedOption.dataset.stock) || 0) : 0;
+                    const cantidadVal = document.getElementById('ajuste-cantidad') ? document.getElementById('ajuste-cantidad').value : '';
+                    const cantidad = Number(cantidadVal) || 0;
+                    const proyTotal = stockTotal + cantidad;
+
+                    const elStockAct = document.getElementById('lbl-stock-actual');
+                    const elStockProy = document.getElementById('lbl-stock-proyectado');
+                    const elLoteAct = document.getElementById('lbl-stock-lote-actual');
+                    const elLoteProy = document.getElementById('lbl-stock-lote-proyectado');
+
+                    if (elStockAct) elStockAct.textContent = stockTotal;
+                    if (elStockProy) {
+                        elStockProy.textContent = proyTotal;
+                        elStockProy.style.color = proyTotal < 0 ? 'var(--danger)' : 'var(--primary)';
+                    }
+
+                    const loteOpt = selectLote ? selectLote.options[selectLote.selectedIndex] : null;
+                    if (!selectedOption || !selectedOption.value || !loteOpt || !loteOpt.value) {
+                        if (elLoteAct) elLoteAct.textContent = 'Lote: seleccione un lote';
+                        if (elLoteProy) { elLoteProy.textContent = 'Lote: —'; elLoteProy.style.color = ''; }
+                        return;
+                    }
+                    if (loteOpt.value === '__NUEVO__') {
+                        const nomNuevo = (inputLoteNuevo && inputLoteNuevo.value.trim()) || 'Nuevo';
+                        if (elLoteAct) elLoteAct.textContent = `Lote nuevo (${nomNuevo}): 0 un.`;
+                        if (elLoteProy) {
+                            elLoteProy.textContent = cantidad > 0 ? `Lote nuevo: +${cantidad} un.` : 'Solo sumar stock (+)';
+                            elLoteProy.style.color = cantidad < 0 ? 'var(--danger)' : 'var(--primary)';
+                        }
+                        return;
+                    }
+                    const stockLote = Number(loteOpt.dataset.qty) || 0;
+                    const proyLote = stockLote + cantidad;
+                    if (elLoteAct) elLoteAct.textContent = `Lote ${loteOpt.dataset.batch || 'S/L'}: ${stockLote} un.`;
+                    if (elLoteProy) {
+                        elLoteProy.textContent = `Lote ${loteOpt.dataset.batch || 'S/L'}: ${proyLote} un.`;
+                        elLoteProy.style.color = proyLote < 0 ? 'var(--danger)' : 'var(--primary)';
+                    }
+                }
+
+                function poblarLotesAjuste(docId) {
+                    if (!selectLote) return;
+                    if (grupoLoteNuevo) grupoLoteNuevo.style.display = 'none';
+                    if (inputLoteNuevo) inputLoteNuevo.value = '';
+                    if (inputLoteVence) inputLoteVence.value = '';
+
+                    if (!docId || !insumosAjusteMap.has(docId)) {
+                        selectLote.innerHTML = '<option value="">Primero seleccione un insumo...</option>';
+                        selectLote.disabled = true;
+                        actualizarCalculadoraAjuste();
+                        return;
+                    }
+
+                    const data = insumosAjusteMap.get(docId);
+                    const lotes = window.SAR_AjusteLotes ? window.SAR_AjusteLotes.listarLotes(data) : [];
+                    selectLote.innerHTML = '';
+                    selectLote.disabled = false;
+
+                    const placeholderOpt = document.createElement('option');
+                    placeholderOpt.value = '';
+                    placeholderOpt.textContent = lotes.length > 1
+                        ? `-- Tiene ${lotes.length} lotes: seleccione a cuál sumar o restar --`
+                        : '-- Seleccione el lote a ajustar --';
+                    selectLote.appendChild(placeholderOpt);
+
+                    lotes.forEach(l => {
+                        const opt = document.createElement('option');
+                        opt.value = l.key;
+                        opt.dataset.batch = l.batch;
+                        opt.dataset.exp = l.expirationDate || '';
+                        opt.dataset.qty = l.quantity;
+                        const venceTxt = l.expirationDate ? window.SAR_Utils.formatDate(l.expirationDate) : 'Sin vencimiento';
+                        opt.textContent = `Lote: ${l.batch} · Vence: ${venceTxt} · Stock: ${l.quantity} un.`;
+                        selectLote.appendChild(opt);
+                    });
+
+                    const nuevoOpt = document.createElement('option');
+                    nuevoOpt.value = '__NUEVO__';
+                    nuevoOpt.textContent = '+ Ingresar a un lote nuevo (solo para sumar stock)';
+                    selectLote.appendChild(nuevoOpt);
+
+                    // Si hay un solo lote, dejarlo preseleccionado para mostrar de inmediato a qué lote corresponde el stock;
+                    // si hay más de un lote, exigir elegir explícitamente a cuál sumar o restar.
+                    if (lotes.length === 1) {
+                        selectLote.value = lotes[0].key;
+                        selectLote.style.borderColor = '';
+                    } else if (lotes.length > 1) {
+                        selectLote.value = '';
+                        selectLote.style.borderColor = 'var(--warning, #f59e0b)';
+                    }
+
+                    const bodega = data.location || data.bodegaNombre || 'Sin bodega';
+                    const detalleLotes = lotes.length === 1
+                        ? `Lote único: ${lotes[0].batch}${lotes[0].expirationDate ? ' (vence ' + window.SAR_Utils.formatDate(lotes[0].expirationDate) + ')' : ''} · ${lotes[0].quantity} un.`
+                        : lotes.length > 1
+                            ? `${lotes.length} lotes: ` + lotes.map(l => `${l.batch} (${l.quantity} u.${l.expirationDate ? ', vence ' + window.SAR_Utils.formatDate(l.expirationDate) : ''})`).join(' · ')
+                            : 'Sin lotes registrados (puede crear un lote nuevo al sumar)';
+                    const lblLotes = document.getElementById('lbl-insumo-seleccionado-lotes');
+                    if (lblLotes) {
+                        lblLotes.textContent = `Bodega: ${bodega} | ${detalleLotes}`;
+                    }
+                    actualizarCalculadoraAjuste();
+                }
 
                 window.cargarInsumosParaAjuste = async function () {
                     if (selectInsumo) {
                         selectInsumo.innerHTML = '<option value="" disabled selected>Escriba en el buscador para cargar insumos...</option>';
                     }
+                    if (selectLote) {
+                        selectLote.innerHTML = '<option value="">Primero seleccione un insumo...</option>';
+                        selectLote.disabled = true;
+                    }
+                    if (grupoLoteNuevo) grupoLoteNuevo.style.display = 'none';
+                    if (inputLoteNuevo) inputLoteNuevo.value = '';
+                    if (inputLoteVence) inputLoteVence.value = '';
                     if (document.getElementById('lbl-insumo-seleccionado-nombre')) {
                         document.getElementById('lbl-insumo-seleccionado-nombre').textContent = "Ningún insumo seleccionado";
                     }
                     if (document.getElementById('lbl-insumo-seleccionado-lotes')) {
-                        document.getElementById('lbl-insumo-seleccionado-lotes').textContent = "Seleccione un elemento de la lista izquierda para cargar los detalles actuales.";
+                        document.getElementById('lbl-insumo-seleccionado-lotes').textContent = "Seleccione un elemento de la lista izquierda para cargar los lotes y detalles actuales.";
                     }
                     if (document.getElementById('lbl-stock-actual')) {
                         document.getElementById('lbl-stock-actual').textContent = "0";
                     }
                     if (document.getElementById('lbl-stock-proyectado')) {
                         document.getElementById('lbl-stock-proyectado').textContent = "0";
+                        document.getElementById('lbl-stock-proyectado').style.color = 'var(--primary)';
+                    }
+                    if (document.getElementById('lbl-stock-lote-actual')) {
+                        document.getElementById('lbl-stock-lote-actual').textContent = "Lote: —";
+                    }
+                    if (document.getElementById('lbl-stock-lote-proyectado')) {
+                        document.getElementById('lbl-stock-lote-proyectado').textContent = "Lote: —";
+                        document.getElementById('lbl-stock-lote-proyectado').style.color = '';
                     }
                 };
 
@@ -790,17 +918,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
                                 const matches = cacheInsumosParaAjuste.filter(docSnap => {
                                     const data = docSnap.data();
-                                    const name = (data.name || "").toLowerCase();
-                                    const code = (data.code || "").toLowerCase();
-                                    const provider = (data.providerId || "").toLowerCase();
-                                    
-                                    // Búsqueda en lote raíz y array batches
                                     const rootBatch = (data.batch || "").toLowerCase();
                                     const batches = data.batches || [];
                                     const matchesBatch = rootBatch.includes(term) || batches.some(b => (b.batch || "").toLowerCase().includes(term));
 
-                                    return name.includes(term) || code.includes(term) || provider.includes(term) || matchesBatch || String(data.codigoMP || '').includes(term);
-                                }).slice(0, 20);
+                                    return SAR_Utils.matches(data.name, term)
+                                        || SAR_Utils.matches(data.code, term)
+                                        || SAR_Utils.matches(data.codigoSAR, term)
+                                        || SAR_Utils.matches(data.location, term)
+                                        || SAR_Utils.matches(data.providerId, term)
+                                        || matchesBatch
+                                        || String(data.codigoMP || '').includes(term)
+                                        || SAR_IdMatch(data.name, term);
+                                }).slice(0, 30);
 
                                 if (matches.length === 0) {
                                     selectInsumo.innerHTML = '<option disabled>No se encontraron insumos</option>';
@@ -810,55 +940,63 @@ document.addEventListener('DOMContentLoaded', () => {
                                 selectInsumo.innerHTML = '<option value="" disabled selected>Seleccione un insumo...</option>';
                                 matches.forEach(docSnap => {
                                     const data = docSnap.data();
+                                    insumosAjusteMap.set(docSnap.id, data);
+                                    const bodega = data.location || data.bodegaNombre || 'Sin bodega';
+                                    const nLotes = window.SAR_AjusteLotes ? window.SAR_AjusteLotes.listarLotes(data).length : (Array.isArray(data.batches) ? data.batches.length : (data.batch ? 1 : 0));
                                     const option = document.createElement('option');
                                     option.value = docSnap.id;
                                     option.dataset.stock = data.quantity || 0;
-                                    option.dataset.nombre = data.name;
-                                    option.textContent = `[Stock: ${data.quantity || 0}] - ${data.name}`;
+                                    option.dataset.nombre = data.name || '';
+                                    option.dataset.bodega = bodega;
+                                    option.textContent = `[Stock: ${data.quantity || 0} · ${bodega}] ${data.name || ''} (${nLotes} lote${nLotes === 1 ? '' : 's'})`;
                                     selectInsumo.appendChild(option);
                                 });
                             } catch (error) {
                                 console.error("Error buscando insumos para ajuste:", error);
+                                const msg = window.SAR_AjusteLotes ? window.SAR_AjusteLotes.mensajeErrorAmigable(error) : 'Error en búsqueda';
                                 selectInsumo.innerHTML = '<option disabled>Error en búsqueda</option>';
+                                if (window.SAR_AjusteLotes && window.SAR_AjusteLotes.esErrorCuota(error)) {
+                                    window.showToast('Cuota agotada', msg, 'error');
+                                }
                             }
                         }, 400);
                     });
                 }
 
-                // Listeners interactivos para la calculadora de Stock
+                // Listeners interactivos para la calculadora de Stock (Insumo + Lote)
                 if (selectInsumo) {
                     selectInsumo.addEventListener('change', () => {
                         const selectedOption = selectInsumo.options[selectInsumo.selectedIndex];
                         if (selectedOption && selectedOption.value !== "") {
-                            const stock = Number(selectedOption.dataset.stock) || 0;
                             const nombre = selectedOption.dataset.nombre || "";
-                            
                             document.getElementById('lbl-insumo-seleccionado-nombre').textContent = nombre;
-                            document.getElementById('lbl-stock-actual').textContent = stock;
-                            
-                            const cantidadInput = document.getElementById('ajuste-cantidad');
-                            const cantidad = Number(cantidadInput.value) || 0;
-                            document.getElementById('lbl-stock-proyectado').textContent = stock + cantidad;
-                            
-                            document.getElementById('lbl-insumo-seleccionado-lotes').textContent = `Insumo ID: ${selectedOption.value} | Listo para el ajuste.`;
+                            poblarLotesAjuste(selectedOption.value);
                         } else {
                             window.cargarInsumosParaAjuste();
                         }
                     });
                 }
 
-                const cantidadInput = document.getElementById('ajuste-cantidad');
-                if (cantidadInput && selectInsumo) {
-                    cantidadInput.addEventListener('input', () => {
-                        const selectedOption = selectInsumo.options[selectInsumo.selectedIndex];
-                        const stock = selectedOption ? (Number(selectedOption.dataset.stock) || 0) : 0;
-                        const cantidad = Number(cantidadInput.value) || 0;
-                        document.getElementById('lbl-stock-proyectado').textContent = stock + cantidad;
+                if (selectLote) {
+                    selectLote.addEventListener('change', () => {
+                        selectLote.style.borderColor = selectLote.value ? '' : 'var(--warning, #f59e0b)';
+                        if (grupoLoteNuevo) {
+                            grupoLoteNuevo.style.display = selectLote.value === '__NUEVO__' ? 'block' : 'none';
+                        }
+                        actualizarCalculadoraAjuste();
                     });
                 }
+                if (inputLoteNuevo) {
+                    inputLoteNuevo.addEventListener('input', actualizarCalculadoraAjuste);
+                }
 
-                // Función reutilizable para la transacción atómica directa de stock
-                window.ejecutarAjusteDirecto = async function (docId, stockActual, insumoNombre, cantidadParsed, justificacion, codigoAjuste = null, opts = {}) {   /* v21.230: opts.solicitudId (aprobar en la misma transacción) · opts.idMov (no aplicar dos veces) */
+                const cantidadInput = document.getElementById('ajuste-cantidad');
+                if (cantidadInput && selectInsumo) {
+                    cantidadInput.addEventListener('input', actualizarCalculadoraAjuste);
+                }
+
+                // Función reutilizable para la transacción atómica directa de stock (con soporte de lote específico)
+                window.ejecutarAjusteDirecto = async function (docId, stockActual, insumoNombre, cantidadParsed, justificacion, codigoAjuste = null, opts = {}) {   /* v21.234: opts.lote ({key, batch, expirationDate, esNuevo}) · opts.solicitudId · opts.idMov */
                     if (!codigoAjuste) {
                         codigoAjuste = window.SAR_Folio ? window.SAR_Folio.provisional('AJU') : "ADJ-" + Math.floor(10000 + Math.random() * 90000);
                     }
@@ -866,12 +1004,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     let accionDetallada = "";
                     let tipoAjuste = cantidadParsed > 0 ? 'sumar' : 'restar';
                     const cantidadAbs = Math.abs(cantidadParsed);
+                    const loteLabelInit = opts && opts.lote && opts.lote.batch ? ` [Lote: ${opts.lote.batch}]` : '';
 
                     if (tipoAjuste === 'sumar') {
-                        accionDetallada = `Suma de stock: ${stockActual} -> ${nuevoStock} (+${cantidadAbs})`;
+                        accionDetallada = `Suma de stock: ${stockActual} -> ${nuevoStock} (+${cantidadAbs})${loteLabelInit}`;
                     } else if (tipoAjuste === 'restar') {
-                        accionDetallada = `Resta de stock: ${stockActual} -> ${nuevoStock} (-${cantidadAbs})`;
+                        accionDetallada = `Resta de stock: ${stockActual} -> ${nuevoStock} (-${cantidadAbs})${loteLabelInit}`;
                     }
+
+                    let loteAfectadoFinal = { batch: (opts && opts.lote && opts.lote.batch) || '', expirationDate: (opts && opts.lote && opts.lote.expirationDate) || '' };
 
                     await runTransaction(db, async (transaction) => {
                         const insumoRef = doc(db, 'Insumos', docId);
@@ -886,68 +1027,47 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (opts && opts.idMov) { const ms = await transaction.get(movRef); if (ms.exists()) { const e = new Error('Este ajuste ya estaba aplicado.'); e.ya = true; throw e; } }
 
                         const dataActual = insumoSnap.data();
-                        const stockReal = dataActual.quantity || 0;
-                        const nuevoStockTransaccion = stockReal + cantidadParsed;
+                        const resultado = window.SAR_AjusteLotes
+                            ? window.SAR_AjusteLotes.aplicarAjusteEnLotes(dataActual, cantidadParsed, opts && opts.lote ? opts.lote : null)
+                            : (() => {
+                                const stockReal = dataActual.quantity || 0;
+                                if (stockReal + cantidadParsed < 0) throw new Error(`Operación denegada: El stock no puede ser menor a 0. Stock actual: ${stockReal}`);
+                                return { nuevoStock: stockReal + cantidadParsed, batches: dataActual.batches || [], batch: dataActual.batch || '', expirationDate: dataActual.expirationDate || '', loteAfectado: { batch: '', expirationDate: '' } };
+                            })();
 
-                        if (nuevoStockTransaccion < 0) {
-                            throw new Error(`Operación denegada: El stock no puede ser menor a 0. Stock actual: ${stockReal}`);
-                        }
-
-                        let currentBatches = dataActual.batches || [];
-                        if (currentBatches.length === 0 && dataActual.batch) {
-                            currentBatches.push({
-                                batch: dataActual.batch,
-                                quantity: stockReal,
-                                expirationDate: dataActual.expirationDate || ''
-                            });
-                        }
-
-                        if (cantidadParsed < 0) {
-                            // RESTA - FEFO
-                            let qtyToReduce = Math.abs(cantidadParsed);
-                            currentBatches.sort(window.fefoCompare);
-
-                            for (let i = 0; i < currentBatches.length && qtyToReduce > 0; i++) {
-                                if (currentBatches[i].quantity > 0) {
-                                    const available = currentBatches[i].quantity;
-                                    if (available >= qtyToReduce) {
-                                        currentBatches[i].quantity -= qtyToReduce;
-                                        qtyToReduce = 0;
-                                    } else {
-                                        qtyToReduce -= available;
-                                        currentBatches[i].quantity = 0;
-                                    }
-                                }
-                            }
-                            currentBatches = currentBatches.filter(b => b.quantity > 0);
-                        } else {
-                            // SUMA
-                            if (currentBatches.length > 0) {
-                                currentBatches[0].quantity += cantidadParsed;
-                            } else {
-                                currentBatches.push({
-                                    batch: "AJUSTE",
-                                    quantity: cantidadParsed,
-                                    expirationDate: ""
-                                });
-                            }
-                        }
+                        loteAfectadoFinal = resultado.loteAfectado || loteAfectadoFinal;
+                        const loteTxtTx = loteAfectadoFinal.batch ? ` [Lote: ${loteAfectadoFinal.batch}]` : '';
+                        const stockRealTx = Number(dataActual.quantity) || 0;
+                        accionDetallada = tipoAjuste === 'sumar'
+                            ? `Suma de stock: ${stockRealTx} -> ${resultado.nuevoStock} (+${cantidadAbs})${loteTxtTx}`
+                            : `Resta de stock: ${stockRealTx} -> ${resultado.nuevoStock} (-${cantidadAbs})${loteTxtTx}`;
 
                         transaction.update(insumoRef, {
-                            quantity: increment(cantidadParsed),
-                            batches: currentBatches,
+                            quantity: resultado.nuevoStock,
+                            batches: resultado.batches,
+                            batch: resultado.batch,
+                            expirationDate: resultado.expirationDate,
                             lastUpdated: serverTimestamp()
                         });
 
                         if (solRef) transaction.update(solRef, { status: 'aprobado', dateActioned: serverTimestamp(), actioner: auth.currentUser.email });
+                        const bodegaActual = dataActual.location || dataActual.bodegaNombre || '';
                         transaction.set(movRef, {
                             type: 'AJUSTE_CRITICO',
-                            insumoName: insumoNombre, insumoId: docId, idInsumoOrigen: docId, document: codigoAjuste, bodega: dataActual.location || '',
+                            insumoName: insumoNombre,
+                            insumoId: docId,
+                            idInsumoOrigen: docId,
+                            document: codigoAjuste,
+                            bodega: bodegaActual,
+                            batch: loteAfectadoFinal.batch || '',
+                            expirationDate: loteAfectadoFinal.expirationDate || '',
+                            delta: cantidadParsed,
+                            observacion: justificacion,
                             item: insumoNombre,
                             quantity: cantidadParsed,
                             user: auth.currentUser.email,
                             date: serverTimestamp(),
-                            origin: 'Ajuste Manual Crítico',
+                            origin: bodegaActual || 'Ajuste Manual Crítico',
                             dest: 'N/A'
                         });
 
@@ -956,13 +1076,16 @@ document.addEventListener('DOMContentLoaded', () => {
                             code: codigoAjuste,
                             user: auth.currentUser.email,
                             item: insumoNombre,
+                            bodega: bodegaActual,
+                            batch: loteAfectadoFinal.batch || '',
+                            expirationDate: loteAfectadoFinal.expirationDate || '',
                             action: accionDetallada,
                             justification: justificacion,
                             date: serverTimestamp()
                         });
                     });
 
-                    return { codigoAjuste, accionDetallada };
+                    return { codigoAjuste, accionDetallada, loteAfectado: loteAfectadoFinal };
                 };
 
                 if (btnEjecutarAjuste) {
@@ -975,50 +1098,109 @@ document.addEventListener('DOMContentLoaded', () => {
                         const selectedOption = selectInsumo.options[selectInsumo.selectedIndex];
 
                         if (!selectedOption || selectedOption.value === "") {
-                            return window.showAlertCenter("Notificación", 'Debe seleccionar un insumo.');
+                            return window.showAlertCenter("Notificación", 'Debe seleccionar a qué insumo desea realizar el ajuste.', true);
+                        }
+
+                        const loteOpt = selectLote ? selectLote.options[selectLote.selectedIndex] : null;
+                        if (!loteOpt || !loteOpt.value) {
+                            if (selectLote) selectLote.focus();
+                            return window.showAlertCenter("Notificación", 'Debe seleccionar a qué lote desea realizar el ajuste.', true);
                         }
 
                         const cantidadParsed = Number(cantidadInputStr);
                         if (!cantidadInputStr || isNaN(cantidadParsed) || cantidadParsed === 0) {
-                            return window.showAlertCenter("Notificación", 'Ingrese una cantidad válida (+ o -). No puede ser cero.');
+                            return window.showAlertCenter("Notificación", 'Ingrese una cantidad válida (+ o -). No puede ser cero.', true);
+                        }
+                        if (!Number.isInteger(cantidadParsed)) {
+                            return window.showAlertCenter("Notificación", 'La cantidad a ajustar debe ser un número entero.', true);
                         }
 
-                        if (justificacion.length <= 10) {
-                            return window.showAlertCenter("Notificación", 'La justificación debe tener más de 10 caracteres.');
+                        let loteSel = null;
+                        if (loteOpt.value === '__NUEVO__') {
+                            if (cantidadParsed < 0) {
+                                return window.showAlertCenter("Notificación", 'No se puede restar stock a un lote nuevo. Seleccione un lote existente.', true);
+                            }
+                            const nuevoBatch = inputLoteNuevo ? inputLoteNuevo.value.trim() : '';
+                            if (!nuevoBatch) {
+                                if (inputLoteNuevo) inputLoteNuevo.focus();
+                                return window.showAlertCenter("Notificación", 'Debe escribir el número del lote nuevo.', true);
+                            }
+                            loteSel = {
+                                key: window.SAR_AjusteLotes ? window.SAR_AjusteLotes.claveLote(nuevoBatch, inputLoteVence ? inputLoteVence.value : '') : nuevoBatch,
+                                batch: nuevoBatch,
+                                expirationDate: inputLoteVence ? inputLoteVence.value.trim() : '',
+                                esNuevo: true
+                            };
+                        } else {
+                            const stockLote = Number(loteOpt.dataset.qty) || 0;
+                            if (stockLote + cantidadParsed < 0) {
+                                return window.showAlertCenter("Notificación", `El lote ${loteOpt.dataset.batch || 'seleccionado'} solo tiene ${stockLote} unidad(es). No puede quedar en negativo.`, true);
+                            }
+                            loteSel = {
+                                key: loteOpt.value,
+                                batch: loteOpt.dataset.batch || 'S/L',
+                                expirationDate: loteOpt.dataset.exp || '',
+                                esNuevo: false
+                            };
+                        }
+
+                        if (justificacion.length < 10) {
+                            return window.showAlertCenter("Notificación", 'La justificación debe tener al menos 10 caracteres.', true);
                         }
 
                         const docId = selectedOption.value;
-                        const stockActual = Number(selectedOption.dataset.stock);
-                        const insumoNombre = selectedOption.dataset.nombre;
+                        const stockActual = Number(selectedOption.dataset.stock) || 0;
+                        const insumoNombre = selectedOption.dataset.nombre || '';
+                        const insumoBodega = selectedOption.dataset.bodega || '';
                         const nuevoStock = stockActual + cantidadParsed;
 
                         if (nuevoStock < 0) {
-                            return window.showAlertCenter("Notificación", 'El stock resultante no puede ser negativo.');
+                            return window.showAlertCenter("Notificación", 'El stock resultante no puede ser negativo.', true);
                         }
 
                         const isSuperAdmin = userRole === 'superadmin';
+                        const loteResumenTxt = `${loteSel.batch}${loteSel.expirationDate ? ' (vence ' + window.SAR_Utils.formatDate(loteSel.expirationDate) + ')' : ''}${loteSel.esNuevo ? ' · lote nuevo' : ''}`;
 
-                        let codigoGob = null, justificacionFinal = justificacion;
+                        let codigoGob = null, justificacionFinal = justificacion, motivoGob = null;
                         if (window.SAR_Gobernanza) {
-                            const r = await window.SAR_Gobernanza.pedirMotivo('Motivo del ajuste', `${window.escapeHTML(insumoNombre)}: ${stockActual} → ${nuevoStock}.`);
+                            const resumenHtml = `<b>Insumo:</b> ${window.escapeHTML(insumoNombre)}${insumoBodega ? ` (${window.escapeHTML(insumoBodega)})` : ''}<br><b>Lote:</b> ${window.escapeHTML(loteResumenTxt)}<br><b>Stock total:</b> ${stockActual} → ${nuevoStock} (${cantidadParsed > 0 ? '+' : ''}${cantidadParsed}).`;
+                            const r = await window.SAR_Gobernanza.pedirMotivo('Confirmar ajuste de stock', resumenHtml);
                             if (!r) return;
-                            if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) {   // sin internet: el ajuste queda en el teléfono y se aplica al volver la conexión, con el stock de ese momento
-                                window.SAR_Cola.encolar({ tipo: 'ajuste', titulo: `Ajuste ${cantidadParsed > 0 ? '+' : ''}${cantidadParsed} · ${insumoNombre}`, datos: { docId, nombre: insumoNombre, cantidad: cantidadParsed, justificacion: `[${r.motivo}${r.nota ? ' - ' + r.nota : ''}] ${justificacion}`, motivo: r.motivo, nota: r.nota, directo: isSuperAdmin, en: Date.now() } });
-                                return window.showAlertCenter('Guardado sin conexión', `El ajuste de ${insumoNombre} (${cantidadParsed > 0 ? '+' : ''}${cantidadParsed}) quedó en este teléfono y se aplicará solo al volver internet.`);
-                            }
-                            codigoGob = await window.SAR_Gobernanza.codigo('AJU');
+                            motivoGob = r;
                             justificacionFinal = `[${r.motivo}${r.nota ? ' - ' + r.nota : ''}] ${justificacion}`;
-                            if (isSuperAdmin) window.SAR_Gobernanza.registrar({ nombre: insumoNombre, delta: cantidadParsed, codigo: codigoGob, motivo: r.motivo, nota: r.nota, origen: 'AJUSTE', antes: { cantidad: stockActual }, despues: { cantidad: nuevoStock }, insumoId: docId }).catch(() => {});
+                            if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) {   // sin internet: el ajuste queda en el teléfono y se aplica al volver la conexión, con el stock de ese momento
+                                window.SAR_Cola.encolar({ tipo: 'ajuste', titulo: `Ajuste ${cantidadParsed > 0 ? '+' : ''}${cantidadParsed} · ${insumoNombre} (Lote ${loteSel.batch})`, datos: { docId, nombre: insumoNombre, bodega: insumoBodega, lote: loteSel, cantidad: cantidadParsed, justificacion: justificacionFinal, motivo: r.motivo, nota: r.nota, directo: isSuperAdmin, en: Date.now() } });
+                                return window.showAlertCenter('Guardado sin conexión', `El ajuste de ${insumoNombre} (Lote ${loteSel.batch}, ${cantidadParsed > 0 ? '+' : ''}${cantidadParsed}) quedó en este equipo y se aplicará solo al volver internet.`);
+                            }
                         }
 
+                        newBtnEjecutar.disabled = true;
                         try {
+                            if (window.SAR_Gobernanza) {
+                                codigoGob = await window.SAR_Gobernanza.codigo('AJU');
+                            }
+
                             if (isSuperAdmin) {
                                 // Ejecutar directamente
-                                const res = await window.ejecutarAjusteDirecto(docId, stockActual, insumoNombre, cantidadParsed, justificacionFinal, codigoGob);
-                                window.showAlertCenter("Notificación", `¡AJUSTE REALIZADO CON ÉXITO!\nCÓDIGO DE AUDITORÍA: ${res.codigoAjuste}`);
+                                const res = await window.ejecutarAjusteDirecto(docId, stockActual, insumoNombre, cantidadParsed, justificacionFinal, codigoGob, { lote: loteSel });
+                                if (window.SAR_Gobernanza && motivoGob) {
+                                    window.SAR_Gobernanza.registrar({
+                                        nombre: insumoNombre,
+                                        lote: loteSel.batch,
+                                        delta: cantidadParsed,
+                                        codigo: res.codigoAjuste,
+                                        motivo: motivoGob.motivo,
+                                        nota: motivoGob.nota,
+                                        origen: 'AJUSTE',
+                                        antes: { cantidad: stockActual, lote: loteSel.batch },
+                                        despues: { cantidad: nuevoStock, lote: loteSel.batch },
+                                        insumoId: docId
+                                    }).catch(() => {});
+                                }
+                                window.showAlertCenter("Notificación", `¡AJUSTE REALIZADO CON ÉXITO!\nInsumo: ${insumoNombre}\nLote: ${loteSel.batch}\nCÓDIGO DE AUDITORÍA: ${res.codigoAjuste}`);
                                 
                                 // Correo de respaldo
-                                const mailBody = `Se ha registrado un ajuste crítico de inventario.\n\nCódigo: ${res.codigoAjuste}\nInsumo: ${insumoNombre}\nAcción: ${res.accionDetallada}\nJustificación: ${justificacion}\nUsuario: ${auth.currentUser.email}`;
+                                const mailBody = `Se ha registrado un ajuste crítico de inventario.\n\nCódigo: ${res.codigoAjuste}\nInsumo: ${insumoNombre}\nBodega: ${insumoBodega}\nLote: ${loteResumenTxt}\nAcción: ${res.accionDetallada}\nJustificación: ${justificacion}\nUsuario: ${auth.currentUser.email}`;
                                 window.location.href = `mailto:visor@tudominio.com?subject=Ajuste Critico ${res.codigoAjuste}&body=${encodeURIComponent(mailBody)}`;
                             } else {
                                 // Solicitar Aprobación
@@ -1027,6 +1209,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                     code: code,
                                     insumoId: docId,
                                     insumoName: insumoNombre,
+                                    bodega: insumoBodega,
+                                    lote: loteSel.batch,
+                                    vencimiento: loteSel.expirationDate || '',
+                                    loteKey: loteSel.key || '',
+                                    esNuevoLote: !!loteSel.esNuevo,
                                     cantidad: cantidadParsed,
                                     justificacion: justificacionFinal,
                                     previousStock: stockActual,
@@ -1035,7 +1222,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     date: serverTimestamp(),
                                     requester: auth.currentUser.email
                                 });
-                                window.showAlertCenter("Solicitud Creada", `Se ha registrado tu solicitud de ajuste con código: ${code}.\nDebe ser aprobada por el Superadministrador.`);
+                                window.showAlertCenter("Solicitud Creada", `Se ha registrado tu solicitud de ajuste con código: ${code}.\nInsumo: ${insumoNombre}\nLote: ${loteSel.batch}\nDebe ser aprobada por el Superadministrador.`);
                             }
 
                             // Limpiar
@@ -1043,10 +1230,14 @@ document.addEventListener('DOMContentLoaded', () => {
                             document.getElementById('ajuste-justificacion').value = "";
                             if (buscadorAjuste) buscadorAjuste.value = "";
                             cacheInsumosParaAjuste = null;
+                            insumosAjusteMap.clear();
                             window.cargarInsumosParaAjuste();
                         } catch (error) {
                             console.error("Error procesando ajuste:", error);
-                            window.showAlertCenter("Notificación", `No se pudo completar la operación: ${error.message || error}`);
+                            const msgAmigable = window.SAR_AjusteLotes ? window.SAR_AjusteLotes.mensajeErrorAmigable(error) : (error.message || error);
+                            window.showAlertCenter("Error al procesar ajuste", msgAmigable, true);
+                        } finally {
+                            newBtnEjecutar.disabled = false;
                         }
                     });
                 }
@@ -1147,10 +1338,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (data.status === 'rechazado' && data.rejectionReason) {
                             detalles += ` | Motivo Rechazo: <strong>${window.escapeHTML(data.rejectionReason)}</strong>`;
                         }
+                        const loteInfoSol = data.lote ? `<br><small class="text-muted">Lote: ${window.escapeHTML(data.lote)}${data.vencimiento ? ' · Vence: ' + window.escapeHTML(window.SAR_Utils.formatDate(data.vencimiento)) : ''}${data.bodega ? ' · ' + window.escapeHTML(data.bodega) : ''}</small>` : '';
 
                         row.innerHTML = `
                             <td><strong>${window.escapeHTML(data.code || 'N/A')}</strong></td>
-                            <td>${window.escapeHTML(data.insumoName || 'Desconocido')}</td>
+                            <td>${window.escapeHTML(data.insumoName || 'Desconocido')}${loteInfoSol}</td>
                             <td>${dateStr}</td>
                             <td>${variation}</td>
                             <td>${data.previousStock} &rarr; ${data.projectedStock}</td>
@@ -1207,10 +1399,12 @@ document.addEventListener('DOMContentLoaded', () => {
                                 </div>
                             `;
 
+                            const loteInfoApr = data.lote ? `<br><small class="text-muted">Lote: ${window.escapeHTML(data.lote)}${data.vencimiento ? ' · Vence: ' + window.escapeHTML(window.SAR_Utils.formatDate(data.vencimiento)) : ''}${data.bodega ? ' · ' + window.escapeHTML(data.bodega) : ''}</small>` : '';
+
                             row.innerHTML = `
                                 <td><strong>${window.escapeHTML(data.code || 'N/A')}</strong></td>
                                 <td>${window.escapeHTML(data.requester || 'Desconocido')}</td>
-                                <td>${window.escapeHTML(data.insumoName || 'Desconocido')}</td>
+                                <td>${window.escapeHTML(data.insumoName || 'Desconocido')}${loteInfoApr}</td>
                                 <td>${dateStr}</td>
                                 <td>${variation}</td>
                                 <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${window.escapeHTML(data.justificacion || '')}">${window.escapeHTML(data.justificacion || '')}</td>
@@ -1241,7 +1435,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             throw new Error("Esta solicitud ya ha sido procesada.");
                         }
 
-                        // Ejecutar el ajuste en la base de datos
+                        // Ejecutar el ajuste en la base de datos (respetando el lote solicitado si existe)
+                        const loteSolicitud = reqData.lote ? {
+                            key: reqData.loteKey || '',
+                            batch: reqData.lote,
+                            expirationDate: reqData.vencimiento || '',
+                            esNuevo: !!reqData.esNuevoLote
+                        } : null;
                         const res = await window.ejecutarAjusteDirecto(
                             reqData.insumoId,
                             reqData.previousStock,
@@ -1249,14 +1449,15 @@ document.addEventListener('DOMContentLoaded', () => {
                             reqData.cantidad,
                             reqData.justificacion,
                             reqData.code,
-                            { solicitudId: docId }   // v21.230: se marca aprobada en la misma transacción del ajuste
+                            { solicitudId: docId, lote: loteSolicitud }   // v21.234: lote específico + aprobación atómica
                         );
 
                         window.showToast("Solicitud Aprobada", `El ajuste ${reqData.code} fue ejecutado con éxito.`, "success");
                     } catch (error) {
                         if (error && error.ya) { window.showToast("Solicitud ya procesada", "Esta solicitud ya quedó aprobada (no se aplicó dos veces).", "info"); return; }   // v21.230
                         console.error("Error aprobando solicitud:", error);
-                        window.showAlertCenter("Error", `No se pudo aprobar la solicitud: ${error.message || error}`);
+                        const msgAmigable = window.SAR_AjusteLotes ? window.SAR_AjusteLotes.mensajeErrorAmigable(error) : (error.message || error);
+                        window.showAlertCenter("Error", `No se pudo aprobar la solicitud: ${msgAmigable}`, true);
                     }
                 };
 
@@ -1366,21 +1567,18 @@ document.addEventListener('DOMContentLoaded', () => {
             // Solo inicializamos los listeners y queries si es la primera vez (evita memoria leaks)
             if (!isAppInitialized) {
                 initializeRestOfSPA();
-                // Ejecución EXCLUSIVA y centralizada de llamadas a Firestore:
+                // Ejecución EXCLUSIVA y centralizada de llamadas a Firestore (Informes, Logs y Compras se cargan bajo demanda al abrir cada vista para cuidar la cuota de Firestore):
                 if (typeof window.startRealTimeDashboard === 'function') window.startRealTimeDashboard();
                 if (typeof window.startRealTimeHistorial === 'function') window.startRealTimeHistorial();
                 if (typeof window.startRealTimeBodegas === 'function') window.startRealTimeBodegas();
                 if (typeof window.startRealTimeUsers === 'function') window.startRealTimeUsers();
                 if (typeof window.startRealTimeConfig === 'function') window.startRealTimeConfig();
-                if (typeof window.startRealTimeInformes === 'function') window.startRealTimeInformes();
-                if (typeof window.startRealTimeLogs === 'function') window.startRealTimeLogs();
-                if (typeof window.startRealTimeCompras === 'function') window.startRealTimeCompras();
 
-                // Inicializar Predictive Engine Data (90 días)
+                // Inicializar Predictive Engine Data (90 días, acotado para no agotar cuota de lecturas)
                 const limite90d = new Date();
                 limite90d.setDate(limite90d.getDate() - 90);
                 // Se usan imports estáticos: collection, query, where, onSnapshot
-                const qPred = query(collection(db, 'Historial_Movimientos'), where('date', '>=', limite90d.toISOString()));
+                const qPred = query(collection(db, 'Historial_Movimientos'), where('date', '>=', limite90d.toISOString()), limit(500));
                 activeListeners.predictive = onSnapshot(qPred, (snap) => {
                     window.globalMovimientosPredictivos = snap.docs.map(d => d.data());
                     // Re-render inventory if it's visible
@@ -2222,7 +2420,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (hash === 'view-informes') {
                     console.log("[Router] Entrando a Informes, disparando carga de auditoría...");
                     loadInformesAuditoria();
-                    if (typeof window.startRealTimeInformes === 'function') window.startRealTimeInformes();
+                    if (typeof window.startRealTimeInformes === 'function' && !activeListeners.informes_kpi) window.startRealTimeInformes();
+                    if (typeof window.startRealTimeLogs === 'function' && !activeListeners.logs) window.startRealTimeLogs();
                 } else if (hash === 'view-inventario') {
                     console.log("[Router] Vista Inventario activa. Cargando página...");
                     if (typeof window.loadFirstPage === 'function') window.loadFirstPage();
@@ -2243,6 +2442,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     console.log("[Router] Vista Transferencias activa.");
                 } else if (hash === 'view-compras') {
                     console.log("[Router] Vista Compras activa.");
+                    if (typeof window.startRealTimeCompras === 'function' && !activeListeners.compras) window.startRealTimeCompras();
+                } else if (hash === 'view-configuracion') {
+                    if (typeof window.startRealTimeLogs === 'function' && !activeListeners.logs) window.startRealTimeLogs();
                 } else if (hash === 'view-bandejas') {
                     console.log("[Router] Vista Bandejas activa.");
                     if (typeof window.startBandejasModule === 'function') window.startBandejasModule();
@@ -2448,7 +2650,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         document.body.addEventListener('change', (e) => {
-            if (e.target.tagName === 'SELECT') {
+            if (e.target.tagName === 'SELECT' && !e.target.closest('#view-ajustes')) {
                 showToast('Filtros Actualizados', `Vista cambiada a: ${e.target.options[e.target.selectedIndex].text}`, 'info');
             }
         });
@@ -4360,65 +4562,65 @@ document.addEventListener('DOMContentLoaded', () => {
                 const formData = new FormData(formEditInsumo);
                 const rawData = Object.fromEntries(formData.entries());
 
-                // Transformación y Limpieza de datos (Senior Standards)
-                const updatedData = {
-                    codigoSAR: (rawData.code || '').trim() || (window.SAR_CodigoSAR ? await window.SAR_CodigoSAR.asignar(rawData.name) : ''),
-                    ...(String(rawData.codigoMP || '').replace(/\D/g, '') ? { codigoMP: String(rawData.codigoMP).replace(/\D/g, '') } : {}),
-                    name: rawData.name.trim(),
-                    nombre: rawData.name.trim(),
-                    descripcion: rawData.name.trim(),
-                    name_lowercase: rawData.name.trim().toLowerCase(), // Crucial para el buscador
-                    category: (rawData.category && rawData.category !== '__nueva__' ? rawData.category.trim() : '') || "General",
-                    categoria: (rawData.category && rawData.category !== '__nueva__' ? rawData.category.trim() : '') || "General",
-                    quantity: Number(rawData.quantity),
-                    cantidad: Number(rawData.quantity),
-                    unitPrice: Number(rawData.unitPrice),
-                    costo_unitario: Number(rawData.unitPrice),
-                    criticalLimit: Number(rawData.criticalLimit),
-                    stock_minimo: Number(rawData.criticalLimit),
-                    batch: rawData.batch.trim().toUpperCase(),
-                    lote: rawData.batch.trim().toUpperCase(),
-                    expirationDate: rawData.expirationDate,
-                    vencimiento: rawData.expirationDate,
-                    fechaVencimiento: rawData.expirationDate,
-                    ...(window.__lotesEditados ? window.__lotesEditados() : {}),
-                    location: rawData.location.trim() || "Sin asignar",
-                    ubicacion: rawData.location.trim() || "Sin asignar",
-                    bodegaNombre: rawData.location.trim() || "Sin asignar",
-                    ...(['medico', 'aseo', 'oficina'].includes(rawData.tipoInsumo) ? { tipoInsumo: rawData.tipoInsumo } : {}),
-                    status: rawData.status || "ACTIVO"
-                };
-                { const so = document.getElementById('edit-location'), op = so && so.selectedOptions[0]; if (op && op.dataset.id) updatedData.bodegaId = op.dataset.id; }
-                if (window.SAR_CodigoSAR && Array.isArray(updatedData.batches)) await window.SAR_CodigoSAR.codificarLotes(updatedData.name, updatedData.batches);
-                // Si cambia el nombre, el anterior queda como alias: así los ingresos, ajustes y sugerencias siguen apuntando al mismo producto y no se crea un duplicado
-                if (window.__editOriginal && window.__editOriginal.name && String(window.__editOriginal.name).trim() !== updatedData.name) {
-                    updatedData.nombresAnteriores = [...new Set([...(Array.isArray(window.__editOriginal.nombresAnteriores) ? window.__editOriginal.nombresAnteriores : []), String(window.__editOriginal.name).trim()])].slice(-20);
-                }
-
-                // Gobernanza: cambios de cantidad, lote, vencimiento o bodega exigen motivo y dejan código de seguimiento
-                let gob = null;
-                if (window.SAR_Gobernanza && window.__editOriginal) {
-                    const o = window.__editOriginal, G = window.SAR_Gobernanza;
-                    const ln = (a) => (a || []).map(b => `${String(b.batch || '').trim().toUpperCase()}|${Number(b.quantity) || 0}|${((d) => d && !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : '')(SAR_Utils.parseDate(b.expirationDate))}`).sort().join(';');
-                    const antesL = ln(Array.isArray(o.batches) && o.batches.length ? o.batches : [{ batch: o.batch, quantity: o.quantity, expirationDate: o.expirationDate }]);
-                    const despL = ln(updatedData.batches || [{ batch: updatedData.batch, quantity: updatedData.quantity, expirationDate: updatedData.expirationDate }]);
-                    const cambiaStock = Number(o.quantity || 0) !== updatedData.quantity || antesL !== despL;
-                    const cambiaBodega = String(o.location || '') !== updatedData.location;
-                    if (cambiaStock || cambiaBodega) {
-                        if (cambiaStock) {
-                            const v = await G.puedeCorregir(o.name || updatedData.name, updatedData.nombresAnteriores || o.nombresAnteriores || []);
-                            if (!v.ok) { window.showAlertCenter('Corrección directa cerrada', `${v.motivo}\n\nPara cambiar cantidad, lote o vencimiento usa Ajustes / Desajustes (pide motivo y genera código).`); return; }
-                        }
-                        const r = await G.pedirMotivo('¿Por qué haces este cambio?', `${window.escapeHTML(o.name || '')}: ${cambiaStock ? 'cantidad / lote / vencimiento' : ''}${cambiaStock && cambiaBodega ? ' y ' : ''}${cambiaBodega ? 'bodega' : ''}.`);
-                        if (!r) return;
-                        gob = { ...r, codigo: await G.codigo('CAM'), antes: { cantidad: Number(o.quantity || 0), lote: o.batch || '', vence: String(o.expirationDate || ''), bodega: o.location || '' }, despues: { cantidad: updatedData.quantity, lote: updatedData.batch || '', vence: String(updatedData.expirationDate || ''), bodega: updatedData.location } };
-                    }
-                }
-
                 btn.innerHTML = '<i class="ph-spinner ph-spin"></i> GUARDANDO...';
                 btn.disabled = true;
 
                 try {
+                    // Transformación y Limpieza de datos (Senior Standards)
+                    const updatedData = {
+                        codigoSAR: (rawData.code || '').trim() || (window.SAR_CodigoSAR ? await window.SAR_CodigoSAR.asignar(rawData.name) : ''),
+                        ...(String(rawData.codigoMP || '').replace(/\D/g, '') ? { codigoMP: String(rawData.codigoMP).replace(/\D/g, '') } : {}),
+                        name: rawData.name.trim(),
+                        nombre: rawData.name.trim(),
+                        descripcion: rawData.name.trim(),
+                        name_lowercase: rawData.name.trim().toLowerCase(), // Crucial para el buscador
+                        category: (rawData.category && rawData.category !== '__nueva__' ? rawData.category.trim() : '') || "General",
+                        categoria: (rawData.category && rawData.category !== '__nueva__' ? rawData.category.trim() : '') || "General",
+                        quantity: Number(rawData.quantity),
+                        cantidad: Number(rawData.quantity),
+                        unitPrice: Number(rawData.unitPrice),
+                        costo_unitario: Number(rawData.unitPrice),
+                        criticalLimit: Number(rawData.criticalLimit),
+                        stock_minimo: Number(rawData.criticalLimit),
+                        batch: rawData.batch.trim().toUpperCase(),
+                        lote: rawData.batch.trim().toUpperCase(),
+                        expirationDate: rawData.expirationDate,
+                        vencimiento: rawData.expirationDate,
+                        fechaVencimiento: rawData.expirationDate,
+                        ...(window.__lotesEditados ? window.__lotesEditados() : {}),
+                        location: rawData.location.trim() || "Sin asignar",
+                        ubicacion: rawData.location.trim() || "Sin asignar",
+                        bodegaNombre: rawData.location.trim() || "Sin asignar",
+                        ...(['medico', 'aseo', 'oficina'].includes(rawData.tipoInsumo) ? { tipoInsumo: rawData.tipoInsumo } : {}),
+                        status: rawData.status || "ACTIVO"
+                    };
+                    { const so = document.getElementById('edit-location'), op = so && so.selectedOptions[0]; if (op && op.dataset.id) updatedData.bodegaId = op.dataset.id; }
+                    if (window.SAR_CodigoSAR && Array.isArray(updatedData.batches)) await window.SAR_CodigoSAR.codificarLotes(updatedData.name, updatedData.batches);
+                    // Si cambia el nombre, el anterior queda como alias: así los ingresos, ajustes y sugerencias siguen apuntando al mismo producto y no se crea un duplicado
+                    if (window.__editOriginal && window.__editOriginal.name && String(window.__editOriginal.name).trim() !== updatedData.name) {
+                        updatedData.nombresAnteriores = [...new Set([...(Array.isArray(window.__editOriginal.nombresAnteriores) ? window.__editOriginal.nombresAnteriores : []), String(window.__editOriginal.name).trim()])].slice(-20);
+                    }
+
+                    // Gobernanza: cambios de cantidad, lote, vencimiento o bodega exigen motivo y dejan código de seguimiento
+                    let gob = null;
+                    if (window.SAR_Gobernanza && window.__editOriginal) {
+                        const o = window.__editOriginal, G = window.SAR_Gobernanza;
+                        const ln = (a) => (a || []).map(b => `${String(b.batch || '').trim().toUpperCase()}|${Number(b.quantity) || 0}|${((d) => d && !isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : '')(SAR_Utils.parseDate(b.expirationDate))}`).sort().join(';');
+                        const antesL = ln(Array.isArray(o.batches) && o.batches.length ? o.batches : [{ batch: o.batch, quantity: o.quantity, expirationDate: o.expirationDate }]);
+                        const despL = ln(updatedData.batches || [{ batch: updatedData.batch, quantity: updatedData.quantity, expirationDate: updatedData.expirationDate }]);
+                        const cambiaStock = Number(o.quantity || 0) !== updatedData.quantity || antesL !== despL;
+                        const cambiaBodega = String(o.location || '') !== updatedData.location;
+                        if (cambiaStock || cambiaBodega) {
+                            if (cambiaStock) {
+                                const v = await G.puedeCorregir(o.name || updatedData.name, updatedData.nombresAnteriores || o.nombresAnteriores || []);
+                                if (!v.ok) { window.showAlertCenter('Corrección directa cerrada', `${v.motivo}\n\nPara cambiar cantidad, lote o vencimiento usa Ajustes / Desajustes (pide motivo y genera código).`); return; }
+                            }
+                            const r = await G.pedirMotivo('¿Por qué haces este cambio?', `${window.escapeHTML(o.name || '')}: ${cambiaStock ? 'cantidad / lote / vencimiento' : ''}${cambiaStock && cambiaBodega ? ' y ' : ''}${cambiaBodega ? 'bodega' : ''}.`);
+                            if (!r) return;
+                            gob = { ...r, codigo: await G.codigo('CAM'), antes: { cantidad: Number(o.quantity || 0), lote: o.batch || '', vence: String(o.expirationDate || ''), bodega: o.location || '' }, despues: { cantidad: updatedData.quantity, lote: updatedData.batch || '', vence: String(updatedData.expirationDate || ''), bodega: updatedData.location } };
+                        }
+                    }
+
                     // Usamos la función de auditoría inmutable definida al inicio de script.js
                     await updateInventoryWithAudit(docId, updatedData, auth.currentUser || { uid: 'admin_local' });
 
@@ -4454,7 +4656,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     window.loadFirstPage(); // Refrescar tabla
                 } catch (err) {
                     console.error("Update Error:", err);
-                    showToast('Error Crítico', 'Fallo al sincronizar cambios con el núcleo.', 'error');
+                    const esCuota = window.SAR_AjusteLotes && window.SAR_AjusteLotes.esErrorCuota(err);
+                    const msg = window.SAR_AjusteLotes ? window.SAR_AjusteLotes.mensajeErrorAmigable(err) : 'Fallo al sincronizar cambios con el núcleo.';
+                    showToast(esCuota ? 'Cuota de Firestore agotada' : 'Error Crítico', msg, 'error');
                 } finally {
                     btn.innerHTML = originalText;
                     btn.disabled = false;
@@ -4620,21 +4824,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const datalist = document.getElementById('lista-insumos');
             if (!input || !datalist) return;
             
-            // Autocompletado (v21.118): carga una vez los nombres de Existencias y del catálogo; el navegador
-            // sugiere por coincidencia dentro del nombre (no solo al inicio) y sin distinguir mayúsculas.
-            const cargarNombres = async () => {
+            // Autocompletado (v21.234): lee una sola vez (con caché de 15 min) sin duplicar lecturas de Historial_Movimientos
+            const cargarNombres = async (forzar = false) => {
+                if (!forzar && window.__nombresIngresoCargadoEn && Date.now() - window.__nombresIngresoCargadoEn < 15 * 60 * 1000) return;
                 try {
                     const snap = await getDocs(query(collection(db, 'Insumos'), orderBy('name', 'asc')));
                     window.insumosDataCache = []; const nombres = new Set();
                     snap.forEach(d => { const x = d.data(); if (x.name) { window.insumosDataCache.push({ id: d.id, ...x }); nombres.add(String(x.name).trim()); } });
-                    // Nombres ya ingresados antes (aunque el producto no haya quedado en Existencias) y los escritos en este equipo
+                    const movsProv = [];
                     try {
-                        const hs = await getDocs(query(collection(db, 'Historial_Movimientos'), where('type', '==', 'INGRESO_PROVEEDOR'), limit(400)));
-                        hs.forEach(d => { const n = String(d.data().insumoName || '').trim(); if (n) nombres.add(n); });
+                        const hs = await getDocs(query(collection(db, 'Historial_Movimientos'), where('type', '==', 'INGRESO_PROVEEDOR'), limit(250)));
+                        hs.forEach(d => { const x = d.data(); movsProv.push(x); const n = String(x.insumoName || '').trim(); if (n) nombres.add(n); });
                     } catch (_) { /* opcional */ }
+                    window.__movsIngresoCache = movsProv;
                     try { JSON.parse(localStorage.getItem('sar_nombres_ingreso') || '[]').forEach(n => { if (n) nombres.add(String(n)); }); } catch (_) { /* opcional */ }
                     try {
-                        const cs = await getDocs(collection(db, 'Catalogo_Productos'));
+                        const cs = await getDocs(query(collection(db, 'Catalogo_Productos'), limit(2000)));
                         cs.forEach(d => { const n = String(d.data().descripcion || '').trim(); if (n) nombres.add(n.toUpperCase()); });
                     } catch (_) { /* el catálogo es opcional */ }
                     // Un nombre que ya fue reemplazado por otro (el producto se renombró) no se sugiere más
@@ -4644,19 +4849,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     const vistos = new Set(), frag = document.createDocumentFragment();
                     [...nombres].sort((x, y) => x.localeCompare(y, 'es')).forEach(n => { const k = n.toLowerCase(); if (vistos.has(k)) return; vistos.add(k); const o = document.createElement('option'); o.value = n; frag.appendChild(o); });
                     datalist.innerHTML = ''; datalist.appendChild(frag);
+                    window.__nombresIngresoCargadoEn = Date.now();
                 } catch (err) { console.error("Datalist Populating Error:", err); }
             };
-            // Proveedores: lo ya escrito en ingresos anteriores (Existencias, historial, órdenes de compra y este equipo) queda en la lista y se autocompleta
-            const cargarProveedores = async () => {
+            // Proveedores: reutiliza el cache de movimientos ya leídos (sin leer Historial_Movimientos por segunda vez)
+            const cargarProveedores = async (forzar = false) => {
+                if (!forzar && window.__provIngresoCargadoEn && Date.now() - window.__provIngresoCargadoEn < 15 * 60 * 1000) return;
                 const dlp = document.getElementById('list-proveedores'); if (!dlp) return;
                 const nk = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
                 const mapa = new Map(), sumar = (n) => { const v = String(n || '').trim(); if (!v || /^(s\/i|s\/d|n\/a|sin proveedor)$/i.test(v)) return; const k = nk(v); if (!mapa.has(k)) mapa.set(k, v); };
                 try { JSON.parse(localStorage.getItem('sar_proveedores_ingreso') || '[]').forEach(sumar); } catch (_) { /* sin almacenamiento */ }
                 (window.insumosDataCache || []).forEach(i => { sumar(i.provider); (i.batches || []).forEach(b => sumar(b.provider)); });
-                try { const hs = await getDocs(query(collection(db, 'Historial_Movimientos'), where('type', '==', 'INGRESO_PROVEEDOR'), limit(500))); hs.forEach(d => sumar(d.data().provider)); } catch (_) { /* opcional */ }
-                try { const os = await getDocs(collection(db, 'Seguimiento_OC')); os.forEach(d => sumar(d.data().proveedor)); } catch (_) { /* opcional */ }
+                (window.__movsIngresoCache || []).forEach(x => sumar(x.provider));
+                try { const os = await getDocs(query(collection(db, 'Seguimiento_OC'), limit(300))); os.forEach(d => sumar(d.data().proveedor)); } catch (_) { /* opcional */ }
                 dlp.innerHTML = ''; [...mapa.values()].sort((a, b) => a.localeCompare(b, 'es')).forEach(n => { const o = document.createElement('option'); o.value = n; dlp.appendChild(o); });
                 window.__proveedoresIngreso = [...mapa.values()];
+                window.__provIngresoCargadoEn = Date.now();
             };
             window.__recargarProveedoresIngreso = cargarProveedores;
             window.__recargarNombresIngreso = cargarNombres;
@@ -4931,10 +5139,15 @@ document.addEventListener('DOMContentLoaded', () => {
                         } catch (eCat) { console.warn('Catálogo:', eCat); }
                     }
 
-                    // Verificación (v21.119): confirma que el producto quedó realmente en Existencias
+                    // Verificación (v21.119): confirma que el producto quedó realmente en Existencias y actualiza la caché local sin re-leer toda la colección
                     try {
                         const chk = await getDoc(doc(db, 'Insumos', insumoId));
                         if (!chk.exists()) throw new Error('El producto no quedó guardado en Existencias.');
+                        const actualizado = { id: insumoId, ...chk.data() };
+                        if (!Array.isArray(window.insumosDataCache)) window.insumosDataCache = [];
+                        const idxCache = window.insumosDataCache.findIndex(x => x.id === insumoId);
+                        if (idxCache >= 0) window.insumosDataCache[idxCache] = actualizado;
+                        else window.insumosDataCache.push(actualizado);
                     } catch (eChk) {
                         console.error('Verificación de ingreso:', eChk);
                         showToast('Revisar ingreso', 'El movimiento quedó en el historial pero el producto no aparece en Existencias. Avise antes de seguir ingresando.', 'error');
@@ -4947,8 +5160,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 } catch (err) {
                     console.error("Movement Save Error:", err);
-                    const msg = typeof err === 'string' ? err : 'Fallo en la sincronización.';
-                    showToast('Error Crítico', msg, 'error');
+                    const esCuota = window.SAR_AjusteLotes && window.SAR_AjusteLotes.esErrorCuota(err);
+                    const msg = typeof err === 'string'
+                        ? err
+                        : (window.SAR_AjusteLotes ? window.SAR_AjusteLotes.mensajeErrorAmigable(err) : ((err && err.message) || 'Fallo en la sincronización.'));
+                    showToast(esCuota ? 'Cuota de Firestore agotada' : 'Error Crítico', msg, 'error');
                 } finally {
                     btn.innerHTML = originalText;
                     btn.disabled = false;
@@ -6427,7 +6643,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             clearListener('informes_logs');
-            activeListeners.informes_logs = onSnapshot(collection(db, 'Historial_Movimientos'), (snapshot) => {
+            activeListeners.informes_logs = onSnapshot(query(collection(db, 'Historial_Movimientos'), orderBy('date', 'desc'), limit(500)), (snapshot) => {
                 const logs = [];
                 snapshot.forEach(docSnap => logs.push({ id: docSnap.id, ...docSnap.data() }));
                 
@@ -6687,7 +6903,7 @@ document.addEventListener('DOMContentLoaded', () => {
             logsTable.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:32px;"><i class="ph-spinner ph-spin" style="font-size:24px; color:var(--primary);"></i><div class="mt-8 text-sm text-muted">Sincronizando registros de auditoría...</div></td></tr>';
 
             clearListener('logs');
-            activeListeners.logs = onSnapshot(collection(db, 'Logs_Sistema'), (snapshot) => {
+            activeListeners.logs = onSnapshot(query(collection(db, 'Logs_Sistema'), limit(150)), (snapshot) => {
                 logsTable.innerHTML = '';
                 if (snapshot.empty) {
                     logsTable.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:16px; color:var(--text-muted);">No se registran incidencias técnicas.</td></tr>';

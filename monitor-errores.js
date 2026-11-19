@@ -57,7 +57,7 @@
             window.SAR_ErroresRecientes = l.slice(0, 30);
         } catch (e) { /* sin permiso: la campana no muestra errores */ }
     }
-    setTimeout(cargarRecientes, 8000); setInterval(cargarRecientes, 600000);
+    setTimeout(cargarRecientes, 8000); setInterval(() => { if (!document.hidden) cargarRecientes(); }, 60 * 60 * 1000);
 
     // ---- panel en «Directorio de errores» ----
     async function panel() {

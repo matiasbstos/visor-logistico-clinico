@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=21.233",
+                "./script.js": "./script.js?v=21.234",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -87,7 +87,7 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
     <meta name="theme-color" content="#1A3668">
-    <link rel="stylesheet" href="style.css?v=21.233">
+    <link rel="stylesheet" href="style.css?v=21.234">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script>window.addEventListener('load', function () { setTimeout(function () { window.SAR_SplashFin && window.SAR_SplashFin(); }, 600); });</script>
@@ -2232,15 +2232,15 @@
                             <!-- Columna Izquierda: Buscador y Selección -->
                             <div class="card form-card">
                                 <h3 class="form-title mb-16">
-                                    <i class="ph ph-magnifying-glass text-primary"></i> Selección de Insumo
+                                    <i class="ph ph-magnifying-glass text-primary"></i> 1. Selección de Insumo
                                 </h3>
-                                <p class="text-muted text-sm mb-20">Busque el fármaco o insumo médico por su nombre o código para iniciar el ajuste.</p>
+                                <p class="text-muted text-sm mb-20">Busque el fármaco o insumo médico por nombre, código o lote para iniciar el ajuste.</p>
                                 
                                 <div class="form-group">
-                                    <label class="form-label" for="buscador-ajuste">Buscar Medicamento</label>
+                                    <label class="form-label" for="buscador-ajuste">Buscar Insumo o Medicamento</label>
                                     <div class="search-input-wrapper">
                                         <i class="ph ph-magnifying-glass"></i>
-                                        <input type="text" id="buscador-ajuste" class="form-control" placeholder="Escriba nombre o código...">
+                                        <input type="text" id="buscador-ajuste" class="form-control" placeholder="Escriba nombre, código o lote...">
                                     </div>
                                 </div>
                                 
@@ -2253,22 +2253,45 @@
                             <!-- Columna Derecha: Formulario de Ajuste -->
                             <div class="card form-card">
                                 <h3 class="form-title mb-16">
-                                    <i class="ph ph-sliders text-primary"></i> Lógica de Ajuste
+                                    <i class="ph ph-sliders text-primary"></i> 2. Lote y Lógica de Ajuste
                                 </h3>
                                 
-                                <div style="background: var(--gray-light); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 20px;">
+                                <div style="background: var(--gray-light); padding: 16px; border-radius: 8px; border: 1px solid var(--border-color); margin-bottom: 16px;">
                                     <h4 id="lbl-insumo-seleccionado-nombre" style="font-size: 14px; font-weight: 700; color: var(--text-main); margin-bottom: 4px;">Ningún insumo seleccionado</h4>
-                                    <p id="lbl-insumo-seleccionado-lotes" style="font-size: 11px; color: var(--text-muted); margin-bottom: 0;">Seleccione un elemento de la lista izquierda para cargar los detalles actuales.</p>
+                                    <p id="lbl-insumo-seleccionado-lotes" style="font-size: 11px; color: var(--text-muted); margin-bottom: 0;">Seleccione un elemento de la lista izquierda para cargar los lotes y detalles actuales.</p>
+                                </div>
+
+                                <div class="form-group" id="grupo-ajuste-lote">
+                                    <label class="form-label" for="ajuste-lote">Lote a Ajustar <span style="color: var(--danger);">*</span></label>
+                                    <select id="ajuste-lote" class="form-control" disabled>
+                                        <option value="">Primero seleccione un insumo...</option>
+                                    </select>
+                                    <small id="ajuste-lote-hint" class="text-muted" style="font-size: 11px; margin-top: 4px; display: block;">Indique a qué lote específico corresponde este ajuste (o elija «+ Nuevo lote» para sumar stock a un lote nuevo).</small>
+                                </div>
+
+                                <div id="grupo-ajuste-lote-nuevo" style="display: none; background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px dashed var(--primary); margin-bottom: 16px;">
+                                    <div class="grid-2-col-even" style="gap: 12px;">
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <label class="form-label" for="ajuste-lote-nuevo">N° de Lote Nuevo <span style="color: var(--danger);">*</span></label>
+                                            <input type="text" id="ajuste-lote-nuevo" class="form-control" placeholder="Ej: L2026-01" maxlength="60">
+                                        </div>
+                                        <div class="form-group" style="margin-bottom: 0;">
+                                            <label class="form-label" for="ajuste-lote-vence">Fecha de Vencimiento (opcional)</label>
+                                            <input type="date" id="ajuste-lote-vence" class="form-control">
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div class="grid-2-col-even mb-20">
                                     <div style="text-align: center; padding: 12px; background: var(--gray-light); border-radius: 8px; border: 1px solid var(--border-color);">
-                                        <span class="form-label" style="margin-bottom: 4px;">Stock Actual</span>
+                                        <span class="form-label" style="margin-bottom: 4px;">Stock Actual (Insumo)</span>
                                         <span id="lbl-stock-actual" style="font-size: 28px; font-weight: 700; color: var(--text-main); display: block;">0</span>
+                                        <small id="lbl-stock-lote-actual" class="text-muted" style="font-size: 11px; display: block; margin-top: 2px;">Lote: —</small>
                                     </div>
                                     <div style="text-align: center; padding: 12px; background: var(--primary-light); border-radius: 8px; border: 1px solid var(--primary-light);">
                                         <span class="form-label" style="color: var(--primary); margin-bottom: 4px;">Nuevo Proyectado</span>
                                         <span id="lbl-stock-proyectado" style="font-size: 28px; font-weight: 700; color: var(--primary); display: block;">0</span>
+                                        <small id="lbl-stock-lote-proyectado" class="text-muted" style="font-size: 11px; display: block; margin-top: 2px;">Lote: —</small>
                                     </div>
                                 </div>
 
@@ -5946,80 +5969,81 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=21.233"></script>
-    <script type="module" src="patch-plantillas.js?v=21.233"></script>
+    <script src="ajuste-lotes.js?v=21.234"></script>
+    <script type="module" src="script.js?v=21.234"></script>
+    <script type="module" src="patch-plantillas.js?v=21.234"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="bodega-explorador.js?v=21.233"></script>
-    <script src="precintos-inventario.js?v=21.233"></script>
-    <script src="prestamos-otros-centros.js?v=21.233"></script>
-    <script src="precinto-escaneo.js?v=21.233"></script>
-    <script src="sonidos.js?v=21.233"></script>
-    <script src="avisos-campana.js?v=21.233"></script>
-    <script src="bodegas-estantes.js?v=21.233"></script>
-    <script src="bodegas-cierre.js?v=21.233"></script>
-    <script src="progreso.js?v=21.233"></script>
-    <script src="cola-offline.js?v=21.233"></script>
-    <script src="oc-lector.js?v=21.233"></script>
-    <script src="acta-edicion.js?v=21.233"></script>
-    <script src="anonimizar-pacientes.js?v=21.233"></script>
-    <script src="cdp-presupuesto.js?v=21.233"></script>
-    <script src="imagenes-producto.js?v=21.233"></script>
-    <script src="catalogo-vista.js?v=21.233"></script>
-    <script src="correo-html.js?v=21.233"></script>
-    <script src="avisos-correo.js?v=21.233"></script>
-    <script src="monitor-errores.js?v=21.233"></script>
-    <script src="lotes-alertas.js?v=21.233"></script>
-    <script src="correlativos.js?v=21.233"></script>
-    <script src="cuadre-ingreso.js?v=21.233"></script>
-    <script src="salud-inventario.js?v=21.233"></script>
-    <script src="codigo-sar.js?v=21.233"></script>
-    <script src="categorias.js?v=21.233"></script>
-    <script src="gobernanza.js?v=21.233"></script>
-    <script src="resumen-stock.js?v=21.233"></script>
-    <script src="vista-previa-agenda.js?v=21.233"></script>
-    <script src="menu-lateral.js?v=21.233"></script>
-    <script src="buscador-global.js?v=21.233"></script>
-    <script src="cargando-global.js?v=21.233"></script>
-    <script src="respaldo-diario.js?v=21.233"></script>
-    <script src="cierre-mensual.js?v=21.233"></script>
-    <script src="tabla-columnas.js?v=21.233"></script>
-    <script src="acerca.js?v=21.233"></script>
-    <script src="memo-flujo.js?v=21.233"></script>
-    <script src="traspaso-bodegas.js?v=21.233"></script>
-    <script src="distribucion-centros.js?v=21.233"></script>
-    <script src="primeros-pasos.js?v=21.233"></script>
-    <script src="guia-lector.js?v=21.233"></script>
-    <script src="seguimiento-oc.js?v=21.233"></script>
-    <script src="compras-agiles.js?v=21.233"></script>
-    <script src="ingreso-rapido.js?v=21.233"></script>
-    <script src="pendientes-entrega.js?v=21.233"></script>
-    <script src="sugerencias-producto.js?v=21.233"></script>
-    <script src="duplicados.js?v=21.233"></script>
-    <script src="recepciones-conformes.js?v=21.233"></script>
-    <script src="sustituciones.js?v=21.233"></script>
-    <script src="solicitudes-insumos.js?v=21.233"></script>
-    <script src="ficha-producto.js?v=21.233"></script>
-    <script src="fotos-auto.js?v=21.233"></script>
-    <script src="sync-local.js?v=21.233"></script>
-    <script src="bultos.js?v=21.233"></script>
-    <script src="bitacora-oc.js?v=21.233"></script>
-    <script src="id-producto.js?v=21.233"></script>
-    <script src="home-compras.js?v=21.233"></script>
-    <script src="home-ingresos.js?v=21.233"></script>
-    <script src="login-animado.js?v=21.233"></script>
-    <script src="nomenclaturas.js?v=21.233"></script>
-    <script src="errores.js?v=21.233"></script>
-    <script src="saldos-contables.js?v=21.233"></script>
-    <script src="recepcion-conforme.js?v=21.233"></script>
-    <script src="acta-documentos.js?v=21.233"></script>
-    <script src="unificar-duplicados.js?v=21.233"></script>
-    <script src="actas-entrega.js?v=21.233"></script>
-    <script src="oxigeno.js?v=21.233"></script>
-    <script src="oxigeno-prestamos.js?v=21.233"></script>
-    <script src="oxigeno-ciclos.js?v=21.233"></script>
-    <script src="vida-producto.js?v=21.233"></script>
-    <script src="editar-ingreso.js?v=21.233"></script>
-    <script src="bodega-transitoria.js?v=21.233"></script>
-    <script src="visor-adquisiciones.js?v=21.233"></script>
+    <script src="bodega-explorador.js?v=21.234"></script>
+    <script src="precintos-inventario.js?v=21.234"></script>
+    <script src="prestamos-otros-centros.js?v=21.234"></script>
+    <script src="precinto-escaneo.js?v=21.234"></script>
+    <script src="sonidos.js?v=21.234"></script>
+    <script src="avisos-campana.js?v=21.234"></script>
+    <script src="bodegas-estantes.js?v=21.234"></script>
+    <script src="bodegas-cierre.js?v=21.234"></script>
+    <script src="progreso.js?v=21.234"></script>
+    <script src="cola-offline.js?v=21.234"></script>
+    <script src="oc-lector.js?v=21.234"></script>
+    <script src="acta-edicion.js?v=21.234"></script>
+    <script src="anonimizar-pacientes.js?v=21.234"></script>
+    <script src="cdp-presupuesto.js?v=21.234"></script>
+    <script src="imagenes-producto.js?v=21.234"></script>
+    <script src="catalogo-vista.js?v=21.234"></script>
+    <script src="correo-html.js?v=21.234"></script>
+    <script src="avisos-correo.js?v=21.234"></script>
+    <script src="monitor-errores.js?v=21.234"></script>
+    <script src="lotes-alertas.js?v=21.234"></script>
+    <script src="correlativos.js?v=21.234"></script>
+    <script src="cuadre-ingreso.js?v=21.234"></script>
+    <script src="salud-inventario.js?v=21.234"></script>
+    <script src="codigo-sar.js?v=21.234"></script>
+    <script src="categorias.js?v=21.234"></script>
+    <script src="gobernanza.js?v=21.234"></script>
+    <script src="resumen-stock.js?v=21.234"></script>
+    <script src="vista-previa-agenda.js?v=21.234"></script>
+    <script src="menu-lateral.js?v=21.234"></script>
+    <script src="buscador-global.js?v=21.234"></script>
+    <script src="cargando-global.js?v=21.234"></script>
+    <script src="respaldo-diario.js?v=21.234"></script>
+    <script src="cierre-mensual.js?v=21.234"></script>
+    <script src="tabla-columnas.js?v=21.234"></script>
+    <script src="acerca.js?v=21.234"></script>
+    <script src="memo-flujo.js?v=21.234"></script>
+    <script src="traspaso-bodegas.js?v=21.234"></script>
+    <script src="distribucion-centros.js?v=21.234"></script>
+    <script src="primeros-pasos.js?v=21.234"></script>
+    <script src="guia-lector.js?v=21.234"></script>
+    <script src="seguimiento-oc.js?v=21.234"></script>
+    <script src="compras-agiles.js?v=21.234"></script>
+    <script src="ingreso-rapido.js?v=21.234"></script>
+    <script src="pendientes-entrega.js?v=21.234"></script>
+    <script src="sugerencias-producto.js?v=21.234"></script>
+    <script src="duplicados.js?v=21.234"></script>
+    <script src="recepciones-conformes.js?v=21.234"></script>
+    <script src="sustituciones.js?v=21.234"></script>
+    <script src="solicitudes-insumos.js?v=21.234"></script>
+    <script src="ficha-producto.js?v=21.234"></script>
+    <script src="fotos-auto.js?v=21.234"></script>
+    <script src="sync-local.js?v=21.234"></script>
+    <script src="bultos.js?v=21.234"></script>
+    <script src="bitacora-oc.js?v=21.234"></script>
+    <script src="id-producto.js?v=21.234"></script>
+    <script src="home-compras.js?v=21.234"></script>
+    <script src="home-ingresos.js?v=21.234"></script>
+    <script src="login-animado.js?v=21.234"></script>
+    <script src="nomenclaturas.js?v=21.234"></script>
+    <script src="errores.js?v=21.234"></script>
+    <script src="saldos-contables.js?v=21.234"></script>
+    <script src="recepcion-conforme.js?v=21.234"></script>
+    <script src="acta-documentos.js?v=21.234"></script>
+    <script src="unificar-duplicados.js?v=21.234"></script>
+    <script src="actas-entrega.js?v=21.234"></script>
+    <script src="oxigeno.js?v=21.234"></script>
+    <script src="oxigeno-prestamos.js?v=21.234"></script>
+    <script src="oxigeno-ciclos.js?v=21.234"></script>
+    <script src="vida-producto.js?v=21.234"></script>
+    <script src="editar-ingreso.js?v=21.234"></script>
+    <script src="bodega-transitoria.js?v=21.234"></script>
+    <script src="visor-adquisiciones.js?v=21.234"></script>
 </body>
 </html>

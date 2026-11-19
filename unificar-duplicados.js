@@ -29,8 +29,9 @@
   function fusionar(grupo) {
     const orden = grupo.slice().sort((a, b) => (num(b.data.quantity) - num(a.data.quantity)) || ((a.data.provisional ? 1 : 0) - (b.data.provisional ? 1 : 0)));
     const sobre = orden[0], lotes = new Map(), det = new Map();
-    let sg = 0;
+    let sg = 0, rsv = 0; const reservas = {};   /* v21.235: lo reservado por actas por confirmar se suma al registro que queda */
     orden.forEach(x => {
+      rsv += num(x.data.reservado); Object.entries(x.data.reservas || {}).forEach(([k, v]) => { reservas[k] = num(reservas[k]) + num(v); });
       lotesDe(x.data).forEach(b => { const k = String(b.batch || 'S/L').toUpperCase() + '|' + String(b.expirationDate || ''); const p = lotes.get(k); if (p) p.quantity += num(b.quantity); else lotes.set(k, { ...b, batch: String(b.batch || 'S/L').toUpperCase(), quantity: num(b.quantity) }); });
       sg += num(x.data.sobregiro);
       (Array.isArray(x.data.sobregiroDetalle) ? x.data.sobregiroDetalle : []).forEach(s => { const k = String(s.acta || ''); det.set(k, (det.get(k) || 0) + num(s.qty)); });
@@ -38,7 +39,7 @@
     const batches = [...lotes.values()].filter(b => b.quantity > 0), quantity = batches.reduce((t, b) => t + b.quantity, 0);
     const detalle = [...det.entries()].map(([acta, qty]) => ({ acta, qty })).filter(s => s.qty > 0);
     const provisional = orden.every(x => !!x.data.provisional);
-    return { id: sobre.id, quitar: orden.slice(1).map(x => x.id), patch: { quantity, cantidad: quantity, batches, sobregiro: sg, sobregiroDetalle: detalle, provisional, ...(provisional ? {} : { provisional: false }) } };
+    return { id: sobre.id, quitar: orden.slice(1).map(x => x.id), patch: { quantity, cantidad: quantity, batches, sobregiro: sg, sobregiroDetalle: detalle, ...(rsv > 0 || Object.keys(reservas).length ? { reservado: rsv, reservas } : {}), provisional, ...(provisional ? {} : { provisional: false }) } };
   }
 
   async function insumosDe(bodega) {

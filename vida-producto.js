@@ -37,7 +37,7 @@
     INGRESO_OC: ['Ingreso por orden de compra', 'ing'], UNIFICACION_STOCK: ['Unificación de stock', 'mov'], CAMBIO_CONTROLADO: ['Cambio con código de seguimiento', 'aju'],
     SALIDA_SOLICITUD: ['Salida por solicitud de insumos', 'sal'], DESPACHO_BANDEJA: ['Despacho a bandeja de turno', 'sal'], RETORNO_BANDEJA: ['Retorno de bandeja', 'ing'], ANULACION_BANDEJA: ['Bandeja anulada (stock devuelto)', 'ing'], DEVOLUCION_ANULACION_BANDEJA: ['Devolución de bandeja anulada', 'ing'], DEVOLUCION_EDICION_BANDEJA: ['Devolución por edición de bandeja', 'ing'],
     ANULACION_RECEPCION: ['Recepción anulada (stock retirado)', 'baj'], REVERSA_CUADRE: ['Vuelve a adeudado (recepción anulada)', 'mov'], DEVOLUCION_PRESTAMO: ['Devolución de préstamo a otro centro', 'sal'], REGULARIZA_SOBREGIRO: ['Adeudado regularizado (sin cambio de stock)', 'mov'],
-    EDICION_ACTA: ['Acta modificada', 'mov'], CIERRE_BODEGA: ['Cierre de bodega (traslado)', 'mov'], TRASPASO: ['Traspaso entre bodegas', 'mov'], ASIGNACION_BODEGA: ['Bodega asignada', 'mov'], RENOMBRE_BODEGA: ['Bodega renombrada', 'mov']
+    EDICION_ACTA: ['Acta modificada', 'mov'], RESERVA_ACTA: ['Reservado para acta por confirmar', 'mov'], LIBERA_RESERVA: ['Reserva liberada (acta eliminada)', 'mov'], CIERRE_BODEGA: ['Cierre de bodega (traslado)', 'mov'], TRASPASO: ['Traspaso entre bodegas', 'mov'], ASIGNACION_BODEGA: ['Bodega asignada', 'mov'], RENOMBRE_BODEGA: ['Bodega renombrada', 'mov']
   };
   /* v21.231: efecto REAL de cada movimiento sobre el stock total del producto (todas sus bodegas). Si el movimiento trae `delta` (desde
      v21.231 los principales lo guardan) se usa ese; si no, se deduce por tipo. Traspasos, cierres, unificaciones y renombres no cambian el total.

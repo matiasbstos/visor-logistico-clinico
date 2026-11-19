@@ -814,7 +814,8 @@ document.addEventListener('DOMContentLoaded', () => {
                                     option.value = docSnap.id;
                                     option.dataset.stock = data.quantity || 0;
                                     option.dataset.nombre = data.name;
-                                    option.textContent = `[Stock: ${data.quantity || 0}] - ${data.name}`;
+                                    option.dataset.reservado = Number(data.reservado) || 0;   /* v21.235 */
+                                    option.textContent = `[Stock: ${data.quantity || 0}${Number(data.reservado) > 0 ? ' + ' + Number(data.reservado) + ' reservado' : ''}] - ${data.name}`;
                                     selectInsumo.appendChild(option);
                                 });
                             } catch (error) {
@@ -840,7 +841,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const cantidad = Number(cantidadInput.value) || 0;
                             document.getElementById('lbl-stock-proyectado').textContent = stock + cantidad;
                             
-                            document.getElementById('lbl-insumo-seleccionado-lotes').textContent = `Insumo ID: ${selectedOption.value} | Listo para el ajuste.`;
+                            { const rv = Number(selectedOption.dataset.reservado) || 0; document.getElementById('lbl-insumo-seleccionado-lotes').textContent = rv > 0 ? `Además hay ${rv} u. reservadas por actas por confirmar (siguen físicamente en bodega, no se cuentan aquí). Si cuentas el estante, réstalas antes de ajustar.` : `Insumo ID: ${selectedOption.value} | Listo para el ajuste.`; }
                         } else {
                             window.cargarInsumosParaAjuste();
                         }
@@ -3237,7 +3238,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const item = {
                     ..._data,
                     name: _data.descripcion || _data.nombre || _data.name || 'Sin nombre',
-                    quantity: _data.cantidad !== undefined ? Number(_data.cantidad) : Number(_data.quantity || 0),
+                    quantity: _data.quantity !== undefined ? Number(_data.quantity || 0) : Number(_data.cantidad || 0),   /* v21.235: quantity es el dato vivo (cantidad podía quedar desfasada) */
                     unitPrice: _data.costo_unitario !== undefined ? Number(_data.costo_unitario) : Number(_data.precio || _data.unitPrice || 0),
                     location: _data.ubicacion || _data.location || 'Bodega Central',
                     expirationDate: _data.vencimiento || _data.fechaVencimiento || _data.expirationDate || 'N/A',
@@ -3295,6 +3296,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     quantityMarkup = `<span class="badge-green">${(item.quantity || 0).toLocaleString('en-US')}</span>`;
                 }
+                if (Number(_data.reservado) > 0) quantityMarkup += `<small class="stk-reserva" title="Reservado por actas por confirmar (${window.escapeHTML(Object.keys(_data.reservas || {}).join(', '))}): no está disponible">+${Number(_data.reservado).toLocaleString('en-US')} reservado</small>`;   /* v21.235 */
 
                 const categoryClass = isCritical ? "item-category text-danger" : "item-category";
                 const isQuarantined = item.status === 'CUARENTENA';
@@ -4197,8 +4199,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     const itemName = tr.querySelector('.item-name').textContent;
 
                     // Confirmación de Seguridad solicitada
-                    if (confirm(`¿Estás seguro de eliminar "${itemName}"?\nEsta acción no se puede deshacer.`)) {
+                    if (await window.SAR_Progreso.confirmar({ titulo: '¿Eliminar este registro?', texto: `<b>${window.escapeHTML(itemName)}</b>. Esta acción no se puede deshacer.`, si: 'Eliminar', no: 'Cancelar', peligro: true })) {
                         try {
+                            { const sx = await getDoc(doc(db, 'Insumos', docId)); if (sx.exists() && Number(sx.data().reservado) > 0) { showToast('No se puede eliminar', `Tiene ${Number(sx.data().reservado)} u. reservadas por actas por confirmar (${Object.keys(sx.data().reservas || {}).join(', ')}). Confirma o elimina esas actas primero.`, 'warning'); return; } }   /* v21.235 */
                             showToast('Borrando...', 'Comunicando con Firestore...', 'info');
                             await deleteDoc(doc(db, 'Insumos', docId));
 

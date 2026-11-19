@@ -100,7 +100,7 @@
         tx.update(refD, { quantity: fin, isCritical: fin <= lim, batches: juntarLotes(lotesDe(dd), movidos), updatedAt: F.serverTimestamp() });
       } else {
         const lim = num(d.criticalLimit || d.stock_minimo || 50), nuevos = juntarLotes([], movidos), prox = [...nuevos].sort(window.fefoCompare || (() => 0))[0];
-        const base = { ...d }; delete base.sobregiro; delete base.sobregiroDetalle; delete base.provisional; delete base.bodegaId; delete base.ubicacionEstante; delete base.status;
+        const base = { ...d }; delete base.sobregiro; delete base.sobregiroDetalle; delete base.provisional; delete base.bodegaId; delete base.ubicacionEstante; delete base.status; delete base.reservado; delete base.reservas;   /* v21.235: lo reservado por actas se queda en el origen */
         tx.set(refD, { ...base, location: hasta, bodegaNombre: hasta, quantity: qty, isCritical: qty <= lim, criticalLimit: lim, batches: nuevos, batch: prox ? prox.batch : (d.batch || ''), expirationDate: prox && prox.expirationDate ? prox.expirationDate : (d.expirationDate || ''), updatedAt: F.serverTimestamp() });
       }
       tx.set(refH, { insumoName: d.name, quantity: qty, type: 'traspaso', user: ((window.firebaseAuth || window.auth || {}).currentUser || {}).email || 'Usuario', date: F.serverTimestamp(), document: (marca && marca.folio) || (ctr ? window.SAR_Folio.escribir(tx, ctr) : `TRASP-${String(desde).substring(0, 3)}-${String(hasta).substring(0, 3)}`), batch: movidos.length === 1 ? movidos[0].batch : 'MULTI-LOTE', origin: desde, dest: hasta, lotes: movidos, idInsumoOrigen: id, idInsumoDestino: refD.id, ...(nota ? { nota } : {}), ...(marca && marca.numero ? { solicitud: marca.numero } : {}) });

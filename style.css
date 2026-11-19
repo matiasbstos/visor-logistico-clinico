@@ -6582,3 +6582,7 @@ body:not([data-user-role="solicitante"]) .menu-item[data-target="view-solicitud-
 #edit-lotes .edl-q{font-weight:700}
 #edit-lotes .edl-ayuda{display:block;font-size:11px;color:#64748b;margin-top:2px}
 @media (max-width:640px){#edit-lotes .edl-cab{display:none}#edit-lotes .edl-fila{grid-template-columns:1fr 1fr 1fr auto;padding:8px;border:1px solid #e2e8f0;border-radius:6px}#edit-lotes .edl-b{grid-column:1/4;grid-row:1}#edit-lotes .edl-x{grid-column:4;grid-row:1}#edit-lotes .edl-v{grid-column:1/5}#edit-lotes .edl-q{grid-column:3/5}}
+
+/* v21.235: stock reservado por actas por confirmar */
+.stk-reserva{display:block;margin-top:3px;font-size:10px;font-weight:700;color:#b45309;white-space:nowrap}
+.act-res-aviso{background:#fff7ed;border-color:#fdba74}

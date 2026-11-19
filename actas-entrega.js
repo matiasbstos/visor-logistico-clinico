@@ -111,6 +111,17 @@
         const r = consumirDetalle(detalleDe(d), n);
         return { cuadrado: n, batches: lotes.filter(l => l.quantity > 0), quantity: q - n, sobregiro: sg - n, sobregiroDetalle: r.det, cubiertas: r.cubiertas, usados };
     }
+    /** v21.235: reserva de stock al emitir un acta. Saca del disponible (quantity − sobregiro − `menos`) hasta `cantidad` por FEFO.
+     *  Devuelve {r, usados, batches, quantity}: lo reservado ya no está en quantity (nadie más lo puede usar) y queda en `reservado` del producto. */
+    function reservarEn(d, cantidad, menos) {
+        const disp = Math.max(0, num(d.quantity) - num(d.sobregiro) - num(menos)), r = Math.min(Math.max(0, Math.floor(num(cantidad))), disp);
+        const cmp = typeof window.fefoCompare === 'function' ? window.fefoCompare : () => 0;
+        const lotes = lotesDeDoc(d).sort(cmp), usados = [];
+        if (r > 0) quitarFEFO(lotes, r, usados);
+        return { r, usados, batches: lotes.filter(l => l.quantity > 0), quantity: num(d.quantity) - r };
+    }
+    /** Mapa de reservas sin el acta `numero`. */
+    const sinReserva = (reservas, numero) => { const o = { ...(reservas || {}) }; delete o[numero]; return o; };
     /** Anulación: devuelve lo descontado y retira del sobregiro lo que nunca salió del sistema. */
     function restaurarConSobregiro(d, usados, sinRespaldo, acta) {
         const res = restaurarLotes(d, usados);
@@ -225,7 +236,8 @@
         const f = fs();
         try { const sn = await f.getDocs(f.query(f.collection(db(), 'Actas_Entrega'), f.where('confirmacion.estado', '==', 'PENDIENTE'), f.limit(300))); pendConf = []; sn.forEach(d => { const a = d.data(); if (a.estado === 'EMITIDA') pendConf.push({ id: d.id, ...a }); }); } catch (e) { pendConf = []; }
     }
-    const reservadoItem = (id, nombre) => pendConf.reduce((t, a) => t + (a.items || []).filter(i => (id && i.id === id) || (!i.id && nombre && normN(i.nombre) === normN(nombre))).reduce((s2, i) => s2 + num(i.cantidad), 0), 0);
+    /* v21.235: las actas emitidas desde esta versión ya sacaron su stock (campo `reservado` del producto); solo se descuentan aquí las antiguas */
+    const reservadoItem = (id, nombre) => pendConf.filter(a => !a.reservaStock).reduce((t, a) => t + (a.items || []).filter(i => (id && i.id === id) || (!i.id && nombre && normN(i.nombre) === normN(nombre))).reduce((s2, i) => s2 + num(i.cantidad), 0), 0);
     const reservadoOC = (ocId, key, ocI) => pendConf.filter(a => a.oc && a.oc.id === ocId && a.oc.columna === key).reduce((t, a) => t + (a.items || []).filter(i => i.ocI === ocI).reduce((s2, i) => s2 + num(i.cantidad), 0), 0);
     /** v21.229: dónde más hay stock de un producto (otras bodegas), por nombre normalizado o ID de Mercado Público. */
     function enOtras(nombre, codigo) {
@@ -248,7 +260,7 @@
     async function leerStock(origen) {
         const f = fs(), stock = [];
         const snap = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('location', '==', origen), f.limit(1500)));
-        snap.forEach(d => { const x = d.data(); if (x.status !== 'CUARENTENA') stock.push({ id: d.id, codigo: String(x.codigoMP || '') || codDe(x.name), name: x.name || '', quantity: num(x.quantity), sobregiro: num(x.sobregiro), reserv: reservadoItem(d.id, x.name), disp: Math.max(0, num(x.quantity) - num(x.sobregiro) - reservadoItem(d.id, x.name)), controlado: !!x.controlado, provisional: !!x.provisional, batches: lotesDeDoc(x) }); });
+        snap.forEach(d => { const x = d.data(); if (x.status !== 'CUARENTENA') stock.push({ id: d.id, codigo: String(x.codigoMP || '') || codDe(x.name), name: x.name || '', quantity: num(x.quantity), sobregiro: num(x.sobregiro), reserv: reservadoItem(d.id, x.name) + num(x.reservado), disp: Math.max(0, num(x.quantity) - num(x.sobregiro) - reservadoItem(d.id, x.name)), controlado: !!x.controlado, provisional: !!x.provisional, batches: lotesDeDoc(x) }); });
         stock.sort((a, b) => (b.disp > 0) - (a.disp > 0) || a.name.localeCompare(b.name, 'es'));
         return stock;
     }
@@ -259,6 +271,61 @@
     }
 
 
+    /* ---- v21.235: reserva de stock de las actas por confirmar ---- */
+    /** Lee (dentro de la transacción) los productos con stock del acta: Map id → {ref, d}. */
+    async function leerReserva(tx, items) {
+        const f = fs(), m = new Map();
+        for (const i of items) if (i.id && num(i.cantidad) > 0 && !m.has(i.id)) { const ref = f.doc(f.collection(db(), 'Insumos'), i.id), sn = await tx.get(ref); m.set(i.id, { ref, d: sn.exists() ? sn.data() : null }); }
+        return m;
+    }
+    /** Calcula la reserva de cada línea (el mismo producto en dos líneas se reserva sobre lo que va quedando). */
+    function planReserva(rs, items, origen, numero, legadoDe) {
+        const vivo = new Map(), porItem = items.map(() => null);
+        items.forEach((i, k) => {
+            const e = i.id && rs.get(i.id); if (!e || !e.d) return;
+            const d = vivo.get(i.id) || e.d;
+            if ((d.location || '') !== origen) throw new Error(`${i.nombre} ya no está en ${origen}: actualiza la pantalla.`);
+            if (d.status === 'CUARENTENA') throw new Error(`${i.nombre} está en CUARENTENA.`);
+            const rr = reservarEn(d, i.cantidad, vivo.has(i.id) ? 0 : (legadoDe ? legadoDe(i) : 0));
+            if (d.controlado && rr.r < num(i.cantidad)) throw new Error(`${i.nombre} es medicamento controlado: no puede entregarse sin stock en sistema.`);
+            vivo.set(i.id, { ...d, quantity: rr.quantity, batches: rr.batches, reservado: num(d.reservado) + rr.r, reservas: { ...(d.reservas || {}), [numero]: num((d.reservas || {})[numero]) + rr.r } });
+            if (rr.r > 0) porItem[k] = { qty: rr.r, lotes: rr.usados };
+        });
+        return { vivo, porItem };
+    }
+    function escribirReserva(tx, plan, items, numero, origen, centro, usuario) {
+        const f = fs(), hechos = new Set();
+        items.forEach((i, k) => {
+            const res = plan.porItem[k]; if (!res) return;
+            tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: i.nombre, item: i.nombre, quantity: res.qty, type: 'RESERVA_ACTA', delta: -res.qty, user: usuario, date: f.serverTimestamp(), document: numero, actaId: numero,
+                batch: res.lotes.length === 1 ? res.lotes[0].batch : 'MULTI-LOTE', lotes: res.lotes, origin: origen, dest: centro, idInsumoOrigen: i.id, observacion: `Reservado para el acta ${numero} (por confirmar con el acta firmada)` });
+            if (hechos.has(i.id)) return; hechos.add(i.id);
+            const d = plan.vivo.get(i.id), prox = (d.batches || [])[0], limite = num(d.criticalLimit || d.stock_minimo || 50);
+            tx.update(f.doc(f.collection(db(), 'Insumos'), i.id), { quantity: d.quantity, batches: d.batches, reservado: d.reservado, reservas: d.reservas, isCritical: d.quantity <= limite, ...(prox ? { batch: prox.batch, expirationDate: prox.expirationDate || '' } : {}), updatedAt: f.serverTimestamp() });
+        });
+    }
+    /** Actas por confirmar emitidas antes de v21.235 (su stock no estaba reservado): reserva el stock de cada una, la más antigua primero. */
+    async function reservarAntiguas(usuario) {
+        await cargarPendConf();
+        const lista = pendConf.filter(a => !a.reservaStock && a.tipo !== 'OXIGENO').sort((x, y) => String(x.numero).localeCompare(String(y.numero)));
+        const f = fs(); let ok = 0, unidades = 0; const errores = [];
+        for (const a0 of lista) {
+            try {
+                const r = await f.runTransaction(db(), async (tx) => {
+                    const ref = f.doc(f.collection(db(), 'Actas_Entrega'), a0.numero), sn = await tx.get(ref); if (!sn.exists()) return 0;
+                    const a = sn.data(); if (a.estado !== 'EMITIDA' || !a.confirmacion || a.confirmacion.estado !== 'PENDIENTE' || a.reservaStock) return 0;
+                    const items = (a.items || []).map(i => ({ ...i, cantidad: num(i.cantidad) }));
+                    const rs = await leerReserva(tx, items), plan = planReserva(rs, items, a.bodegaOrigen, a.numero, null);
+                    escribirReserva(tx, plan, items, a.numero, a.bodegaOrigen, a.centro || '', usuario);
+                    tx.update(ref, { reservaStock: true, items: items.map((i, k) => plan.porItem[k] ? { ...i, reserva: plan.porItem[k] } : i), reservadaEn: f.serverTimestamp() });
+                    return plan.porItem.reduce((t, x) => t + (x ? x.qty : 0), 0);
+                });
+                ok++; unidades += r;
+            } catch (e) { errores.push(`${a0.numero}: ${e.message || e}`); }
+        }
+        await cargarPendConf();
+        return { ok, unidades, errores, total: lista.length };
+    }
     /** Emite el acta SIN descontar stock: queda "por confirmar" hasta subir el acta firmada (el stock solo se reserva). */
     async function emitirDiferido(b, usuario) {
         const f = fs();
@@ -284,10 +351,15 @@
                 autoPend = ocLineas.map((l, idx) => ({ l, idx, p: num(l.dist && l.dist[b.oc.key]) - num(l.entregado && l.entregado[b.oc.key]) - items.filter(i => i.ocI === idx).reduce((t, i) => t + num(i.cantidad), 0) }))
                     .filter(x => !yaEn.has(x.idx) && x.p > 0).map(x => ({ nombre: String(x.l.descripcion || '').toUpperCase(), cantidad: x.p }));
             }
-            const itemsActa = items.map(i => ({ id: i.id || null, nombre: String(i.nombre || '').toUpperCase() === i.nombre ? i.nombre : i.nombre, cantidad: num(i.cantidad), ...(i.manual && !i.id ? { manual: true } : {}), ...(i.codigo ? { codigoMP: String(i.codigo) } : {}), ...(!b.oc && num(i.solicitado) > num(i.cantidad) ? { solicitado: num(i.solicitado), entregadoTotal: num(i.cantidad) } : {}), ...(i.fisico && normN(i.fisico) !== normN(i.nombre) ? { entregaFisica: { nombre: String(i.fisico).trim().toUpperCase(), ...(codDe(i.fisico) ? { codigoMP: codDe(i.fisico) } : {}) } } : {}), ...(b.oc ? { ocI: i.ocI, solicitado: i.solicitado, entregadoTotal: i.entregadoTotal } : {}), ...(i.distI != null ? { distI: i.distI } : {}) }));
+            /* v21.235: el stock del acta queda RESERVADO al emitir: sale de lo disponible (por lote que vence primero) y nadie más lo puede usar
+               hasta confirmar la entrega con el acta firmada (ahí se cierra) o anular el acta (ahí vuelve). Todo en esta misma transacción. */
+            const rs = await leerReserva(tx, items);
+            const plan = planReserva(rs, items, b.origen, numero, (i) => reservadoItem(i.id, i.nombre));
+            const itemsActa = items.map((i, k) => ({ ...(plan.porItem[k] ? { reserva: plan.porItem[k] } : {}), id: i.id || null, nombre: String(i.nombre || '').toUpperCase() === i.nombre ? i.nombre : i.nombre, cantidad: num(i.cantidad), ...(i.manual && !i.id ? { manual: true } : {}), ...(i.codigo ? { codigoMP: String(i.codigo) } : {}), ...(!b.oc && num(i.solicitado) > num(i.cantidad) ? { solicitado: num(i.solicitado), entregadoTotal: num(i.cantidad) } : {}), ...(i.fisico && normN(i.fisico) !== normN(i.nombre) ? { entregaFisica: { nombre: String(i.fisico).trim().toUpperCase(), ...(codDe(i.fisico) ? { codigoMP: codDe(i.fisico) } : {}) } } : {}), ...(b.oc ? { ocI: i.ocI, solicitado: i.solicitado, entregadoTotal: i.entregadoTotal } : {}), ...(i.distI != null ? { distI: i.distI } : {}) }));
             tx.set(ctrRef, { ultimo: n, anio, updatedAt: f.serverTimestamp() });
+            escribirReserva(tx, plan, items, numero, b.origen, b.centro.trim(), usuario);
             const acta = {
-                numero, fecha, centro: b.centro.trim(), bodegaOrigen: b.origen, estado: 'EMITIDA', stockDescontado: false, conSobregiro: false,
+                numero, fecha, centro: b.centro.trim(), bodegaOrigen: b.origen, estado: 'EMITIDA', stockDescontado: false, conSobregiro: false, reservaStock: true,
                 confirmacion: { estado: 'PENDIENTE' },
                 items: itemsActa, pendientes: [...b.pendientes.map(p => ({ nombre: p.nombre, cantidad: num(p.cantidad), ...(p.codigoMP ? { codigoMP: String(p.codigoMP) } : {}) })), ...autoPend],
                 documentos: b.documentos.map(d => ({ tipo: d.tipo, numero: d.numero, detalle: d.detalle || '' })),
@@ -336,7 +408,7 @@
         const f = fs();
         const resp = await guardarRespaldo(a.numero, file, usuario, a.oc && a.oc.id);
         const b = { origen: a.bodegaOrigen, centro: a.centro, pendientes: a.pendientes || [], documentos: a.documentos || [], recibe: a.recibe || {}, oc: a.oc && a.oc.id ? { id: a.oc.id, key: a.oc.columna, numeroOC: a.oc.numeroOC, memo: a.oc.memo, cdp: a.oc.cdp } : null,
-            items: (a.items || []).map(i => ({ id: i.id || null, manual: !i.id, nombre: i.nombre, codigo: i.codigoMP || '', cantidad: num(i.cantidad), solicitado: num(i.solicitado), ocI: i.ocI, ...(i.distI != null ? { distI: i.distI } : {}), fisico: i.entregaFisica ? i.entregaFisica.nombre : '' })), dist: a.distribucion || null };
+            items: (a.items || []).map(i => ({ id: i.id || null, manual: !i.id, nombre: i.nombre, codigo: i.codigoMP || '', cantidad: num(i.cantidad), ...(a.reservaStock && i.reserva && num(i.reserva.qty) > 0 ? { reserva: i.reserva } : {}), solicitado: num(i.solicitado), ocI: i.ocI, ...(i.distI != null ? { distI: i.distI } : {}), fisico: i.entregaFisica ? i.entregaFisica.nombre : '' })), dist: a.distribucion || null };
         return emitir(b, usuario, { numero: a.numero, respaldo: resp });
     }
     async function subirFirmada(a, file, usuario) {
@@ -416,26 +488,32 @@
                 return d;
             });
             const vivo = new Map(), ultimo = new Map(); refs.forEach((r, k) => ultimo.set(r.clave, k));
+            /* v21.235: al confirmar, lo reservado al emitir ya salió del disponible: se cierra la reserva y solo se descuenta lo que faltó reservar */
+            if (opc.numero && refs.some(r => r.i.reserva)) { const ya = new Set(); refs.forEach((r, k) => { if (r.i.reserva && !r.i.nuevo && datos[k] && !ya.has(r.clave)) { ya.add(r.clave); if (!(datos[k].reservas && num(datos[k].reservas[numero]) > 0)) throw new Error(`${r.i.nombre}: no se encontró la reserva del acta ${numero} en el producto (¿se unificó o cerró la bodega?). Revisa el producto antes de confirmar.`); } }); }
             const calc = refs.map((r, k) => {
                 const d0 = vivo.get(r.clave) || datos[k];
-                const p = planificar({ ...d0, name: datos[k].name }, r.i.cantidad, numero);
-                vivo.set(r.clave, { ...d0, quantity: p.quantity, batches: p.batches, sobregiro: p.sobregiro, sobregiroDetalle: p.sobregiroDetalle });
+                const rv = opc.numero && r.i.reserva ? num(r.i.reserva.qty) : 0, resto = num(r.i.cantidad) - rv;
+                const p = resto > 0 ? planificar({ ...d0, name: datos[k].name }, resto, numero)
+                    : { usados: [], cuadreUsados: [], batches: lotesDeDoc(d0), quantity: num(d0.quantity), sobregiro: num(d0.sobregiro), sobregiroDetalle: detalleDe(d0), cubiertas: [], faltante: 0, cuadrado: 0 };
+                const conRes = rv > 0 || !!(d0._tocaReserva);
+                const reservado = Math.max(0, num(d0.reservado) - rv), reservas = rv > 0 ? sinReserva(d0.reservas, numero) : (d0.reservas || {});
+                vivo.set(r.clave, { ...d0, quantity: p.quantity, batches: p.batches, sobregiro: p.sobregiro, sobregiroDetalle: p.sobregiroDetalle, reservado, reservas, _tocaReserva: conRes });
                 if (datos[k].controlado && p.faltante > 0) throw new Error(`${r.i.nombre} es medicamento controlado: no puede entregarse sin stock en sistema.`);
-                return p;
+                return { ...p, rv, resto, usadosTot: [...(rv > 0 ? (r.i.reserva.lotes || []) : []), ...p.usados], reservado, reservas, conRes };
             });
-            const itemsActa = refs.map((r, k) => ({ id: r.ref.id, nombre: r.i.nombre, cantidad: num(r.i.cantidad), lotes: calc[k].usados, sinRespaldo: calc[k].faltante, ...(datos[k].codigoMP || r.i.codigo ? { codigoMP: String(datos[k].codigoMP || r.i.codigo) } : {}), ...(!b.oc && num(r.i.solicitado) > num(r.i.cantidad) ? { solicitado: num(r.i.solicitado), entregadoTotal: num(r.i.cantidad) } : {}), ...(r.i.nuevo ? { provisional: true } : {}), ...(r.i.fisico && normN(r.i.fisico) !== normN(r.i.nombre) ? { entregaFisica: { nombre: String(r.i.fisico).trim().toUpperCase(), ...(codDe(r.i.fisico) ? { codigoMP: codDe(r.i.fisico) } : {}) } } : {}), ...(b.oc ? { ocI: r.i.ocI, solicitado: r.i.solicitado, entregadoTotal: r.i.entregadoTotal } : {}), ...(r.i.distI != null ? { distI: r.i.distI } : {}) }));
+            const itemsActa = refs.map((r, k) => ({ id: r.ref.id, nombre: r.i.nombre, cantidad: num(r.i.cantidad), lotes: calc[k].usadosTot, sinRespaldo: calc[k].faltante, ...(datos[k].codigoMP || r.i.codigo ? { codigoMP: String(datos[k].codigoMP || r.i.codigo) } : {}), ...(!b.oc && num(r.i.solicitado) > num(r.i.cantidad) ? { solicitado: num(r.i.solicitado), entregadoTotal: num(r.i.cantidad) } : {}), ...(r.i.nuevo ? { provisional: true } : {}), ...(r.i.fisico && normN(r.i.fisico) !== normN(r.i.nombre) ? { entregaFisica: { nombre: String(r.i.fisico).trim().toUpperCase(), ...(codDe(r.i.fisico) ? { codigoMP: codDe(r.i.fisico) } : {}) } } : {}), ...(b.oc ? { ocI: r.i.ocI, solicitado: r.i.solicitado, entregadoTotal: r.i.entregadoTotal } : {}), ...(r.i.distI != null ? { distI: r.i.distI } : {}) }));
             refs.forEach((r, k) => {
                 const d = datos[k], c = calc[k];
                 const limite = num(d.criticalLimit || d.stock_minimo || 50);
                 const prox = c.batches[0];
-                const cambios = { ...(r.i.codigoNuevo && r.i.codigo && !d.codigoMP ? { codigoMP: String(r.i.codigo) } : {}), quantity: c.quantity, batches: c.batches, sobregiro: c.sobregiro, sobregiroDetalle: c.sobregiroDetalle, isCritical: c.quantity <= limite, ...(prox ? { batch: prox.batch, expirationDate: prox.expirationDate || '' } : {}), updatedAt: f.serverTimestamp() };
+                const cambios = { ...(r.i.codigoNuevo && r.i.codigo && !d.codigoMP ? { codigoMP: String(r.i.codigo) } : {}), quantity: c.quantity, batches: c.batches, sobregiro: c.sobregiro, sobregiroDetalle: c.sobregiroDetalle, ...(c.conRes ? { reservado: c.reservado, reservas: c.reservas } : {}), isCritical: c.quantity <= limite, ...(prox ? { batch: prox.batch, expirationDate: prox.expirationDate || '' } : {}), updatedAt: f.serverTimestamp() };
                 if (ultimo.get(r.clave) === k) { if (r.i.nuevo) tx.set(r.ref, { ...d, ...cambios }); else tx.update(r.ref, cambios); }   // una escritura por producto, con lo acumulado
                 c.cubiertas.forEach(cu => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name, quantity: cu.qty, type: 'CUADRE_SOBREGIRO', delta: -num(cu.qty), user: usuario, date: f.serverTimestamp(), document: numero, batch: 'MULTI-LOTE', origin: b.origen, idInsumoOrigen: r.ref.id, observacion: `Cuadre automático al ${opc.numero ? 'confirmar' : 'emitir'} ${numero}: ${cu.qty} u. del acta ${cu.acta} ya estaban entregadas sin respaldo`, actaId: cu.acta, cuadradoPor: numero }));
                 tx.set(r.hist, {
-                    insumoName: d.name, quantity: num(r.i.cantidad), type: 'ENTREGA_ACTA', delta: -(num(r.i.cantidad) - num(c.faltante)), user: usuario, date: f.serverTimestamp(), document: numero,
-                    batch: c.usados.length === 1 ? c.usados[0].batch : (c.usados.length ? 'MULTI-LOTE' : 'SIN-RESPALDO'), origin: b.origen, dest: b.centro, lotes: c.usados, ...(opc.historica ? { fechaDocumento: fecha, historica: true } : {}),
+                    insumoName: d.name, quantity: num(r.i.cantidad), type: 'ENTREGA_ACTA', delta: -(c.resto - num(c.faltante)), ...(c.rv > 0 ? { reservaPrevia: c.rv } : {}), user: usuario, date: f.serverTimestamp(), document: numero,
+                    batch: c.usadosTot.length === 1 ? c.usadosTot[0].batch : (c.usadosTot.length ? 'MULTI-LOTE' : 'SIN-RESPALDO'), origin: b.origen, dest: b.centro, lotes: c.usadosTot, ...(opc.historica ? { fechaDocumento: fecha, historica: true } : {}),
                     idInsumoOrigen: r.ref.id, sinRespaldo: c.faltante,
-                    observacion: `${opc.historica ? 'Acta histórica (anterior al sistema, del ' + fecha + ') ' : 'Acta de entrega '}${numero}${c.faltante > 0 ? ` · ${c.faltante} u. sin respaldo en sistema (sobregiro)` : ''}${r.i.nuevo ? ' · insumo provisional' : ''}`, actaId: numero
+                    observacion: `${opc.historica ? 'Acta histórica (anterior al sistema, del ' + fecha + ') ' : 'Acta de entrega '}${numero}${c.rv > 0 ? ` · ${c.rv} u. ya estaban reservadas desde la emisión` : ''}${c.faltante > 0 ? ` · ${c.faltante} u. sin respaldo en sistema (sobregiro)` : ''}${r.i.nuevo ? ' · insumo provisional' : ''}`, actaId: numero
                 });
             });
             if (!opc.numero && !opc.historica) tx.set(ctrRef, { ultimo: n, anio, updatedAt: f.serverTimestamp() });
@@ -498,7 +576,20 @@
             if (!as.exists()) throw new Error('El acta no existe.');
             const a = as.data();
             if (a.estado === 'ANULADA') throw new Error('El acta ya estaba anulada.');
-            if (a.confirmacion && a.confirmacion.estado === 'PENDIENTE') { tx.update(actaRef, { estado: 'ANULADA', stockDescontado: false, anuladaEn: f.serverTimestamp(), anuladaPor: usuario, anulacionMotivo: motivo }); return; }   // nunca salió del stock
+            if (a.confirmacion && a.confirmacion.estado === 'PENDIENTE') {   // nunca se entregó: si tenía stock reservado (v21.235), vuelve al disponible
+                const conR = a.reservaStock ? (a.items || []).filter(i => i.id && i.reserva && num(i.reserva.qty) > 0) : [];
+                const leidos = new Map(); for (const i of conR) if (!leidos.has(i.id)) { const ref = f.doc(f.collection(db(), 'Insumos'), i.id), sn = await tx.get(ref); leidos.set(i.id, { ref, d: sn.exists() ? sn.data() : null }); }
+                const vivoL = new Map();
+                conR.forEach(i => {
+                    const e = leidos.get(i.id); if (!e.d) throw new Error(`${i.nombre} ya no existe: no se puede devolver lo reservado.`);
+                    const d = vivoL.get(i.id) || e.d, res = restaurarLotes(d, i.reserva.lotes || [{ batch: 'S/L', used: num(i.reserva.qty), expirationDate: '' }]);
+                    vivoL.set(i.id, { ...d, quantity: res.quantity, batches: res.batches, reservado: Math.max(0, num(d.reservado) - num(i.reserva.qty)), reservas: sinReserva(d.reservas, numero) });
+                    tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name || i.nombre, item: d.name || i.nombre, quantity: num(i.reserva.qty), type: 'LIBERA_RESERVA', delta: num(i.reserva.qty), user: usuario, date: f.serverTimestamp(), document: numero, actaId: numero,
+                        batch: (i.reserva.lotes || []).length === 1 ? i.reserva.lotes[0].batch : 'MULTI-LOTE', lotes: i.reserva.lotes || [], origin: a.centro || '', dest: a.bodegaOrigen, idInsumoDestino: i.id, observacion: `Acta ${numero} eliminada antes de entregarse: vuelve al stock lo reservado. Motivo: ${motivo}` });
+                });
+                vivoL.forEach((d, id) => { const limite = num(d.criticalLimit || d.stock_minimo || 50); tx.update(leidos.get(id).ref, { quantity: d.quantity, batches: d.batches, reservado: d.reservado, reservas: d.reservas, isCritical: d.quantity <= limite, updatedAt: f.serverTimestamp() }); });
+                tx.update(actaRef, { estado: 'ANULADA', stockDescontado: false, anuladaEn: f.serverTimestamp(), anuladaPor: usuario, anulacionMotivo: motivo }); return;
+            }
             const refs = a.items.map(i => ({ i, ref: f.doc(f.collection(db(), 'Insumos'), i.id), hist: f.doc(f.collection(db(), 'Historial_Movimientos')) }));
             const snaps = []; for (const r of refs) snaps.push(await tx.get(r.ref));
             let ocRef = null, ocLineas = null;
@@ -653,11 +744,12 @@
         </div></div>
         <div data-act-tab="emitidas"${tab === 'emitidas' ? '' : ' hidden'}>
         <h3 class="act-h">Actas emitidas</h3>
+        ${(() => { const viejas = pendConf.filter(a => !a.reservaStock && a.tipo !== 'OXIGENO' && (a.items || []).some(i => i.id)); return viejas.length && esAdmin() ? `<div class="act-aviso-dup act-res-aviso"><span><b>${viejas.length}</b> acta${viejas.length === 1 ? '' : 's'} por confirmar ${viejas.length === 1 ? 'fue emitida' : 'fueron emitidas'} antes de la reserva de stock (${viejas.slice(0, 4).map(a => esc(a.numero)).join(', ')}${viejas.length > 4 ? '…' : ''}): su stock todavía se puede usar en otros movimientos.</span> <button type="button" class="btn btn-primary btn-sm" id="act-reservar">Reservar su stock ahora</button></div>` : ''; })()}
         ${(() => { const c = { firmada: 0, porfirmar: 0, pend: 0 }; historial.forEach(a => { const e = estadoFirma(a); if (e === 'firmada') c.firmada++; if (e === 'porfirmar') c.porfirmar++; if (e !== 'anulada' && a.tipo !== 'OXIGENO' && pendDeActa(a).length) c.pend++; }); const b = (k, ic, tx, n, cls) => `<button type="button" class="act-ind ${cls}${filtroActas === k ? ' on' : ''}" data-f="${k}" aria-pressed="${filtroActas === k}"><i class="ph-bold ${ic}"></i><span>${tx}</span><b>${n}</b></button>`; return `<div class="act-inds" role="group" aria-label="Filtrar actas">${b('porfirmar', 'ph-signature', 'Pendientes por firmar', c.porfirmar, 'act-ind-pen')}${b('firmada', 'ph-seal-check', 'Firmadas', c.firmada, 'act-ind-ok')}${b('pend', 'ph-hourglass-medium', 'Con productos pendientes', c.pend, 'act-ind-prod')}${b('todas', 'ph-list', 'Todas', historial.length, '')}</div>`; })()}
         <div class="act-busq"><input type="search" id="act-bq" class="form-control" placeholder="Buscar acta: número, centro, producto, fecha, estado…" aria-label="Buscar en actas emitidas"><small id="act-bq-n"></small></div>
         <div class="act-hist">${historial.length ? historial.map(a => {
             const pend = a.estado === 'EMITIDA' && a.tipo !== 'OXIGENO' && a.confirmacion && a.confirmacion.estado === 'PENDIENTE', n = esc(a.numero), ox = a.tipo === 'OXIGENO';
-            const chip = a.estado === 'ANULADA' ? '<span class="act-chip act-c-anu">Anulada</span>' : pend ? '<span class="act-chip act-c-pen">Por confirmar</span>' : (a.respaldo ? '<span class="act-chip act-c-ok">Firmada</span>' : '<span class="act-chip act-c-sin">Sin acta firmada</span>');
+            const chip = a.estado === 'ANULADA' ? '<span class="act-chip act-c-anu">Anulada</span>' : pend ? `<span class="act-chip act-c-pen"${a.reservaStock ? ' title="El stock de esta acta está reservado: no se puede usar en otro movimiento hasta confirmar la entrega o eliminar el acta"' : ''}>${a.reservaStock ? 'Por confirmar · stock reservado' : 'Por confirmar'}</span>` : (a.respaldo ? '<span class="act-chip act-c-ok">Firmada</span>' : '<span class="act-chip act-c-sin">Sin acta firmada</span>');
             const q = norm2([a.numero, a.centro, a.fecha, a.creadoPor, a.bodegaOrigen, pend ? 'por confirmar' : '', a.respaldo ? 'firmada' : 'sin firmar', a.estado === 'ANULADA' ? 'anulada' : '', a.conSobregiro ? 'sobregiro' : '', (a.items || []).map(i => i.nombre).join(' ')].join(' '));
             return `<div class="act-hrow${a.estado === 'ANULADA' ? ' act-anulada' : ''}" data-ver="${n}" data-q="${esc(q)}" data-est="${estadoFirma(a)}" data-pend="${!ox && a.estado !== 'ANULADA' && pendDeActa(a).length ? 1 : 0}" role="button" tabindex="0" aria-label="Ver el acta ${n}"><div class="act-hinfo"><div class="act-htit"><strong>${n}</strong><span>${esc(a.centro)}</span>${chip}${a.conSobregiro ? '<span class="act-chip act-c-sin" title="Parte de lo entregado no tenía respaldo en el sistema">Con sobregiro</span>' : ''}</div><small>${esc(a.fecha)} · ${ox ? 'oxígeno · ' : ''}${(a.items || []).length} ${ox ? 'balones' : 'productos'} · ${esc(a.bodegaOrigen)} · ${esc(a.creadoPor || '')}</small></div>
             <div class="act-hbtns">${ox ? '' : `<button type="button" class="btn btn-outline act-pickrow" data-n="${n}" aria-label="Hoja de picking del acta ${n}"><i class="ph-bold ph-list-checks"></i> Picking</button>`}${ox || a.estado === 'ANULADA' ? '' : (pendDeActa(a).length ? `<button type="button" class="btn btn-outline act-pendrow" data-n="${n}" aria-label="Ver productos pendientes del acta ${n}"><i class="ph-bold ph-hourglass-medium"></i> Pendientes (${pendDeActa(a).length})</button>` : `<button type="button" class="btn btn-outline act-pendrow" disabled title="Este centro no tiene productos pendientes en esta acta"><i class="ph-bold ph-hourglass-medium"></i> Pendientes</button>`)}<span class="btn btn-primary act-verbtn"><i class="ph-bold ph-eye"></i> Ver acta</span></div></div>`; }).join('') : '<div class="act-hint">Todavía no hay actas emitidas. <button type="button" class="btn btn-primary act-ir-emitir">Emitir la primera acta</button></div>'}</div></div>
@@ -675,6 +767,15 @@
         r.querySelectorAll('.act-pickrow').forEach(b => b.addEventListener('click', (e) => { e.stopPropagation(); const a = historial.find(x => x.numero === b.dataset.n); if (a && window.SAR_Pendientes && window.SAR_Pendientes.pickingActa) window.SAR_Pendientes.pickingActa(a); }));
         r.querySelectorAll('.act-hrow[data-ver]').forEach(f => { const ir = () => verActa(f.dataset.ver); f.addEventListener('click', ir); f.addEventListener('keydown', (k) => { if (k.target !== f) return; if (k.key === 'Enter' || k.key === ' ') { k.preventDefault(); ir(); } }); });
         r.querySelectorAll('.act-ir-emitir').forEach(b => b.addEventListener('click', () => irA('emitir')));
+        { const br = r.querySelector('#act-reservar'); if (br) br.addEventListener('click', async () => {
+            const viejas = pendConf.filter(a => !a.reservaStock && a.tipo !== 'OXIGENO' && (a.items || []).some(i => i.id));
+            if (!(await preg({ titulo: 'Reservar el stock de las actas por confirmar', texto: 'Para cada acta (la más antigua primero) se saca del disponible de su bodega lo que se entregará; queda reservado hasta confirmar la entrega con el acta firmada o eliminar el acta. Lo que no tenga stock queda igual que hoy (se cuadra al confirmar).', lineas: viejas.slice(0, 10).map(a => `${esc(a.numero)} · ${esc(a.centro || '')} · ${esc(a.bodegaOrigen || '')}`).concat(viejas.length > 10 ? [`y ${viejas.length - 10} más…`] : []), si: 'Reservar', no: 'Ahora no' }))) return;
+            br.disabled = true; const prog = window.SAR_Progreso.iniciar('Reservando el stock…', ['Revisando cada acta por confirmar…']);
+            try { const res = await reservarAntiguas(usuarioEmail()); await Promise.all([cargarStock(), cargarHistorial()]); pintar();
+                if (res.errores.length) { prog.error(); toast('Algunas actas no se reservaron', res.errores.slice(0, 3).join(' · '), 'warning'); }
+                else prog.listo(`${res.ok} acta(s) con su stock reservado · ${res.unidades} unidades`, { informe: true }); }
+            catch (e) { prog.error(); toast('No se reservó', e.message || String(e), 'error'); br.disabled = false; }
+        }); }
         r.addEventListener('click', (e) => r.querySelectorAll('.act-mas[open]').forEach(d => { if (!d.contains(e.target) || e.target.closest('.act-mas-m button')) d.open = false; }));
         r.addEventListener('keydown', (e) => { if (e.key === 'Escape') r.querySelectorAll('.act-mas[open]').forEach(d => { d.open = false; const sm = d.querySelector('summary'); if (sm) sm.focus(); }); });
         if (window.SAR_Saldos && window.SAR_Saldos.pintarSeg) window.SAR_Saldos.pintarSeg();
@@ -943,7 +1044,7 @@
         const a = historial.find(x => x.numero === numero); if (!a) return;
         if (modalCierre) modalCierre();
         const n = esc(a.numero), pend = a.estado === 'EMITIDA' && a.tipo !== 'OXIGENO' && a.confirmacion && a.confirmacion.estado === 'PENDIENTE', ox = a.tipo === 'OXIGENO';
-        const estado = a.estado === 'ANULADA' ? '<span class="act-chip act-c-anu">Anulada</span>' : pend ? '<span class="act-chip act-c-pen">Por confirmar</span>' : (a.respaldo ? '<span class="act-chip act-c-ok">Firmada</span>' : '<span class="act-chip act-c-sin">Sin acta firmada</span>');
+        const estado = a.estado === 'ANULADA' ? '<span class="act-chip act-c-anu">Anulada</span>' : pend ? `<span class="act-chip act-c-pen"${a.reservaStock ? ' title="El stock de esta acta está reservado: no se puede usar en otro movimiento hasta confirmar la entrega o eliminar el acta"' : ''}>${a.reservaStock ? 'Por confirmar · stock reservado' : 'Por confirmar'}</span>` : (a.respaldo ? '<span class="act-chip act-c-ok">Firmada</span>' : '<span class="act-chip act-c-sin">Sin acta firmada</span>');
         const prim = a.estado !== 'EMITIDA' || !esAdmin() ? '' : pend ? `<button type="button" class="btn btn-primary act-conf" data-n="${n}"><i class="ph-bold ph-seal-check"></i> Confirmar entrega</button>` : (a.respaldo ? '' : `<button type="button" class="btn btn-primary act-firm" data-n="${n}"><i class="ph-bold ph-upload-simple"></i> Subir firmada</button>`);
         const verf = a.respaldo ? `<button type="button" class="btn btn-outline act-verr" data-n="${n}">Ver acta firmada</button><button type="button" class="btn btn-outline act-dlr" data-n="${n}">Descargar firmada</button>` : '';
         const mas = (esAdmin() && a.estado === 'EMITIDA') || (esAdmin() && a.estado !== 'ANULADA' && !ox) ? `<details class="act-mas"><summary class="btn btn-outline" aria-haspopup="menu" aria-label="Más acciones">⋯</summary><div class="act-mas-m">${esAdmin() && a.estado === 'EMITIDA' ? `<button type="button" class="act-ed" data-n="${n}">Editar</button>` : ''}${esAdmin() && a.estado !== 'ANULADA' && !ox ? `<button type="button" class="act-an act-peligro" data-n="${n}">Eliminar acta</button>` : ''}</div></details>` : '';
@@ -1089,6 +1190,6 @@
     let precarga = null, manualImg = '', manualAbierto = false;
     const vistaMImg = () => manualImg ? `<img src="${esc(manualImg)}" alt="" class="act-mimg-v"><button type="button" class="btn btn-outline btn-sm" id="act-mimg-q">Quitar</button>` : '<small>WEBP, JPG, PNG… (queda en el catálogo)</small>';
     function precargar(centro, lista, dist) { precarga = { centro, lista: lista || [], dist: dist || null }; if (window.location.hash === '#view-actas-entrega') abrir(); else window.location.hash = 'view-actas-entrega'; }
-    window.SAR_ActasEntrega = { precargar, recargarStock: async () => { await cargarStock(); if (typeof pintar === 'function') pintar(); }, ver: verActa, verPorNumero: async (n) => { if (!historial.find(x => x.numero === n)) await cargarHistorial(); return verActa(n); }, avisarFirmada: (a, file) => file.arrayBuffer().then(buf => window.SAR_Avisos && window.SAR_Avisos.avisarActa('firmada', a, { firmada: { bytes: new Uint8Array(buf), mime: file.type, nombre: file.name } })), precargar, listaCentros, abrir, planificar, cuadrar, restaurarConSobregiro, detalleDe, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, lotesDeDoc, subirFirmada, verRespaldo, descargarRespaldo: (a) => verRespaldo(a, true) };
+    window.SAR_ActasEntrega = { precargar, recargarStock: async () => { await cargarStock(); if (typeof pintar === 'function') pintar(); }, ver: verActa, verPorNumero: async (n) => { if (!historial.find(x => x.numero === n)) await cargarHistorial(); return verActa(n); }, avisarFirmada: (a, file) => file.arrayBuffer().then(buf => window.SAR_Avisos && window.SAR_Avisos.avisarActa('firmada', a, { firmada: { bytes: new Uint8Array(buf), mime: file.type, nombre: file.name } })), precargar, listaCentros, abrir, planificar, cuadrar, restaurarConSobregiro, detalleDe, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, reservarEn, reservarAntiguas, confirmarEntrega, lotesDeDoc, subirFirmada, verRespaldo, descargarRespaldo: (a) => verRespaldo(a, true) };
     if (typeof module !== 'undefined') module.exports = window.SAR_ActasEntrega;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: { dataset: {} } });

@@ -74,6 +74,8 @@
             items.push({ id: d.id, ref: d.ref, name: data.name, quantity: num(data.quantity), lotes: lotesAMover(data),
                 controlado: !!data.controlado, cuarentena: data.status === 'CUARENTENA' });
         });
+        { const res = []; snap.forEach(d => { const x = d.data(); if (num(x.reservado) > 0) res.push(`${x.name} (${num(x.reservado)} u.: ${Object.keys(x.reservas || {}).join(', ')})`); });   /* v21.235 */
+          if (res.length) throw new Error(`Hay stock reservado por actas por confirmar: ${res.slice(0, 4).join('; ')}${res.length > 4 ? '…' : ''}. Confirma o elimina esas actas antes de cerrar la bodega.`); }
         items.sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
         for (const it of items) {
             const s = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('name', '==', it.name), f.where('location', '==', destino.name), f.limit(1)));
@@ -97,6 +99,7 @@
             const qty = num(o.quantity);
             if (qty <= 0 && !(num(o.sobregiro) > 0)) return 0;                       // ya se había movido: no hace nada
             if (o.status === 'CUARENTENA') throw new Error('Producto en CUARENTENA: resuélvelo antes de cerrar.');
+            if (num(o.reservado) > 0) throw new Error(`«${o.name}» tiene ${num(o.reservado)} u. reservadas por actas por confirmar (${Object.keys(o.reservas || {}).join(', ')}): confírmalas o elimínalas antes de cerrar la bodega.`);   /* v21.235 */
             const movidos = lotesAMover(o);
             const dData = sD.exists() ? sD.data() : null;
             const dLimite = num((dData && (dData.criticalLimit || dData.stock_minimo)) || o.criticalLimit || o.stock_minimo || 50);
@@ -112,7 +115,7 @@
             if (dData) {
                 tx.update(it.destRef, { quantity: dQty, isCritical: dQty <= dLimite, batches: dLotes, ...sgD, updatedAt: f.serverTimestamp() });
             } else {
-                const { bodegaId: _bi, provisional: _pv, ...oSin } = o;
+                const { bodegaId: _bi, provisional: _pv, reservado: _rv, reservas: _rs, ...oSin } = o;
                 tx.set(it.destRef, { ...oSin, ...sgD, status: o.status === 'CUARENTENA' ? 'CUARENTENA' : (o.status || 'ACTIVO'), bodegaNombre: destino.name, location: destino.name, quantity: dQty, isCritical: dQty <= dLimite, criticalLimit: dLimite, batches: dLotes,
                     batch: prox ? prox.batch : (o.batch || ''), expirationDate: prox && prox.expirationDate ? prox.expirationDate : (o.expirationDate || ''), updatedAt: f.serverTimestamp() });
             }

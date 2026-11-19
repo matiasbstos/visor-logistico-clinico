@@ -6586,3 +6586,7 @@ body:not([data-user-role="solicitante"]) .menu-item[data-target="view-solicitud-
 /* v21.235: stock reservado por actas por confirmar */
 .stk-reserva{display:block;margin-top:3px;font-size:10px;font-weight:700;color:#b45309;white-space:nowrap}
 .act-res-aviso{background:#fff7ed;border-color:#fdba74}
+
+/* v21.237: respaldo semanal en Excel */
+.bks-form{display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px 14px;align-items:end;margin:10px 0}.bks-form label{display:flex;flex-direction:column;gap:4px;font-size:.85rem;font-weight:600;color:#334155}.bks-form label small{font-weight:400;color:#64748b}.bks-form .bks-chk{flex-direction:row;align-items:center;gap:8px;grid-column:1/-1}
+@media (max-width:640px){.bks-form{grid-template-columns:1fr}}

@@ -4904,8 +4904,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             transaction.update(insumoRef, {
                                 ...(cq ? { quantity: cq.quantity, batches: cq.batches, sobregiro: cq.sobregiro, sobregiroDetalle: cq.sobregiroDetalle } : { quantity: increment(quantity), batches: currentBatches }),
-                                provider: data.providerId || insumoSnap.data().provider,
-                                purchaseType: data.purchaseType || insumoSnap.data().purchaseType,
+                                provider: String(data.providerId || dataAnterior.provider || 'S/I').trim(),
+                                purchaseType: String(data.purchaseType || dataAnterior.purchaseType || 'S/I').trim(),
                                 ...(!dataAnterior.codigoSAR && codigoSAR ? { codigoSAR } : {}),
                                 ...((!dataAnterior.category || dataAnterior.category === 'General') && categoriaSel !== 'General' ? { category: categoriaSel } : {}),
                                 ...(!dataAnterior.codigoMP && codigoMP ? { codigoMP } : {}),

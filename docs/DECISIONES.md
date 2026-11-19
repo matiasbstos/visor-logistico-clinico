@@ -1527,7 +1527,7 @@ Los tres pendientes de 4.282, pedidos por el usuario, revisados por Amy (12 hall
 ## 4.285 · Fotos en Impresión de etiquetas (v21.232)
 Pedido del usuario: agregar las fotografías. La lista «Por producto», los productos que faltan por etiquetar y cada grupo de etiquetas en el detalle de la orden muestran la foto del producto (la misma de Existencias: catálogo / Mercado Público, `SAR_Imagenes.thumb` + `rellenar`); si no hay foto queda el recuadro gris.
 
-## 4.286 · Avisos del sitio, bodega automática en actas, ajuste con un solo motivo y cajas × unidades (v21.233)
+## 4.286 · Avisos del sitio, bodega automática en actas, ajuste con un solo motivo y cajas × unidades (v21.234)
 Pedidos del usuario:
 - **Avisos del sistema, no de Chrome**: en Actas de entrega (cambiar origen, agregar sin ID, vaciar borrador, emitir, acta histórica, confirmar entrega, eliminar acta), en Distribución por centros y en Seguimiento OC (anular recepción, eliminar orden) los `confirm()`/`prompt()` del navegador se reemplazan por la ventana del sitio al centro (`SAR_Progreso.confirmar`, nuevo `SAR_Progreso.pedir` para escribir un motivo). Los `alert()` que queden en el sitio se muestran con la misma ventana (`SAR_Progreso.avisar`).
 - **Actas: bodega automática**: al agregar un producto que no tiene stock en el origen pero sí en otra bodega, el origen cambia solo a la bodega con más stock (lo ya agregado se vuelve a buscar ahí) y queda un aviso al costado del selector («Correcto» / «Volver a …»). Solo se pregunta si el cambio dejaría sin stock productos ya agregados. Los productos que solo existen en otra bodega ahora también tienen botón Agregar.

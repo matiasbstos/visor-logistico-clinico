@@ -117,6 +117,13 @@ t('reserva de stock al emitir un acta (v21.235): sale del disponible por FEFO y 
   const r = A.reservarEn(d, 200); assert.strictEqual(r.r, 200); assert.strictEqual(r.quantity, 800); assert.strictEqual(r.batches.reduce((t, b) => t + b.quantity, 0), 800);
   const r2 = A.reservarEn({ name: 'X', quantity: 50, sobregiro: 20 }, 100); assert.strictEqual(r2.r, 30); assert.strictEqual(r2.quantity, 20);
   assert.strictEqual(A.reservarEn({ name: 'X', quantity: 50 }, 100, 50).r, 0); });
+t('respaldo semanal en Excel (v21.237): semana ISO, día de envío y filas por lote', () => { global.window = global.window || global; const R = require('../respaldo-semanal.js');
+  assert.strictEqual(R.semanaISO(new Date(2026, 10, 19)), '2026-S47'); assert.strictEqual(R.semanaISO(new Date(2027, 0, 1)), '2026-S53'); assert.strictEqual(R.semanaISO(new Date(2026, 0, 5)), '2026-S02');
+  assert.strictEqual(R.toca(new Date(2026, 10, 16), 1), true); assert.strictEqual(R.toca(new Date(2026, 10, 16), 3), false); assert.strictEqual(R.toca(new Date(2026, 10, 22), 5), true);
+  const f = R.armarFilas([{ _id: 'a', name: 'GASA', location: 'Bodega Central', quantity: 30, reservado: 5, unitPrice: 100, batches: [{ batch: 'L1', quantity: 10, expirationDate: '2026-12-01' }, { batch: 'L2', quantity: 20, expirationDate: '2028-01-01' }] }, { _id: 'b', name: 'BATA', quantity: 0 }],
+    [{ numero: 'AE-1', estado: 'EMITIDA', confirmacion: { estado: 'PENDIENTE' }, items: [{ nombre: 'GASA', cantidad: 5, reserva: { qty: 5 } }] }], new Date(2026, 10, 19));
+  assert.strictEqual(f.inv.length, 3); assert.strictEqual(f.inv.find(r => r['Lote'] === 'L1')['Total disponible del producto'], 30); assert.strictEqual(f.vencer.length, 1); assert.strictEqual(f.pend.length, 1);
+  const tot = f.resumen.find(r => r['Bodega'] === 'TOTAL'); assert.strictEqual(tot['Unidades disponibles'], 30); assert.strictEqual(tot['Unidades reservadas'], 5); assert.strictEqual(tot['Valor (costo unitario)'], 3000); });
 t('salud del inventario: nombres con espacios, sin bodega, repetidos por nombre o ID y deudas con stock (v21.228)', () => { require('../unificar-duplicados.js'); const S = require('../salud-inventario.js');
   const I = (id, d) => ({ id, data: d }), bod = [I('bc', { name: 'Bodega Central' }), I('bt', { name: 'Bodega Transitoria ' }), I('cam', { name: 'Bodega CAM' })];
   const ins = [I('s1', { name: 'SABANILLA', location: 'Bodega Central', quantity: 550, sobregiro: 10, sobregiroDetalle: [{ acta: 'AE-1', qty: 10 }], codigoMP: '4623811' }), I('s2', { name: 'Sabanilla ', location: 'Bodega Central', quantity: 0, sobregiro: 50, codigoMP: '4623804' }),

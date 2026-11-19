@@ -268,7 +268,9 @@
                 const tomado = await f.runTransaction(db(), async (tx) => { const s = await tx.get(ref); if (!s.exists() || s.data().estado !== 'pendiente') return false; tx.update(ref, { estado: 'enviando', updatedAt: f.serverTimestamp() }); return true; });
                 if (!tomado) continue;
                 let r; try { const c = JSON.parse(x.data().carga); r = await enviarCorreoAhora(c.destinatarios, c.correo, c.extra); } catch (e) { r = { estado: 'error', detalle: String((e && e.message) || e) }; }
-                await f.updateDoc(ref, { estado: r.estado === 'enviado' || r.estado === 'sin_adjuntos' ? 'enviado' : 'pendiente', detalleEnvio: r.detalle || '', enviadoEn: r.estado === 'enviado' ? new Date().toISOString() : '', updatedAt: f.serverTimestamp() });
+                /* v21.237: lo enviado ya no guarda la carga (adjuntos en base64: la cola se lee cada 5 min); tras 30 intentos fallidos se deja de reintentar */
+                const ok = r.estado === 'enviado' || r.estado === 'sin_adjuntos', intentos = (Number(x.data().intentos) || 0) + 1;
+                await f.updateDoc(ref, { estado: ok ? 'enviado' : (intentos >= 30 ? 'fallido' : 'pendiente'), intentos, detalleEnvio: r.detalle || '', enviadoEn: r.estado === 'enviado' ? new Date().toISOString() : '', ...(ok ? { carga: '' } : {}), updatedAt: f.serverTimestamp() });
                 if (r.estado === 'enviado' || r.estado === 'sin_adjuntos') { n++; await marcarAvisoEnviado(x.data(), r).catch(() => {}); }
             }
         } catch (e) { console.warn('[Correo] cola', e); }

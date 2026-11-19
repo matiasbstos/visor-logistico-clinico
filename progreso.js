@@ -70,14 +70,17 @@
         };
     }
     /** Confirmación con la marca (reemplaza al cuadro «sarinventario.web.app says»): SAR_Confirmar({titulo, texto, lineas:[…], si, no, peligro}) → Promise<boolean>. */
+    let nConf = 0;
+    const arriba = (d) => { const t = document.querySelectorAll('.sar-conf'); return t[t.length - 1] === d; };   /* solo responde a Escape la ventana de más arriba */
+    /* o.alt = texto de un tercer botón: la promesa devuelve 'alt' (cerrar con Escape o clic afuera = false, como Cancelar) */
     function confirmar(o) {
         o = o || {};
         return new Promise(resolve => {
-            const prev = document.activeElement, d = document.createElement('div'); d.className = 'sar-conf'; d.setAttribute('role', 'alertdialog'); d.setAttribute('aria-modal', 'true'); d.setAttribute('aria-labelledby', 'sar-conf-t');
-            d.innerHTML = `<div class="sar-conf__c"><div class="sar-conf__marca" aria-hidden="true"><img src="assets/logo-sar.png" alt=""></div><h3 id="sar-conf-t" class="sar-conf__t">${esc(o.titulo || '¿Confirmas?')}</h3>${o.texto ? `<p class="sar-conf__x">${o.texto}</p>` : ''}${(o.lineas || []).length ? `<ul class="sar-conf__l">${o.lineas.map(l => `<li>${l}</li>`).join('')}</ul>` : ''}<div class="sar-conf__b">${o.soloSi ? '' : `<button type="button" class="btn btn-secondary" data-r="0">${esc(o.no || 'Cancelar')}</button>`}<button type="button" class="btn ${o.peligro ? 'btn-danger' : 'btn-primary'}" data-r="1">${esc(o.si || 'Confirmar')}</button></div></div>`;
+            const prev = document.activeElement, d = document.createElement('div'); d.className = 'sar-conf'; d.setAttribute('role', 'alertdialog'); d.setAttribute('aria-modal', 'true'); const tid = 'sar-conf-t' + (++nConf); d.setAttribute('aria-labelledby', tid);
+            d.innerHTML = `<div class="sar-conf__c"><div class="sar-conf__marca" aria-hidden="true"><img src="assets/logo-sar.png" alt=""></div><h3 id="${tid}" class="sar-conf__t">${esc(o.titulo || '¿Confirmas?')}</h3>${o.texto ? `<p class="sar-conf__x">${o.texto}</p>` : ''}${(o.lineas || []).length ? `<ul class="sar-conf__l">${o.lineas.map(l => `<li>${l}</li>`).join('')}</ul>` : ''}<div class="sar-conf__b${o.alt ? ' sar-conf__b--3' : ''}">${o.soloSi ? '' : `<button type="button" class="btn btn-secondary" data-r="0">${esc(o.no || 'Cancelar')}</button>`}${o.alt ? `<button type="button" class="btn btn-outline" data-r="2">${esc(o.alt)}</button>` : ''}<button type="button" class="btn ${o.peligro ? 'btn-danger' : 'btn-primary'}" data-r="1">${esc(o.si || 'Confirmar')}</button></div></div>`;
             const cierra = (v) => { document.removeEventListener('keydown', tecla, true); d.remove(); try { if (prev && prev.focus) prev.focus(); } catch (e) { /* sin foco */ } resolve(v); };
-            const tecla = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cierra(false); } };
-            d.addEventListener('click', (e) => { const b = e.target.closest('[data-r]'); if (b) cierra(b.dataset.r === '1'); else if (e.target === d) cierra(false); });
+            const tecla = (e) => { if (e.key === 'Escape' && arriba(d)) { e.preventDefault(); e.stopImmediatePropagation(); cierra(false); } };
+            d.addEventListener('click', (e) => { const b = e.target.closest('[data-r]'); if (b) cierra(b.dataset.r === '2' ? 'alt' : b.dataset.r === '1'); else if (e.target === d) cierra(false); });
             document.addEventListener('keydown', tecla, true); document.body.appendChild(d);
             const ok = d.querySelector('[data-r="1"]'); if (ok) ok.focus();
         });
@@ -87,13 +90,13 @@
     function pedir(o) {
         o = o || {};
         return new Promise(resolve => {
-            const prev = document.activeElement, d = document.createElement('div'); d.className = 'sar-conf'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true'); d.setAttribute('aria-labelledby', 'sar-conf-t');
-            d.innerHTML = `<div class="sar-conf__c"><div class="sar-conf__marca" aria-hidden="true"><img src="assets/logo-sar.png" alt=""></div><h3 id="sar-conf-t" class="sar-conf__t">${esc(o.titulo || 'Escribe')}</h3>${o.texto ? `<p class="sar-conf__x">${o.texto}</p>` : ''}<input type="text" class="form-control sar-conf__in" aria-label="${esc(o.titulo || 'Texto')}" placeholder="${esc(o.placeholder || '')}" value="${esc(o.valor || '')}" autocomplete="off"><div class="sar-conf__b"><button type="button" class="btn btn-secondary" data-r="0">${esc(o.no || 'Cancelar')}</button><button type="button" class="btn ${o.peligro ? 'btn-danger' : 'btn-primary'}" data-r="1">${esc(o.si || 'Aceptar')}</button></div></div>`;
+            const prev = document.activeElement, d = document.createElement('div'); d.className = 'sar-conf'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true'); const tid = 'sar-conf-t' + (++nConf); d.setAttribute('aria-labelledby', tid);
+            d.innerHTML = `<div class="sar-conf__c"><div class="sar-conf__marca" aria-hidden="true"><img src="assets/logo-sar.png" alt=""></div><h3 id="${tid}" class="sar-conf__t">${esc(o.titulo || 'Escribe')}</h3>${o.texto ? `<p class="sar-conf__x">${o.texto}</p>` : ''}<input type="text" class="form-control sar-conf__in" aria-label="${esc(o.titulo || 'Texto')}" placeholder="${esc(o.placeholder || '')}" value="${esc(o.valor || '')}" autocomplete="off"><div class="sar-conf__b"><button type="button" class="btn btn-secondary" data-r="0">${esc(o.no || 'Cancelar')}</button><button type="button" class="btn ${o.peligro ? 'btn-danger' : 'btn-primary'}" data-r="1">${esc(o.si || 'Aceptar')}</button></div></div>`;
             const inp = d.querySelector('input'), ok = d.querySelector('[data-r="1"]');
             const valido = () => { const v = inp.value.trim(); return o.exacto ? v === String(o.exacto) : !!v; };
             const sync = () => { ok.disabled = !valido(); };
             const cierra = (v) => { document.removeEventListener('keydown', tecla, true); d.remove(); try { if (prev && prev.focus) prev.focus(); } catch (e) { /* sin foco */ } resolve(v); };
-            const tecla = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cierra(null); } else if (e.key === 'Enter' && e.target === inp && valido()) { e.preventDefault(); cierra(inp.value.trim()); } };
+            const tecla = (e) => { if (!arriba(d)) return; if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); cierra(null); } else if (e.key === 'Enter' && e.target === inp && valido()) { e.preventDefault(); cierra(inp.value.trim()); } };
             d.addEventListener('click', (e) => { const b = e.target.closest('[data-r]'); if (b) { if (b.dataset.r === '1') { if (valido()) cierra(inp.value.trim()); } else cierra(null); } else if (e.target === d) cierra(null); });
             inp.addEventListener('input', sync); sync();
             document.addEventListener('keydown', tecla, true); document.body.appendChild(d);
@@ -135,6 +138,7 @@
         setTimeout(fin, o.ms || 8000); return d;
     }
     window.SAR_Progreso = { exito, confirmar, pedir, avisar, iniciar, correr, cargando, segundoPlano, aviso };
-    /* v21.233: los alert() que queden en el sitio se muestran con la ventana de la marca, al centro */
+    /* v21.233: los alert() que queden en el sitio se muestran con la ventana de la marca, al centro.
+       OJO: ya no detiene la ejecución (no es bloqueante): no escribir alert(...) seguido de una acción que el usuario deba leer antes. */
     try { window.alert = (m) => { avisar(String(m == null ? '' : m)); }; } catch (e) { /* navegador sin reemplazo */ }
 })(window, document);

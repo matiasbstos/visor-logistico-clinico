@@ -6234,7 +6234,7 @@ body:not([data-user-role="superadmin"]) #menu-memo-flujo { display: none !import
 .sar-conf__t{margin:2px 0 0;color:var(--primary,#1a3668);font-size:1.15rem}.sar-conf__x{margin:0;color:#475569}
 .sar-conf__l{list-style:none;margin:4px 0 0;padding:10px 12px;background:#f5f7fb;border-radius:6px;width:100%;text-align:left;font-size:.85rem;max-height:200px;overflow:auto;color:#1e293b}.sar-conf__l li{padding:3px 0;border-bottom:1px solid #e5eaf2}.sar-conf__l li:last-child{border:0}
 .sar-conf__b{display:flex;gap:10px;justify-content:center;margin-top:12px;width:100%}.sar-conf__b .btn{min-width:120px}
-.sar-conf__in{width:100%;margin-top:4px}.sar-conf__x .sar-conf__aviso{display:block;margin-top:8px;padding:8px 10px;background:#fff7ed;border-left:3px solid #f59e0b;border-radius:4px;text-align:left;color:#7c2d12;font-size:.85rem}
+.sar-conf__in{width:100%;margin-top:4px}.sar-conf__b--3{flex-wrap:wrap}.sar-conf__b--3 .btn{min-width:0;flex:1 1 130px}.sar-conf__x .sar-conf__aviso{display:block;margin-top:8px;padding:8px 10px;background:#fff7ed;border-left:3px solid #f59e0b;border-radius:4px;text-align:left;color:#7c2d12;font-size:.85rem}
 .sar-conf__c{max-height:92vh;overflow:auto}@media (max-width:480px){.sar-conf{padding:12px}.sar-conf__c{padding:20px 16px 16px}.sar-conf__b{flex-direction:column-reverse}.sar-conf__b .btn{width:100%}}
 /* Solicitudes de insumos (v21.189) */
 body[data-user-role="solicitante"] .menu-item:not([data-target="view-solicitud-insumos"]),

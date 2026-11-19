@@ -152,6 +152,7 @@
     const vacio = () => ({ origen: null, centro: '', dist: null, historica: null, items: [], pendientes: [], documentos: [], recibe: { nombre: '', cargo: '' } });
     let borrador = vacio();
     let stock = [];           // docs de la bodega elegida
+    let ocupado = false;      // v21.233: un cambio de origen en curso (evita doble clic)
     let global = [];          // v21.229: productos con stock en todas las bodegas {n, nombre, cod, bodega, q}
     let bodegas = [];
     let historial = [];
@@ -241,10 +242,15 @@
         await cargarPendConf();
         if (!borrador.origen) return;
         await cargarCatalogo();
-        const f = fs();
-        const snap = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('location', '==', borrador.origen), f.limit(1500)));
+        stock = await leerStock(borrador.origen);
+    }
+    /** Stock disponible de una bodega, sin tocar el borrador (v21.233: para decidir el cambio automático de origen con lo realmente disponible). */
+    async function leerStock(origen) {
+        const f = fs(), stock = [];
+        const snap = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('location', '==', origen), f.limit(1500)));
         snap.forEach(d => { const x = d.data(); if (x.status !== 'CUARENTENA') stock.push({ id: d.id, codigo: String(x.codigoMP || '') || codDe(x.name), name: x.name || '', quantity: num(x.quantity), sobregiro: num(x.sobregiro), reserv: reservadoItem(d.id, x.name), disp: Math.max(0, num(x.quantity) - num(x.sobregiro) - reservadoItem(d.id, x.name)), controlado: !!x.controlado, provisional: !!x.provisional, batches: lotesDeDoc(x) }); });
         stock.sort((a, b) => (b.disp > 0) - (a.disp > 0) || a.name.localeCompare(b.name, 'es'));
+        return stock;
     }
     async function cargarHistorial() {
         const f = fs();
@@ -717,25 +723,34 @@
         const hon = document.getElementById('act-hist-on'); if (hon) hon.addEventListener('change', () => { leerCampos(); borrador.historica = hon.checked ? { on: true, folio: '', fecha: '' } : null; guardarBorrador(); pintar(); });
         ['act-centro', 'act-rn', 'act-rc', 'act-en', 'act-ec', 'act-hist-folio', 'act-hist-fecha'].forEach(id => { const e = document.getElementById(id); if (e) e.addEventListener('change', () => { leerCampos(); guardarBorrador(); if (id === 'act-centro') pintar(); }); });
         /* v21.229: usar como origen la bodega donde sí hay stock; lo ya agregado se vuelve a buscar en esa bodega */
-        /* Cambia el origen a otra bodega y vuelve a buscar ahí lo ya agregado. Devuelve cuántos quedaron con y sin stock. */
+        /* Cambia el origen a otra bodega y vuelve a buscar ahí lo ya agregado. Si no se puede leer el stock de la nueva bodega, no cambia nada (v21.233). */
+        const buscaEn = (lista, nombre, codigo) => lista.find(x => normN(x.name) === normN(nombre) || (codigo && /^\d{5,}$/.test(String(codigo)) && String(x.codigo) === String(codigo)));
         const cambiarOrigen = async (nueva, opc) => {
-            opc = opc || {}; leerCampos(); const previos = borrador.items.map(i => ({ ...i })), antes = borrador.origen;
-            borrador.origen = nueva; borrador.items = [];
-            try { await cargarStock(); } catch (x) { toast('Error', 'No se pudo cargar el stock: ' + x.message, 'error'); }
-            let conStock = 0, sin = 0;
-            previos.forEach(i => { const s = stock.find(x => normN(x.name) === normN(i.nombre) || (i.codigo && /^\d{5,}$/.test(String(i.codigo)) && String(x.codigo) === String(i.codigo)));
-                if (s) { conStock++; borrador.items.push({ ...i, id: s.id, manual: false, nombre: s.name, codigo: s.codigo || i.codigo || '', stock: s.disp, controlado: s.controlado }); }
-                else { sin++; borrador.items.push({ ...i, id: null, manual: true, stock: 0 }); } });
-            borrador.autoOrigen = opc.auto ? { bodega: nueva, previa: antes || '', producto: opc.producto || '' } : null;
-            const sel = document.getElementById('act-origen'); if (sel) sel.value = nueva;
-            guardarBorrador();
-            if (!opc.silencioso) { pintar(); toast('Bodega de origen: ' + nueva, previos.length ? `${conStock} producto(s) ahora con stock de ${nueva}${sin ? ` · ${sin} siguen sin stock (revísalos)` : ''}.` : 'Ya puedes agregar el producto con su stock.', sin ? 'warning' : 'success'); }
-            return { conStock, sin };
+            opc = opc || {}; if (ocupado && !opc.interno) return null;
+            if (!opc.interno) ocupado = true;
+            try {
+                leerCampos();
+                let nuevo;
+                try { await cargarPendConf(); await cargarCatalogo(); nuevo = opc.pre || await leerStock(nueva); }
+                catch (x) { toast('No se cambió la bodega', 'No se pudo leer el stock de ' + nueva + ': ' + (x.message || x), 'error'); return null; }
+                const previos = borrador.items.map(i => ({ ...i })), antes = borrador.origen;
+                borrador.origen = nueva; stock = nuevo; borrador.items = [];
+                let conStock = 0, sin = 0;
+                previos.forEach(i => { const s = buscaEn(stock, i.nombre, i.codigo);
+                    if (s) { conStock++; borrador.items.push({ ...i, id: s.id, manual: false, nombre: s.name, codigo: s.codigo || i.codigo || '', stock: s.disp, controlado: s.controlado }); }
+                    else { sin++; borrador.items.push({ ...i, id: null, manual: true, stock: 0 }); } });
+                borrador.autoOrigen = opc.auto ? { bodega: nueva, previa: antes || '', producto: opc.producto || '' } : null;
+                const sel = document.getElementById('act-origen'); if (sel) sel.value = nueva;
+                guardarBorrador();
+                if (!opc.silencioso) { pintar(); toast('Bodega de origen: ' + nueva, previos.length ? `${conStock} producto(s) ahora con stock de ${nueva}${sin ? ` · ${sin} siguen sin stock (revísalos)` : ''}.` : 'Ya puedes agregar el producto con su stock.', sin ? 'warning' : 'success'); }
+                return { conStock, sin };
+            } finally { if (!opc.interno) ocupado = false; }
         };
         $$('.act-cambia').forEach(b => b.addEventListener('click', () => cambiarOrigen(b.dataset.cambia)));
         const vAuto = r.querySelector('.act-auto-volver'); if (vAuto) vAuto.addEventListener('click', () => cambiarOrigen(vAuto.dataset.volver));
         const vAutoOk = r.querySelector('.act-auto-ok'); if (vAutoOk) vAutoOk.addEventListener('click', () => { borrador.autoOrigen = null; guardarBorrador(); pintar(); });
         $$('.act-addcat').forEach(b => b.addEventListener('click', async () => {
+            if (ocupado) return;
             const gi = b.dataset.gi != null, c0 = gi ? null : catalogo[+b.dataset.ci]; if (!gi && !c0) return;
             const key = gi ? 'g' + b.dataset.gi : b.dataset.ci;
             const nom = gi ? String(b.dataset.gn || '').toUpperCase() : String(c0.descripcion || c0.insumoName || '').toUpperCase(), cod = gi ? String(b.dataset.gc || '') : (c0.codigoMP ? String(c0.codigoMP) : '');
@@ -743,26 +758,37 @@
             if (!(c > 0 || (c === 0 && solC > 0))) { toast('Cantidad', 'Indica una cantidad mayor que 0 (o 0 con el pedido, para dejarlo pendiente).', 'warning'); return; }
             if (borrador.items.length >= MAX_ITEMS) { toast('Límite', `Máximo ${MAX_ITEMS} productos por acta.`, 'warning'); return; }
             if (borrador.items.some(i => normN(i.nombre) === normN(nom))) { toast('Ya está en el acta', 'Ese producto ya está agregado: cambia su cantidad en la lista del acta.', 'warning'); return; }
-            /* v21.233: si el producto tiene stock en otra bodega, el origen se cambia SOLO a esa bodega (sin preguntar) y se avisa al costado.
-               Solo se pregunta si el cambio dejaría sin stock algo que ya está en el acta. */
+            const item = (extra) => ({ id: null, manual: true, nombre: nom, codigo: cod, cantidad: c, solicitado: solC > c ? solC : 0, stock: 0, ...(c0 && c0.imagen ? { imagen: c0.imagen } : {}), ...(extra || {}) });
             const o = enOtras(nom, cod);
-            if (o.length) {
-                const nueva = o[0].bodega, enNueva = (i) => global.some(g => g.bodega === nueva && g.q > 0 && (g.n === normN(i.nombre) || (i.codigo && /^\d{5,}$/.test(String(i.codigo)) && g.cod === String(i.codigo))));
-                const pierden = borrador.items.filter(i => num(i.stock) > 0 && !enNueva(i));
-                let cambiar = !pierden.length;
-                if (!cambiar) cambiar = await preg({ titulo: `Hay stock en ${nueva}`, texto: `<b>${esc(nom)}</b>: hay <b>${o[0].q}</b> en ${esc(nueva)} y nada en ${esc(borrador.origen)}. Si cambias el origen, estos productos del acta quedan sin stock:`, lineas: pierden.slice(0, 8).map(i => esc(i.nombre)).concat(pierden.length > 8 ? [`y ${pierden.length - 8} más…`] : []), si: `Cambiar a ${nueva}`, no: `Seguir en ${borrador.origen} (sin stock)` });
-                if (cambiar) {
-                    await cambiarOrigen(nueva, { auto: true, producto: nom, silencioso: true });
-                    const s0 = stock.find(x => normN(x.name) === normN(nom) || (cod && /^\d{5,}$/.test(cod) && String(x.codigo) === cod));
-                    if (s0 && s0.controlado && c > s0.disp) { pintar(); toast('Medicamento controlado', 'No puede entregarse sin stock en sistema.', 'error'); return; }
-                    if (s0 && !borrador.items.some(i => i.id === s0.id)) borrador.items.push({ id: s0.id, nombre: s0.name, codigo: s0.codigo || cod, cantidad: c, solicitado: solC > c ? solC : 0, stock: s0.disp, controlado: s0.controlado });
-                    else if (!s0) borrador.items.push({ id: null, manual: true, nombre: nom, codigo: cod, cantidad: c, solicitado: solC > c ? solC : 0, stock: 0 });
-                    refrescar();
-                    toast('Origen cambiado a ' + nueva, `Ahí hay ${o[0].q} de ${nom}. Revisa el origen al costado.`, 'info');
+            if (!o.length) { borrador.items.push(item()); refrescar(); return; }
+            /* v21.233: si el producto tiene stock DISPONIBLE en otra bodega, el origen cambia solo a esa bodega (sin preguntar) y queda un aviso al costado.
+               Se pregunta solo si el cambio dejaría con menos respaldo lo que ya está en el acta. Cerrar la ventana = no se agrega nada. */
+            ocupado = true; b.disabled = true;
+            try {
+                const nueva = o[0].bodega;
+                let cand; try { await cargarPendConf(); cand = await leerStock(nueva); } catch (x) { toast('Sin conexión', 'No se pudo revisar el stock de ' + nueva + ': no se agregó. Intenta de nuevo.', 'error'); return; }
+                const s0 = buscaEn(cand, nom, cod), dispN = s0 ? num(s0.disp) : 0;
+                const sinStockAqui = `queda como provisional sin stock (deuda en ${esc(borrador.origen)})`;
+                if (dispN <= 0) {   /* lo que hay en la otra bodega está reservado o es deuda: no sirve cambiar */
+                    if (await preg({ titulo: 'Sin stock disponible', texto: `<b>${esc(nom)}</b>: lo que hay en ${esc(nueva)} ya está reservado en actas por confirmar. Si lo agregas, ${sinStockAqui}.`, si: 'Agregar sin stock', no: 'Cancelar' })) { borrador.items.push(item()); refrescar(); }
                     return;
                 }
-            }
-            borrador.items.push({ id: null, manual: true, nombre: nom, codigo: cod, cantidad: c, solicitado: solC > c ? solC : 0, stock: 0, ...(c0 && c0.imagen ? { imagen: c0.imagen } : {}) }); refrescar();
+                if (s0.controlado && c > dispN) { toast('Medicamento controlado', `En ${nueva} hay ${dispN} disponibles: no puede entregarse sin stock en sistema.`, 'error'); return; }
+                if (s0.id && borrador.items.some(i => i.id === s0.id || (i.codigo && s0.codigo && String(i.codigo) === String(s0.codigo)))) { toast('Ya está en el acta', `Ese producto ya está agregado (como ${s0.name}): cambia su cantidad en la lista del acta.`, 'warning'); return; }
+                const cubre = (i, disp) => Math.min(num(i.cantidad), Math.max(0, num(disp)));
+                const pierden = borrador.items.filter(i => { const x = buscaEn(cand, i.nombre, i.codigo); return cubre(i, i.stock) > cubre(i, x ? x.disp : 0); });
+                if (pierden.length) {
+                    const r2 = await preg({ titulo: `Hay stock en ${nueva}`, texto: `<b>${esc(nom)}</b>: hay <b>${dispN}</b> disponibles en ${esc(nueva)} y nada en ${esc(borrador.origen)}. Si cambias el origen, estos productos del acta quedan con menos respaldo:`, lineas: pierden.slice(0, 8).map(i => { const x = buscaEn(cand, i.nombre, i.codigo); return `${esc(i.nombre)}: ${cubre(i, i.stock)} → <b>${cubre(i, x ? x.disp : 0)}</b> con stock`; }).concat(pierden.length > 8 ? [`y ${pierden.length - 8} más…`] : []), si: `Cambiar a ${nueva}`, alt: `Agregar sin stock en ${borrador.origen}`, no: 'Cancelar' });
+                    if (r2 === 'alt') { borrador.items.push(item()); refrescar(); return; }
+                    if (r2 !== true) return;
+                }
+                const res = await cambiarOrigen(nueva, { auto: true, producto: nom, silencioso: true, interno: true, pre: cand });
+                if (!res) return;
+                const s1 = buscaEn(stock, nom, cod);
+                borrador.items.push(s1 ? { id: s1.id, nombre: s1.name, codigo: s1.codigo || cod, cantidad: c, solicitado: solC > c ? solC : 0, stock: s1.disp, controlado: s1.controlado } : item());
+                refrescar();
+                toast('Origen cambiado a ' + nueva, `Ahí hay ${dispN} disponibles de ${nom}${dispN < c ? ` (faltan ${c - dispN}: quedan sin respaldo)` : ''}${res.sin ? ` · ${res.sin} producto(s) del acta siguen sin stock` : ''}. Revisa el origen al costado.`, res.sin || dispN < c ? 'warning' : 'info');
+            } finally { ocupado = false; b.disabled = false; }
         }));
         $$('.act-add').forEach(b => b.addEventListener('click', () => {
             const s = stock.find(x => x.id === b.dataset.id); const inp = r.querySelector(`.act-qty[data-qid="${CSS.escape(b.dataset.id)}"]`);

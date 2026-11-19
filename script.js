@@ -1015,7 +1015,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (window.SAR_Gobernanza) {
                             const r = { motivo: motivoSel, nota: '' };
                             if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) {   // sin internet: el ajuste queda en el teléfono y se aplica al volver la conexión, con el stock de ese momento
-                                window.SAR_Cola.encolar({ tipo: 'ajuste', titulo: `Ajuste ${cantidadParsed > 0 ? '+' : ''}${cantidadParsed} · ${insumoNombre}`, datos: { docId, nombre: insumoNombre, cantidad: cantidadParsed, justificacion: `[${r.motivo}${r.nota ? ' - ' + r.nota : ''}] ${justificacion}`, motivo: r.motivo, nota: r.nota, directo: isSuperAdmin, en: Date.now() } });
+                                window.SAR_Cola.encolar({ tipo: 'ajuste', titulo: `Ajuste ${cantidadParsed > 0 ? '+' : ''}${cantidadParsed} · ${insumoNombre}`, datos: { docId, nombre: insumoNombre, cantidad: cantidadParsed, justificacion: `[${r.motivo}${r.nota ? ' - ' + r.nota : ''}] ${justificacion}`, motivo: r.motivo, nota: r.nota, observacion: justificacion, directo: isSuperAdmin, en: Date.now() } });
                                 return window.showAlertCenter('Guardado sin conexión', `El ajuste de ${insumoNombre} (${cantidadParsed > 0 ? '+' : ''}${cantidadParsed}) quedó en este teléfono y se aplicará solo al volver internet.`);
                             }
                             codigoGob = await window.SAR_Gobernanza.codigo('AJU');
@@ -4285,7 +4285,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             document.getElementById('edit-criticalLimit').value = data.criticalLimit || 50;
                             document.getElementById('edit-batch').value = data.batch || '';
                             window.__editLotes = (Array.isArray(data.batches) && data.batches.length ? data.batches : [{ batch: data.batch || '', quantity: Number(data.quantity) || 0, expirationDate: data.expirationDate || '' }])
-                                .map(b => { const d = SAR_Utils.parseDate(b.expirationDate); return { batch: b.batch || '', quantity: Number(b.quantity) || 0, expirationDate: (d && !isNaN(d.getTime())) ? d.toISOString().split('T')[0] : '', ...(b.provider ? { provider: b.provider } : {}), ...(b.codigoLote ? { codigoLote: b.codigoLote } : {}), ...((() => { const uc = Math.floor(Number(b.porCaja) || Number(data.unidadesPorCaja) || 0), q = Number(b.quantity) || 0; return uc > 0 ? { porCaja: uc, cajas: q % uc === 0 ? q / uc : '' } : {}; })()) }; });
+                                .map(b => { const d = SAR_Utils.parseDate(b.expirationDate); return { batch: b.batch || '', quantity: Number(b.quantity) || 0, expirationDate: (d && !isNaN(d.getTime())) ? d.toISOString().split('T')[0] : '', ...(b.provider ? { provider: b.provider } : {}), ...(b.codigoLote ? { codigoLote: b.codigoLote } : {}), ...((() => { const uc = Math.floor(Number(b.porCaja) || 0), q = Number(b.quantity) || 0; return uc > 0 ? { porCaja: uc, cajas: q % uc === 0 ? q / uc : '' } : {}; })()) }; });
                             window.__pintarEditLotes();
                             document.getElementById('edit-status').value = data.status || 'ACTIVO';
 
@@ -4334,7 +4334,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const cont = document.getElementById('edit-lotes'); if (!cont) return;
             const L = window.__editLotes || [];
             /* v21.233: cajas × unidades por caja = cantidad del lote (la cantidad sigue siendo en unidades) */
-            const nomE = (document.getElementById('edit-name') || {}).value || '', sug = window.SAR_Bultos && window.SAR_Bultos.sugerirPorCaja ? window.SAR_Bultos.sugerirPorCaja(nomE) : 0;
+            const nomE = (document.getElementById('edit-name') || {}).value || '', sug = Math.floor(Number(window.__editOriginal && window.__editOriginal.unidadesPorCaja) || 0) || (window.SAR_Bultos && window.SAR_Bultos.sugerirPorCaja ? window.SAR_Bultos.sugerirPorCaja(nomE) : 0);
             cont.innerHTML = (L.length ? `<div class="edl-cab" aria-hidden="true"><span>Lote</span><span>Vencimiento</span><span>Cajas</span><span>U. por caja</span><span>Total (u.)</span><span></span></div>` : '') + L.map((b, i) => `<div class="edl-fila">
                 <input type="text" class="form-control edl-b" data-i="${i}" value="${window.escapeHTML(b.batch)}" placeholder="Lote" aria-label="Lote ${i + 1}">
                 <input type="date" class="form-control edl-v" data-i="${i}" value="${window.escapeHTML(b.expirationDate)}" aria-label="Vencimiento lote ${i + 1}">
@@ -4351,7 +4351,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const batches = L.map(b => ({ batch: (b.batch || '').trim().toUpperCase() || 'S/L', quantity: Math.max(0, Math.floor(Number(b.quantity) || 0)), expirationDate: b.expirationDate || '', ...(b.provider ? { provider: b.provider } : {}), ...(b.codigoLote ? { codigoLote: b.codigoLote } : {}), ...(Math.floor(Number(b.porCaja) || 0) > 0 ? { porCaja: Math.floor(Number(b.porCaja)) } : {}) }));
             const orden = batches.slice().sort(window.fefoCompare), p = orden[0];
             const uc0 = batches.find(b => b.porCaja > 0);
-            return { ...(uc0 ? { unidadesPorCaja: uc0.porCaja } : {}), batches, quantity: batches.reduce((t, b) => t + b.quantity, 0), cantidad: batches.reduce((t, b) => t + b.quantity, 0), batch: p.batch, lote: p.batch, expirationDate: p.expirationDate, vencimiento: p.expirationDate, fechaVencimiento: p.expirationDate };
+            const ucAntes = Math.floor(Number(window.__editOriginal && window.__editOriginal.unidadesPorCaja) || 0);
+            return { ...(uc0 ? { unidadesPorCaja: uc0.porCaja } : (ucAntes ? { unidadesPorCaja: 0 } : {})), batches, quantity: batches.reduce((t, b) => t + b.quantity, 0), cantidad: batches.reduce((t, b) => t + b.quantity, 0), batch: p.batch, lote: p.batch, expirationDate: p.expirationDate, vencimiento: p.expirationDate, fechaVencimiento: p.expirationDate };
         };
         document.addEventListener('input', (e) => {
             const t = e.target; if (!t || !t.classList || !window.__editLotes) return; const i = Number(t.dataset && t.dataset.i);

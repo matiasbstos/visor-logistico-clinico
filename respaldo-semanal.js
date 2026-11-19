@@ -68,7 +68,7 @@
         const resumen = [...porBod.values()].sort((a, b) => a['Bodega'].localeCompare(b['Bodega'], 'es'));
         const tot = resumen.reduce((t, b) => ({ u: t.u + b['Unidades disponibles'], r: t.r + b['Unidades reservadas'], v: t.v + b['Valor (costo unitario)'], p: t.p + b['Productos con stock'] }), { u: 0, r: 0, v: 0, p: 0 });
         resumen.push({ 'Bodega': 'TOTAL', 'Productos con stock': tot.p, 'Unidades disponibles': tot.u, 'Unidades reservadas': tot.r, 'Unidades adeudadas': resumen.reduce((t, b) => t + b['Unidades adeudadas'], 0), 'Valor (costo unitario)': tot.v });
-        return { inv, resumen, vencer, pend, totales: { productos: insumos.length, filas: inv.length, unidades: tot.u, reservadas: tot.r, valor: tot.v, bodegas: porBod.size, actasPend: new Set(pend.map(p => p['Acta'])).size } };
+        return { inv, resumen, vencer, pend, totales: { productos: insumos.filter(x => x.status !== 'ELIMINADO').length, filas: inv.length, unidades: tot.u, reservadas: tot.r, valor: tot.v, bodegas: porBod.size, actasPend: new Set(pend.map(p => p['Acta'])).size } };
     }
     function suma(txt) { let h = 2166136261; for (let i = 0; i < txt.length; i++) { h ^= txt.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0).toString(16); }
 
@@ -103,6 +103,7 @@
     async function leerDatos() {
         const f = F(), db = DB(), ins = [], actas = [];
         (await f.getDocs(f.query(f.collection(db, 'Insumos'), f.limit(10000)))).forEach(d => ins.push({ _id: d.id, ...d.data() }));
+        if (ins.length >= 10000) throw new Error('El inventario tiene 10.000 registros o más: el Excel saldría incompleto. Avisa a soporte.');
         try { (await f.getDocs(f.query(f.collection(db, 'Actas_Entrega'), f.where('confirmacion.estado', '==', 'PENDIENTE'), f.limit(500)))).forEach(d => actas.push({ _id: d.id, ...d.data() })); } catch (e) { /* sin índice o permiso: la hoja sale vacía */ }
         return { ins, actas };
     }
@@ -122,6 +123,7 @@
         opc = opc || {}; const f = F(), db = DB(), S = window.SAR_SeguimientoOC; if (!f || !db) return { estado: 'sin_conexion' };
         if (!S || !S.enviarCorreo) return { estado: 'sin_correo' };
         if (S.cargarConfig) await S.cargarConfig();
+        if (S.configurado && !S.configurado()) return { estado: 'sin_correo' };   /* sin Apps Script abriría un borrador en cada carga */
         const cfg = await config(); if (!cfg.destinatarios.length) return { estado: 'sin_destinatarios' };
         if (!opc.forzar && !cfg.activo) return { estado: 'inactivo' };
         const ahora = new Date(), semana = semanaISO(ahora), ref = f.doc(f.collection(db, 'Contadores'), `respaldo-semanal-${semana}`);
@@ -129,17 +131,21 @@
         /* reserva: solo un equipo envía por semana (si quedó «en curso» más de 30 min, se retoma) */
         const tomado = await f.runTransaction(db, async (tx) => {
             const s = await tx.get(ref), d = s.exists() ? s.data() : null;
-            if (d && !opc.forzar && (['enviado', 'programado'].includes(d.estado) || (d.estado === 'en curso' && Date.now() - num(d.enMs) < 1800000))) return false;
+            const reciente = (h) => Date.now() - num(d && d.enMs) < h * 3600000;
+            if (d && d.estado === 'en curso' && reciente(0.5)) return false;   /* otro equipo lo está armando (también si se pulsa «Enviar ahora») */
+            if (d && !opc.forzar && (['enviado', 'programado'].includes(d.estado) || (d.estado === 'error' && (reciente(6) || num(d.intentos) >= 3)))) return false;   /* tras un error: espera 6 h y máximo 3 intentos automáticos */
             tx.set(ref, { tipo: 'respaldo-semanal', semana, estado: 'en curso', enMs: Date.now(), por: usuario(), intentos: num(d && d.intentos) + 1, actualizado: new Date().toISOString() });
             return true;
         });
         if (!tomado) return { estado: 'ya_enviado' };
         try {
-            const g = await generar(), t = g.filas.totales;
+            const g = await generar(), t = g.filas.totales, b64 = bytesAb64(g.bytes);
+            if (b64.length > 850000) throw new Error(`El Excel pesa ${Math.round(g.bytes.length / 1024)} KB: es más de lo que la cola de correos puede guardar. Descárgalo desde Configuración y guárdalo a mano.`);
             const texto = `Respaldo semanal del inventario (${semana}).\n\nAdjunto: ${g.nombre}\n- ${t.productos} productos, ${t.filas} filas por lote, ${t.bodegas} bodegas\n- ${t.unidades.toLocaleString('es-CL')} unidades disponibles · ${t.reservadas.toLocaleString('es-CL')} reservadas por ${t.actasPend} actas por confirmar\n- Suma de control: ${g.control}\n\nGuarde este correo: es una copia fuera del sistema. Generado automáticamente por el Visor Logístico Clínico.`;
             const html = `<p>Respaldo semanal del inventario <b>${esc(semana)}</b>.</p><ul><li>${t.productos} productos · ${t.filas} filas por lote · ${t.bodegas} bodegas</li><li>${t.unidades.toLocaleString('es-CL')} unidades disponibles · ${t.reservadas.toLocaleString('es-CL')} reservadas por ${t.actasPend} actas por confirmar</li><li>Suma de control: <code>${esc(g.control)}</code></li></ul><p>Adjunto: <b>${esc(g.nombre)}</b> (hojas: Inventario, Resumen por bodega, Por vencer, Actas por confirmar, Información).</p><p style="color:#64748b">Guarde este correo: es una copia fuera del sistema. Generado automáticamente por el Visor Logístico Clínico.</p>`;
-            const r = await S.enviarCorreo(cfg.destinatarios, { subject: `Respaldo semanal de inventario SAR · ${semana}`, text: texto, html }, { respaldo: true, attachments: [{ name: g.nombre, mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', base64: bytesAb64(g.bytes) }] });
+            const r = await S.enviarCorreo(cfg.destinatarios, { subject: `Respaldo semanal de inventario SAR · ${semana}`, text: texto, html }, { respaldo: true, attachments: [{ name: g.nombre, mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', base64: b64 }] });
             const estado = r.estado === 'enviado' ? 'enviado' : r.estado === 'programado' ? 'programado' : 'error';
+            if (r.estado === 'sin_adjuntos') r.detalle = 'El correo salió SIN el Excel: el script de correo está desactualizado (Seguimiento OC → Configurar correo → pegar el código nuevo).';
             await f.setDoc(ref, { tipo: 'respaldo-semanal', semana, estado, enMs: Date.now(), por: usuario(), archivo: g.nombre, control: g.control, filas: t.filas, unidades: t.unidades, destinatarios: cfg.destinatarios, detalle: String(r.detalle || r.estado || ''), actualizado: new Date().toISOString() }, { merge: true });
             return { estado, detalle: r.detalle || '', archivo: g.nombre };
         } catch (e) {
@@ -170,13 +176,14 @@
             <label>Desde el día<select class="form-control" id="bks-dia" ${adm ? '' : 'disabled'}>${[1, 2, 3, 4, 5].map(d => `<option value="${d}"${cfg.dia === d ? ' selected' : ''}>${DIAS[d]}</option>`).join('')}</select></label>
           </div>
           ${l.length ? `<div class="sal-tabla">${l.map(m => { const e = est[m.estado] || ['', m.estado]; return `<div class="bk-fila"><div><b>${esc(m.semana)}</b> <span class="bk-res ${e[0]}">${esc(e[1])}</span><small>${esc(m.archivo || '')}${m.filas ? ' · ' + num(m.filas) + ' filas' : ''}${m.control ? ' · control ' + esc(m.control) : ''} · por ${esc(m.por || '—')} · ${esc(String(m.actualizado || '').slice(0, 16).replace('T', ' '))}${m.estado === 'error' && m.detalle ? ' · ' + esc(m.detalle) : ''}</small></div></div>`; }).join('')}</div>` : '<p class="act-hint">Aún no se ha enviado ningún respaldo semanal.</p>'}
-          <div class="bk-pie bks-pie">${adm ? '<button type="button" class="btn btn-primary btn-sm" id="bks-guardar">Guardar</button> <button type="button" class="btn btn-outline btn-sm" id="bks-enviar">Enviar ahora</button> ' : ''}<button type="button" class="btn btn-outline btn-sm" id="bks-bajar">Descargar el Excel</button></div>`;
+          <div class="bk-pie bks-pie">${adm ? '<button type="button" class="btn btn-primary btn-sm" id="bks-guardar">Guardar</button> <button type="button" class="btn btn-outline btn-sm" id="bks-enviar">Enviar ahora</button> <button type="button" class="btn btn-outline btn-sm" id="bks-bajar">Descargar el Excel</button>' : '<span class="act-hint">Solo administración puede configurarlo o descargarlo.</span>'}</div>`;
         const toast = (t, m, k) => { if (window.showToast) window.showToast(t, m, k); };
-        sec.querySelector('#bks-bajar').addEventListener('click', async (e) => { const b = e.currentTarget; b.disabled = true; try { const g = await generar(); descargarBytes(g.bytes, g.nombre); } catch (x) { toast('Respaldo', 'No se pudo armar el Excel: ' + (x.message || x), 'error'); } b.disabled = false; });
+        const bj = sec.querySelector('#bks-bajar'); if (bj) bj.addEventListener('click', async (e) => { const b = e.currentTarget; b.disabled = true; try { const g = await generar(); descargarBytes(g.bytes, g.nombre); } catch (x) { toast('Respaldo', 'No se pudo armar el Excel: ' + (x.message || x), 'error'); } b.disabled = false; });
         const g = sec.querySelector('#bks-guardar');
         if (g) g.addEventListener('click', async () => {
             const dest = String(sec.querySelector('#bks-dest').value || '').split(/[,;\s]+/).map(s => s.trim()).filter(Boolean), malos = dest.filter(d => !emailOk(d));
             if (malos.length) { toast('Correos', 'Revisa: ' + malos.join(', '), 'warning'); return; }
+            const fuera = dest.filter(d => !/@(cormumel\.cl|vivirsalud\.cl)$/i.test(d)); if (fuera.length) { toast('Correos', 'El script de correo solo envía a @cormumel.cl y @vivirsalud.cl. Revisa: ' + fuera.join(', '), 'warning'); return; }
             const activo = sec.querySelector('#bks-activo').checked; if (activo && !dest.length) { toast('Correos', 'Indica al menos un correo para activar el envío.', 'warning'); return; }
             g.disabled = true;
             try { const f = F(); await f.setDoc(f.doc(f.collection(DB(), 'Config_Correo'), 'principal'), { respaldoSemanal: { activo, destinatarios: dest, dia: Number(sec.querySelector('#bks-dia').value) || 1, por: usuario(), actualizado: new Date().toISOString() } }, { merge: true }); toast('Respaldo semanal', activo ? 'Guardado: se enviará cada semana.' : 'Guardado (envío automático apagado).', 'success'); panel(); }
@@ -186,8 +193,8 @@
         if (en) en.addEventListener('click', async () => {
             const ok = window.SAR_Progreso && window.SAR_Progreso.confirmar ? await window.SAR_Progreso.confirmar({ titulo: '¿Enviar el respaldo ahora?', texto: `Se arma el Excel con el inventario actual y se envía a: <b>${esc(cfg.destinatarios.join(', ') || '(sin correos guardados)')}</b>.`, si: 'Enviar', no: 'Cancelar' }) : true;
             if (!ok) return; en.disabled = true; en.textContent = 'Enviando…';
-            const r = await enviar({ forzar: true });
-            const msg = { enviado: ['Respaldo enviado', 'success'], programado: ['Quedó en la cola de correos: sale solo en horario hábil (lunes a viernes, 8 a 17 h).', 'info'], sin_destinatarios: ['Guarda primero los correos que lo reciben.', 'warning'], sin_correo: ['Falta configurar el correo (Seguimiento OC → Configurar correo).', 'warning'], error: ['No se pudo enviar: ' + (r.detalle || ''), 'error'] }[r.estado] || [r.estado, 'info'];
+            let r; try { r = await enviar({ forzar: true }); } catch (x) { r = { estado: 'error', detalle: (x && x.message) || String(x) }; }
+            const msg = { ya_enviado: ['Otro equipo lo está armando en este momento: espera unos minutos.', 'info'], enviado: ['Respaldo enviado', 'success'], programado: ['Quedó en la cola de correos: sale solo en horario hábil (lunes a viernes, 8 a 17 h).', 'info'], sin_destinatarios: ['Guarda primero los correos que lo reciben.', 'warning'], sin_correo: ['Falta configurar el correo (Seguimiento OC → Configurar correo).', 'warning'], error: ['No se pudo enviar: ' + (r.detalle || ''), 'error'] }[r.estado] || [r.estado, 'info'];
             toast('Respaldo semanal', msg[0], msg[1]); panel();
         });
     }

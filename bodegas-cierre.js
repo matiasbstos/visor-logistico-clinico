@@ -97,9 +97,9 @@
             const o = sO.data();
             const sD = await tx.get(it.destRef);
             const qty = num(o.quantity);
+            if (num(o.reservado) > 0) throw new Error(`«${o.name}» tiene ${num(o.reservado)} u. reservadas por actas por confirmar (${Object.keys(o.reservas || {}).join(', ')}): confírmalas o elimínalas antes de cerrar la bodega.`);   /* v21.235 */
             if (qty <= 0 && !(num(o.sobregiro) > 0)) return 0;                       // ya se había movido: no hace nada
             if (o.status === 'CUARENTENA') throw new Error('Producto en CUARENTENA: resuélvelo antes de cerrar.');
-            if (num(o.reservado) > 0) throw new Error(`«${o.name}» tiene ${num(o.reservado)} u. reservadas por actas por confirmar (${Object.keys(o.reservas || {}).join(', ')}): confírmalas o elimínalas antes de cerrar la bodega.`);   /* v21.235 */
             const movidos = lotesAMover(o);
             const dData = sD.exists() ? sD.data() : null;
             const dLimite = num((dData && (dData.criticalLimit || dData.stock_minimo)) || o.criticalLimit || o.stock_minimo || 50);

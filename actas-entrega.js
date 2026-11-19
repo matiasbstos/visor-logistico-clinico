@@ -237,7 +237,7 @@
         try { const sn = await f.getDocs(f.query(f.collection(db(), 'Actas_Entrega'), f.where('confirmacion.estado', '==', 'PENDIENTE'), f.limit(300))); pendConf = []; sn.forEach(d => { const a = d.data(); if (a.estado === 'EMITIDA') pendConf.push({ id: d.id, ...a }); }); } catch (e) { pendConf = []; }
     }
     /* v21.235: las actas emitidas desde esta versión ya sacaron su stock (campo `reservado` del producto); solo se descuentan aquí las antiguas */
-    const reservadoItem = (id, nombre) => pendConf.filter(a => !a.reservaStock).reduce((t, a) => t + (a.items || []).filter(i => (id && i.id === id) || (!i.id && nombre && normN(i.nombre) === normN(nombre))).reduce((s2, i) => s2 + num(i.cantidad), 0), 0);
+    const reservadoItem = (id, nombre) => pendConf.reduce((t, a) => t + (a.items || []).filter(i => (id && i.id === id) || (!i.id && nombre && normN(i.nombre) === normN(nombre))).reduce((s2, i) => s2 + Math.max(0, num(i.cantidad) - (a.reservaStock && i.reserva ? num(i.reserva.qty) : 0)), 0), 0);   /* v21.235: lo ya reservado en el producto no se cuenta dos veces */
     const reservadoOC = (ocId, key, ocI) => pendConf.filter(a => a.oc && a.oc.id === ocId && a.oc.columna === key).reduce((t, a) => t + (a.items || []).filter(i => i.ocI === ocI).reduce((s2, i) => s2 + num(i.cantidad), 0), 0);
     /** v21.229: dónde más hay stock de un producto (otras bodegas), por nombre normalizado o ID de Mercado Público. */
     function enOtras(nombre, codigo) {
@@ -457,7 +457,10 @@
             if (!numero) { const cs = await tx.get(ctrRef); n = (cs.exists() ? num(cs.data().ultimo) : 0) + 1; numero = numeroActa(anio, n); }
             const actaRef = f.doc(f.collection(db(), 'Actas_Entrega'), numero);
             if (opc.historica) { const h0 = await tx.get(actaRef); if (h0.exists()) throw new Error(`Ya existe el acta histórica ${numero}. Usa otro N°.`); }
-            if (opc.numero) { const as0 = await tx.get(actaRef); const c0 = as0.exists() && as0.data().confirmacion; if (!c0 || c0.estado !== 'PENDIENTE' || as0.data().estado !== 'EMITIDA') throw new Error('Esta acta ya no está pendiente de confirmar.'); }
+            if (opc.numero) { const as0 = await tx.get(actaRef); const c0 = as0.exists() && as0.data().confirmacion; if (!c0 || c0.estado !== 'PENDIENTE' || as0.data().estado !== 'EMITIDA') throw new Error('Esta acta ya no está pendiente de confirmar.');
+                /* v21.235: la reserva se toma del acta recién leída (no de la copia en pantalla: otra persona pudo reservarla recién) */
+                const fr = as0.data(), lin = fr.reservaStock ? (fr.items || []) : [];
+                refs.forEach((r, k) => { const li = lin[k]; r.i.reserva = li && li.reserva && num(li.reserva.qty) > 0 && (!li.id || li.id === r.i.id) ? li.reserva : null; }); }
             const snaps = [];
             for (const r of refs) snaps.push(r.i.nuevo ? null : await tx.get(r.ref));
             // Entrega desde una orden de compra (v20.55): se valida y se actualiza lo entregado de cada línea
@@ -489,7 +492,9 @@
             });
             const vivo = new Map(), ultimo = new Map(); refs.forEach((r, k) => ultimo.set(r.clave, k));
             /* v21.235: al confirmar, lo reservado al emitir ya salió del disponible: se cierra la reserva y solo se descuenta lo que faltó reservar */
-            if (opc.numero && refs.some(r => r.i.reserva)) { const ya = new Set(); refs.forEach((r, k) => { if (r.i.reserva && !r.i.nuevo && datos[k] && !ya.has(r.clave)) { ya.add(r.clave); if (!(datos[k].reservas && num(datos[k].reservas[numero]) > 0)) throw new Error(`${r.i.nombre}: no se encontró la reserva del acta ${numero} en el producto (¿se unificó o cerró la bodega?). Revisa el producto antes de confirmar.`); } }); }
+            if (opc.numero) { const ya = new Set(); refs.forEach((r, k) => { if (r.i.nuevo || !datos[k] || ya.has(r.clave)) return; ya.add(r.clave); const tieneR = !!(datos[k].reservas && num(datos[k].reservas[numero]) > 0), lineaR = refs.some(x => x.clave === r.clave && x.i.reserva);
+                if (lineaR && !tieneR) throw new Error(`${r.i.nombre}: no se encontró la reserva del acta ${numero} en el producto (¿se unificó o cerró la bodega?). Revisa el producto antes de confirmar.`);
+                if (!lineaR && tieneR) throw new Error(`${r.i.nombre}: el producto tiene stock reservado para ${numero} pero el acta no lo indica. Actualiza la pantalla e intenta de nuevo.`); }); }
             const calc = refs.map((r, k) => {
                 const d0 = vivo.get(r.clave) || datos[k];
                 const rv = opc.numero && r.i.reserva ? num(r.i.reserva.qty) : 0, resto = num(r.i.cantidad) - rv;
@@ -581,7 +586,7 @@
                 const leidos = new Map(); for (const i of conR) if (!leidos.has(i.id)) { const ref = f.doc(f.collection(db(), 'Insumos'), i.id), sn = await tx.get(ref); leidos.set(i.id, { ref, d: sn.exists() ? sn.data() : null }); }
                 const vivoL = new Map();
                 conR.forEach(i => {
-                    const e = leidos.get(i.id); if (!e.d) throw new Error(`${i.nombre} ya no existe: no se puede devolver lo reservado.`);
+                    const e = leidos.get(i.id); if (!e.d) return;   /* el producto ya no existe (se borró): no hay a dónde devolver; el acta igual se elimina */
                     const d = vivoL.get(i.id) || e.d, res = restaurarLotes(d, i.reserva.lotes || [{ batch: 'S/L', used: num(i.reserva.qty), expirationDate: '' }]);
                     vivoL.set(i.id, { ...d, quantity: res.quantity, batches: res.batches, reservado: Math.max(0, num(d.reservado) - num(i.reserva.qty)), reservas: sinReserva(d.reservas, numero) });
                     tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name || i.nombre, item: d.name || i.nombre, quantity: num(i.reserva.qty), type: 'LIBERA_RESERVA', delta: num(i.reserva.qty), user: usuario, date: f.serverTimestamp(), document: numero, actaId: numero,

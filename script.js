@@ -4344,7 +4344,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <input type="number" min="0" step="1" inputmode="numeric" class="form-control edl-cj" data-i="${i}" value="${b.cajas === '' || b.cajas == null ? '' : Number(b.cajas)}" placeholder="Cajas" aria-label="Cajas del lote ${i + 1}">
                 <input type="number" min="0" step="1" inputmode="numeric" class="form-control edl-uc" data-i="${i}" value="${Number(b.porCaja) > 0 ? Number(b.porCaja) : ''}" placeholder="${sug ? sug + '?' : 'U/caja'}" aria-label="Unidades por caja del lote ${i + 1}">
                 <input type="number" min="0" step="1" class="form-control edl-q" data-i="${i}" value="${Number(b.quantity) || 0}" aria-label="Total en unidades del lote ${i + 1}">
-                <button type="button" class="btn btn-icon edl-x" data-i="${i}" title="Quitar lote" aria-label="Quitar lote ${i + 1}"${L.length <= 1 ? ' disabled' : ''}><i class="ph ph-trash"></i></button></div>`).join('') + (L.length ? '<small class="edl-ayuda">Escribe cuántas cajas llegaron y cuántas unidades trae cada caja: el total en unidades se calcula solo. Si hay unidades sueltas, corrige el total.</small>' : '');
+                <button type="button" class="btn btn-icon edl-x" data-i="${i}" title="Quitar lote" aria-label="Quitar lote ${i + 1}"${L.length <= 1 ? ' disabled' : ''}><i class="ph ph-trash"></i></button></div>`).join('') + (L.length ? '<small class="edl-ayuda">Escribe cuántas cajas llegaron y cuántas unidades trae cada caja: el total en unidades se calcula solo. Si hay unidades sueltas, corrige el total.</small>' : '') + (Number(window.__editOriginal && window.__editOriginal.reservado) > 0 ? `<small class="edl-ayuda edl-reserva">Además hay <b>${Number(window.__editOriginal.reservado)}</b> u. reservadas por actas por confirmar: siguen en el estante pero NO van en estos lotes. Si cuentas el estante, réstalas.</small>` : '');
             const q = document.getElementById('edit-quantity');
             if (q) { q.value = L.reduce((t, b) => t + (Number(b.quantity) || 0), 0); q.readOnly = true; q.title = 'Es la suma de los lotes'; }
         };
@@ -4418,6 +4418,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     status: rawData.status || "ACTIVO"
                 };
                 { const so = document.getElementById('edit-location'), op = so && so.selectedOptions[0]; if (op && op.dataset.id) updatedData.bodegaId = op.dataset.id; }
+                { const o0 = window.__editOriginal || {}; if (Number(o0.reservado) > 0 && String(o0.location || '').trim() !== updatedData.location) { window.showAlertCenter('No se puede cambiar la bodega', `Este producto tiene ${Number(o0.reservado)} u. reservadas por actas por confirmar (${Object.keys(o0.reservas || {}).join(', ')}) en ${o0.location}. Confírmalas o elimínalas antes de cambiarlo de bodega (o usa Transferencias para mover lo disponible).`); return; } }   /* v21.235 */
                 if (window.SAR_CodigoSAR && Array.isArray(updatedData.batches)) await window.SAR_CodigoSAR.codificarLotes(updatedData.name, updatedData.batches);
                 // Si cambia el nombre, el anterior queda como alias: así los ingresos, ajustes y sugerencias siguen apuntando al mismo producto y no se crea un duplicado
                 if (window.__editOriginal && window.__editOriginal.name && String(window.__editOriginal.name).trim() !== updatedData.name) {
@@ -5762,6 +5763,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 const masProximo = [...nuevosLotes].sort(window.fefoCompare)[0];
                                 transaction.set(docRefDest, {
                                     ...dataActual,
+                                    reservado: 0, reservas: {},   /* v21.235: lo reservado por actas se queda en el origen */
                                     location: toName,
                                     quantity: qtyToMove,
                                     isCritical: qtyToMove <= dLimit,
@@ -5876,7 +5878,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 let stockTotal = 0, lineasConStock = 0;
                 try {
                     const snapStock = await getDocs(query(collection(db, 'Insumos'), where('location', '==', bodegaName), limit(600)));
-                    snapStock.forEach(d => { const q = Number(d.data().quantity) || 0; if (q > 0) { stockTotal += q; lineasConStock++; } });
+                    snapStock.forEach(d => { const q = (Number(d.data().quantity) || 0) + (Number(d.data().reservado) || 0) + (Number(d.data().sobregiro) || 0); if (q > 0) { stockTotal += q; lineasConStock++; } });   /* v21.235: también lo reservado y lo adeudado */
                 } catch (err) {
                     showToast('No se pudo verificar', 'No se pudo comprobar el stock de la bodega; no se elimina nada.', 'error');
                     return;
@@ -13179,7 +13181,7 @@ function doGet(e) {
                         if (targetDoc) {
                             const currentQty = Number(targetDoc.data().quantity) || 0;
                             const newQty = Math.max(0, currentQty - (Number(target.quantity) || 0));
-                            if (newQty === 0) {
+                            if (newQty === 0 && !(Number(targetDoc.data().reservado) > 0)) {   /* v21.235: con stock reservado por actas no se borra el registro */
                                 await deleteDoc(targetDoc.ref);
                             } else {
                                 await updateDoc(targetDoc.ref, {

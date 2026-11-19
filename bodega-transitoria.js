@@ -187,7 +187,9 @@
     const out = [], vistos = new Set();
     insumosBod.filter(i => i.status !== 'CUARENTENA').forEach(i => {
       const cod = soloDig(i.codigoMP || i.code), k = claveDe(i.name, cod); vistos.add(k);
-      lotesDe(i).forEach(l => out.push({ k, nombre: i.name, codigo: cod, estante: i.ubicacionEstante || '', lote: l.batch || '', vence: l.expirationDate || '', lab: labDe(i), sistema: num(l.quantity), objetivo: objetivos[k] ? num(objetivos[k].objetivo) : '' }));
+      /* v21.235: lo reservado por actas por confirmar sigue en el estante: se suma a lo que el sistema espera contar (en el primer lote) */
+      const rv = num(i.reservado), ls = lotesDe(i); if (!ls.length && rv > 0) ls.push({ batch: 'S/L', quantity: 0, expirationDate: '' });
+      ls.forEach((l, li) => out.push({ k, nombre: i.name + (li === 0 && rv > 0 ? ` (incluye ${rv} reservadas para actas)` : ''), codigo: cod, estante: i.ubicacionEstante || '', lote: l.batch || '', vence: l.expirationDate || '', lab: labDe(i), sistema: num(l.quantity) + (li === 0 ? rv : 0), objetivo: objetivos[k] ? num(objetivos[k].objetivo) : '' }));
     });
     Object.entries(objetivos).forEach(([k, o]) => { if (!vistos.has(k)) out.push({ k, nombre: o.nombre, codigo: o.codigo || '', estante: '', lote: '', vence: '', lab: '', sistema: 0, objetivo: num(o.objetivo) }); });
     return out.sort((a, b) => String(a.nombre).localeCompare(String(b.nombre), 'es') || String(a.vence).localeCompare(String(b.vence)));

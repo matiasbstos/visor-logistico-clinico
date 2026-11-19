@@ -49,7 +49,7 @@
         for (const l of lotes) {
             if (falta <= 0) break;
             const u = Math.min(l.quantity, falta);
-            if (u > 0) { usados.push({ batch: l.batch, used: u, expirationDate: l.expirationDate }); l.quantity -= u; falta -= u; }
+            if (u > 0) { usados.push({ batch: l.batch, used: u, expirationDate: l.expirationDate, ...(Number(l.porCaja) > 0 ? { porCaja: Number(l.porCaja) } : {}) }); l.quantity -= u; falta -= u; }
         }
         // stock sin lote registrado
         if (falta > 0) usados.push({ batch: 'S/L', used: falta, expirationDate: '' });
@@ -61,7 +61,7 @@
         for (const l of lotes) {
             if (falta <= 0) break;
             const u = Math.min(l.quantity, falta);
-            if (u > 0) { usados.push({ batch: l.batch, used: u, expirationDate: l.expirationDate }); l.quantity -= u; falta -= u; }
+            if (u > 0) { usados.push({ batch: l.batch, used: u, expirationDate: l.expirationDate, ...(Number(l.porCaja) > 0 ? { porCaja: Number(l.porCaja) } : {}) }); l.quantity -= u; falta -= u; }
         }
         if (falta > 0) usados.push({ batch: 'S/L', used: falta, expirationDate: '' });
     }
@@ -141,7 +141,7 @@
         for (const u of usados || []) {
             total += num(u.used);
             const ex = arr.find(b => b.batch === u.batch && (b.expirationDate || '') === (u.expirationDate || ''));
-            if (ex) ex.quantity += num(u.used); else arr.push({ batch: u.batch, quantity: num(u.used), expirationDate: u.expirationDate || '' });
+            if (ex) ex.quantity += num(u.used); else arr.push({ batch: u.batch, quantity: num(u.used), expirationDate: u.expirationDate || '', ...(num(u.porCaja) > 0 ? { porCaja: num(u.porCaja) } : {}) });
         }
         return { batches: arr, quantity: num(d.quantity) + total };
     }

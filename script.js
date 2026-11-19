@@ -4919,7 +4919,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 ...(!dataAnterior.codigoSAR && codigoSAR ? { codigoSAR } : {}),
                                 ...((!dataAnterior.category || dataAnterior.category === 'General') && categoriaSel !== 'General' ? { category: categoriaSel } : {}),
                                 ...(!dataAnterior.codigoMP && codigoMP ? { codigoMP } : {}),
-                                ...(porCajaIng ? { unidadesPorCaja: porCajaIng } : {}),
+                                ...(porCajaIng && !(Number(dataAnterior.unidadesPorCaja) > 0) ? { unidadesPorCaja: porCajaIng } : {}),
                                 // El tipo de un insumo ya clasificado no se cambia desde un ingreso
                                 tipoInsumo: dataAnterior.tipoInsumo || (['medico', 'aseo', 'oficina'].includes(data.tipoInsumo) ? data.tipoInsumo : 'medico'),
                                 updatedAt: serverTimestamp()
@@ -5720,6 +5720,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     used: usedQty,
                                     expirationDate: recorrer[i].expirationDate || '',
                                     ...(recorrer[i].codigoLote ? { codigoLote: recorrer[i].codigoLote } : {}),
+                                    ...(Number(recorrer[i].porCaja) > 0 ? { porCaja: Number(recorrer[i].porCaja) } : {}),
                                     ...(recorrer[i].provider ? { provider: recorrer[i].provider } : {})
                                 });
                             }
@@ -5739,7 +5740,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         // 2. Destino (solo traspaso a bodega): conserva el código y vencimiento reales de cada lote
                         if (docRefDest) {
-                            const moved = lotesMovidos.map(l => ({ batch: l.batch, quantity: l.used, expirationDate: l.expirationDate, ...(l.codigoLote ? { codigoLote: l.codigoLote } : {}), ...(l.provider ? { provider: l.provider } : {}) }));
+                            const moved = lotesMovidos.map(l => ({ batch: l.batch, quantity: l.used, expirationDate: l.expirationDate, ...(l.codigoLote ? { codigoLote: l.codigoLote } : {}), ...(Number(l.porCaja) > 0 ? { porCaja: Number(l.porCaja) } : {}), ...(l.provider ? { provider: l.provider } : {}) }));
                             const mergeInto = (arr) => {
                                 for (const m of moved) {
                                     const ex = arr.find(b => b.batch === m.batch && (b.expirationDate || '') === (m.expirationDate || ''));

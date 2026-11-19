@@ -4341,7 +4341,7 @@ document.addEventListener('DOMContentLoaded', () => {
             cont.innerHTML = (L.length ? `<div class="edl-cab" aria-hidden="true"><span>Lote</span><span>Vencimiento</span><span>Cajas</span><span>U. por caja</span><span>Total (u.)</span><span></span></div>` : '') + L.map((b, i) => `<div class="edl-fila">
                 <input type="text" class="form-control edl-b" data-i="${i}" value="${window.escapeHTML(b.batch)}" placeholder="Lote" aria-label="Lote ${i + 1}">
                 <input type="date" class="form-control edl-v" data-i="${i}" value="${window.escapeHTML(b.expirationDate)}" aria-label="Vencimiento lote ${i + 1}">
-                <input type="number" min="0" step="1" inputmode="numeric" class="form-control edl-cj" data-i="${i}" value="${b.cajas === '' || b.cajas == null ? '' : Number(b.cajas)}" placeholder="Cajas" aria-label="Cajas del lote ${i + 1}">
+                <input type="number" min="0" step="1" inputmode="numeric" class="form-control edl-cj" data-i="${i}" value="${b.cajas === '' || b.cajas == null ? '' : Number(b.cajas)}" placeholder="${Number(b.porCaja) > 0 && Number(b.quantity) > 0 ? Math.floor(Number(b.quantity) / Number(b.porCaja)) + ' + ' + (Number(b.quantity) % Number(b.porCaja)) + ' u.' : 'Cajas'}" aria-label="Cajas del lote ${i + 1}">
                 <input type="number" min="0" step="1" inputmode="numeric" class="form-control edl-uc" data-i="${i}" value="${Number(b.porCaja) > 0 ? Number(b.porCaja) : ''}" placeholder="${sug ? sug + '?' : 'U/caja'}" aria-label="Unidades por caja del lote ${i + 1}">
                 <input type="number" min="0" step="1" class="form-control edl-q" data-i="${i}" value="${Number(b.quantity) || 0}" aria-label="Total en unidades del lote ${i + 1}">
                 <button type="button" class="btn btn-icon edl-x" data-i="${i}" title="Quitar lote" aria-label="Quitar lote ${i + 1}"${L.length <= 1 ? ' disabled' : ''}><i class="ph ph-trash"></i></button></div>`).join('') + (L.length ? '<small class="edl-ayuda">Escribe cuántas cajas llegaron y cuántas unidades trae cada caja: el total en unidades se calcula solo. Si hay unidades sueltas, corrige el total.</small>' : '') + (Number(window.__editOriginal && window.__editOriginal.reservado) > 0 ? `<small class="edl-ayuda edl-reserva">Además hay <b>${Number(window.__editOriginal.reservado)}</b> u. reservadas por actas por confirmar: siguen en el estante pero NO van en estos lotes. Si cuentas el estante, réstalas.</small>` : '');
@@ -4784,6 +4784,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const insumoNormalizado = nombreInput.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
                 const quantity = Number(data.quantity);
                 const cleanBatch = (data.batch || "").trim().toUpperCase() || 'S/L';
+                /* v21.236: si se ingresó «Por cajas», las unidades por caja quedan en el lote (y se ven en Editar insumo) */
+                const porCajaIng = (() => { const pan = document.getElementById('ing-cajas'), nC = document.getElementById('ing-n-cajas'), uC = document.getElementById('ing-u-caja'); if (!pan || pan.style.display === 'none' || !nC || !uC) return 0; const n = Math.floor(Number(nC.value) || 0), u = Math.floor(Number(uC.value) || 0); return n > 0 && u > 0 && n * u === quantity ? u : 0; })();
 
                 // Sanitización de Fecha Robusta (Type Guard)
                 const _expD = window.SAR_Utils.parseDate(data.expirationDate);
@@ -4853,8 +4855,10 @@ document.addEventListener('DOMContentLoaded', () => {
                                     quantity: quantity,
                                     expirationDate: formattedDate,
                                     provider: data.providerId || 'S/I',
-                                    ...(codigoLote ? { codigoLote } : {})
+                                    ...(codigoLote ? { codigoLote } : {}),
+                                    ...(porCajaIng ? { porCaja: porCajaIng } : {})
                                 }],
+                                ...(porCajaIng ? { unidadesPorCaja: porCajaIng } : {}),
                                 batch: cleanBatch, // Mantenemos por retrocompatibilidad UI temporal
                                 expirationDate: formattedDate,
                                 provider: data.providerId || "S/I",
@@ -4891,13 +4895,15 @@ document.addEventListener('DOMContentLoaded', () => {
                                 currentBatches[batchIndex].quantity += quantity;
                                 if (!currentBatches[batchIndex].codigoLote && codigoLote) currentBatches[batchIndex].codigoLote = codigoLote;
                                 if (formattedDate && !vNorm(currentBatches[batchIndex].expirationDate)) currentBatches[batchIndex].expirationDate = formattedDate;   // solo completa si no tenía
+                                if (porCajaIng && !(Number(currentBatches[batchIndex].porCaja) > 0)) currentBatches[batchIndex].porCaja = porCajaIng;
                             } else {
                                 currentBatches.push({
                                     batch: cleanBatch,
                                     quantity: quantity,
                                     expirationDate: formattedDate,
                                     provider: data.providerId || 'S/I',
-                                    ...(codigoLote ? { codigoLote } : {})
+                                    ...(codigoLote ? { codigoLote } : {}),
+                                    ...(porCajaIng ? { porCaja: porCajaIng } : {})
                                 });
                             }
 
@@ -4913,6 +4919,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 ...(!dataAnterior.codigoSAR && codigoSAR ? { codigoSAR } : {}),
                                 ...((!dataAnterior.category || dataAnterior.category === 'General') && categoriaSel !== 'General' ? { category: categoriaSel } : {}),
                                 ...(!dataAnterior.codigoMP && codigoMP ? { codigoMP } : {}),
+                                ...(porCajaIng ? { unidadesPorCaja: porCajaIng } : {}),
                                 // El tipo de un insumo ya clasificado no se cambia desde un ingreso
                                 tipoInsumo: dataAnterior.tipoInsumo || (['medico', 'aseo', 'oficina'].includes(data.tipoInsumo) ? data.tipoInsumo : 'medico'),
                                 updatedAt: serverTimestamp()

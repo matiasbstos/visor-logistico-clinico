@@ -728,7 +728,7 @@
         const blo = q('#soc-lotes'); if (blo) blo.addEventListener('click', formLotes);
         root().querySelectorAll('[data-anular-rec]').forEach(b => b.addEventListener('click', async () => {
             const recId = b.dataset.anularRec;
-            const motivo = (prompt(`Anular la recepción ${recId}: lo recibido vuelve a quedar "por recibir" y, si ingresó a stock, se retira de la bodega. Queda el registro en la bitácora y en el historial.${ocActual.recepcionConforme ? '\n\nOJO: la recepción conforme ya emitida no cambia sola; edítala o regenérala después.' : ''}\n\nMotivo:`, 'Recepción mal registrada') || '').trim();
+            const motivo = String((await window.SAR_Progreso.pedir({ titulo: `Anular la recepción ${recId}`, texto: `Lo recibido vuelve a quedar «por recibir» y, si ingresó a stock, se retira de la bodega. Queda el registro en la bitácora y en el historial.${ocActual.recepcionConforme ? '<span class="sar-conf__aviso">La recepción conforme ya emitida no cambia sola: edítala o regenérala después.</span>' : ''}<br><b>Motivo:</b>`, valor: 'Recepción mal registrada', si: 'Anular recepción', no: 'Cancelar', peligro: true })) || '').trim();
             if (!motivo) return;
             const prog = window.SAR_Progreso.iniciar('Anulando la recepción…', ['Preparando la anulación…']);
             try { await anularRecepcion(ocActual, recId, motivo, (t) => prog.paso(t)); prog.listo(`Recepción ${recId} anulada: stock y cantidades revertidos`, { informe: true }); }
@@ -777,7 +777,7 @@
         if (!oc || !esAdmin()) return; const f = fs();
         const recs = (oc.recepciones || []).filter(r => !r.anulada);
         if (recs.length || hayRecibido(oc)) { toast('No se puede eliminar', 'Esta orden ya tiene recepciones (' + recs.length + '). Anúlalas primero para devolver el stock y luego elimínala.', 'warning'); return; }
-        const t = window.prompt(`Vas a ELIMINAR la orden ${oc.numeroOC} (sin recepciones, no hay stock que revertir). Esto no se puede deshacer.\n\nEscribe el N° de la orden para confirmar:`, '');
+        const t = await window.SAR_Progreso.pedir({ titulo: `Eliminar la orden ${oc.numeroOC}`, texto: 'No tiene recepciones: no hay stock que revertir. <b>Esto no se puede deshacer.</b><br>Escribe el N° de la orden para confirmar:', placeholder: String(oc.numeroOC), si: 'Eliminar orden', no: 'Cancelar', peligro: true });
         if (t == null) return; if (String(t).trim().toUpperCase() !== String(oc.numeroOC).trim().toUpperCase()) { toast('No coincide', 'El número escrito no coincide: no se eliminó nada.', 'warning'); return; }
         const prog = window.SAR_Progreso.iniciar('Eliminando la orden…', ['Borrando los archivos de la orden…']);
         try {

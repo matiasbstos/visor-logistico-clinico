@@ -153,7 +153,9 @@
       <div class="dis-pie"><button type="button" class="btn btn-outline btn-sm" id="dis-addl">+ Agregar línea</button><span class="act-hint">El stock se lee de la Bodega Central: lo que aún no llega aparece «sin stock» hasta que se ingrese la orden de compra.</span></div>`;
   }
 
-  function pedirTexto(titulo, valor) { const v = window.prompt(titulo, valor || ''); return v == null ? null : v.trim(); }
+  /* v21.233: ventanas del sitio (al centro, con la marca) en vez de los cuadros de Chrome */
+  async function pedirTexto(titulo, valor) { const P = window.SAR_Progreso; const v = P && P.pedir ? await P.pedir({ titulo, valor: valor || '', si: 'Aceptar' }) : window.prompt(titulo, valor || ''); return v == null ? null : String(v).trim(); }
+  const preg = (o) => (window.SAR_Progreso && window.SAR_Progreso.confirmar ? window.SAR_Progreso.confirmar(o) : Promise.resolve(window.confirm(String(o.titulo || ''))));
   async function importar(file) {
     if (!window.XLSX) { toast('Excel', 'La librería de Excel aún no carga. Intenta de nuevo en unos segundos.', 'warning'); return; }
     try {
@@ -189,7 +191,7 @@
     });
     if (!lst.length) { toast('Entregar', 'Este centro no tiene cantidades pendientes de entrega.', 'info'); return; }
     if (lst.length > 60) { lst.sort((x, y) => (y.entregable > 0) - (x.entregable > 0)); lst.length = 60; toast('Acta', 'Un acta admite 60 productos: se armó con los primeros 60 (los que se entregan primero). Repite para el resto.', 'info'); }
-    if (!lst.some(p => p.entregable > 0) && !window.confirm('No marcaste nada para entregar: el acta saldría solo con pendientes. ¿Continuar?')) return;
+    if (!lst.some(p => p.entregable > 0) && !(await preg({ titulo: 'El acta saldría solo con pendientes', texto: 'No marcaste nada para entregar a este centro.', si: 'Continuar', no: 'Volver' }))) return;
     if (act && act.id === d.id) { try { await guardar(true); } catch (e) { /* sigue */ } }
     A.precargar(ce.nombre, lst, { id: d.id, correlativo: d.correlativo || '', centro: ce.nombre, ci: cidx });
   }
@@ -262,7 +264,7 @@
       });
       body.querySelectorAll('.dp-vinc').forEach(b => b.addEventListener('click', async () => {
         const tr = b.closest('.dis-prow'), l = ce.lineas[Number(tr.dataset.i)], destino = b.dataset.n;
-        if (!window.confirm(`¿«${nombreDe(l)}» (ID ${l.idCM || 's/i'}) es el MISMO producto que «${destino}» del stock?\n\nSe recordará para las próximas distribuciones y órdenes.`)) return;
+        if (!(await preg({ titulo: '¿Es el mismo producto?', texto: `«${esc(nombreDe(l))}» (ID ${esc(l.idCM || 's/i')}) y «${esc(destino)}» del stock. Se recordará para las próximas distribuciones y órdenes.`, si: 'Sí, es el mismo', no: 'No' }))) return;
         try { const f = fs(), id = String(l.idCM || l.descripcion || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60).slice(0, 120);
           await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: l.descripcion, descripcion_lower: String(l.descripcion).toLowerCase(), codigoMP: l.idCM || '', insumoName: destino, actualizado: f.serverTimestamp() }, { merge: true });
           await cargarStock(); toast('Vinculado', 'Esa línea ahora usa el stock de «' + destino + '».', 'success'); cargarPanel(body, true);
@@ -287,16 +289,16 @@
     el.addEventListener('click', async (e) => {
       const t = e.target, b = (s) => t.closest(s);
       try {
-        if (b('#dis-nueva')) { const n = pedirTexto('Nombre de la distribución (ej: SDC 1122 · insumos de curación):', ''); if (!n) return; const m = window.confirm('¿Es una compra por CONVENIO MARCO?\n\nAceptar = Convenio Marco · Cancelar = No Marco') ? 'CONVENIO' : 'NO_MARCO'; act = await crear(n, m); ci = 0; entMap = {}; await guardar(true); await cargarOCs(); pintarDetalle(); }
+        if (b('#dis-nueva')) { const n = await pedirTexto('Nombre de la distribución (ej: SDC 1122 · insumos de curación)', ''); if (!n) return; const m = (await preg({ titulo: '¿Tipo de compra?', texto: `Distribución <b>${esc(n)}</b>.`, si: 'Convenio Marco', no: 'No Marco' })) ? 'CONVENIO' : 'NO_MARCO'; act = await crear(n, m); ci = 0; entMap = {}; await guardar(true); await cargarOCs(); pintarDetalle(); }
         else if (b('.dis-hit')) { const h = hitsLista[Number(b('.dis-hit').dataset.k)]; if (!h) return; act = JSON.parse(JSON.stringify(lista.find(d => d.id === h.distId))); ci = h.ci; if (!stockIdx) await cargarStock(); await cargarOCs(); entMap = await cargarEntregas(act.id); pintarDetalle(); const tr = root().querySelector(`tr[data-i="${h.i}"]`); if (tr) { tr.classList.add('dis-foco'); tr.scrollIntoView({ block: 'center' }); } }
         else if (b('.dis-card')) { act = JSON.parse(JSON.stringify(lista.find(d => d.id === b('.dis-card').dataset.id))); ci = 0; if (!stockIdx) await cargarStock(); await cargarOCs(); entMap = await cargarEntregas(act.id); pintarDetalle(); }
-        else if (b('#dis-volver')) { if (sucio && !window.confirm('Hay cambios sin guardar. ¿Salir igual?')) return; await cargarLista(); pintarLista(); }
+        else if (b('#dis-volver')) { if (sucio && !(await preg({ titulo: 'Hay cambios sin guardar', texto: 'Si sales ahora se pierden.', si: 'Salir igual', no: 'Quedarme', peligro: true }))) return; await cargarLista(); pintarLista(); }
         else if (b('#dis-guardar')) { await guardar(); pintarDetalle(); }
         else if (b('#dis-xls')) descargar();
         else if (b('.dis-tab[data-ci]')) { ci = Number(b('.dis-tab').dataset.ci); pintarDetalle(); }
-        else if (b('#dis-addc')) { const n = pedirTexto('Nombre del centro:', ''); if (!n) return; act.centros.push({ nombre: n, lineas: [] }); ci = act.centros.length - 1; sucio = true; pintarDetalle(); }
-        else if (b('#dis-ren')) { const n = pedirTexto('Nuevo nombre del centro:', act.centros[ci].nombre); if (!n) return; act.centros[ci].nombre = n; sucio = true; pintarDetalle(); }
-        else if (b('#dis-quitc')) { if (act.centros.length < 2) { toast('Centros', 'Debe quedar al menos un centro.', 'warning'); return; } if (!window.confirm(`¿Quitar «${act.centros[ci].nombre}» y sus ${act.centros[ci].lineas.length} línea(s)?`)) return; act.centros.splice(ci, 1); ci = 0; sucio = true; pintarDetalle(); }
+        else if (b('#dis-addc')) { const n = await pedirTexto('Nombre del centro', ''); if (!n) return; act.centros.push({ nombre: n, lineas: [] }); ci = act.centros.length - 1; sucio = true; pintarDetalle(); }
+        else if (b('#dis-ren')) { const n = await pedirTexto('Nuevo nombre del centro', act.centros[ci].nombre); if (!n) return; act.centros[ci].nombre = n; sucio = true; pintarDetalle(); }
+        else if (b('#dis-quitc')) { if (act.centros.length < 2) { toast('Centros', 'Debe quedar al menos un centro.', 'warning'); return; } if (!(await preg({ titulo: `¿Quitar «${act.centros[ci].nombre}»?`, texto: `Se quitan sus ${act.centros[ci].lineas.length} línea(s) de la distribución.`, si: 'Quitar', no: 'Cancelar', peligro: true }))) return; act.centros.splice(ci, 1); ci = 0; sucio = true; pintarDetalle(); }
         else if (b('#dis-addl')) { act.centros[ci].lineas.push({ descripcion: '', idCM: '', equivalente: '', presentacion: '', valor: 0, cantidad: 0, unidad: '', proyecto: '', referencia: '', entregado: 0 }); sucio = true; pintarDetalle(); }
         else if (b('.dis-del')) { act.centros[ci].lineas.splice(Number(b('tr').dataset.i), 1); sucio = true; pintarDetalle(); }
         else if (b('#dis-entregar')) entregar();

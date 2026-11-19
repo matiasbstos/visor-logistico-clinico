@@ -232,6 +232,9 @@
         global.filter(g => g.bodega !== String(borrador.origen || '').trim() && (g.n === n || (c && /^\d{5,}$/.test(c) && g.cod === c))).forEach(g => m.set(g.bodega, (m.get(g.bodega) || 0) + g.q));
         return [...m.entries()].map(([bodega, q]) => ({ bodega, q })).sort((a, b) => b.q - a.q);
     }
+    /* v21.233: confirmaciones con la ventana del sitio (al centro, con la marca), nunca el cuadro de Chrome */
+    const preg = (o) => (window.SAR_Progreso && window.SAR_Progreso.confirmar ? window.SAR_Progreso.confirmar(o) : Promise.resolve(window.confirm(String(o.titulo || '') + '\n\n' + String(o.texto || '').replace(/<[^>]+>/g, ''))));
+    const pedirTx = (o) => (window.SAR_Progreso && window.SAR_Progreso.pedir ? window.SAR_Progreso.pedir(o) : Promise.resolve(window.prompt(String(o.titulo || ''), o.valor || '')));
     const otrasHTML = (o) => o.length ? `<span class="act-otra"><i class="ph-bold ph-warning"></i> Hay ${o.map(x => `<b>${x.q}</b> en ${esc(x.bodega)}`).join(', ')}</span> <button type="button" class="btn btn-outline btn-sm act-cambia" data-cambia="${esc(o[0].bodega)}">Usar ${esc(o[0].bodega)}</button>` : '';
     async function cargarStock() {
         stock = [];
@@ -575,7 +578,7 @@
                 if (!(nom.toLowerCase().includes(q) || cod.includes(q))) return;
                 vistos.add(nn); out.push({ ci, nombre: nom, codigo: cod, imagen: c.imagen || '', derivado: c.derivado || '' });
             });
-            global.forEach(g => { if (vistos.has(g.n) || g.bodega === String(borrador.origen || '').trim() || !(g.nombre.toLowerCase().includes(q) || g.cod.includes(q))) return; vistos.add(g.n); out.push({ ci: -1, nombre: String(g.nombre).toUpperCase(), codigo: g.cod, imagen: '', derivado: '' }); });   /* v21.229: también lo que está en otras bodegas */
+            global.forEach(g => { if (vistos.has(g.n) || g.bodega === String(borrador.origen || '').trim() || !(g.nombre.toLowerCase().includes(q) || g.cod.includes(q))) return; vistos.add(g.n); out.push({ ci: -1, gi: out.length, nombre: String(g.nombre).toUpperCase(), codigo: g.cod, imagen: '', derivado: '' }); });   /* v21.229: también lo que está en otras bodegas */
             return out.slice(0, 20);
         })();
         const yaCat = (x) => borrador.items.some(i => i.manual && (normN(i.nombre) === normN(x.nombre) || (x.codigo && i.codigo === x.codigo)));
@@ -597,6 +600,7 @@
             <h3 class="act-h">1 · Stock disponible</h3>
             <label class="act-l">Bodega de origen
               <select id="act-origen"><option value="">— elegir —</option>${bodegas.map(b => `<option value="${esc(b.name)}"${b.name === borrador.origen ? ' selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
+            ${borrador.autoOrigen && borrador.autoOrigen.bodega === borrador.origen ? `<div class="act-auto" role="status"><i class="ph-bold ph-arrows-left-right" aria-hidden="true"></i><span>Origen elegido automáticamente: <b>${esc(borrador.origen)}</b> tiene el stock de ${esc(borrador.autoOrigen.producto)}.</span><span class="act-auto-b"><button type="button" class="btn btn-outline btn-sm act-auto-ok">Correcto</button>${borrador.autoOrigen.previa ? `<button type="button" class="btn btn-outline btn-sm act-auto-volver" data-volver="${esc(borrador.autoOrigen.previa)}">Volver a ${esc(borrador.autoOrigen.previa)}</button>` : ''}</span></div>` : ''}
             <input id="act-buscar" type="search" placeholder="Buscar por nombre o ID del producto…" value="${esc(busqueda)}" autocomplete="off">
             <details class="act-det act-manual"${(manualAbierto || borrador.items.some(i => i.manual)) ? ' open' : ''}><summary>¿No está en el sistema? Ingreso manual</summary>
               <p class="act-hint">Se asume que lo tienes físicamente. Queda como insumo provisional y como <b>sobregiro</b> (saldo contable negativo) hasta que ingrese la OC/SDC y se cuadre.</p>
@@ -609,9 +613,9 @@
             <div class="act-stock">${!borrador.origen ? '<p class="act-hint">Elige una bodega para ver su stock.</p>' : !lista.length ? '<p class="act-hint">Sin resultados. Si no está en el sistema, agrégalo a mano abajo.</p>' : lista.map(s => `
               <div class="act-fila${yaEsta(s.id) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(s.name, { codigo: s.codigo }) : ''}${esc(s.name)}${s.controlado ? ' <small>(controlado)</small>' : ''}${s.provisional ? ' <small>(provisional)</small>' : ''}<small>${s.codigo ? '<b>ID ' + esc(s.codigo) + '</b> · ' : '<span class="act-sin">sin ID</span> · '}${s.disp > 0 ? 'Disponible: ' + s.disp + (s.reserv > 0 ? ' · reservado en actas por confirmar: ' + s.reserv : '') : '<span class="act-sin">Sin stock en sistema</span>'}${s.sobregiro > 0 ? ' · sobregiro: ' + s.sobregiro : ''}</small></div>
                 ${yaEsta(s.id) ? '<span class="act-chip">agregado</span>' : `<input type="number" min="0" class="act-qty" data-sid="${esc(s.id)}" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input type="number" min="1" value="1" class="act-qty" data-qid="${esc(s.id)}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-add" data-id="${esc(s.id)}">Agregar</button>`}</div>`).join('')}
-              ${enCat.length ? '<p class="act-hint"><b>Sin stock en esta bodega</b> (del catálogo, registrados antes o en otras bodegas). Si está en otra bodega, usa esa bodega como origen; agregarlo aquí lo deja como manual · provisional (deuda):</p>' + enCat.map(x => `
+              ${enCat.length ? '<p class="act-hint"><b>Sin stock en esta bodega</b> (del catálogo, registrados antes o en otras bodegas). Si está en otra bodega, al agregarlo el origen cambia solo a esa bodega; si no hay en ninguna, queda como manual · provisional (deuda):</p>' + enCat.map(x => `
               <div class="act-fila${yaCat(x) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}${esc(x.nombre)} <small>(${x.derivado ? 'registrado en ' + esc(x.derivado) : 'catálogo'})</small><small>${x.codigo ? '<b>ID ' + esc(x.codigo) + '</b>' : '<span class="act-sin">sin ID</span>'} · <span class="act-sin">Sin stock en esta bodega</span>${(() => { const o = enOtras(x.nombre, x.codigo); return o.length ? '<br>' + otrasHTML(o) : ''; })()}</small></div>
-                ${yaCat(x) ? '<span class="act-chip">agregado</span>' : x.ci < 0 ? '' : `<input type="number" min="0" class="act-qty" data-csid="${x.ci}" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input type="number" min="0" value="1" class="act-qty" data-cqid="${x.ci}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-addcat" data-ci="${x.ci}">Agregar</button>`}</div>`).join('') : ''}
+                ${yaCat(x) ? '<span class="act-chip">agregado</span>' : (() => { const k = x.ci < 0 ? 'g' + x.gi : x.ci, dat = x.ci < 0 ? `data-gi="${x.gi}" data-gn="${esc(x.nombre)}" data-gc="${esc(x.codigo)}"` : `data-ci="${x.ci}"`; return `<input type="number" min="0" class="act-qty" data-csid="${k}" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input type="number" min="0" value="1" class="act-qty" data-cqid="${k}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-addcat" ${dat}>Agregar</button>`; })()}</div>`).join('') : ''}
               ${stock.filter(s => !q || s.name.toLowerCase().includes(q) || String(s.codigo || '').includes(q)).length > 80 ? '<p class="act-hint">Hay más resultados: afina la búsqueda.</p>' : ''}</div>
           </div>
           <div class="act-col">
@@ -699,8 +703,8 @@
         const refrescar = () => { leerCampos(); guardarBorrador(); pintar(); };
         $('#act-origen').addEventListener('change', async (e) => {
             leerCampos();
-            if (borrador.items.length && !confirm('Cambiar de bodega vacía los productos agregados. ¿Continuar?')) { e.target.value = borrador.origen || ''; return; }
-            borrador.origen = e.target.value || null; borrador.items = [];
+            if (borrador.items.length && !(await preg({ titulo: 'Cambiar la bodega de origen', texto: `Se quitarán los <b>${borrador.items.length}</b> productos ya agregados al acta.`, si: 'Cambiar bodega', no: 'Mantener' }))) { e.target.value = borrador.origen || ''; return; }
+            borrador.origen = e.target.value || null; borrador.items = []; borrador.autoOrigen = null;
             try { await cargarStock(); } catch (x) { toast('Error', 'No se pudo cargar el stock: ' + x.message, 'error'); }
             guardarBorrador(); pintar();
         });
@@ -713,26 +717,52 @@
         const hon = document.getElementById('act-hist-on'); if (hon) hon.addEventListener('change', () => { leerCampos(); borrador.historica = hon.checked ? { on: true, folio: '', fecha: '' } : null; guardarBorrador(); pintar(); });
         ['act-centro', 'act-rn', 'act-rc', 'act-en', 'act-ec', 'act-hist-folio', 'act-hist-fecha'].forEach(id => { const e = document.getElementById(id); if (e) e.addEventListener('change', () => { leerCampos(); guardarBorrador(); if (id === 'act-centro') pintar(); }); });
         /* v21.229: usar como origen la bodega donde sí hay stock; lo ya agregado se vuelve a buscar en esa bodega */
-        $$('.act-cambia').forEach(b => b.addEventListener('click', async () => {
-            leerCampos(); const nueva = b.dataset.cambia, previos = borrador.items.map(i => ({ ...i }));
+        /* Cambia el origen a otra bodega y vuelve a buscar ahí lo ya agregado. Devuelve cuántos quedaron con y sin stock. */
+        const cambiarOrigen = async (nueva, opc) => {
+            opc = opc || {}; leerCampos(); const previos = borrador.items.map(i => ({ ...i })), antes = borrador.origen;
             borrador.origen = nueva; borrador.items = [];
             try { await cargarStock(); } catch (x) { toast('Error', 'No se pudo cargar el stock: ' + x.message, 'error'); }
             let conStock = 0, sin = 0;
             previos.forEach(i => { const s = stock.find(x => normN(x.name) === normN(i.nombre) || (i.codigo && /^\d{5,}$/.test(String(i.codigo)) && String(x.codigo) === String(i.codigo)));
                 if (s) { conStock++; borrador.items.push({ ...i, id: s.id, manual: false, nombre: s.name, codigo: s.codigo || i.codigo || '', stock: s.disp, controlado: s.controlado }); }
                 else { sin++; borrador.items.push({ ...i, id: null, manual: true, stock: 0 }); } });
+            borrador.autoOrigen = opc.auto ? { bodega: nueva, previa: antes || '', producto: opc.producto || '' } : null;
             const sel = document.getElementById('act-origen'); if (sel) sel.value = nueva;
-            guardarBorrador(); pintar();
-            toast('Bodega de origen: ' + nueva, previos.length ? `${conStock} producto(s) ahora con stock de ${nueva}${sin ? ` · ${sin} siguen sin stock (revísalos)` : ''}.` : 'Ya puedes agregar el producto con su stock.', sin ? 'warning' : 'success');
-        }));
+            guardarBorrador();
+            if (!opc.silencioso) { pintar(); toast('Bodega de origen: ' + nueva, previos.length ? `${conStock} producto(s) ahora con stock de ${nueva}${sin ? ` · ${sin} siguen sin stock (revísalos)` : ''}.` : 'Ya puedes agregar el producto con su stock.', sin ? 'warning' : 'success'); }
+            return { conStock, sin };
+        };
+        $$('.act-cambia').forEach(b => b.addEventListener('click', () => cambiarOrigen(b.dataset.cambia)));
+        const vAuto = r.querySelector('.act-auto-volver'); if (vAuto) vAuto.addEventListener('click', () => cambiarOrigen(vAuto.dataset.volver));
+        const vAutoOk = r.querySelector('.act-auto-ok'); if (vAutoOk) vAutoOk.addEventListener('click', () => { borrador.autoOrigen = null; guardarBorrador(); pintar(); });
         $$('.act-addcat').forEach(b => b.addEventListener('click', async () => {
-            const c0 = catalogo[+b.dataset.ci]; if (!c0) return;
-            { const o = enOtras(String(c0.descripcion || c0.insumoName || ''), c0.codigoMP); if (o.length && !(await (window.SAR_Progreso && window.SAR_Progreso.confirmar ? window.SAR_Progreso.confirmar({ titulo: 'Este producto está en otra bodega', texto: `Hay <b>${o[0].q}</b> en <b>${esc(o[0].bodega)}</b>. Si lo agregas desde ${esc(borrador.origen)} queda como provisional sin stock (deuda en ${esc(borrador.origen)}) y en ${esc(o[0].bodega)} no se descuenta. Lo correcto es usar ${esc(o[0].bodega)} como origen.`, si: 'Agregar igual sin stock', no: 'Cancelar' }) : confirm('Hay stock en ' + o[0].bodega + '. ¿Agregar igual sin stock?')))) return; }
-            const c = Math.floor(num((r.querySelector(`.act-qty[data-cqid="${b.dataset.ci}"]`) || {}).value)), solC = Math.floor(num((r.querySelector(`.act-qty[data-csid="${b.dataset.ci}"]`) || {}).value));
+            const gi = b.dataset.gi != null, c0 = gi ? null : catalogo[+b.dataset.ci]; if (!gi && !c0) return;
+            const key = gi ? 'g' + b.dataset.gi : b.dataset.ci;
+            const nom = gi ? String(b.dataset.gn || '').toUpperCase() : String(c0.descripcion || c0.insumoName || '').toUpperCase(), cod = gi ? String(b.dataset.gc || '') : (c0.codigoMP ? String(c0.codigoMP) : '');
+            const c = Math.floor(num((r.querySelector(`.act-qty[data-cqid="${key}"]`) || {}).value)), solC = Math.floor(num((r.querySelector(`.act-qty[data-csid="${key}"]`) || {}).value));
             if (!(c > 0 || (c === 0 && solC > 0))) { toast('Cantidad', 'Indica una cantidad mayor que 0 (o 0 con el pedido, para dejarlo pendiente).', 'warning'); return; }
             if (borrador.items.length >= MAX_ITEMS) { toast('Límite', `Máximo ${MAX_ITEMS} productos por acta.`, 'warning'); return; }
-            const nom = String(c0.descripcion || c0.insumoName || '').toUpperCase(), cod = c0.codigoMP ? String(c0.codigoMP) : '';
-            if (borrador.items.some(i => normN(i.nombre) === normN(nom))) { toast('Ya está en el acta', 'Ese producto ya está agregado: cambia su cantidad en la lista del acta.', 'warning'); return; } borrador.items.push({ id: null, manual: true, nombre: nom, codigo: cod, cantidad: c, solicitado: solC > c ? solC : 0, stock: 0, ...(c0.imagen ? { imagen: c0.imagen } : {}) }); refrescar();
+            if (borrador.items.some(i => normN(i.nombre) === normN(nom))) { toast('Ya está en el acta', 'Ese producto ya está agregado: cambia su cantidad en la lista del acta.', 'warning'); return; }
+            /* v21.233: si el producto tiene stock en otra bodega, el origen se cambia SOLO a esa bodega (sin preguntar) y se avisa al costado.
+               Solo se pregunta si el cambio dejaría sin stock algo que ya está en el acta. */
+            const o = enOtras(nom, cod);
+            if (o.length) {
+                const nueva = o[0].bodega, enNueva = (i) => global.some(g => g.bodega === nueva && g.q > 0 && (g.n === normN(i.nombre) || (i.codigo && /^\d{5,}$/.test(String(i.codigo)) && g.cod === String(i.codigo))));
+                const pierden = borrador.items.filter(i => num(i.stock) > 0 && !enNueva(i));
+                let cambiar = !pierden.length;
+                if (!cambiar) cambiar = await preg({ titulo: `Hay stock en ${nueva}`, texto: `<b>${esc(nom)}</b>: hay <b>${o[0].q}</b> en ${esc(nueva)} y nada en ${esc(borrador.origen)}. Si cambias el origen, estos productos del acta quedan sin stock:`, lineas: pierden.slice(0, 8).map(i => esc(i.nombre)).concat(pierden.length > 8 ? [`y ${pierden.length - 8} más…`] : []), si: `Cambiar a ${nueva}`, no: `Seguir en ${borrador.origen} (sin stock)` });
+                if (cambiar) {
+                    await cambiarOrigen(nueva, { auto: true, producto: nom, silencioso: true });
+                    const s0 = stock.find(x => normN(x.name) === normN(nom) || (cod && /^\d{5,}$/.test(cod) && String(x.codigo) === cod));
+                    if (s0 && s0.controlado && c > s0.disp) { pintar(); toast('Medicamento controlado', 'No puede entregarse sin stock en sistema.', 'error'); return; }
+                    if (s0 && !borrador.items.some(i => i.id === s0.id)) borrador.items.push({ id: s0.id, nombre: s0.name, codigo: s0.codigo || cod, cantidad: c, solicitado: solC > c ? solC : 0, stock: s0.disp, controlado: s0.controlado });
+                    else if (!s0) borrador.items.push({ id: null, manual: true, nombre: nom, codigo: cod, cantidad: c, solicitado: solC > c ? solC : 0, stock: 0 });
+                    refrescar();
+                    toast('Origen cambiado a ' + nueva, `Ahí hay ${o[0].q} de ${nom}. Revisa el origen al costado.`, 'info');
+                    return;
+                }
+            }
+            borrador.items.push({ id: null, manual: true, nombre: nom, codigo: cod, cantidad: c, solicitado: solC > c ? solC : 0, stock: 0, ...(c0 && c0.imagen ? { imagen: c0.imagen } : {}) }); refrescar();
         }));
         $$('.act-add').forEach(b => b.addEventListener('click', () => {
             const s = stock.find(x => x.id === b.dataset.id); const inp = r.querySelector(`.act-qty[data-qid="${CSS.escape(b.dataset.id)}"]`);
@@ -775,7 +805,7 @@
         const ligarQuitar = () => { const q = $('#act-mimg-q'); if (q) q.addEventListener('click', () => { manualImg = ''; $('#act-mimg-v').innerHTML = vistaMImg(); }); };
         const mi = $('#act-mimg'); if (mi) mi.addEventListener('change', async () => { const file = mi.files && mi.files[0]; if (!file) return; try { manualImg = await reducirFoto(file); $('#act-mimg-v').innerHTML = vistaMImg(); ligarQuitar(); } catch (e) { toast('Foto', e.message || 'No se pudo leer la foto.', 'error'); } });
         ligarQuitar();
-        $('#act-madd').addEventListener('click', () => {
+        $('#act-madd').addEventListener('click', async () => {
             const n = $('#act-mn').value.trim().toUpperCase(); const c = Math.floor(num($('#act-mq').value)); const solM = Math.floor(num($('#act-ms').value));
             if (n.length < 3 || !(c > 0 || (c === 0 && solM > 0))) { toast('Ingreso manual', 'Escribe el nombre del insumo y la cantidad a entregar (si no la tienes, pon 0 y anota el pedido: queda como pendiente).', 'warning'); return; }
             if ($('#act-mc').checked) { toast('Medicamento controlado', 'No se permite sin stock en sistema: use el circuito con folio DAU.', 'error'); return; }
@@ -783,7 +813,7 @@
             const cod = String(($('#act-mid').value || '').replace(/\D/g, ''));
             const par = stock.find(x => x.name.toLowerCase() === n.toLowerCase() || (cod && x.codigo === cod));
             if (par) { toast('Ya existe', `"${par.name}" ya está en esta bodega: agrégalo desde la lista.`, 'warning'); return; }
-            if (!cod && !confirm('No indicaste el ID del producto. Sirve para asociar la foto y la orden de compra después. ¿Agregar sin ID?')) return;
+            if (!cod && !(await preg({ titulo: '¿Agregar sin ID?', texto: 'No indicaste el ID del producto (Mercado Público). Sirve para asociar la foto y la orden de compra después.', si: 'Agregar sin ID', no: 'Volver' }))) return;
             const sol = Math.floor(num($('#act-ms').value));
             if (borrador.items.some(i => normN(i.nombre) === normN(n))) { toast('Ya está en el acta', 'Ese producto ya está agregado: cambia su cantidad en la lista del acta.', 'warning'); return; } borrador.items.push({ id: null, manual: true, nombre: n, codigo: cod, cantidad: c, solicitado: sol > c ? sol : 0, stock: 0, ...(manualImg ? { imagen: manualImg } : {}) }); manualImg = ''; refrescar();
         });
@@ -796,7 +826,7 @@
             const n = $('#act-dn').value.trim(); if (!n) { toast('Documento', 'Escribe el número del documento.', 'warning'); return; }
             borrador.documentos.push({ tipo: $('#act-dt').value, numero: n, detalle: $('#act-dd').value.trim() }); refrescar();
         });
-        $('#act-limpiar').addEventListener('click', () => { if (!confirm('¿Vaciar el borrador?')) return; borrador = { ...vacio(), origen: borrador.origen }; guardarBorrador(); pintar(); });
+        $('#act-limpiar').addEventListener('click', async () => { if (!(await preg({ titulo: '¿Vaciar el borrador?', texto: 'Se quitan los productos, pendientes y documentos del acta en preparación.', si: 'Vaciar', no: 'Cancelar', peligro: true }))) return; borrador = { ...vacio(), origen: borrador.origen }; guardarBorrador(); pintar(); });
         $('#act-emitir').addEventListener('click', onEmitir);
         ['pdf', 'docx'].forEach(fm => { const bt = document.getElementById('act-prueba-' + fm); if (bt) bt.addEventListener('click', async () => { bt.disabled = true; try { await probarActa(fm); } finally { bt.disabled = false; } }); });
         accionesActa($$);
@@ -806,7 +836,7 @@
     function accionesActa($$) {
         $$('.act-conf').forEach(b => b.addEventListener('click', async () => {
             const a = historial.find(x => x.numero === b.dataset.n); if (!a) return;
-            if (!confirm(`Confirmar la entrega del acta ${a.numero} a ${a.centro}.\n\nVas a subir el acta firmada (PDF o foto). Al guardarla se DESCUENTAN del stock de ${a.bodegaOrigen} los ${(a.items || []).length} productos del acta.\n\n¿Continuar?`)) return;
+            if (!(await preg({ titulo: `Confirmar la entrega ${a.numero}`, texto: `A <b>${esc(a.centro)}</b>. Vas a subir el acta firmada (PDF o foto). Al guardarla se <b>descuentan</b> del stock de ${esc(a.bodegaOrigen)} los ${(a.items || []).length} productos del acta.`, si: 'Subir acta firmada', no: 'Cancelar' }))) return;
             const file = await pedirArchivo(); if (!file) return;
             const prog = window.SAR_Progreso.iniciar('Confirmando la entrega…', ['Subiendo el acta firmada y descontando el stock…']);
             try { await confirmarEntrega(a, file, usuarioEmail()); if (window.SAR_Avisos) file.arrayBuffer().then(buf => window.SAR_Avisos.avisarActa('confirmacion', a, { firmada: { bytes: new Uint8Array(buf), mime: file.type, nombre: file.name } })).then(av => { if (av && av.estado === 'enviado') toast('Correo enviado', `Aviso de la entrega ${a.numero} enviado con el acta firmada.`, 'success'); else if (av && av.estado !== 'sin_configurar') toast('Correo no enviado', av.detalle || 'No se pudo enviar el aviso.', 'warning'); }).catch(() => {}); await Promise.all([cargarStock(), cargarHistorial()]); pintar(); prog.listo(`Entrega ${a.numero} confirmada · stock descontado`, { informe: true }); }
@@ -830,7 +860,7 @@
             window.SAR_ActaEdicion.abrir(a, { centros: listaCentros(), refrescar: async () => { await Promise.all([cargarHistorial(), cargarStock()]); pintar(); } });
         }));
         $$('.act-an').forEach(b => b.addEventListener('click', async () => {
-            const motivo = (prompt(`Eliminar el acta ${b.dataset.n}: se borra su archivo, el stock vuelve a la bodega de origen y lo entregado vuelve a quedar pendiente en la orden. Queda el registro en el historial.\n\nMotivo:`, 'Acta mal generada') || '').trim();
+            const motivo = String((await pedirTx({ titulo: `Eliminar el acta ${b.dataset.n}`, texto: 'Se borra su archivo, el stock vuelve a la bodega de origen y lo entregado vuelve a quedar pendiente en la orden. Queda el registro en el historial.<br><b>Motivo:</b>', valor: 'Acta mal generada', si: 'Eliminar acta', no: 'Cancelar', peligro: true })) || '').trim();
             if (!motivo) return;
             const prog = window.SAR_Progreso.iniciar('Anulando el acta…', ['Devolviendo el stock a la bodega de origen…']);
             try {
@@ -955,7 +985,7 @@
         if (!/^\d{4}-\d{2}-\d{2}$/.test(h.fecha || '')) { toast('Falta la fecha', 'Indica la fecha original del acta.', 'warning'); return; }
         if (h.fecha > new Date().toISOString().slice(0, 10)) { toast('Fecha futura', 'La fecha original no puede ser posterior a hoy.', 'warning'); return; }
         const total = borrador.items.reduce((s, i) => s + num(i.cantidad), 0);
-        if (!confirm(`Acta histórica ${h.folio} del ${h.fecha} para ${borrador.centro.trim()}: ${borrador.items.length} productos (${total} unidades).\n\nEl stock de ${borrador.origen} SE DESCUENTA AHORA (por lote que vence primero), porque esa entrega ya ocurrió.\n\n¿Registrar?`)) return;
+        if (!(await preg({ titulo: `¿Registrar el acta histórica ${String(h.folio)}?`, texto: `Del ${esc(h.fecha)} para <b>${esc(borrador.centro.trim())}</b>: ${borrador.items.length} productos (${total} unidades).<br>El stock de ${esc(borrador.origen)} <b>se descuenta ahora</b> (por lote que vence primero), porque esa entrega ya ocurrió.`, si: 'Registrar', no: 'Cancelar' }))) return;
         emitiendo = true; const btn = document.getElementById('act-emitir'); if (btn) btn.disabled = true;
         const prog = window.SAR_Progreso.iniciar('Registrando el acta histórica…', ['Descontando el stock…']);
         try {
@@ -979,8 +1009,8 @@
         if (borrador.historica && borrador.historica.on) return emitirHistorica();
         const total = borrador.items.reduce((s, i) => s + num(i.cantidad), 0);
         const sin = borrador.items.map(i => ({ n: i.nombre, f: Math.max(0, num(i.cantidad) - num(i.stock)) })).filter(x => x.f > 0);
-        const avisoSin = sin.length ? `\n\nSIN RESPALDO EN SISTEMA (quedan como sobregiro, saldo contable negativo hasta cuadrar con la OC/SDC):\n${sin.map(x => `• ${x.n}: ${x.f} u.`).join('\n')}` : '';
-        if (!confirm(`Se emitirá el acta para ${borrador.centro.trim()} con ${borrador.items.length} productos (${total} unidades).\n\nEl stock de ${borrador.origen} NO se descuenta ahora: queda reservado hasta que confirmes la entrega subiendo el acta firmada (desde "Actas emitidas").${avisoSin}\n\n¿Emitir?`)) return;
+        const avisoSin = sin.length ? `<span class="sar-conf__aviso"><b>Sin respaldo en sistema</b> (${sin.length}): quedan como sobregiro hasta cuadrar con la OC/SDC.</span>` : '';
+        if (!(await preg({ titulo: '¿Emitir el acta?', texto: `Para <b>${esc(borrador.centro.trim())}</b> con ${borrador.items.length} productos (${total} unidades) desde ${esc(borrador.origen)}.<br>El stock <b>no se descuenta ahora</b>: queda reservado hasta que subas el acta firmada (en «Actas emitidas»).${avisoSin}`, lineas: sin.map(x => `${esc(x.n)}: <b>${x.f}</b> u. sin respaldo`), si: 'Emitir acta', no: 'Revisar' }))) return;
         emitiendo = true; const btn = document.getElementById('act-emitir'); if (btn) btn.disabled = true;
         const prog = window.SAR_Progreso.iniciar('Emitiendo el acta de entrega…', ['Numerando el acta…']);
         try {

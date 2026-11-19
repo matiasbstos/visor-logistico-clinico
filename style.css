@@ -6234,6 +6234,8 @@ body:not([data-user-role="superadmin"]) #menu-memo-flujo { display: none !import
 .sar-conf__t{margin:2px 0 0;color:var(--primary,#1a3668);font-size:1.15rem}.sar-conf__x{margin:0;color:#475569}
 .sar-conf__l{list-style:none;margin:4px 0 0;padding:10px 12px;background:#f5f7fb;border-radius:6px;width:100%;text-align:left;font-size:.85rem;max-height:200px;overflow:auto;color:#1e293b}.sar-conf__l li{padding:3px 0;border-bottom:1px solid #e5eaf2}.sar-conf__l li:last-child{border:0}
 .sar-conf__b{display:flex;gap:10px;justify-content:center;margin-top:12px;width:100%}.sar-conf__b .btn{min-width:120px}
+.sar-conf__in{width:100%;margin-top:4px}.sar-conf__x .sar-conf__aviso{display:block;margin-top:8px;padding:8px 10px;background:#fff7ed;border-left:3px solid #f59e0b;border-radius:4px;text-align:left;color:#7c2d12;font-size:.85rem}
+.sar-conf__c{max-height:92vh;overflow:auto}@media (max-width:480px){.sar-conf{padding:12px}.sar-conf__c{padding:20px 16px 16px}.sar-conf__b{flex-direction:column-reverse}.sar-conf__b .btn{width:100%}}
 /* Solicitudes de insumos (v21.189) */
 body[data-user-role="solicitante"] .menu-item:not([data-target="view-solicitud-insumos"]),
 body[data-user-role="solicitante"] .sidebar-box:not(:has(.menu-item[data-target="view-solicitud-insumos"])),
@@ -6549,6 +6551,7 @@ body:not([data-user-role="solicitante"]) .menu-item[data-target="view-solicitud-
 .menu-item.menu-sub{padding-left:38px;font-size:.88em;opacity:.95}.menu-item.menu-sub i{font-size:1em}
 .sidebar.collapsed .menu-item.menu-sub{padding-left:inherit}
 .act-otra{display:inline-flex;align-items:center;gap:4px;color:#1d4ed8;font-weight:600}.act-otra i{color:#d97706}
+.act-auto{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:6px 0 10px;padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #1d4ed8;border-radius:6px;font-size:.85rem;color:#1e3a8a}.act-auto>i{font-size:1.1rem}.act-auto>span:first-of-type{flex:1 1 220px}.act-auto-b{display:flex;gap:6px;flex-wrap:wrap}
 .act-cambia{margin-top:4px;padding:2px 10px;font-size:12px}
 
 /* v21.232 · Impresión de etiquetas: detalle de la orden */
@@ -6572,3 +6575,10 @@ body:not([data-user-role="solicitante"]) .menu-item[data-target="view-solicitud-
 .bu-falta2 li{grid-template-columns:auto 1fr auto auto}.bu-falta2 li .prod-img{width:36px;height:36px;margin-right:0}
 .bu-grp-h{align-items:center}.bu-grp-h .prod-img{width:44px;height:44px;margin-right:0}.bu-grp-t{flex:1;min-width:0}
 @media(max-width:640px){.bu-falta2 li{grid-template-columns:auto 1fr auto}.bu-falta2 li .prod-img{grid-row:1/3}.bu-f-m{grid-column:2}.bu-f-q{grid-column:3}.bu-grp-h{flex-direction:row;flex-wrap:wrap}.bu-grp-h .btn{width:100%}}
+
+/* v21.233: lotes en Editar insumo con cajas × unidades por caja */
+#edit-lotes .edl-cab,#edit-lotes .edl-fila{display:grid;grid-template-columns:1.3fr 1.2fr .7fr .8fr .9fr auto;gap:8px;align-items:center;margin-bottom:6px}
+#edit-lotes .edl-cab{margin-bottom:2px;font-size:11px;font-weight:600;color:#64748b;text-transform:uppercase;letter-spacing:.02em}
+#edit-lotes .edl-q{font-weight:700}
+#edit-lotes .edl-ayuda{display:block;font-size:11px;color:#64748b;margin-top:2px}
+@media (max-width:640px){#edit-lotes .edl-cab{display:none}#edit-lotes .edl-fila{grid-template-columns:1fr 1fr 1fr auto;padding:8px;border:1px solid #e2e8f0;border-radius:6px}#edit-lotes .edl-b{grid-column:1/4;grid-row:1}#edit-lotes .edl-x{grid-column:4;grid-row:1}#edit-lotes .edl-v{grid-column:1/5}#edit-lotes .edl-q{grid-column:3/5}}

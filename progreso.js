@@ -74,13 +74,36 @@
         o = o || {};
         return new Promise(resolve => {
             const prev = document.activeElement, d = document.createElement('div'); d.className = 'sar-conf'; d.setAttribute('role', 'alertdialog'); d.setAttribute('aria-modal', 'true'); d.setAttribute('aria-labelledby', 'sar-conf-t');
-            d.innerHTML = `<div class="sar-conf__c"><div class="sar-conf__marca" aria-hidden="true"><img src="assets/logo-sar.png" alt=""></div><h3 id="sar-conf-t" class="sar-conf__t">${esc(o.titulo || '¿Confirmas?')}</h3>${o.texto ? `<p class="sar-conf__x">${o.texto}</p>` : ''}${(o.lineas || []).length ? `<ul class="sar-conf__l">${o.lineas.map(l => `<li>${l}</li>`).join('')}</ul>` : ''}<div class="sar-conf__b"><button type="button" class="btn btn-secondary" data-r="0">${esc(o.no || 'Cancelar')}</button><button type="button" class="btn ${o.peligro ? 'btn-danger' : 'btn-primary'}" data-r="1">${esc(o.si || 'Confirmar')}</button></div></div>`;
+            d.innerHTML = `<div class="sar-conf__c"><div class="sar-conf__marca" aria-hidden="true"><img src="assets/logo-sar.png" alt=""></div><h3 id="sar-conf-t" class="sar-conf__t">${esc(o.titulo || '¿Confirmas?')}</h3>${o.texto ? `<p class="sar-conf__x">${o.texto}</p>` : ''}${(o.lineas || []).length ? `<ul class="sar-conf__l">${o.lineas.map(l => `<li>${l}</li>`).join('')}</ul>` : ''}<div class="sar-conf__b">${o.soloSi ? '' : `<button type="button" class="btn btn-secondary" data-r="0">${esc(o.no || 'Cancelar')}</button>`}<button type="button" class="btn ${o.peligro ? 'btn-danger' : 'btn-primary'}" data-r="1">${esc(o.si || 'Confirmar')}</button></div></div>`;
             const cierra = (v) => { document.removeEventListener('keydown', tecla, true); d.remove(); try { if (prev && prev.focus) prev.focus(); } catch (e) { /* sin foco */ } resolve(v); };
             const tecla = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cierra(false); } };
             d.addEventListener('click', (e) => { const b = e.target.closest('[data-r]'); if (b) cierra(b.dataset.r === '1'); else if (e.target === d) cierra(false); });
             document.addEventListener('keydown', tecla, true); document.body.appendChild(d);
             const ok = d.querySelector('[data-r="1"]'); if (ok) ok.focus();
         });
+    }
+    /** v21.233: pedir un texto con la marca (reemplaza a window.prompt). SAR_Progreso.pedir({titulo, texto, valor, placeholder, si, no, peligro, exacto}) → Promise<string|null>.
+     *  exacto: el botón se habilita solo si lo escrito coincide (para confirmar algo que no se puede deshacer). */
+    function pedir(o) {
+        o = o || {};
+        return new Promise(resolve => {
+            const prev = document.activeElement, d = document.createElement('div'); d.className = 'sar-conf'; d.setAttribute('role', 'dialog'); d.setAttribute('aria-modal', 'true'); d.setAttribute('aria-labelledby', 'sar-conf-t');
+            d.innerHTML = `<div class="sar-conf__c"><div class="sar-conf__marca" aria-hidden="true"><img src="assets/logo-sar.png" alt=""></div><h3 id="sar-conf-t" class="sar-conf__t">${esc(o.titulo || 'Escribe')}</h3>${o.texto ? `<p class="sar-conf__x">${o.texto}</p>` : ''}<input type="text" class="form-control sar-conf__in" aria-label="${esc(o.titulo || 'Texto')}" placeholder="${esc(o.placeholder || '')}" value="${esc(o.valor || '')}" autocomplete="off"><div class="sar-conf__b"><button type="button" class="btn btn-secondary" data-r="0">${esc(o.no || 'Cancelar')}</button><button type="button" class="btn ${o.peligro ? 'btn-danger' : 'btn-primary'}" data-r="1">${esc(o.si || 'Aceptar')}</button></div></div>`;
+            const inp = d.querySelector('input'), ok = d.querySelector('[data-r="1"]');
+            const valido = () => { const v = inp.value.trim(); return o.exacto ? v === String(o.exacto) : !!v; };
+            const sync = () => { ok.disabled = !valido(); };
+            const cierra = (v) => { document.removeEventListener('keydown', tecla, true); d.remove(); try { if (prev && prev.focus) prev.focus(); } catch (e) { /* sin foco */ } resolve(v); };
+            const tecla = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cierra(null); } else if (e.key === 'Enter' && e.target === inp && valido()) { e.preventDefault(); cierra(inp.value.trim()); } };
+            d.addEventListener('click', (e) => { const b = e.target.closest('[data-r]'); if (b) { if (b.dataset.r === '1') { if (valido()) cierra(inp.value.trim()); } else cierra(null); } else if (e.target === d) cierra(null); });
+            inp.addEventListener('input', sync); sync();
+            document.addEventListener('keydown', tecla, true); document.body.appendChild(d);
+            inp.focus(); try { inp.select(); } catch (e) { /* sin selección */ }
+        });
+    }
+    /** v21.233: aviso con un solo botón (reemplaza a window.alert). */
+    function avisar(o) {
+        o = typeof o === 'string' ? { texto: esc(o).replace(/\n/g, '<br>') } : (o || {});
+        return confirmar({ titulo: o.titulo || 'Aviso', texto: o.texto, lineas: o.lineas, si: o.si || 'Entendido', soloSi: true });
     }
     /** Animación de «guardado» con la marca de Visor: hexágono que se arma y un ✓ que se dibuja. SAR_Progreso.exito({titulo, texto, ms}) → Promise. */
     const HEX = '<svg class="sar-ok__svg" viewBox="0 0 200 200" aria-hidden="true"><polygon class="sar-ok__hex" points="100,12 176.2,56 176.2,144 100,188 23.8,144 23.8,56"/><path class="sar-ok__chk" d="M62 102 l26 26 l52 -56"/><circle class="sar-ok__pt" cx="146" cy="146" r="11"/></svg>';
@@ -111,5 +134,7 @@
         try { if (window.SAR_Sonidos) window.SAR_Sonidos.tocar('ok'); } catch (e) { /* sin sonido */ }
         setTimeout(fin, o.ms || 8000); return d;
     }
-    window.SAR_Progreso = { exito, confirmar, iniciar, correr, cargando, segundoPlano, aviso };
+    window.SAR_Progreso = { exito, confirmar, pedir, avisar, iniciar, correr, cargando, segundoPlano, aviso };
+    /* v21.233: los alert() que queden en el sitio se muestran con la ventana de la marca, al centro */
+    try { window.alert = (m) => { avisar(String(m == null ? '' : m)); }; } catch (e) { /* navegador sin reemplazo */ }
 })(window, document);

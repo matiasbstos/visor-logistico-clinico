@@ -112,6 +112,11 @@ t('cuadre automático de lo adeudado al ingresar (v21.228)', () => { global.docu
   assert.strictEqual(r.quantity, 450); assert.strictEqual(r.sobregiro, 0); assert.strictEqual(sets.length, 2); assert.strictEqual(sets[1].type, 'CUADRE_SOBREGIRO'); assert.strictEqual(sets[1].actaId, 'AE-2');
   const r2 = C.aplicar(f, {}, tx, { ref: { id: 'X' }, antes: { quantity: 0, sobregiro: 100, sobregiroDetalle: [{ acta: 'AE-1', qty: 100 }] }, quantity: 30, batches: [{ batch: 'L', quantity: 30 }] }); assert.strictEqual(r2.quantity, 0); assert.strictEqual(r2.sobregiro, 70);
   assert.strictEqual(C.aplicar(f, {}, tx, { ref: { id: 'X' }, antes: { quantity: 5, sobregiro: 0 }, quantity: 10, batches: [] }), null); assert.strictEqual(C.aplicar(f, {}, tx, { ref: { id: 'X' }, antes: null, quantity: 10 }), null); });
+t('reserva de stock al emitir un acta (v21.235): sale del disponible por FEFO y no toca lo adeudado', () => { const A = (require('../actas-entrega.js'), (global.window || global).SAR_ActasEntrega);
+  const d = { name: 'SABANILLA', quantity: 1000, sobregiro: 0, batches: [{ batch: 'B', quantity: 600, expirationDate: '2028-01-01' }, { batch: 'A', quantity: 400, expirationDate: '2027-01-01' }] };
+  const r = A.reservarEn(d, 200); assert.strictEqual(r.r, 200); assert.strictEqual(r.quantity, 800); assert.strictEqual(r.batches.reduce((t, b) => t + b.quantity, 0), 800);
+  const r2 = A.reservarEn({ name: 'X', quantity: 50, sobregiro: 20 }, 100); assert.strictEqual(r2.r, 30); assert.strictEqual(r2.quantity, 20);
+  assert.strictEqual(A.reservarEn({ name: 'X', quantity: 50 }, 100, 50).r, 0); });
 t('salud del inventario: nombres con espacios, sin bodega, repetidos por nombre o ID y deudas con stock (v21.228)', () => { require('../unificar-duplicados.js'); const S = require('../salud-inventario.js');
   const I = (id, d) => ({ id, data: d }), bod = [I('bc', { name: 'Bodega Central' }), I('bt', { name: 'Bodega Transitoria ' }), I('cam', { name: 'Bodega CAM' })];
   const ins = [I('s1', { name: 'SABANILLA', location: 'Bodega Central', quantity: 550, sobregiro: 10, sobregiroDetalle: [{ acta: 'AE-1', qty: 10 }], codigoMP: '4623811' }), I('s2', { name: 'Sabanilla ', location: 'Bodega Central', quantity: 0, sobregiro: 50, codigoMP: '4623804' }),

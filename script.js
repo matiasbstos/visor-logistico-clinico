@@ -948,7 +948,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             user: auth.currentUser.email,
                             date: serverTimestamp(),
                             origin: 'Ajuste Manual Crítico',
-                            dest: 'N/A'
+                            dest: 'N/A',
+                            /* v21.233: código AJU y motivo visibles en el kárdex y el informe contable */
+                            codigoSeguimiento: codigoAjuste, delta: cantidadParsed,
+                            ...(opts && opts.motivo ? { motivo: opts.motivo } : {}), ...(opts && opts.observacion ? { observacion: opts.observacion } : {})
                         });
 
                         const newAuditRef = doc(collection(db, 'Auditoria'));
@@ -972,6 +975,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     newBtnEjecutar.addEventListener('click', async () => {
                         const cantidadInputStr = document.getElementById('ajuste-cantidad').value;
                         const justificacion = document.getElementById('ajuste-justificacion').value.trim();
+                        const motivoSel = ((document.getElementById('ajuste-motivo') || {}).value || '').trim();   /* v21.233: el motivo se elige en la misma pantalla (no hay segunda ventana) */
                         const selectedOption = selectInsumo.options[selectInsumo.selectedIndex];
 
                         if (!selectedOption || selectedOption.value === "") {
@@ -983,8 +987,11 @@ document.addEventListener('DOMContentLoaded', () => {
                             return window.showAlertCenter("Notificación", 'Ingrese una cantidad válida (+ o -). No puede ser cero.');
                         }
 
+                        if (!motivoSel) {
+                            return window.showAlertCenter("Notificación", 'Elige el motivo del ajuste.');
+                        }
                         if (justificacion.length <= 10) {
-                            return window.showAlertCenter("Notificación", 'La justificación debe tener más de 10 caracteres.');
+                            return window.showAlertCenter("Notificación", 'La observación debe tener más de 10 caracteres.');
                         }
 
                         const docId = selectedOption.value;
@@ -998,12 +1005,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         const isSuperAdmin = userRole === 'superadmin';
 
-                        let codigoGob = null, justificacionFinal = justificacion;
+                        let codigoGob = null, justificacionFinal = `[${motivoSel}] ${justificacion}`;
+                        /* v21.233: una sola confirmación, con la ventana del sitio: resumen + código AJU que se asignará */
+                        {
+                            const P = window.SAR_Progreso, e = window.escapeHTML;
+                            const ok = P && P.confirmar ? await P.confirmar({ titulo: '¿Confirmar el ajuste?', texto: `<b>${e(insumoNombre)}</b>: ${stockActual} → <b>${nuevoStock}</b> (${cantidadParsed > 0 ? '+' : ''}${cantidadParsed}).`, lineas: [`Motivo: <b>${e(motivoSel)}</b>`, `Observación: ${e(justificacion)}`, isSuperAdmin ? 'Se aplica ahora y recibe un código <b>AJU</b>.' : 'Queda como solicitud con código <b>AJU</b> para que la apruebe el superadministrador.'], si: isSuperAdmin ? 'Confirmar ajuste' : 'Enviar solicitud', no: 'Revisar' }) : true;
+                            if (!ok) return;
+                        }
                         if (window.SAR_Gobernanza) {
-                            const r = await window.SAR_Gobernanza.pedirMotivo('Motivo del ajuste', `${window.escapeHTML(insumoNombre)}: ${stockActual} → ${nuevoStock}.`);
-                            if (!r) return;
+                            const r = { motivo: motivoSel, nota: '' };
                             if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) {   // sin internet: el ajuste queda en el teléfono y se aplica al volver la conexión, con el stock de ese momento
-                                window.SAR_Cola.encolar({ tipo: 'ajuste', titulo: `Ajuste ${cantidadParsed > 0 ? '+' : ''}${cantidadParsed} · ${insumoNombre}`, datos: { docId, nombre: insumoNombre, cantidad: cantidadParsed, justificacion: `[${r.motivo}${r.nota ? ' - ' + r.nota : ''}] ${justificacion}`, motivo: r.motivo, nota: r.nota, directo: isSuperAdmin, en: Date.now() } });
+                                window.SAR_Cola.encolar({ tipo: 'ajuste', titulo: `Ajuste ${cantidadParsed > 0 ? '+' : ''}${cantidadParsed} · ${insumoNombre}`, datos: { docId, nombre: insumoNombre, cantidad: cantidadParsed, justificacion: `[${r.motivo}${r.nota ? ' - ' + r.nota : ''}] ${justificacion}`, motivo: r.motivo, nota: r.nota, observacion: justificacion, directo: isSuperAdmin, en: Date.now() } });
                                 return window.showAlertCenter('Guardado sin conexión', `El ajuste de ${insumoNombre} (${cantidadParsed > 0 ? '+' : ''}${cantidadParsed}) quedó en este teléfono y se aplicará solo al volver internet.`);
                             }
                             codigoGob = await window.SAR_Gobernanza.codigo('AJU');
@@ -1014,12 +1026,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         try {
                             if (isSuperAdmin) {
                                 // Ejecutar directamente
-                                const res = await window.ejecutarAjusteDirecto(docId, stockActual, insumoNombre, cantidadParsed, justificacionFinal, codigoGob);
-                                window.showAlertCenter("Notificación", `¡AJUSTE REALIZADO CON ÉXITO!\nCÓDIGO DE AUDITORÍA: ${res.codigoAjuste}`);
+                                const res = await window.ejecutarAjusteDirecto(docId, stockActual, insumoNombre, cantidadParsed, justificacionFinal, codigoGob, { motivo: motivoSel, observacion: justificacion });
+                                window.showAlertCenter("Ajuste realizado", `Código: ${res.codigoAjuste}\nQueda en el historial y en el informe contable del producto.`);
                                 
-                                // Correo de respaldo
-                                const mailBody = `Se ha registrado un ajuste crítico de inventario.\n\nCódigo: ${res.codigoAjuste}\nInsumo: ${insumoNombre}\nAcción: ${res.accionDetallada}\nJustificación: ${justificacion}\nUsuario: ${auth.currentUser.email}`;
-                                window.location.href = `mailto:visor@tudominio.com?subject=Ajuste Critico ${res.codigoAjuste}&body=${encodeURIComponent(mailBody)}`;
+                                /* v21.233: se quitó el correo a visor@tudominio.com (dirección de ejemplo que abría el programa de correo tras cada ajuste) */
                             } else {
                                 // Solicitar Aprobación
                                 const code = codigoGob || (window.SAR_Folio ? window.SAR_Folio.provisional('AJU') : "ADJ-" + Math.floor(10000 + Math.random() * 90000));
@@ -1031,6 +1041,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     justificacion: justificacionFinal,
                                     previousStock: stockActual,
                                     projectedStock: nuevoStock,
+                                    motivo: motivoSel, observacion: justificacion,
                                     status: "pendiente",
                                     date: serverTimestamp(),
                                     requester: auth.currentUser.email
@@ -1041,6 +1052,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             // Limpiar
                             document.getElementById('ajuste-cantidad').value = "";
                             document.getElementById('ajuste-justificacion').value = "";
+                            { const m = document.getElementById('ajuste-motivo'); if (m) m.value = ''; }
                             if (buscadorAjuste) buscadorAjuste.value = "";
                             cacheInsumosParaAjuste = null;
                             window.cargarInsumosParaAjuste();
@@ -1249,7 +1261,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             reqData.cantidad,
                             reqData.justificacion,
                             reqData.code,
-                            { solicitudId: docId }   // v21.230: se marca aprobada en la misma transacción del ajuste
+                            { solicitudId: docId, motivo: reqData.motivo || '', observacion: reqData.observacion || '' }   // v21.230: se marca aprobada en la misma transacción del ajuste
                         );
 
                         window.showToast("Solicitud Aprobada", `El ajuste ${reqData.code} fue ejecutado con éxito.`, "success");
@@ -4273,7 +4285,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             document.getElementById('edit-criticalLimit').value = data.criticalLimit || 50;
                             document.getElementById('edit-batch').value = data.batch || '';
                             window.__editLotes = (Array.isArray(data.batches) && data.batches.length ? data.batches : [{ batch: data.batch || '', quantity: Number(data.quantity) || 0, expirationDate: data.expirationDate || '' }])
-                                .map(b => { const d = SAR_Utils.parseDate(b.expirationDate); return { batch: b.batch || '', quantity: Number(b.quantity) || 0, expirationDate: (d && !isNaN(d.getTime())) ? d.toISOString().split('T')[0] : '', ...(b.provider ? { provider: b.provider } : {}), ...(b.codigoLote ? { codigoLote: b.codigoLote } : {}) }; });
+                                .map(b => { const d = SAR_Utils.parseDate(b.expirationDate); return { batch: b.batch || '', quantity: Number(b.quantity) || 0, expirationDate: (d && !isNaN(d.getTime())) ? d.toISOString().split('T')[0] : '', ...(b.provider ? { provider: b.provider } : {}), ...(b.codigoLote ? { codigoLote: b.codigoLote } : {}), ...((() => { const uc = Math.floor(Number(b.porCaja) || 0), q = Number(b.quantity) || 0; return uc > 0 ? { porCaja: uc, cajas: q % uc === 0 ? q / uc : '' } : {}; })()) }; });
                             window.__pintarEditLotes();
                             document.getElementById('edit-status').value = data.status || 'ACTIVO';
 
@@ -4321,26 +4333,40 @@ document.addEventListener('DOMContentLoaded', () => {
         window.__pintarEditLotes = function () {
             const cont = document.getElementById('edit-lotes'); if (!cont) return;
             const L = window.__editLotes || [];
-            cont.innerHTML = L.map((b, i) => `<div class="edl-fila" style="display:grid; grid-template-columns:1.4fr 1.2fr .8fr auto; gap:8px; margin-bottom:6px; align-items:center;">
+            /* v21.233: cajas × unidades por caja = cantidad del lote (la cantidad sigue siendo en unidades) */
+            const nomE = (document.getElementById('edit-name') || {}).value || '', sug = Math.floor(Number(window.__editOriginal && window.__editOriginal.unidadesPorCaja) || 0) || (window.SAR_Bultos && window.SAR_Bultos.sugerirPorCaja ? window.SAR_Bultos.sugerirPorCaja(nomE) : 0);
+            cont.innerHTML = (L.length ? `<div class="edl-cab" aria-hidden="true"><span>Lote</span><span>Vencimiento</span><span>Cajas</span><span>U. por caja</span><span>Total (u.)</span><span></span></div>` : '') + L.map((b, i) => `<div class="edl-fila">
                 <input type="text" class="form-control edl-b" data-i="${i}" value="${window.escapeHTML(b.batch)}" placeholder="Lote" aria-label="Lote ${i + 1}">
                 <input type="date" class="form-control edl-v" data-i="${i}" value="${window.escapeHTML(b.expirationDate)}" aria-label="Vencimiento lote ${i + 1}">
-                <input type="number" min="0" step="1" class="form-control edl-q" data-i="${i}" value="${Number(b.quantity) || 0}" aria-label="Cantidad lote ${i + 1}">
-                <button type="button" class="btn btn-icon edl-x" data-i="${i}" title="Quitar lote" aria-label="Quitar lote ${i + 1}"${L.length <= 1 ? ' disabled' : ''}><i class="ph ph-trash"></i></button></div>`).join('');
+                <input type="number" min="0" step="1" inputmode="numeric" class="form-control edl-cj" data-i="${i}" value="${b.cajas === '' || b.cajas == null ? '' : Number(b.cajas)}" placeholder="Cajas" aria-label="Cajas del lote ${i + 1}">
+                <input type="number" min="0" step="1" inputmode="numeric" class="form-control edl-uc" data-i="${i}" value="${Number(b.porCaja) > 0 ? Number(b.porCaja) : ''}" placeholder="${sug ? sug + '?' : 'U/caja'}" aria-label="Unidades por caja del lote ${i + 1}">
+                <input type="number" min="0" step="1" class="form-control edl-q" data-i="${i}" value="${Number(b.quantity) || 0}" aria-label="Total en unidades del lote ${i + 1}">
+                <button type="button" class="btn btn-icon edl-x" data-i="${i}" title="Quitar lote" aria-label="Quitar lote ${i + 1}"${L.length <= 1 ? ' disabled' : ''}><i class="ph ph-trash"></i></button></div>`).join('') + (L.length ? '<small class="edl-ayuda">Escribe cuántas cajas llegaron y cuántas unidades trae cada caja: el total en unidades se calcula solo. Si hay unidades sueltas, corrige el total.</small>' : '');
             const q = document.getElementById('edit-quantity');
             if (q) { q.value = L.reduce((t, b) => t + (Number(b.quantity) || 0), 0); q.readOnly = true; q.title = 'Es la suma de los lotes'; }
         };
         window.__lotesEditados = function () {
             const L = (window.__editLotes || []).filter(b => (b.batch || '').trim() || Number(b.quantity) > 0);
             if (!L.length) return {};
-            const batches = L.map(b => ({ batch: (b.batch || '').trim().toUpperCase() || 'S/L', quantity: Math.max(0, Math.floor(Number(b.quantity) || 0)), expirationDate: b.expirationDate || '', ...(b.provider ? { provider: b.provider } : {}), ...(b.codigoLote ? { codigoLote: b.codigoLote } : {}) }));
+            const batches = L.map(b => ({ batch: (b.batch || '').trim().toUpperCase() || 'S/L', quantity: Math.max(0, Math.floor(Number(b.quantity) || 0)), expirationDate: b.expirationDate || '', ...(b.provider ? { provider: b.provider } : {}), ...(b.codigoLote ? { codigoLote: b.codigoLote } : {}), ...(Math.floor(Number(b.porCaja) || 0) > 0 ? { porCaja: Math.floor(Number(b.porCaja)) } : {}) }));
             const orden = batches.slice().sort(window.fefoCompare), p = orden[0];
-            return { batches, quantity: batches.reduce((t, b) => t + b.quantity, 0), cantidad: batches.reduce((t, b) => t + b.quantity, 0), batch: p.batch, lote: p.batch, expirationDate: p.expirationDate, vencimiento: p.expirationDate, fechaVencimiento: p.expirationDate };
+            const uc0 = batches.find(b => b.porCaja > 0);
+            const ucAntes = Math.floor(Number(window.__editOriginal && window.__editOriginal.unidadesPorCaja) || 0);
+            return { ...(uc0 ? { unidadesPorCaja: uc0.porCaja } : (ucAntes ? { unidadesPorCaja: 0 } : {})), batches, quantity: batches.reduce((t, b) => t + b.quantity, 0), cantidad: batches.reduce((t, b) => t + b.quantity, 0), batch: p.batch, lote: p.batch, expirationDate: p.expirationDate, vencimiento: p.expirationDate, fechaVencimiento: p.expirationDate };
         };
         document.addEventListener('input', (e) => {
             const t = e.target; if (!t || !t.classList || !window.__editLotes) return; const i = Number(t.dataset && t.dataset.i);
             if (t.classList.contains('edl-b')) window.__editLotes[i].batch = t.value;
             else if (t.classList.contains('edl-v')) window.__editLotes[i].expirationDate = t.value;
-            else if (t.classList.contains('edl-q')) { window.__editLotes[i].quantity = Number(t.value) || 0; const q = document.getElementById('edit-quantity'); if (q) q.value = window.__editLotes.reduce((s, b) => s + (Number(b.quantity) || 0), 0); }
+            else if (t.classList.contains('edl-q') || t.classList.contains('edl-cj') || t.classList.contains('edl-uc')) {
+                const L = window.__editLotes[i], fila = t.closest('.edl-fila');
+                if (t.classList.contains('edl-q')) { L.quantity = Number(t.value) || 0; const uc = Math.floor(Number(L.porCaja) || 0); L.cajas = uc > 0 && L.quantity % uc === 0 ? L.quantity / uc : ''; const cj = fila && fila.querySelector('.edl-cj'); if (cj) cj.value = L.cajas; }
+                else {
+                    if (t.classList.contains('edl-cj')) L.cajas = t.value === '' ? '' : Math.max(0, Math.floor(Number(t.value) || 0)); else L.porCaja = Math.max(0, Math.floor(Number(t.value) || 0));
+                    if (Number(L.cajas) > 0 && Number(L.porCaja) > 0) { L.quantity = Number(L.cajas) * Number(L.porCaja); const qq = fila && fila.querySelector('.edl-q'); if (qq) qq.value = L.quantity; }
+                }
+                const q = document.getElementById('edit-quantity'); if (q) q.value = window.__editLotes.reduce((s, b) => s + (Number(b.quantity) || 0), 0);
+            }
         });
         document.addEventListener('click', (e) => {
             const x = e.target && e.target.closest ? e.target.closest('.edl-x, #edit-lote-add') : null; if (!x || !window.__editLotes) return;

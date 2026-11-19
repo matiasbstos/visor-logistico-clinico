@@ -5,7 +5,7 @@
     <script type="importmap">
         {
             "imports": {
-                "./script.js": "./script.js?v=21.233",
+                "./script.js": "./script.js?v=21.234",
                 "./excelUtils.js": "./excelUtils.js?v=20.11"
             }
         }
@@ -53,7 +53,7 @@
                     )
                 );
             }
-            // (v21.232) Ya NO se borra la base local de Firestore: guarda envíos hechos sin internet (también los de «Pedir insumos»).
+            // (v21.234) Ya NO se borra la base local de Firestore: guarda envíos hechos sin internet (también los de «Pedir insumos»).
             Promise.allSettled(cleanupPromises).then(() => {
                 if (!sessionStorage.getItem('SAR_FORCE_RELOAD_' + APP_VERSION)) {
                     sessionStorage.setItem('SAR_FORCE_RELOAD_' + APP_VERSION, '1');
@@ -70,7 +70,7 @@
                 ev.preventDefault();
                 if (!sessionStorage.getItem('SAR_FS_IDB_RECOVERED_' + APP_VERSION)) {
                     sessionStorage.setItem('SAR_FS_IDB_RECOVERED_' + APP_VERSION, '1');
-                    // Se recarga una vez sin borrar nada: borrar la base local perdía lo pendiente de sincronizar (v21.232)
+                    // Se recarga una vez sin borrar nada: borrar la base local perdía lo pendiente de sincronizar (v21.234)
                     setTimeout(() => window.location.reload(), 150);
                 }
             }
@@ -87,11 +87,11 @@
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32.png">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
     <meta name="theme-color" content="#1A3668">
-    <link rel="stylesheet" href="style.css?v=21.233">
+    <link rel="stylesheet" href="style.css?v=21.234">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="manifest" href="manifest.json">
     <script>window.addEventListener('load', function () { setTimeout(function () { window.SAR_SplashFin && window.SAR_SplashFin(); }, 600); });</script>
-    <script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));   // app instalable que abre sin internet (v21.232)</script>
+    <script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));   // app instalable que abre sin internet (v21.234)</script>
     <script src="https://unpkg.com/@phosphor-icons/web@2.1.1" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
     <script src="https://unpkg.com/html5-qrcode@2.3.8" type="text/javascript"></script>
@@ -2276,6 +2276,12 @@
                                     <label class="form-label" for="ajuste-cantidad">Cantidad a Ajustar</label>
                                     <input type="number" id="ajuste-cantidad" class="form-control" placeholder="Ej: -10 (Merma) o 50 (Sobrante)">
                                     <small class="text-muted" style="font-size: 11px; margin-top: 4px; display: block;">Use signo negativo (-) para restar o positivo (+) para sumar stock.</small>
+                                </div>
+
+                                <div class="form-group">
+                                    <label class="form-label" for="ajuste-motivo">Motivo del ajuste</label>
+                                    <select id="ajuste-motivo" class="form-control"><option value="">Selecciona un motivo…</option><option>Error de digitación</option><option>Producto no está / no se encontró</option><option>Merma o daño</option><option>Conteo físico (toma de inventario)</option><option>Devolución</option><option>Corrección de lote o vencimiento</option><option>Corrección de proveedor o documento</option><option>Cambio de bodega</option><option>Otro</option></select>
+                                    <small class="text-muted" style="font-size: 11px; margin-top: 4px; display: block;">Al confirmar se asigna un código AJU (correlativo) que aparece en el historial y en el informe contable.</small>
                                 </div>
 
                                 <div class="form-group">
@@ -5946,80 +5952,80 @@
             to { transform: scale(1); opacity: 1; }
         }
     </style>
-    <script type="module" src="script.js?v=21.233"></script>
-    <script type="module" src="patch-plantillas.js?v=21.233"></script>
+    <script type="module" src="script.js?v=21.234"></script>
+    <script type="module" src="patch-plantillas.js?v=21.234"></script>
     <script src="visor-triaje.js?v=20.11"></script>
-    <script src="bodega-explorador.js?v=21.233"></script>
-    <script src="precintos-inventario.js?v=21.233"></script>
-    <script src="prestamos-otros-centros.js?v=21.233"></script>
-    <script src="precinto-escaneo.js?v=21.233"></script>
-    <script src="sonidos.js?v=21.233"></script>
-    <script src="avisos-campana.js?v=21.233"></script>
-    <script src="bodegas-estantes.js?v=21.233"></script>
-    <script src="bodegas-cierre.js?v=21.233"></script>
-    <script src="progreso.js?v=21.233"></script>
-    <script src="cola-offline.js?v=21.233"></script>
-    <script src="oc-lector.js?v=21.233"></script>
-    <script src="acta-edicion.js?v=21.233"></script>
-    <script src="anonimizar-pacientes.js?v=21.233"></script>
-    <script src="cdp-presupuesto.js?v=21.233"></script>
-    <script src="imagenes-producto.js?v=21.233"></script>
-    <script src="catalogo-vista.js?v=21.233"></script>
-    <script src="correo-html.js?v=21.233"></script>
-    <script src="avisos-correo.js?v=21.233"></script>
-    <script src="monitor-errores.js?v=21.233"></script>
-    <script src="lotes-alertas.js?v=21.233"></script>
-    <script src="correlativos.js?v=21.233"></script>
-    <script src="cuadre-ingreso.js?v=21.233"></script>
-    <script src="salud-inventario.js?v=21.233"></script>
-    <script src="codigo-sar.js?v=21.233"></script>
-    <script src="categorias.js?v=21.233"></script>
-    <script src="gobernanza.js?v=21.233"></script>
-    <script src="resumen-stock.js?v=21.233"></script>
-    <script src="vista-previa-agenda.js?v=21.233"></script>
-    <script src="menu-lateral.js?v=21.233"></script>
-    <script src="buscador-global.js?v=21.233"></script>
-    <script src="cargando-global.js?v=21.233"></script>
-    <script src="respaldo-diario.js?v=21.233"></script>
-    <script src="cierre-mensual.js?v=21.233"></script>
-    <script src="tabla-columnas.js?v=21.233"></script>
-    <script src="acerca.js?v=21.233"></script>
-    <script src="memo-flujo.js?v=21.233"></script>
-    <script src="traspaso-bodegas.js?v=21.233"></script>
-    <script src="distribucion-centros.js?v=21.233"></script>
-    <script src="primeros-pasos.js?v=21.233"></script>
-    <script src="guia-lector.js?v=21.233"></script>
-    <script src="seguimiento-oc.js?v=21.233"></script>
-    <script src="compras-agiles.js?v=21.233"></script>
-    <script src="ingreso-rapido.js?v=21.233"></script>
-    <script src="pendientes-entrega.js?v=21.233"></script>
-    <script src="sugerencias-producto.js?v=21.233"></script>
-    <script src="duplicados.js?v=21.233"></script>
-    <script src="recepciones-conformes.js?v=21.233"></script>
-    <script src="sustituciones.js?v=21.233"></script>
-    <script src="solicitudes-insumos.js?v=21.233"></script>
-    <script src="ficha-producto.js?v=21.233"></script>
-    <script src="fotos-auto.js?v=21.233"></script>
-    <script src="sync-local.js?v=21.233"></script>
-    <script src="bultos.js?v=21.233"></script>
-    <script src="bitacora-oc.js?v=21.233"></script>
-    <script src="id-producto.js?v=21.233"></script>
-    <script src="home-compras.js?v=21.233"></script>
-    <script src="home-ingresos.js?v=21.233"></script>
-    <script src="login-animado.js?v=21.233"></script>
-    <script src="nomenclaturas.js?v=21.233"></script>
-    <script src="errores.js?v=21.233"></script>
-    <script src="saldos-contables.js?v=21.233"></script>
-    <script src="recepcion-conforme.js?v=21.233"></script>
-    <script src="acta-documentos.js?v=21.233"></script>
-    <script src="unificar-duplicados.js?v=21.233"></script>
-    <script src="actas-entrega.js?v=21.233"></script>
-    <script src="oxigeno.js?v=21.233"></script>
-    <script src="oxigeno-prestamos.js?v=21.233"></script>
-    <script src="oxigeno-ciclos.js?v=21.233"></script>
-    <script src="vida-producto.js?v=21.233"></script>
-    <script src="editar-ingreso.js?v=21.233"></script>
-    <script src="bodega-transitoria.js?v=21.233"></script>
-    <script src="visor-adquisiciones.js?v=21.233"></script>
+    <script src="bodega-explorador.js?v=21.234"></script>
+    <script src="precintos-inventario.js?v=21.234"></script>
+    <script src="prestamos-otros-centros.js?v=21.234"></script>
+    <script src="precinto-escaneo.js?v=21.234"></script>
+    <script src="sonidos.js?v=21.234"></script>
+    <script src="avisos-campana.js?v=21.234"></script>
+    <script src="bodegas-estantes.js?v=21.234"></script>
+    <script src="bodegas-cierre.js?v=21.234"></script>
+    <script src="progreso.js?v=21.234"></script>
+    <script src="cola-offline.js?v=21.234"></script>
+    <script src="oc-lector.js?v=21.234"></script>
+    <script src="acta-edicion.js?v=21.234"></script>
+    <script src="anonimizar-pacientes.js?v=21.234"></script>
+    <script src="cdp-presupuesto.js?v=21.234"></script>
+    <script src="imagenes-producto.js?v=21.234"></script>
+    <script src="catalogo-vista.js?v=21.234"></script>
+    <script src="correo-html.js?v=21.234"></script>
+    <script src="avisos-correo.js?v=21.234"></script>
+    <script src="monitor-errores.js?v=21.234"></script>
+    <script src="lotes-alertas.js?v=21.234"></script>
+    <script src="correlativos.js?v=21.234"></script>
+    <script src="cuadre-ingreso.js?v=21.234"></script>
+    <script src="salud-inventario.js?v=21.234"></script>
+    <script src="codigo-sar.js?v=21.234"></script>
+    <script src="categorias.js?v=21.234"></script>
+    <script src="gobernanza.js?v=21.234"></script>
+    <script src="resumen-stock.js?v=21.234"></script>
+    <script src="vista-previa-agenda.js?v=21.234"></script>
+    <script src="menu-lateral.js?v=21.234"></script>
+    <script src="buscador-global.js?v=21.234"></script>
+    <script src="cargando-global.js?v=21.234"></script>
+    <script src="respaldo-diario.js?v=21.234"></script>
+    <script src="cierre-mensual.js?v=21.234"></script>
+    <script src="tabla-columnas.js?v=21.234"></script>
+    <script src="acerca.js?v=21.234"></script>
+    <script src="memo-flujo.js?v=21.234"></script>
+    <script src="traspaso-bodegas.js?v=21.234"></script>
+    <script src="distribucion-centros.js?v=21.234"></script>
+    <script src="primeros-pasos.js?v=21.234"></script>
+    <script src="guia-lector.js?v=21.234"></script>
+    <script src="seguimiento-oc.js?v=21.234"></script>
+    <script src="compras-agiles.js?v=21.234"></script>
+    <script src="ingreso-rapido.js?v=21.234"></script>
+    <script src="pendientes-entrega.js?v=21.234"></script>
+    <script src="sugerencias-producto.js?v=21.234"></script>
+    <script src="duplicados.js?v=21.234"></script>
+    <script src="recepciones-conformes.js?v=21.234"></script>
+    <script src="sustituciones.js?v=21.234"></script>
+    <script src="solicitudes-insumos.js?v=21.234"></script>
+    <script src="ficha-producto.js?v=21.234"></script>
+    <script src="fotos-auto.js?v=21.234"></script>
+    <script src="sync-local.js?v=21.234"></script>
+    <script src="bultos.js?v=21.234"></script>
+    <script src="bitacora-oc.js?v=21.234"></script>
+    <script src="id-producto.js?v=21.234"></script>
+    <script src="home-compras.js?v=21.234"></script>
+    <script src="home-ingresos.js?v=21.234"></script>
+    <script src="login-animado.js?v=21.234"></script>
+    <script src="nomenclaturas.js?v=21.234"></script>
+    <script src="errores.js?v=21.234"></script>
+    <script src="saldos-contables.js?v=21.234"></script>
+    <script src="recepcion-conforme.js?v=21.234"></script>
+    <script src="acta-documentos.js?v=21.234"></script>
+    <script src="unificar-duplicados.js?v=21.234"></script>
+    <script src="actas-entrega.js?v=21.234"></script>
+    <script src="oxigeno.js?v=21.234"></script>
+    <script src="oxigeno-prestamos.js?v=21.234"></script>
+    <script src="oxigeno-ciclos.js?v=21.234"></script>
+    <script src="vida-producto.js?v=21.234"></script>
+    <script src="editar-ingreso.js?v=21.234"></script>
+    <script src="bodega-transitoria.js?v=21.234"></script>
+    <script src="visor-adquisiciones.js?v=21.234"></script>
 </body>
 </html>

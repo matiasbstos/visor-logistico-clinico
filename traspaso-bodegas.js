@@ -20,7 +20,7 @@
     for (let i = 0; i < lotes.length && falta > 0; i++) {
       const disp = num(lotes[i].quantity); if (disp <= 0) continue;
       const usa = Math.min(disp, falta); lotes[i].quantity = disp - usa; falta -= usa;
-      movidos.push({ batch: lotes[i].batch || 'S/L', used: usa, expirationDate: lotes[i].expirationDate || '', ...(lotes[i].codigoLote ? { codigoLote: lotes[i].codigoLote } : {}), ...(lotes[i].provider ? { provider: lotes[i].provider } : {}) });
+      movidos.push({ batch: lotes[i].batch || 'S/L', used: usa, expirationDate: lotes[i].expirationDate || '', ...(lotes[i].codigoLote ? { codigoLote: lotes[i].codigoLote } : {}), ...(num(lotes[i].porCaja) > 0 ? { porCaja: num(lotes[i].porCaja) } : {}), ...(lotes[i].provider ? { provider: lotes[i].provider } : {}) });
     }
     if (falta > 0) movidos.push({ batch: 'S/L', used: falta, expirationDate: '' });
     return { lotes, movidos };
@@ -33,7 +33,7 @@
       const b = lotes.find(x => claveL(x) === s.clave);
       if (!b || num(b.quantity) < s.qty) throw new Error(`El lote ${String(s.clave).split('|')[0]} solo tiene ${b ? num(b.quantity) : 0} unidad(es).`);
       b.quantity = num(b.quantity) - s.qty;
-      movidos.push({ batch: b.batch || 'S/L', used: s.qty, expirationDate: b.expirationDate || '', ...(b.codigoLote ? { codigoLote: b.codigoLote } : {}), ...(b.provider ? { provider: b.provider } : {}) });
+      movidos.push({ batch: b.batch || 'S/L', used: s.qty, expirationDate: b.expirationDate || '', ...(num(b.porCaja) > 0 ? { porCaja: num(b.porCaja) } : {}), ...(b.codigoLote ? { codigoLote: b.codigoLote } : {}), ...(b.provider ? { provider: b.provider } : {}) });
     });
     return { lotes, movidos };
   }
@@ -43,7 +43,7 @@
     movidos.forEach(m => {
       const ex = arr.find(b => b.batch === m.batch && (b.expirationDate || '') === (m.expirationDate || ''));
       if (ex) ex.quantity = num(ex.quantity) + m.used;
-      else arr.push({ batch: m.batch, quantity: m.used, expirationDate: m.expirationDate, ...(m.codigoLote ? { codigoLote: m.codigoLote } : {}), ...(m.provider ? { provider: m.provider } : {}) });
+      else arr.push({ batch: m.batch, quantity: m.used, expirationDate: m.expirationDate, ...(m.codigoLote ? { codigoLote: m.codigoLote } : {}), ...(m.provider ? { provider: m.provider } : {}), ...(num(m.porCaja) > 0 ? { porCaja: num(m.porCaja) } : {}) });
     });
     return arr;
   }

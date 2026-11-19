@@ -42,8 +42,8 @@
   /** Suma lotes de `nuevos` ([{batch, quantity, expirationDate}]) a `existentes`, juntando el mismo lote y vencimiento. */
   function sumarLotes(existentes, nuevos) {
     const m = new Map(); const k = (b) => `${b.batch || 'S/L'}|${b.expirationDate || ''}`;
-    (existentes || []).forEach(b => m.set(k(b), { batch: b.batch || 'S/L', quantity: num(b.quantity), expirationDate: b.expirationDate || '' }));
-    (nuevos || []).forEach(b => { const x = m.get(k(b)); if (x) x.quantity += num(b.quantity); else m.set(k(b), { batch: b.batch || 'S/L', quantity: num(b.quantity), expirationDate: b.expirationDate || '' }); });
+    (existentes || []).forEach(b => m.set(k(b), { ...b, batch: b.batch || 'S/L', quantity: num(b.quantity), expirationDate: b.expirationDate || '' }));   /* v21.236: conserva porCaja, codigoLote y proveedor del lote */
+    (nuevos || []).forEach(b => { const x = m.get(k(b)); if (x) x.quantity += num(b.quantity); else m.set(k(b), { ...b, batch: b.batch || 'S/L', quantity: num(b.quantity), expirationDate: b.expirationDate || '' }); });
     return [...m.values()];
   }
 
@@ -155,7 +155,7 @@
       const items = { ...ya }; trabajos.forEach(({ r, total }) => { items[r.k] = { n: yaDe(r) + total, c: String(r.contado) }; repuesto[r.k] = total; });
       tx.set(marcaRef, { tipo: 'transitoria-reposicion', bodegaId: b.id, bodega: b.name, fecha, items, documentos: (ms.exists() ? (ms.data().documentos || []) : []).concat([docTxt]), por: usuario(), actualizado: new Date().toISOString() });
       trabajos.forEach(({ r, movidos, total }) => {
-        const usados = movidos.flatMap(m => m.pl.usados).map(u => ({ batch: u.batch, quantity: u.used, expirationDate: u.expirationDate || '' }));
+        const usados = movidos.flatMap(m => m.pl.usados).map(u => ({ batch: u.batch, quantity: u.used, expirationDate: u.expirationDate || '', ...(num(u.porCaja) > 0 ? { porCaja: num(u.porCaja) } : {}) }));
         movidos.forEach(m => tx.update(doc('Insumos', m.p.id), { quantity: m.pl.quantity, batches: m.pl.batches, updatedAt: f.serverTimestamp() }));
         const destino = r.dB[0], base = movidos[0].d;
         if (destino) {

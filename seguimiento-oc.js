@@ -1263,10 +1263,12 @@
         ingresos.forEach(g => {
             total += g.cantidad;
             const ex = lotes.find(b => b.batch === g.lote && (b.expirationDate || 'N/A') === g.vence);
-            if (ex) ex.quantity = num(ex.quantity) + g.cantidad; else lotes.push({ batch: g.lote, quantity: g.cantidad, expirationDate: g.vence });
+            if (ex) { ex.quantity = num(ex.quantity) + g.cantidad; if (g.porCaja > 0 && !(num(ex.porCaja) > 0)) ex.porCaja = g.porCaja; }
+            else lotes.push({ batch: g.lote, quantity: g.cantidad, expirationDate: g.vence, ...(g.porCaja > 0 ? { porCaja: g.porCaja } : {}) });
         });
         if (typeof window.fefoCompare === 'function') lotes.sort(window.fefoCompare);
-        return { batches: lotes, quantity: num(doc && doc.quantity) + total, ingresado: total };
+        const pc = (ingresos.find(g => g.porCaja > 0) || {}).porCaja || 0;
+        return { batches: lotes, quantity: num(doc && doc.quantity) + total, ingresado: total, ...(pc ? { porCaja: pc } : {}) };
     }
     /** Aplica lo recibido a las líneas de la OC. Puro. */
     function aplicarRecepcion(data, key, det, incidencias, extra, ingresaStock) {
@@ -1296,7 +1298,10 @@
                 if (!ref && cod) { const s2 = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('codigoMP', '==', cod), f.limit(10))); s2.forEach(x => { const l = x.data().location; if (!ref && (l === central || !l)) ref = f.doc(f.collection(db(), 'Insumos'), x.id); }); }
                 if (!ref) ref = f.doc(f.collection(db(), 'Insumos'), `tras_${slug(nombre)}__${slug(central)}`);
                 const g = grupos.get(ref.path) || { ref, nombre, codigo: cod, ingresos: [], lineas: [] };
-                g.ingresos.push({ cantidad: d.cantidad, lote: (d.lote || '').trim().toUpperCase() || 'S/L', vence: d.vence || 'N/A' }); g.lineas.push(d); d._ref = ref.id; grupos.set(ref.path, g);
+                g.ingresos.push({ cantidad: d.cantidad, lote: (d.lote || '').trim().toUpperCase() || 'S/L', vence: d.vence || 'N/A', porCaja: (() => { const pc = num(d.cajas) > 0 && d.cantidad % num(d.cajas) === 0 ? d.cantidad / num(d.cajas) : 0; if (!pc) return 0;
+                    /* «Cajas o bultos»: si el producto ya tiene unidades por caja (o el nombre lo dice, «CAJA 50») y no calza, eran bultos: no se guarda */
+                    const conocido = num(g.unidadesPorCaja) || (window.SAR_Bultos && window.SAR_Bultos.sugerirPorCaja ? num(window.SAR_Bultos.sugerirPorCaja(g.nombre || d.insumoName || '')) : 0);
+                    return !conocido || conocido === pc ? pc : 0; })() });   /* v21.236: unidades por caja al lote (se ven en Editar insumo) */ g.lineas.push(d); d._ref = ref.id; grupos.set(ref.path, g);
             }
         }
         paso(`Guardando la recepción ${recId} y subiendo ${det.reduce((t, d) => t + d.cantidad, 0)} unidades al stock…`);
@@ -1323,7 +1328,7 @@
                 const cq = window.SAR_CuadreIngreso ? window.SAR_CuadreIngreso.aplicar(f, db(), tx, { ref: g.ref, antes: actual, quantity: m.quantity, batches: m.batches, documento: `${recId} · OC ${oc.numeroOC}`, bodega: central, nombre: g.nombre, usuario: usuario() }) : null;
                 if (cq) { m.quantity = cq.quantity; m.batches = cq.batches; cuadresEv.push({ idInsumo: g.ref.id, nombre: g.nombre, cuadrado: cq.cuadrado, cubiertas: cq.cubiertas, usados: cq.usados }); }
                 const prox2 = m.batches[0];
-                const base = { origenOC: true, ...(g.codigo ? { codigoMP: g.codigo } : {}), quantity: m.quantity, batches: m.batches, isCritical: m.quantity <= limite, batch: prox2 ? prox2.batch : '', expirationDate: prox2 ? prox2.expirationDate : 'N/A', provider: oc.proveedor || provDoc || (actual && actual.provider) || 'S/I', ...(cq ? { sobregiro: cq.sobregiro, sobregiroDetalle: cq.sobregiroDetalle } : {}), ...(actual && !actual.location && !actual.bodegaNombre ? { location: central, bodegaNombre: central } : {}), updatedAt: f.serverTimestamp() };
+                const base = { origenOC: true, ...(m.porCaja && !(num(actual && actual.unidadesPorCaja) > 0) ? { unidadesPorCaja: m.porCaja } : {}), ...(g.codigo ? { codigoMP: g.codigo } : {}), quantity: m.quantity, batches: m.batches, isCritical: m.quantity <= limite, batch: prox2 ? prox2.batch : '', expirationDate: prox2 ? prox2.expirationDate : 'N/A', provider: oc.proveedor || provDoc || (actual && actual.provider) || 'S/I', ...(cq ? { sobregiro: cq.sobregiro, sobregiroDetalle: cq.sobregiroDetalle } : {}), ...(actual && !actual.location && !actual.bodegaNombre ? { location: central, bodegaNombre: central } : {}), updatedAt: f.serverTimestamp() };
                 if (actual) tx.update(g.ref, base); else tx.set(g.ref, { name: g.nombre, name_lowercase: String(g.nombre).toLowerCase(), location: central, criticalLimit: 50, ...base });
                 g.ingresos.forEach(ing => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), {
                     insumoName: g.nombre, item: g.nombre, quantity: ing.cantidad, type: 'INGRESO_OC', batch: ing.lote, expirationDate: ing.vence, destination: central, dest: central, origin: oc.proveedor || 'Proveedor',

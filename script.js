@@ -5140,10 +5140,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
 
                     // Verificación (v21.119): confirma que el producto quedó realmente en Existencias y actualiza la caché local sin re-leer toda la colección
+                    let nombreGuardado = nombreInput.trim();
                     try {
                         const chk = await getDoc(doc(db, 'Insumos', insumoId));
                         if (!chk.exists()) throw new Error('El producto no quedó guardado en Existencias.');
                         const actualizado = { id: insumoId, ...chk.data() };
+                        if (actualizado.name) nombreGuardado = actualizado.name;
                         if (!Array.isArray(window.insumosDataCache)) window.insumosDataCache = [];
                         const idxCache = window.insumosDataCache.findIndex(x => x.id === insumoId);
                         if (idxCache >= 0) window.insumosDataCache[idxCache] = actualizado;
@@ -5153,10 +5155,32 @@ document.addEventListener('DOMContentLoaded', () => {
                         showToast('Revisar ingreso', 'El movimiento quedó en el historial pero el producto no aparece en Existencias. Avise antes de seguir ingresando.', 'error');
                         throw eChk;
                     }
+                    const modoCajaBtn = document.getElementById('ing-modo-caja');
+                    const enModoCaja = !!(modoCajaBtn && modoCajaBtn.getAttribute('aria-pressed') === 'true');
+                    const cajasIng = enModoCaja ? Math.max(0, Math.floor(Number((document.getElementById('ing-n-cajas') || {}).value) || 0)) : 0;
+                    const uPorCajaIng = enModoCaja ? Math.max(0, Math.floor(Number((document.getElementById('ing-u-caja') || {}).value) || 0)) : 0;
+                    const datosEtiquetaIngreso = {
+                        nombre: nombreGuardado,
+                        insumoId,
+                        codigoMP: codigoMP || '',
+                        bodega: destinoNombre,
+                        lote: cleanBatch,
+                        vence: formattedDate === 'N/A' ? '' : formattedDate,
+                        total: quantity,
+                        ...(cajasIng > 0 ? { cajas: cajasIng } : {}),
+                        ...(uPorCajaIng > 0 ? { porCaja: uPorCajaIng } : {}),
+                        proveedor: String(data.providerId || '').trim(),
+                        oc: String(data.ordenDocumento || '').trim().toUpperCase(),
+                        rec: codigoIngreso || '',
+                        fechaRecepcion: new Date().toISOString().slice(0, 10)
+                    };
                     showToast('Éxito', 'Movimiento registrado y auditado correctamente.', 'success');
                     moveForm.reset();
                     populateInsumosSelect(); // Refrescar lista con nuevos stocks
                     if (typeof window.loadFirstPage === 'function') window.loadFirstPage(); // Refrescar tabla de inventario
+                    if (window.SAR_Bultos && typeof window.SAR_Bultos.ofrecerIngreso === 'function') {
+                        window.SAR_Bultos.ofrecerIngreso(datosEtiquetaIngreso);
+                    }
 
                 } catch (err) {
                     console.error("Movement Save Error:", err);

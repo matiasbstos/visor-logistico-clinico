@@ -269,6 +269,9 @@ t('etiquetas jerárquicas v21.234: caja completa → cajas individuales, folios 
   const falt = B.faltantesOC(oc, [padre, ...subs], '2026-11-14');
   assert.strictEqual(falt.length, 1);
   assert.strictEqual(falt[0].total, 500);     // 1500 recibidos - 1000 del padre = 500 (no 0 por sumar subcajas!)
+  // Reparto desparejo por cantidad de subcajas y hook post-ingreso exportado
+  assert.deepStrictEqual(B.repartirSubcajas(100, 11, 0), [10, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9]);
+  assert.strictEqual(typeof B.ofrecerIngreso, 'function');
 });
 // contador con transacciones que se encolan: 20 pedidos simultáneos = 20 números distintos y seguidos (prueba asíncrona)
 (async () => {

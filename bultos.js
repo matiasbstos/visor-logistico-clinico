@@ -222,7 +222,7 @@
     const cajas = num(g.cajas) > 0 ? repartirEnCajas(g.total, g.cajas) : repartirCajas(g.total, g.porCaja); if (!cajas.length) throw new Error('Indica el total de unidades y cuántas cajas son (o cuántas vienen por caja).');
     if (cajas.length > 300) throw new Error('Son más de 300 cajas: revisa las unidades por caja.');
     const conSub = !!g.conSubcajas && (num(g.subcajasPorCaja) > 0 || num(g.unidadesPorSubcaja) > 0);
-    const genAhora = conSub && !!g.generarSubcajasAhora;
+    const genAhora = conSub && (!!g.generarSubcajasAhora || g.subModo === 'ambas' || g.subModo === 'solo_sub');
     if (genAhora) {
       const totEtq = cajas.reduce((s, q) => s + 1 + repartirSubcajas(q, g.subcajasPorCaja, g.unidadesPorSubcaja).length, 0);
       if (totEtq > 400) throw new Error(`Se generarían ${totEtq} etiquetas de una vez (máx. 400). Genera primero las cajas completas y desglosa cada caja cuando la abras.`);
@@ -368,42 +368,90 @@
     return ov;
   }
 
-  /** pref: {nombre, insumoId, codigoMP, bodega, lote, vence, total, proveedor, oc, rec, fechaRecepcion, lineas:[…mismos campos]} */
+  /** pref: {nombre, insumoId, codigoMP, bodega, lote, vence, total, cajas, porCaja, proveedor, oc, rec, fechaRecepcion, desdeIngreso, lineas:[…mismos campos]} */
   async function etiquetar(pref) {
     const p = pref || {}, lineas = Array.isArray(p.lineas) && p.lineas.length ? p.lineas : null;
-    const ov = ventana('Etiquetas de bulto', `<div class="bu-tabs"><button type="button" class="on" data-t="nueva">Nuevas etiquetas</button><button type="button" class="bu-tab-re" data-t="re">Reimprimir existentes</button></div><div class="bu-pane" data-p="nueva"></div><div class="bu-pane" data-p="re" hidden></div>`, { encima: !!p.encima });
+    const ov = ventana(p.desdeIngreso ? 'Configurar e imprimir etiqueta del ingreso' : 'Etiquetas de bulto', `<div class="bu-tabs"><button type="button" class="on" data-t="nueva">Nuevas etiquetas</button><button type="button" class="bu-tab-re" data-t="re">Reimprimir existentes</button></div><div class="bu-pane" data-p="nueva"></div><div class="bu-pane" data-p="re" hidden></div>`, { encima: !!p.encima });
     ov.querySelectorAll('.bu-tabs button').forEach(b => b.onclick = () => { ov.querySelectorAll('.bu-tabs button').forEach(x => x.classList.toggle('on', x === b)); ov.querySelectorAll('.bu-pane').forEach(x => { x.hidden = x.dataset.p !== b.dataset.t; }); if (b.dataset.t === 're') pintarReimprimir(ov.querySelector('[data-p="re"]')); });
     const pane = ov.querySelector('[data-p="nueva"]');
     let sel = lineas ? { ...lineas[0], idx: 0 } : { ...p };
-    const pintar = () => {
-      const sug = sugerirPorCaja(sel.nombre), porCaja = num(sel.porCaja) || sug || '', cajas = repartirCajas(sel.total, porCaja);
+    const calcular = () => {
+      const sug = sugerirPorCaja(sel.nombre), totalN = num(sel.total);
+      let porCajaVal = num(sel.porCaja), cajas = [];
+      if (num(sel.cajas) > 0 && totalN > 0) {
+        cajas = repartirEnCajas(totalN, sel.cajas);
+        if (!porCajaVal && cajas.length) porCajaVal = Math.max(...cajas);
+      } else if (porCajaVal > 0 && totalN > 0) {
+        cajas = repartirCajas(totalN, porCajaVal);
+      } else if (sug > 0 && totalN > 0) {
+        porCajaVal = Math.min(sug, totalN);
+        cajas = repartirCajas(totalN, porCajaVal);
+      } else if (totalN > 0) {
+        porCajaVal = totalN;
+        cajas = [totalN];
+      }
       const conSub = !!sel.conSubcajas;
       const subCant = num(sel.subcajasPorCaja) || 0, uSub = num(sel.unidadesPorSubcaja) || 0;
+      const subPartesPrimera = conSub && cajas.length ? repartirSubcajas(cajas[0], subCant, uSub) : [];
       const totSub = conSub ? cajas.reduce((s, q) => s + repartirSubcajas(q, subCant, uSub).length, 0) : 0;
-      const genAhora = conSub && !!sel.generarSubcajasAhora;
-      const listaValida = cajas.length > 0 && (!conSub || totSub > 0);
+      const subModo = sel.subModo || (sel.generarSubcajasAhora ? 'ambas' : 'solo_ext');
+      const listaValida = !!sel.nombre && cajas.length > 0 && (!conSub || totSub > 0);
+      return { sug, totalN, porCajaVal, cajas, conSub, subCant, uSub, subPartesPrimera, totSub, subModo, listaValida };
+    };
+    const textoPrev = (st) => {
+      const { cajas, conSub, subPartesPrimera, totSub, subModo } = st;
+      if (!cajas.length) return 'Indica el total de unidades y las cajas globales (o unidades por caja).';
+      const totalU = cajas.reduce((s, x) => s + x, 0);
+      const detCajas = cajas.length > 1 && cajas[cajas.length - 1] !== cajas[0]
+        ? `${cajas.length - 1} caja(s) de ${cajas[0]} u. + 1 de ${cajas[cajas.length - 1]} u.`
+        : `${cajas.length} caja${cajas.length === 1 ? '' : 's'} de ${cajas[0]} u.`;
+      if (!conSub) return `<b>${cajas.length} etiqueta${cajas.length === 1 ? '' : 's'} de caja global</b>: ${detCajas} · total <b>${totalU} u.</b>`;
+      if (!totSub) return 'Paso 2: indica cuántas subcajas trae cada caja global (o cuántas unidades trae cada subcaja).';
+      const restoSub = subPartesPrimera.length > 1 && subPartesPrimera[subPartesPrimera.length - 1] !== subPartesPrimera[0];
+      const detSub = restoSub
+        ? `${subPartesPrimera.length} subcajas (${subPartesPrimera.length - 1}×${subPartesPrimera[0]} + 1×${subPartesPrimera[subPartesPrimera.length - 1]} u.)`
+        : `${subPartesPrimera.length} subcaja${subPartesPrimera.length === 1 ? '' : 's'} × ${subPartesPrimera[0]} u. c/u`;
+      const lineaExt = `<b>Etiqueta exterior (CAJA COMPLETA):</b> ${cajas.length} × ${cajas[0]} u. en total · <i>Adentro: ${detSub}</i>`;
+      const lineaInt = `<b>Etiquetas internas (CAJA INDIVIDUAL):</b> ${totSub} etiqueta${totSub === 1 ? '' : 's'} (${subPartesPrimera[0]} u. c/u${restoSub ? ', última ' + subPartesPrimera[subPartesPrimera.length - 1] + ' u.' : ''})`;
+      if (subModo === 'ambas') return `${lineaExt}<br>${lineaInt}<br><small>Se imprimen <b>${cajas.length + totSub} etiquetas</b> en total · stock real contado: <b>${totalU} u.</b> (sin doble conteo).</small>`;
+      if (subModo === 'solo_sub') return `${lineaInt}<br><small>Se registra la caja global (${totalU} u.) y se imprimen solo las <b>${totSub} etiquetas de subcajas</b> (sin doble conteo).</small>`;
+      return `${lineaExt}<br><small>Se imprimen <b>${cajas.length} etiqueta${cajas.length === 1 ? '' : 's'} exterior${cajas.length === 1 ? '' : 'es'}</b> con el total y el detalle interno; podrás imprimir las ${totSub} subcajas al abrir o reimprimir.</small>`;
+    };
+    const pintar = () => {
+      const st = calcular();
+      const { sug, porCajaVal, cajas, conSub, subCant, uSub, subPartesPrimera, subModo, listaValida } = st;
       pane.innerHTML = `${lineas ? `<label class="bu-l">Producto de esta recepción<select id="bu-lin" class="si-in">${lineas.map((l, i) => `<option value="${i}"${i === sel.idx ? ' selected' : ''}>${esc(l.nombre)} · ${num(l.total)} u.${l.lote ? ' · lote ' + esc(l.lote) : ''}${l.hecho ? ' ✔' : ''}</option>`).join('')}</select></label>`
-          : `<label class="bu-l">Producto<input id="bu-q" class="si-in" placeholder="Busca por nombre…" value="${esc(sel.nombre || '')}" autocomplete="off"></label><div id="bu-sug" class="bu-sug"></div>`}
-        <div class="bu-g3"><label class="bu-l">Lote<input id="bu-lote" class="si-in" value="${esc(sel.lote || '')}"></label><label class="bu-l">Vence<input id="bu-vence" type="date" class="si-in" value="${esc(sel.vence || '')}"></label><label class="bu-l">Bodega<input id="bu-bod" class="si-in" value="${esc(sel.bodega || '')}"></label></div>
-        <div class="bu-g3"><label class="bu-l">Total de unidades<input id="bu-total" type="number" min="1" class="si-in" value="${num(sel.total) || ''}" inputmode="numeric"></label><label class="bu-l">${conSub ? 'Unidades por caja completa' : 'Unidades por caja'}<input id="bu-pc" type="number" min="1" class="si-in" value="${porCaja}" inputmode="numeric">${sug && !num(sel.porCaja) ? '<small>Sugerido por la descripción («caja x ' + sug + '»)</small>' : ''}</label><label class="bu-l">${conSub ? 'Cajas completas' : 'Cajas'}<input id="bu-cajas" type="number" min="1" class="si-in" value="${cajas.length || ''}" inputmode="numeric"><small>Si cambias las cajas, se recalculan las unidades.</small></label></div>
-        <div class="bu-subbox">
-          <label class="bu-chk"><input type="checkbox" id="bu-con-sub"${conSub ? ' checked' : ''}><span><b>Esta caja completa trae cajas individuales adentro</b> <small>(ej. 1 caja master con 10 cajitas de 100 u.)</small></span></label>
-          ${conSub ? `<div class="bu-g3" style="margin-top:8px;">
-            <label class="bu-l">Cajas individuales por caja completa<input id="bu-sub-n" type="number" min="1" max="200" class="si-in" inputmode="numeric" value="${subCant || ''}" placeholder="Ej: 10"></label>
-            <label class="bu-l">Unidades por caja individual<input id="bu-sub-u" type="number" min="1" class="si-in" inputmode="numeric" value="${uSub || ''}" placeholder="Ej: 100"></label>
-            <label class="bu-l">¿Qué etiquetas imprimir ahora?<select id="bu-sub-modo" class="si-in"><option value="0"${genAhora ? '' : ' selected'}>Solo caja(s) completa(s) ahora (desglosar al abrir)</option><option value="1"${genAhora ? ' selected' : ''}>Caja(s) completa(s) + cajas individuales ahora</option></select></label>
+          : (p.desdeIngreso && sel.nombre ? `<div class="bu-ing-res"><b>${esc(sel.nombre)}</b> · ${num(sel.total)} u. · lote <b>${esc(sel.lote || 'S/L')}</b>${sel.vence ? ' · vence ' + esc(fechaCL(sel.vence)) : ''}${sel.bodega ? ' · ' + esc(sel.bodega) : ''}</div>`
+            : `<label class="bu-l">Producto<input id="bu-q" class="si-in" placeholder="Busca por nombre…" value="${esc(sel.nombre || '')}" autocomplete="off"></label><div id="bu-sug" class="bu-sug"></div>`)}
+        <section class="bu-paso">
+          <div class="bu-paso-h"><span class="bu-paso-n">1</span>Parámetros de la caja global (exterior)</div>
+          <div class="bu-g3">
+            <label class="bu-l">Total de unidades<input id="bu-total" type="number" min="1" class="si-in" value="${num(sel.total) || ''}" inputmode="numeric"></label>
+            <label class="bu-l">N° de cajas globales<input id="bu-cajas" type="number" min="1" class="si-in" value="${cajas.length || ''}" inputmode="numeric"><small>Si cambias las cajas, se recalculan las unidades.</small></label>
+            <label class="bu-l">Unidades por caja global<input id="bu-pc" type="number" min="1" class="si-in" value="${porCajaVal || ''}" inputmode="numeric">${sug && !num(sel.porCaja) && !num(sel.cajas) ? '<small>Sugerido («caja x ' + sug + '»)</small>' : '<small>Total en la etiqueta exterior.</small>'}</label>
+          </div>
+        </section>
+        <section class="bu-paso bu-subbox">
+          <div class="bu-paso-h"><span class="bu-paso-n">2</span>Subcajas / bultos internos</div>
+          <label class="bu-chk"><input type="checkbox" id="bu-con-sub"${conSub ? ' checked' : ''}><span><b>¿Esta caja global trae subcajas / cajas individuales adentro?</b> <small>(ej. 1 caja global de 1000 u. con 10 subcajas de 100 u.)</small></span></label>
+          ${conSub ? `<div class="bu-g3">
+            <label class="bu-l">¿Cuántas subcajas trae la caja?<input id="bu-sub-n" type="number" min="1" max="200" class="si-in" inputmode="numeric" value="${subCant || subPartesPrimera.length || ''}" placeholder="Ej: 10"></label>
+            <label class="bu-l">Unidades por subcaja<input id="bu-sub-u" type="number" min="1" class="si-in" inputmode="numeric" value="${uSub || (subPartesPrimera[0] || '')}" placeholder="Ej: 100"></label>
+            <label class="bu-l">¿Qué etiquetas imprimir?<select id="bu-sub-modo" class="si-in">
+              <option value="ambas"${subModo === 'ambas' ? ' selected' : ''}>Caja global + subcajas individuales</option>
+              <option value="solo_ext"${subModo === 'solo_ext' ? ' selected' : ''}>Solo etiqueta exterior (con detalle interno)</option>
+              <option value="solo_sub"${subModo === 'solo_sub' ? ' selected' : ''}>Solo etiquetas de subcajas individuales</option>
+            </select></label>
           </div>` : ''}
-        </div>
-        <div class="bu-g3"><label class="bu-l">Proveedor<input id="bu-prov" class="si-in" value="${esc(sel.proveedor || '')}"></label><label class="bu-l">Orden de compra<input id="bu-oc" class="si-in" value="${esc(sel.oc || '')}"></label><label class="bu-l">Fecha de recepción<input id="bu-fr" type="date" class="si-in" value="${esc(sel.fechaRecepcion || hoyISO())}"></label></div>
-        ${sel.rec ? `<p class="si-v">Recepción ${esc(sel.rec)}</p>` : ''}
-        <div class="bu-prev">${!cajas.length ? 'Indica el total y las unidades por caja.'
-          : conSub
-            ? (totSub ? (genAhora
-                ? `<b>${cajas.length} etiqueta${cajas.length === 1 ? '' : 's'} de CAJA COMPLETA + ${totSub} etiqueta${totSub === 1 ? '' : 's'} de CAJA INDIVIDUAL</b> (total ${cajas.length + totSub} etiquetas · ${cajas.reduce((s, x) => s + x, 0)} u. reales, sin doble conteo).`
-                : `<b>${cajas.length} etiqueta${cajas.length === 1 ? '' : 's'} de CAJA COMPLETA</b> (c/u con ${subCant || Math.round(totSub / cajas.length)} cajas individuales${uSub ? ' × ' + uSub + ' u.' : ''} · total ${cajas.reduce((s, x) => s + x, 0)} u.). Podrás generar las etiquetas individuales al abrir cada caja.`)
-              : 'Indica cuántas cajas individuales trae cada caja completa (o cuántas unidades viene en cada una).')
-            : `<b>${cajas.length} etiqueta${cajas.length === 1 ? '' : 's'}</b>: ${cajas.length > 1 && cajas[cajas.length - 1] !== cajas[0] ? `${cajas.length - 1} caja(s) de ${cajas[0]} u. y la última de ${cajas[cajas.length - 1]} u.` : `cajas de ${cajas[0]} u.`} · total ${cajas.reduce((s, x) => s + x, 0)} u.`}</div>
-        <div class="fp-facc"><button type="button" class="btn btn-primary" id="bu-gen"${listaValida ? '' : ' disabled'}><i class="ph-bold ph-printer"></i> Generar e imprimir</button></div>`;
+        </section>
+        <section class="bu-paso">
+          <div class="bu-paso-h"><span class="bu-paso-n">3</span>Datos de la etiqueta y vista previa</div>
+          <div class="bu-g3"><label class="bu-l">Lote<input id="bu-lote" class="si-in" value="${esc(sel.lote || '')}"></label><label class="bu-l">Vence<input id="bu-vence" type="date" class="si-in" value="${esc(sel.vence || '')}"></label><label class="bu-l">Bodega<input id="bu-bod" class="si-in" value="${esc(sel.bodega || '')}"></label></div>
+          <div class="bu-g3"><label class="bu-l">Proveedor<input id="bu-prov" class="si-in" value="${esc(sel.proveedor || '')}"></label><label class="bu-l">Orden de compra / Doc.<input id="bu-oc" class="si-in" value="${esc(sel.oc || '')}"></label><label class="bu-l">Fecha de recepción<input id="bu-fr" type="date" class="si-in" value="${esc(sel.fechaRecepcion || hoyISO())}"></label></div>
+          ${sel.rec ? `<p class="si-v" style="margin:0;">Registro / Recepción: ${esc(sel.rec)}</p>` : ''}
+          <div class="bu-prev" id="bu-prev">${textoPrev(st)}</div>
+        </section>
+        <div class="fp-facc">${p.desdeIngreso ? '<button type="button" class="btn btn-secondary" id="bu-despues">Ahora no</button>' : ''}<button type="button" class="btn btn-primary" id="bu-gen"${listaValida ? '' : ' disabled'}><i class="ph-bold ph-printer"></i> Generar e imprimir</button></div>`;
       const v = (id) => (pane.querySelector('#' + id) || {}).value;
       const leer2 = () => {
         sel.lote = v('bu-lote'); sel.vence = v('bu-vence'); sel.bodega = v('bu-bod');
@@ -412,39 +460,109 @@
         if (sel.conSubcajas) {
           sel.subcajasPorCaja = num(v('bu-sub-n'));
           sel.unidadesPorSubcaja = num(v('bu-sub-u'));
-          sel.generarSubcajasAhora = v('bu-sub-modo') === '1';
+          sel.subModo = v('bu-sub-modo') || 'ambas';
+          sel.generarSubcajasAhora = sel.subModo === 'ambas' || sel.subModo === 'solo_sub';
         }
       };
-      ['bu-total', 'bu-pc'].forEach(id => { const e = pane.querySelector('#' + id); if (e) e.onchange = () => { leer2(); if (sel.conSubcajas && sel.porCaja && sel.unidadesPorSubcaja) sel.subcajasPorCaja = Math.ceil(sel.porCaja / sel.unidadesPorSubcaja); pintar(); }; });
-      const ec = pane.querySelector('#bu-cajas'); if (ec) ec.onchange = () => { leer2(); const n = Math.max(1, num(ec.value)); if (sel.total) sel.porCaja = Math.ceil(sel.total / n); pintar(); };
+      const refrescarPrev = () => {
+        const prev = pane.querySelector('#bu-prev'), gen = pane.querySelector('#bu-gen'), s2 = calcular();
+        if (prev) prev.innerHTML = textoPrev(s2);
+        if (gen) gen.disabled = !s2.listaValida;
+      };
+      const eTot = pane.querySelector('#bu-total');
+      const ePc = pane.querySelector('#bu-pc');
+      const ec = pane.querySelector('#bu-cajas');
+      const sn = pane.querySelector('#bu-sub-n');
+      const su = pane.querySelector('#bu-sub-u');
+      const sincronizarSub = () => {
+        if (!sel.conSubcajas) return;
+        const uC = calcular().cajas[0] || sel.porCaja || sel.total;
+        if (sel.unidadesPorSubcaja > 0 && uC > 0) {
+          sel.subcajasPorCaja = Math.ceil(uC / sel.unidadesPorSubcaja);
+          if (sn) sn.value = sel.subcajasPorCaja || '';
+        } else if (sel.subcajasPorCaja > 0 && uC > 0) {
+          sel.unidadesPorSubcaja = (uC % sel.subcajasPorCaja === 0) ? (uC / sel.subcajasPorCaja) : 0;
+          if (su) su.value = sel.unidadesPorSubcaja || '';
+        }
+      };
+      if (eTot) eTot.oninput = () => {
+        sel.total = num(eTot.value);
+        if (sel.cajas > 0 && sel.total > 0) {
+          const rep = repartirEnCajas(sel.total, sel.cajas);
+          sel.porCaja = rep.length ? Math.max(...rep) : Math.ceil(sel.total / sel.cajas);
+          if (ePc) ePc.value = sel.porCaja || '';
+        } else {
+          if (ec) ec.value = calcular().cajas.length || '';
+        }
+        sincronizarSub(); refrescarPrev();
+      };
+      if (ePc) ePc.oninput = () => {
+        sel.porCaja = num(ePc.value); sel.cajas = 0;
+        if (ec) ec.value = calcular().cajas.length || '';
+        sincronizarSub(); refrescarPrev();
+      };
+      if (ec) ec.oninput = () => {
+        const n = Math.max(0, Math.floor(num(ec.value))); sel.cajas = n;
+        if (n > 0 && sel.total > 0) {
+          const rep = repartirEnCajas(sel.total, n);
+          sel.porCaja = rep.length ? Math.max(...rep) : Math.ceil(sel.total / n);
+          if (ePc) ePc.value = sel.porCaja || '';
+        }
+        sincronizarSub(); refrescarPrev();
+      };
       const chkSub = pane.querySelector('#bu-con-sub');
       if (chkSub) chkSub.onchange = () => {
         leer2(); sel.conSubcajas = chkSub.checked;
-        if (sel.conSubcajas && sel.porCaja && !sel.subcajasPorCaja && !sel.unidadesPorSubcaja) {
-          const sU = sugerirPorCaja(sel.nombre);
-          if (sU && sU < sel.porCaja) { sel.unidadesPorSubcaja = sU; sel.subcajasPorCaja = Math.ceil(sel.porCaja / sU); }
+        if (sel.conSubcajas) {
+          if (!sel.subModo) sel.subModo = 'ambas';
+          sel.generarSubcajasAhora = sel.subModo === 'ambas' || sel.subModo === 'solo_sub';
+          const uCaja = calcular().cajas[0] || sel.porCaja || sel.total;
+          if (uCaja && !sel.subcajasPorCaja && !sel.unidadesPorSubcaja) {
+            const sU = sugerirPorCaja(sel.nombre);
+            if (sU && sU < uCaja) { sel.unidadesPorSubcaja = sU; sel.subcajasPorCaja = Math.ceil(uCaja / sU); }
+          }
         }
         pintar();
       };
-      const sn = pane.querySelector('#bu-sub-n');
-      if (sn) sn.onchange = () => { leer2(); if (sel.subcajasPorCaja && sel.unidadesPorSubcaja && !sel.porCaja) sel.porCaja = sel.subcajasPorCaja * sel.unidadesPorSubcaja; else if (sel.subcajasPorCaja && sel.porCaja) sel.unidadesPorSubcaja = Math.ceil(sel.porCaja / sel.subcajasPorCaja); pintar(); };
-      const su = pane.querySelector('#bu-sub-u');
-      if (su) su.onchange = () => { leer2(); if (sel.subcajasPorCaja && sel.unidadesPorSubcaja) { if (!sel.porCaja || sel.porCaja === num(porCaja)) sel.porCaja = sel.subcajasPorCaja * sel.unidadesPorSubcaja; else sel.subcajasPorCaja = Math.ceil(sel.porCaja / sel.unidadesPorSubcaja); } else if (sel.unidadesPorSubcaja && sel.porCaja) { sel.subcajasPorCaja = Math.ceil(sel.porCaja / sel.unidadesPorSubcaja); } pintar(); };
-      const sm = pane.querySelector('#bu-sub-modo'); if (sm) sm.onchange = () => { leer2(); pintar(); };
+      if (sn) sn.oninput = () => {
+        const n = Math.max(0, Math.floor(num(sn.value))), uC = calcular().cajas[0] || sel.porCaja || sel.total;
+        sel.subcajasPorCaja = n;
+        sel.unidadesPorSubcaja = (n > 0 && uC > 0 && uC % n === 0) ? (uC / n) : 0;
+        if (su) {
+          const pSub = calcular().subPartesPrimera;
+          su.value = sel.unidadesPorSubcaja || '';
+          su.placeholder = pSub.length ? '≈ ' + pSub[0] : 'Ej: 100';
+        }
+        refrescarPrev();
+      };
+      if (su) su.oninput = () => {
+        const u = Math.max(0, Math.floor(num(su.value))), uC = calcular().cajas[0] || sel.porCaja || sel.total;
+        sel.unidadesPorSubcaja = u;
+        sel.subcajasPorCaja = (u > 0 && uC > 0) ? Math.ceil(uC / u) : 0;
+        if (sn) sn.value = sel.subcajasPorCaja || '';
+        refrescarPrev();
+      };
+      const sm = pane.querySelector('#bu-sub-modo'); if (sm) sm.onchange = () => { leer2(); refrescarPrev(); };
       const ls = pane.querySelector('#bu-lin'); if (ls) ls.onchange = () => { const i = num(ls.value); sel = { ...lineas[i], idx: i }; pintar(); };
+      const bDesp = pane.querySelector('#bu-despues'); if (bDesp) bDesp.onclick = () => ov.cerrar();
       const q = pane.querySelector('#bu-q'); if (q) q.oninput = async () => {
         const t = norm(q.value), box = pane.querySelector('#bu-sug'); if (t.length < 2) { box.innerHTML = ''; return; }
         const l = (await cargarInsumos()).filter(i => norm(i.name).includes(t)).slice(0, 8);
         box.innerHTML = l.map(i => lotesDe(i).map(b => `<button type="button" class="bu-op" data-id="${esc(i.id)}" data-lote="${esc(b.batch || 'S/L')}" data-v="${esc(b.expirationDate || '')}" data-q="${num(b.quantity)}"><b>${esc(i.name)}</b><small>${esc(i.location || '')} · lote ${esc(b.batch || 'S/L')}${b.expirationDate ? ' · vence ' + esc(fechaCL(b.expirationDate)) : ''} · ${num(b.quantity)} u.</small></button>`).join('')).join('') || '<p class="si-v">Sin coincidencias.</p>';
-        box.querySelectorAll('.bu-op').forEach(b => b.onclick = () => { const i = insumos.find(x => x.id === b.dataset.id); sel = { ...sel, nombre: i.name, insumoId: i.id, codigoMP: i.codigoMP || '', bodega: i.location || '', lote: b.dataset.lote, vence: b.dataset.v, total: num(b.dataset.q), porCaja: 0, proveedor: sel.proveedor || i.provider || '' }; pintar(); });
+        box.querySelectorAll('.bu-op').forEach(b => b.onclick = () => { const i = insumos.find(x => x.id === b.dataset.id); sel = { ...sel, nombre: i.name, insumoId: i.id, codigoMP: i.codigoMP || '', bodega: i.location || '', lote: b.dataset.lote, vence: b.dataset.v, total: num(b.dataset.q), porCaja: 0, cajas: 0, proveedor: sel.proveedor || i.provider || '' }; pintar(); });
       };
       pane.querySelector('#bu-gen').onclick = async (e) => {
-        leer2(); if (!sel.nombre) { toast('Etiquetas', 'Elige el producto.', 'warning'); return; }
+        leer2(); const stAct = calcular();
+        if (!sel.nombre) { toast('Etiquetas', 'Elige el producto.', 'warning'); return; }
+        if (!num(sel.porCaja) && stAct.porCajaVal) sel.porCaja = stAct.porCajaVal;
         e.target.disabled = true;
         try {
-          const l = await crear(sel); await imprimir(l);
+          const l = await crear(sel);
+          const aImprimir = (sel.conSubcajas && sel.subModo === 'solo_sub') ? l.filter(esSubcaja) : l;
+          await imprimir(aImprimir);
           if (lineas) { lineas[sel.idx].hecho = true; const sig = lineas.findIndex(x => !x.hecho); if (sig >= 0) { sel = { ...lineas[sig], idx: sig }; } }
-          if (window.SAR_Progreso && window.SAR_Progreso.exito) window.SAR_Progreso.exito({ titulo: `${l.length} etiqueta${l.length === 1 ? '' : 's'} lista${l.length === 1 ? '' : 's'}`, texto: esc(l[0].folio) + (l.length > 1 ? ' a ' + esc(l[l.length - 1].folio) : '') });
+          if (window.SAR_Progreso && window.SAR_Progreso.exito) window.SAR_Progreso.exito({ titulo: `${aImprimir.length} etiqueta${aImprimir.length === 1 ? '' : 's'} lista${aImprimir.length === 1 ? '' : 's'}`, texto: esc(aImprimir[0].folio) + (aImprimir.length > 1 ? ' a ' + esc(aImprimir[aImprimir.length - 1].folio) : '') });
+          if (p.desdeIngreso && !lineas) { ov.cerrar(); return; }
           pintar();
         } catch (er) { toast('No se generaron', er.message || String(er), 'error'); e.target.disabled = false; }
       };
@@ -804,10 +922,42 @@
   /** Después de una recepción: ofrece etiquetar sus productos (espera a que no haya otra ventana abierta). */
   function ofrecerRecepcion(o) {
     let n = 0; const t = setInterval(async () => {
-      n++; if (document.querySelector('.modal-overlay, .sar-conf, .r-prog, .bu-ov, .sar-ok') && n < 120) return; clearInterval(t);
+      n++; if (document.querySelector('.modal-overlay.active, .sar-conf, .r-prog, .bu-ov, .sar-ok') && n < 120) return; clearInterval(t);
       const P = window.SAR_Progreso; const si = P && P.confirmar ? await P.confirmar({ titulo: '¿Etiquetar los bultos?', texto: `Recepción <b>${esc(o.rec || '')}</b>: imprime una etiqueta por caja con lote, vencimiento y cantidad.`, si: 'Etiquetar', no: 'Ahora no' }) : false;
       if (si) etiquetar({ lineas: o.lineas });
-    }, 1000);
+    }, 600);
+  }
+  /** Después de un ingreso de existencias: avisa de inmediato para configurar e imprimir la etiqueta (caja global, subcajas y datos). */
+  function ofrecerIngreso(item) {
+    if (!item || !item.nombre || !(num(item.total) > 0)) return;
+    let n = 0; const t = setInterval(async () => {
+      n++; if (document.querySelector('.modal-overlay.active, .sar-conf, .r-prog, .bu-ov, .sar-ok') && n < 40) return; clearInterval(t);
+      const P = window.SAR_Progreso;
+      const lineas = [
+        `Cantidad ingresada: <b>${num(item.total)} u.</b>${num(item.cajas) > 0 && num(item.porCaja) > 0 ? ` (${num(item.cajas)} caja${num(item.cajas) === 1 ? '' : 's'} × ${num(item.porCaja)} u.)` : ''}`,
+        `Lote: <b>${esc(item.lote || 'S/L')}</b>${item.vence ? ` · Vence: <b>${esc(fechaCL(item.vence))}</b>` : ''}`
+      ];
+      if (item.proveedor || item.oc) lineas.push(`${item.proveedor ? `Proveedor: ${esc(item.proveedor)}` : ''}${item.oc ? `${item.proveedor ? ' · ' : ''}Doc/OC: ${esc(item.oc)}` : ''}`);
+      const si = P && P.confirmar ? await P.confirmar({
+        titulo: '¿Imprimir etiqueta del producto?',
+        texto: `Se ingresó <b>${esc(item.nombre)}</b> en <b>${esc(item.bodega || 'Bodega Central')}</b>. Podrás indicar los parámetros de la caja global, si trae subcajas adentro y los datos de la etiqueta.`,
+        lineas,
+        si: 'Imprimir etiqueta',
+        no: 'Ahora no'
+      }) : true;
+      if (si) {
+        etiquetar({ ...item, desdeIngreso: true });
+      } else if (P && P.aviso) {
+        P.aviso({
+          titulo: 'Etiqueta pendiente',
+          texto: `${item.nombre} · ${num(item.total)} u. (lote ${item.lote || 'S/L'})`,
+          estado: 'info',
+          boton: 'Imprimir etiqueta',
+          ms: 10000,
+          alTocar: () => etiquetar({ ...item, desdeIngreso: true })
+        });
+      }
+    }, 300);
   }
   /** Al terminar una recepción: los productos con cajas contadas generan sus etiquetas solas (un PDF con todas);
       los que quedaron sin cajas se ofrecen para etiquetar después. */
@@ -830,6 +980,6 @@
   if (typeof module === 'undefined' && typeof window.addEventListener === 'function' && document.getElementById) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', contarAlIniciar); else contarAlIniciar(); }
   if (typeof module === 'undefined' && typeof window.addEventListener === 'function') { window.addEventListener('hashchange', revisarHash); if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', revisarHash); else revisarHash(); }
 
-  window.SAR_Bultos = { porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, repartirSubcajas, armarSubcajas, desglosar, abrirDesglose, subcajasDe, esSubcaja, esMaster, folioSubcaja, conflictoJerarquia, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
+  window.SAR_Bultos = { porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, repartirSubcajas, armarSubcajas, desglosar, abrirDesglose, subcajasDe, esSubcaja, esMaster, folioSubcaja, conflictoJerarquia, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, ofrecerIngreso, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_Bultos;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null, addEventListener() {} });

@@ -6573,7 +6573,11 @@ body:not([data-user-role="solicitante"]) .menu-item[data-target="view-solicitud-
 .bu-grp-h{align-items:center}.bu-grp-h .prod-img{width:44px;height:44px;margin-right:0}.bu-grp-t{flex:1;min-width:0}
 @media(max-width:640px){.bu-falta2 li{grid-template-columns:auto 1fr auto}.bu-falta2 li .prod-img{grid-row:1/3}.bu-f-m{grid-column:2}.bu-f-q{grid-column:3}.bu-grp-h{flex-direction:row;flex-wrap:wrap}.bu-grp-h .btn{width:100%}}
 
-/* v21.234 · Etiquetas jerárquicas: caja completa (master) → cajas individuales (subcajas) */
+/* v21.234 · Etiquetas jerárquicas: caja completa (master) → cajas individuales (subcajas) y pasos post-ingreso */
+.bu-paso{background:#fff;border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.bu-paso-h{display:flex;align-items:center;gap:8px;font-size:.86rem;font-weight:700;color:var(--primary,#1a3668)}
+.bu-paso-n{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--primary,#1a3668);color:#fff;font-size:.74rem;font-weight:800;flex:0 0 auto}
+.bu-ing-res{background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:8px 10px;font-size:.84rem;color:#0f172a}
 .bu-subbox{background:#f8fafc;border:1px dashed #94a3b8;border-radius:10px;padding:10px 12px}
 .bu-chk{display:flex;align-items:flex-start;gap:8px;cursor:pointer;font-size:.86rem;color:#1e293b}.bu-chk input{margin-top:3px}.bu-chk small{color:#64748b;font-weight:400}
 .bu-nv{display:inline-block;padding:1px 7px;border-radius:6px;font-size:.7rem;font-weight:700;vertical-align:middle;margin-left:4px}

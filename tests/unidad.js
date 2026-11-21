@@ -124,6 +124,11 @@ t('respaldo semanal en Excel (v21.237): semana ISO, día de envío y filas por l
     [{ numero: 'AE-1', estado: 'EMITIDA', confirmacion: { estado: 'PENDIENTE' }, items: [{ nombre: 'GASA', cantidad: 5, reserva: { qty: 5 } }] }], new Date(2026, 10, 19));
   assert.strictEqual(f.inv.length, 3); assert.strictEqual(f.inv.find(r => r['Lote'] === 'L1')['Total disponible del producto'], 30); assert.strictEqual(f.vencer.length, 1); assert.strictEqual(f.pend.length, 1);
   const tot = f.resumen.find(r => r['Bodega'] === 'TOTAL'); assert.strictEqual(tot['Unidades disponibles'], 30); assert.strictEqual(tot['Unidades reservadas'], 5); assert.strictEqual(tot['Valor (costo unitario)'], 3000); });
+t('etiquetas por niveles (v21.238): caja grande con cajas interiores', () => { const B = require('../bultos.js');
+  const p = B.planCajas({ total: 2000, porCaja: 1000, subPor: 50 }); assert.strictEqual(p.length, 2); assert.strictEqual(p[0].q, 1000); assert.strictEqual(p[0].hijos.length, 20); assert.strictEqual(p[0].hijos.reduce((a, b) => a + b, 0), 1000);
+  const p2 = B.planCajas({ total: 1030, porCaja: 1000, subPor: 50 }); assert.strictEqual(p2[1].q, 30); assert.strictEqual(p2[1].hijos.length, 0);
+  const p3 = B.planCajas({ total: 120, porCaja: 120, subPor: 50 }); assert.deepStrictEqual(p3[0].hijos, [50, 50, 20]);
+  assert.strictEqual(B.planCajas({ total: 100, porCaja: 50 })[0].hijos.length, 0); });
 t('salud del inventario: nombres con espacios, sin bodega, repetidos por nombre o ID y deudas con stock (v21.228)', () => { require('../unificar-duplicados.js'); const S = require('../salud-inventario.js');
   const I = (id, d) => ({ id, data: d }), bod = [I('bc', { name: 'Bodega Central' }), I('bt', { name: 'Bodega Transitoria ' }), I('cam', { name: 'Bodega CAM' })];
   const ins = [I('s1', { name: 'SABANILLA', location: 'Bodega Central', quantity: 550, sobregiro: 10, sobregiroDetalle: [{ acta: 'AE-1', qty: 10 }], codigoMP: '4623811' }), I('s2', { name: 'Sabanilla ', location: 'Bodega Central', quantity: 0, sobregiro: 50, codigoMP: '4623804' }),

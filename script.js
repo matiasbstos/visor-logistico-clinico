@@ -905,15 +905,17 @@ document.addEventListener('DOMContentLoaded', () => {
                         /* v21.238: conteo físico: el lote debe seguir como se contó (si cambió entre medio, se vuelve a contar) */
                         if (opts && opts.lote && opts.esperadoLote != null) {
                             const hay = currentBatches.filter(b => (b.batch || 'S/L') === opts.lote).reduce((t, b) => t + (Number(b.quantity) || 0), 0);
-                            if (hay !== Number(opts.esperadoLote)) throw new Error(`El lote ${opts.lote} cambió desde el conteo (tenía ${opts.esperadoLote}, ahora ${hay}). Vuelve a contarlo.`);
+                            if (hay !== Number(opts.esperadoLote)) throw new Error(`El lote ${opts.lote} cambió desde el conteo (tenía ${opts.esperadoLote}, ahora ${hay}).${opts.solicitudId ? ' Rechaza esta solicitud y vuelve a contar el lote.' : ' Vuelve a contarlo.'}`);
                         }
 
                         if (cantidadParsed < 0) {
-                            // RESTA - FEFO
+                            // RESTA - FEFO (v21.238: con opts.lote, solo de ese lote)
                             let qtyToReduce = Math.abs(cantidadParsed);
                             currentBatches.sort(window.fefoCompare);
+                            if (opts && opts.lote) { const hayL = currentBatches.filter(b => (b.batch || 'S/L') === opts.lote).reduce((t, b) => t + (Number(b.quantity) || 0), 0); if (hayL < qtyToReduce) throw new Error(`El lote ${opts.lote} tiene ${hayL} u.: no se pueden descontar ${qtyToReduce}.`); }
 
                             for (let i = 0; i < currentBatches.length && qtyToReduce > 0; i++) {
+                                if (opts && opts.lote && (currentBatches[i].batch || 'S/L') !== opts.lote) continue;
                                 if (currentBatches[i].quantity > 0) {
                                     const available = currentBatches[i].quantity;
                                     if (available >= qtyToReduce) {

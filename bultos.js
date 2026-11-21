@@ -171,7 +171,7 @@
   /** pref: {nombre, insumoId, codigoMP, bodega, lote, vence, total, proveedor, oc, rec, fechaRecepcion, lineas:[…mismos campos], conteo}
    *  v21.238: cajas grandes con cajas interiores (subPor) y modo «conteo»: etiquetar stock que ya estaba en el sistema contándolo
    *  (si se cuenta más, se suma con un ajuste AJU; si se cuenta menos, queda en el informe de diferencias). */
-  const textoDif = (dif, esSuper) => dif > 0 ? (esSuper ? 'Se sumará al stock (ajuste por conteo, con código).' : 'Quedará como solicitud de ajuste para el superadministrador.') : dif < 0 ? 'Faltan unidades: queda en el informe de diferencias (el stock no se baja).' : dif === 0 ? 'Cuadra con el sistema.' : '';
+  const textoDif = (dif, esSuper) => dif > 0 ? (esSuper ? 'Se sumará al stock (ajuste por conteo, con código).' : 'Quedará como solicitud de ajuste para el superadministrador.') : dif < 0 ? (esSuper ? 'Faltan unidades: se descontarán de este lote (ajuste por conteo, con código).' : 'Faltan unidades: quedará como solicitud de ajuste a la baja.') : dif === 0 ? 'Cuadra con el sistema.' : '';
   async function etiquetar(pref) {
     const p = pref || {}, lineas = Array.isArray(p.lineas) && p.lineas.length ? p.lineas : null, conteo = !!p.conteo;
     const ov = ventana(conteo ? 'Etiquetar stock existente (con conteo)' : 'Etiquetas de bulto', `<div class="bu-tabs"><button type="button" class="on" data-t="nueva">${conteo ? 'Contar y etiquetar' : 'Nuevas etiquetas'}</button><button type="button" data-t="re">Reimprimir existentes</button></div><div class="bu-pane" data-p="nueva"></div><div class="bu-pane" data-p="re" hidden></div>`, { encima: !!p.encima });
@@ -254,7 +254,7 @@
             const enC0 = Math.max(0, num(sel.total) - num(sel.sueltas)), g0 = { total: enC0, porCaja: sel.porCaja, cajas: num(sel.porCaja) > 0 ? 0 : sel.cajas, subPor: sel.tieneSub ? sel.subPor : 0 }, pl0 = enC0 > 0 ? planCajas(g0) : [];
             if (enC0 > 0 && !pl0.length) throw new Error('Indica las unidades por caja grande (o cuántas cajas son).');
             if (pl0.length > 300 || pl0.reduce((t, x) => t + 1 + x.hijos.length, 0) > 600) throw new Error('Serían demasiadas etiquetas: revisa las unidades por caja.');
-            if (dif !== 0 && P0 && P0.confirmar && !(await P0.confirmar({ titulo: dif > 0 ? `¿Sumar ${dif} u. al stock?` : `Faltan ${-dif} u.`, texto: `<b>${esc(sel.nombre)}</b> · lote ${esc(sel.lote || 'S/L')}: sistema <b>${num(sel.sistema) + num(sel.reservado)}</b>, contado <b>${num(sel.total)}</b>.`, lineas: [dif > 0 ? (esSuper ? `Se suman ${dif} u. al lote con un ajuste por conteo (código AJU).` : `Queda una solicitud de ajuste por ${dif} u. para el superadministrador.`) : 'El stock no se cambia: queda en el informe de diferencias.'], si: dif > 0 ? (esSuper ? 'Sumar y seguir' : 'Enviar solicitud y seguir') : 'Registrar y seguir', no: 'Revisar' }))) { btn.disabled = false; return; }
+            if (dif !== 0 && P0 && P0.confirmar && !(await P0.confirmar({ titulo: dif > 0 ? `¿Sumar ${dif} u. al stock?` : `¿Descontar ${-dif} u. (faltante)?`, texto: `<b>${esc(sel.nombre)}</b> · lote ${esc(sel.lote || 'S/L')}: sistema <b>${num(sel.sistema) + num(sel.reservado)}</b>, contado <b>${num(sel.total)}</b>.`, lineas: [esSuper ? `Se ${dif > 0 ? 'suman' : 'descuentan'} ${Math.abs(dif)} u. ${dif > 0 ? 'al' : 'del'} lote con un ajuste por conteo (código AJU).` : `Queda una solicitud de ajuste por ${dif > 0 ? '+' : ''}${dif} u. para el superadministrador.`, ...(dif < 0 ? ['Antes de confirmar un faltante, vuelve a contar ese lote.'] : [])], si: esSuper ? (dif > 0 ? 'Sumar y seguir' : 'Descontar y seguir') : 'Enviar solicitud y seguir', no: 'Revisar' }))) { btn.disabled = false; return; }
             msgConteo = await registrarConteo(sel);
           }
           const enC = Math.max(0, num(sel.total) - (conteo ? num(sel.sueltas) : 0));
@@ -286,29 +286,32 @@
     const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), 'Insumos'), sel.insumoId)); if (!sn.exists()) throw new Error('El producto ya no existe.');
     const d = sn.data(); if (d.status === 'CUARENTENA') throw new Error('El producto está en CUARENTENA: resuélvelo antes de contarlo.');
     const lote = sel.lote || 'S/L', sistema = enLote(d, lote), nLotes = lotesTodos(d).filter(b => b.quantity > 0).length, res = num(d.reservado);
-    if (res > 0 && nLotes > 1) throw new Error(`Este producto tiene ${res} u. reservadas para actas por confirmar y varios lotes: no se puede saber en qué lote están. Confirma o elimina esas actas antes de contarlo.`);
+    const conStock = lotesTodos(d).filter(b => b.quantity > 0);
+    if (res > 0 && (nLotes > 1 || (conStock.length === 1 && conStock[0].batch !== lote))) throw new Error(`Este producto tiene ${res} u. reservadas para actas por confirmar y varios lotes: no se puede saber en qué lote están. Confirma o elimina esas actas antes de contarlo.`);
     const esperado = sistema + (res > 0 ? res : 0), contado = Math.max(0, Math.floor(num(sel.total))), dif = contado - esperado;
     const obs = `Conteo físico al etiquetar · lote ${lote} · sistema ${sistema}${res ? ` + ${res} reservadas` : ''}, contado ${contado}${num(sel.sueltas) ? ` (${num(sel.sueltas)} sueltas)` : ''}${num(d.sobregiro) > 0 ? ` · deuda ${num(d.sobregiro)} u.` : ''}`;
     const base = { tipo: 'conteo-etiquetado', insumoId: sel.insumoId, nombre: d.name, bodega: d.location || '', lote, sistema, reservado: res, contado, diferencia: dif, por: usuario(), en: new Date().toISOString() };
     if (dif === 0) { await f.setDoc(f.doc(f.collection(db(), 'Contadores'), idConteo()), { ...base, estado: 'CUADRA' }); return `Conteo cuadrado: ${contado} u.`; }
-    if (dif < 0) { await f.setDoc(f.doc(f.collection(db(), 'Contadores'), idConteo()), { ...base, estado: 'FALTANTE' }); return `<b>Faltan ${-dif} u.</b> respecto del sistema (${esperado}): quedó en «Diferencias de conteo», el stock no se cambió.`; }
     const rol = String(document.body && document.body.dataset.userRole || '').toLowerCase(), G = window.SAR_Gobernanza, just = `[Conteo físico (toma de inventario)] ${obs}`;
+    /* v21.238 (decisión del usuario): si falta, también se ajusta (a la baja, en ese lote) */
+    if (dif < 0 && -dif > sistema) throw new Error(`Faltan ${-dif} u. pero el lote solo tiene ${sistema} en el sistema (el resto está reservado para actas): revisa las actas por confirmar.`);
     if (rol === 'superadmin' && typeof window.ejecutarAjusteDirecto === 'function') {
       const codigo = G && G.codigo ? await G.codigo('AJU').catch(() => '') : '';
       const r = await window.ejecutarAjusteDirecto(sel.insumoId, num(d.quantity), d.name, dif, just, codigo || null, { motivo: 'Conteo físico (toma de inventario)', observacion: obs, lote, vence: sel.vence || '', esperadoLote: sistema, saldarDeuda: true });
       try { if (G && G.registrar) G.registrar({ nombre: d.name, lote, delta: dif, codigo: r.codigoAjuste, motivo: 'Conteo físico (toma de inventario)', nota: obs, origen: 'CONTEO_ETIQUETAS', antes: { cantidad: num(d.quantity) }, despues: { cantidad: num(d.quantity) + dif }, insumoId: sel.insumoId }).catch(() => {}); } catch (e) { /* sin gobernanza */ }
-      await f.setDoc(f.doc(f.collection(db(), 'Contadores'), idConteo()), { ...base, estado: 'SUMADO', codigo: r.codigoAjuste });
-      return `<b>+${dif} u.</b> sumadas al stock con el ajuste <b>${esc(r.codigoAjuste)}</b>.${num(d.sobregiro) > 0 ? ' La deuda del producto quedó saldada.' : ''}`;
+      await f.setDoc(f.doc(f.collection(db(), 'Contadores'), idConteo()), { ...base, estado: dif > 0 ? 'SUMADO' : 'DESCONTADO', codigo: r.codigoAjuste });
+      return dif > 0 ? `<b>+${dif} u.</b> sumadas al stock con el ajuste <b>${esc(r.codigoAjuste)}</b>.${num(d.sobregiro) > 0 ? ' La deuda del producto quedó saldada.' : ''}` : `<b>${dif} u.</b> descontadas del lote con el ajuste <b>${esc(r.codigoAjuste)}</b>.`;
     }
     /* una sola solicitud pendiente por producto y lote (un reintento no la duplica) */
     const ps = await f.getDocs(f.query(f.collection(db(), 'Solicitudes_Ajuste'), f.where('insumoId', '==', sel.insumoId), f.limit(200))); let pend = null;
     ps.forEach(x => { const y = x.data(); if (y.status === 'pendiente' && y.conteo && (y.lote || 'S/L') === lote) pend = y; });
-    if (pend) throw new Error(`Ya hay una solicitud de ajuste pendiente para este lote (${pend.code || ''}). Espera a que la aprueben o rechacen.`);
+    if (pend && num(pend.cantidad) === dif) return `Ya había una solicitud pendiente por <b>${dif > 0 ? '+' : ''}${dif} u.</b> para este lote (${esc(pend.code || '')}): no se duplicó.`;
+    if (pend) throw new Error(`Ya hay una solicitud de ajuste pendiente para este lote (${pend.code || ''}) por ${num(pend.cantidad)} u. Pide al superadministrador que la rechace antes de volver a contar.`);
     const sref = f.doc(f.collection(db(), 'Solicitudes_Ajuste'));
     const codigo = G && G.codigo ? await G.codigo('AJU').catch(() => '') : '';
     await f.setDoc(sref, { code: codigo || ('AJU-' + Date.now()), insumoId: sel.insumoId, insumoName: d.name, cantidad: dif, justificacion: just, previousStock: num(d.quantity), projectedStock: num(d.quantity) + dif, motivo: 'Conteo físico (toma de inventario)', observacion: obs, lote, vence: sel.vence || '', loteSistema: sistema, conteo: true, status: 'pendiente', date: f.serverTimestamp(), requester: usuario() });
     await f.setDoc(f.doc(f.collection(db(), 'Contadores'), idConteo()), { ...base, estado: 'SOLICITADO', codigo });
-    return `<b>+${dif} u.</b> quedaron como solicitud de ajuste${codigo ? ' <b>' + esc(codigo) + '</b>' : ''} (la aprueba el superadministrador).`;
+    return `<b>${dif > 0 ? '+' : ''}${dif} u.</b> quedaron como solicitud de ajuste${codigo ? ' <b>' + esc(codigo) + '</b>' : ''} (la aprueba el superadministrador).`;
   }
   /** v21.238: «Diferencias de conteo»: lo registrado al etiquetar stock existente (faltantes, sobrantes y solicitudes). */
   async function diferencias() {

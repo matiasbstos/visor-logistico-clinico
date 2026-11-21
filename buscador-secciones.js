@@ -21,7 +21,7 @@
         'view-seguimiento-oc': 'orden compra oc proveedor recepcion conforme mercado publico',
         'view-solicitudes-insumos': 'pedidos solicitudes recibidas sol bandeja pedido',
         'view-solicitud-insumos': 'pedir solicitar pedido nuevo',
-        'view-etiquetas': 'etiqueta imprimir zebra bulto reimprimir codigo barras',
+        'view-etiquetas': 'etiqueta imprimir zebra bulto reimprimir codigo barras pistola probar lector escaner',
         'view-bultos': 'bulto caja pistola escanear contar cajas',
         'view-fotos': 'fotos fotografia imagen camara caja catalogo enlaces links accesos directos telefono qr',
         'view-historial': 'historial movimientos kardex',

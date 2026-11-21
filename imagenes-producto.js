@@ -26,9 +26,13 @@
     // parecida a otro producto) o "descartada" no se usa en ninguna pantalla hasta que la persona la mire en la tienda y la confirme.
     const sinConfirmar = (c) => c.fotoEstado === 'por_confirmar' || c.fotoEstado === 'descartada';
     function entrada(c) { return { codigo: c.codigoMP ? String(c.codigoMP) : '', imagen: c.imagen || '', archivo: sinConfirmar(c) ? '' : (c.imagenMP || (c.codigoMP && semilla[String(c.codigoMP)]) || '') }; }
+    /* v21.240: caja, otras fotos, nombre común y fabricante van en mapas aparte (solo los lee fotos()), para no tapar la foto del producto de otra ficha */
+    let masCod = new Map(), masNom = new Map();
+    function sumarMas(m, k, c) { const y = m.get(k) || { caja: '', extra: [], comun: '', fabricante: '' }; if (!y.caja && c.imagenCaja) y.caja = c.imagenCaja; if (!y.extra.length && Array.isArray(c.fotosExtra)) y.extra = c.fotosExtra.slice(); if (!y.comun && c.nombreComun) y.comun = c.nombreComun; if (!y.fabricante && c.fabricante) y.fabricante = c.fabricante; m.set(k, y); }
     function indexar(lista) {
-        porCodigo = new Map(); porNombre = new Map(); descartados = new Set(); candidatas = new Map();
+        porCodigo = new Map(); porNombre = new Map(); descartados = new Set(); candidatas = new Map(); masCod = new Map(); masNom = new Map();
         lista.forEach(c => {
+            if (c.imagenCaja || (Array.isArray(c.fotosExtra) && c.fotosExtra.length) || c.nombreComun || c.fabricante) { if (c.codigoMP) sumarMas(masCod, String(c.codigoMP), c); [c.descripcion, c.insumoName].forEach(n => { if (n) sumarMas(masNom, norm(n), c); }); }
             if (c.codigoMP && c.fotoEstado === 'por_confirmar' && c.imagenMP) candidatas.set(String(c.codigoMP), { codigo: String(c.codigoMP), imagen: '', archivo: c.imagenMP, pendiente: true });
             if (c.codigoMP && sinConfirmar(c)) descartados.add(String(c.codigoMP));
             // Foto hallada automáticamente y aún «por confirmar»: se muestra igual (con la marca «por confirmar») para que el catálogo esté completo; las descartadas nunca (v21.198)
@@ -62,6 +66,8 @@
     /** Como buscar(), pero si no hay foto confirmada devuelve la candidata marcada como "por confirmar" (solo para la orden en curso). */
     function buscarConCandidata(nombre, codigo) { return buscar(nombre, codigo) || (codigo ? candidatas.get(String(codigo)) || null : null); }
     function src(e, tam) { return e ? (e.imagen || (e.archivo ? urlMP(e.archivo, tam) : '')) : ''; }
+    /** v21.240: todas las fotos de un producto: {producto, caja, extra[], propia (foto tomada aquí), comun, fabricante}. */
+    function fotos(nombre, codigo) { const e = buscar(nombre, codigo), c = codigo ? String(codigo) : '', a = (c && masCod.get(c)) || {}, b = masNom.get(norm(nombre)) || {}; return { producto: src(e, 320), caja: a.caja || b.caja || '', extra: (a.extra && a.extra.length ? a.extra : b.extra) || [], propia: !!(e && e.imagen), comun: a.comun || b.comun || '', fabricante: a.fabricante || b.fabricante || '' }; }
     function imgHTML(e, tam, alt) { const s = src(e, tam); return s ? `<img src="${esc(s)}" alt="${esc(alt || '')}" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode&&this.parentNode.classList.add('prod-img--sin');this.remove()">` : ''; }
     /** Marcador con la foto del producto (se completa solo cuando el catálogo termina de cargar). */
     function thumb(nombre, opc) {
@@ -136,5 +142,5 @@
         Object.keys(ix.n || {}).forEach(k => { if (!porNombre.has(k)) { const v = ix.n[k] || {}; porNombre.set(k, { codigo: '', imagen: v.i || '', archivo: v.a || '' }); } });
         listo = true;
     }
-    window.SAR_Imagenes = { buscarWeb, sumarIndice, buscarFoto, buscarPorDescripcion, buscarConCandidata, ampliar, cargar, thumb, buscar, src, imgHTML, rellenar, archivoPara, urlMP, recargar: () => cargar(true) };
+    window.SAR_Imagenes = { fotos, buscarWeb, sumarIndice, buscarFoto, buscarPorDescripcion, buscarConCandidata, ampliar, cargar, thumb, buscar, src, imgHTML, rellenar, archivoPara, urlMP, recargar: () => cargar(true) };
 })(window, document);

@@ -4314,6 +4314,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (docSnap.exists()) {
                             const data = docSnap.data();
                             window.__editOriginal = data;
+                            setTimeout(() => { if (window.SAR_FotosTel && window.SAR_FotosTel.verCaja) window.SAR_FotosTel.verCaja(); }, 50);   /* v21.240: foto de la caja junto a la del producto */
                             { const ff = document.getElementById('edit-foto'); if (ff) ff.value = ''; }
                             // Poblar formulario
                             document.getElementById('edit-doc-id').value = docId;

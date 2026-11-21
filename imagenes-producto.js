@@ -30,11 +30,11 @@
        La foto principal (`imagen`, la que se ve en todo el sitio) es la de la CAJA / envase (modelo v21.203). Fichas guardadas por v21.240
        (fotosPor sin fotosV: 2) tenían imagen = producto e imagenCaja = caja. */
     let masCod = new Map(), masNom = new Map();
-    const legado = (c) => !!(c.fotosPor && c.fotosV !== 2);
+    const legado = (c) => !!(c.imagenCaja && c.fotosV !== 2);   /* mismo criterio que fotos-telefono.js */
     function sumarMas(m, k, c) {
         const y = m.get(k) || { producto: '', cajaLegado: '', extra: [], comun: '', fabricante: '' }, ex = Array.isArray(c.fotosExtra) ? c.fotosExtra.filter(Boolean) : [];
         const pr = ex.find(x => typeof x === 'object' && x.tipo === 'producto');
-        if (!y.producto) y.producto = pr ? pr.img || '' : (legado(c) ? c.imagen || '' : '');
+        if (!y.producto) y.producto = legado(c) && c.imagen && !(pr && !pr.porConfirmar) ? c.imagen : (pr ? pr.img || '' : '');
         if (!y.cajaLegado && legado(c) && c.imagenCaja) y.cajaLegado = c.imagenCaja;
         if (!y.extra.length) y.extra = ex.filter(x => !(typeof x === 'object' && x.tipo === 'producto')).map(x => typeof x === 'string' ? x : x.img).filter(Boolean);
         if (!y.comun && c.nombreComun) y.comun = c.nombreComun; if (!y.fabricante && c.fabricante) y.fabricante = c.fabricante; m.set(k, y);

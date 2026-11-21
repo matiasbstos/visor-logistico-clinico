@@ -28,15 +28,38 @@
             im.onerror = () => { URL.revokeObjectURL(u); mal(new Error('No se pudo leer la foto.')); }; im.src = u;
         });
     }
-    const legado = (c) => !!(c && c.fotosPor && c.fotosV !== 2);
+    /* Ficha escrita por v21.240 al revés: solo se reconoce con seguridad si tiene `imagenCaja` (en ese caso `imagen` era el producto).
+       Sin imagenCaja, `imagen` se lee como la caja (modelo de la casa): en el peor caso una foto queda en el lugar equivocado, nunca se pierde. */
+    const legado = (c) => !!(c && c.imagenCaja && c.fotosV !== 2);
     const imgDe = (x) => typeof x === 'string' ? x : (x && x.img) || '';
-    /** Lee una ficha del catálogo: {c, caja, cajaAuto ({mp}|{web}), producto, otras[]} */
+    /** Ficha en el modelo de la casa, sin perder ninguna foto: {imagen (caja), fotosExtra[{tipo,img,…}]}. Pura. */
+    function migrar(c) {
+        let ex = (Array.isArray(c.fotosExtra) ? c.fotosExtra.filter(Boolean) : []).map(x => typeof x === 'string' ? { tipo: 'otra', img: x } : x);
+        if (!legado(c)) return { imagen: c.imagen || '', fotosExtra: ex };
+        if (c.imagen) {   /* la foto del producto que se sacó con el teléfono manda sobre la «por confirmar» automática */
+            const k = ex.findIndex(x => x.tipo === 'producto' && x.porConfirmar), real = ex.some(x => x.tipo === 'producto' && !x.porConfirmar);
+            const nueva = { tipo: real ? 'otra' : 'producto', img: c.imagen, por: c.fotosPor || '', en: c.fotosEn || '' };
+            if (!real && k >= 0) ex[k] = nueva; else ex.push(nueva);
+        }
+        return { imagen: c.imagenCaja, fotosExtra: ex };
+    }
+    /** Lee una ficha: {c, caja, cajaAuto ({mp}|{web}), producto, otras[]} */
     function normal(c) {
-        const ex = Array.isArray(c.fotosExtra) ? c.fotosExtra.filter(Boolean) : [], L = legado(c);
-        const prodEx = ex.find(x => typeof x === 'object' && x.tipo === 'producto');
-        const caja = L ? (c.imagenCaja || '') : (c.imagen || c.imagenCaja || '');
-        const ok = c.fotoEstado !== 'descartada', cajaAuto = !L && !caja && ok && (c.imagenMP || c.imagenWeb) ? (c.imagenMP ? { mp: c.imagenMP } : { web: c.imagenWeb }) : null;
-        return { c, caja, cajaAuto, producto: prodEx ? imgDe(prodEx) : (L ? (c.imagen || '') : ''), otras: ex.filter(x => !(typeof x === 'object' && x.tipo === 'producto')).map(imgDe).filter(Boolean) };
+        const m = migrar(c), ex = m.fotosExtra, prodEx = ex.find(x => x.tipo === 'producto' && !x.porConfirmar) || ex.find(x => x.tipo === 'producto');
+        const caja = m.imagen || '', ok = c.fotoEstado !== 'descartada';
+        const cajaAuto = !caja && ok && (c.imagenMP || c.imagenWeb) ? (c.imagenMP ? { mp: c.imagenMP } : { web: c.imagenWeb }) : null;
+        return { c, caja, cajaAuto, producto: prodEx ? prodEx.img || '' : '', otras: ex.filter(x => x !== prodEx).map(imgDe).filter(Boolean) };
+    }
+    /** Qué se escribe al guardar una foto. tipo: caja | producto | otra. Pura; error si ya hay 4 fotos adicionales. */
+    function armarFotos(c, tipo, img, por, en) {
+        const m = migrar(c); let imagen = m.imagen, ex = m.fotosExtra.slice();
+        if (tipo === 'caja') imagen = img;
+        else if (tipo === 'producto') {   /* cambia UNA foto del producto: la «por confirmar», o la primera; las demás se quedan */
+            let k = ex.findIndex(x => x.tipo === 'producto' && x.porConfirmar); if (k < 0) k = ex.findIndex(x => x.tipo === 'producto');
+            const nueva = { tipo: 'producto', img, por, en }; if (k >= 0) ex[k] = nueva; else ex.push(nueva);
+        } else ex.push({ tipo: 'otra', img, por, en });
+        if (ex.length > 4) return { error: 'Ya tiene 4 fotos adicionales: quita una en la ficha del producto antes de agregar otra.' };
+        return { imagen, fotosExtra: ex };
     }
     /** Lista de pendientes: productos con stock (sin repetir por nombre o código) + los pedidos desde el computador. Puro.
         Un producto puede tener varias fichas en el catálogo (por código y por nombre): se miran todas.
@@ -82,28 +105,26 @@
     async function guardarFoto(p, tipo, dataUrl) {
         const f = fs(), ref = f.doc(f.collection(db(), 'Catalogo_Productos'), p.id), sn = await f.getDoc(ref), c = sn.exists() ? sn.data() : {};
         const base = { descripcion: c.descripcion || p.nombre, descripcion_lower: String(c.descripcion || p.nombre).toLowerCase(), insumoName: c.insumoName || p.nombre, codigoMP: c.codigoMP || p.codigo || '' };
-        /* se pasa la ficha al modelo de la casa (imagen = caja; fotosExtra = producto y otras, como objetos) */
-        const n = normal(c), yo = usuario(), ahora = new Date().toISOString();
-        let caja = n.caja, ex = (Array.isArray(c.fotosExtra) ? c.fotosExtra.filter(Boolean) : []).map(x => typeof x === 'string' ? { tipo: 'otra', img: x } : x);
-        if (legado(c) && n.producto && !ex.some(x => x.tipo === 'producto')) ex.push({ tipo: 'producto', img: n.producto, por: c.fotosPor || '', en: c.fotosEn || '' });
-        const habia = tipo === 'producto' ? !!(n.producto || p.imagen) : tipo === 'caja' ? !!(caja || p.caja) : false;
-        if (tipo === 'caja') caja = dataUrl;
-        else if (tipo === 'producto') ex = ex.filter(x => x.tipo !== 'producto').concat([{ tipo: 'producto', img: dataUrl, por: yo, en: ahora }]);   /* cambiar = reemplaza la del producto (también la «por confirmar») */
-        else { ex = ex.concat([{ tipo: 'otra', img: dataUrl, por: yo, en: ahora }]); while (ex.length > 4) { const k = ex.findIndex(x => x.tipo !== 'producto'); if (k < 0) break; ex.splice(k, 1); } }   /* máx. 4, como la ficha */
+        const n = normal(c), yo = usuario(), ahora = new Date().toISOString(), r = armarFotos(c, tipo === 'extra' ? 'otra' : tipo, dataUrl, yo, ahora);
+        if (r.error) throw new Error(r.error);
+        const habia = tipo === 'producto' ? !!(n.producto || p.imagen) : tipo === 'caja' ? !!(n.caja || p.caja) : false;
         /* seguimiento: quién cambió qué foto y cuándo (sin guardar la foto anterior, para no pesar) */
         const hist = (Array.isArray(c.fotosHist) ? c.fotosHist : []).concat([{ tipo, accion: habia ? 'cambio' : 'nueva', por: yo, en: ahora, desde: /fotos\.html/.test(String(window.location && window.location.pathname)) ? 'teléfono' : 'computador' }]).slice(-30);
-        const tieneProd = ex.some(x => x.tipo === 'producto') || p.faltaProd === false, tieneCaja = !!caja || !!p.cajaAuto || p.faltaCaja === false;
+        const tieneProd = r.fotosExtra.some(x => x.tipo === 'producto') || p.faltaProd === false, tieneCaja = !!r.imagen || !!p.cajaAuto || p.faltaCaja === false;
         const completo = tieneProd && tieneCaja;
-        await f.setDoc(ref, { ...base, imagen: caja || '', imagenCaja: '', fotosExtra: ex, fotosV: 2, fotoPedida: !!(c.fotoPedida && !completo), fotosPor: yo, fotosEn: ahora, fotosHist: hist, actualizado: f.serverTimestamp ? f.serverTimestamp() : ahora }, { merge: true });
+        await f.setDoc(ref, { ...base, imagen: r.imagen || '', imagenCaja: '', fotosExtra: r.fotosExtra, fotosV: 2, fotoPedida: !!(c.fotoPedida && !completo), fotosPor: yo, fotosEn: ahora, fotosHist: hist, actualizado: f.serverTimestamp ? f.serverTimestamp() : ahora }, { merge: true });
         if (completo) for (const otro of (p.ids || []).filter(x => x && x !== p.id)) { try { await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), otro), { fotoPedida: false }, { merge: true }); } catch (e) { /* la otra ficha queda pedida */ } }
-        const prodNuevo = (ex.find(x => x.tipo === 'producto') || {}).img || '';
-        return { caja, producto: prodNuevo, otras: ex.filter(x => x.tipo !== 'producto').map(x => x.img), fotosHist: hist };
+        const nn = normal({ imagen: r.imagen, fotosExtra: r.fotosExtra, fotosV: 2 });
+        return { caja: nn.caja, producto: nn.producto, otras: nn.otras, fotosHist: hist };
     }
+    /** Pasa una ficha de v21.240 al modelo de la casa (la llama la ficha del producto antes de escribir). */
+    const porMigrar = (c) => !!c && (legado(c) || (Array.isArray(c.fotosExtra) && c.fotosExtra.some(x => typeof x === 'string')));
+    async function migrarFicha(id, c) { if (!porMigrar(c)) return c; const f = fs(), m = migrar(c); await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { imagen: m.imagen, imagenCaja: '', fotosExtra: m.fotosExtra, fotosV: 2 }, { merge: true }); return { ...c, imagen: m.imagen, imagenCaja: '', fotosExtra: m.fotosExtra, fotosV: 2 }; }
     /** Quita el pedido de fotos en todas las fichas del producto. */
-    async function quitarPedido(p) { const f = fs(); for (const id of (p.ids && p.ids.length ? p.ids : [p.id])) await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { fotoPedida: false }, { merge: true }); }
+    async function quitarPedido(p) { const f = fs(); for (const id of new Set([...(p.ids || []), p.id, idCatalogo(p.nombre, p.codigo)].filter(Boolean))) await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { fotoPedida: false }, { merge: true }); }
     /** Desde el computador: deja el producto en la lista del teléfono. */
-    async function pedir(nombre, codigo) {
-        const f = fs(), id = idCatalogo(nombre, codigo), ref = f.doc(f.collection(db(), 'Catalogo_Productos'), id), sn = await f.getDoc(ref), c = sn.exists() ? sn.data() : {};
+    async function pedir(nombre, codigo, idFicha) {
+        const f = fs(), id = idFicha || idCatalogo(nombre, codigo), ref = f.doc(f.collection(db(), 'Catalogo_Productos'), id), sn = await f.getDoc(ref), c = sn.exists() ? sn.data() : {};
         await f.setDoc(ref, { descripcion: c.descripcion || nombre, descripcion_lower: String(c.descripcion || nombre).toLowerCase(), insumoName: c.insumoName || nombre, codigoMP: c.codigoMP || String(codigo || ''), fotoPedida: true, fotoPedidaPor: usuario(), fotoPedidaEn: new Date().toISOString() }, { merge: true });
         return URL_FOTOS();
     }
@@ -182,7 +203,7 @@
             cuerpo.innerHTML = `<div class="fv-barra"><input type="search" class="form-control" id="fv-q" placeholder="Buscar por nombre, ID o nombre común…" value="${esc(q)}" aria-label="Buscar en el catálogo"></div>
               <div class="fv-chips">${[['nada', 'Sin ninguna foto', F.nada], ['prod', 'Sin foto del producto', F.prod], ['caja', 'Sin foto de la caja', F.caja], ['pedidas', 'Pedidas al teléfono', F.pedidas], ['completos', 'Completos', F.completos], ['todo', 'Todo el catálogo', F.todo]].map(([k, n, f]) => `<button type="button" class="ft-chip${filtro === k ? ' on' : ''}" data-f="${k}" aria-pressed="${filtro === k}">${n} <b>${cuenta(f)}</b></button>`).join('')}</div>
               <div class="fv-grid">${vis.slice(0, tope).map(p => `<article class="fv-p" data-i="${lista.indexOf(p)}">
-                <div class="fv-fotos"><label class="fv-f" title="Cambiar la foto del producto">${thumb(srcProd(p), 'Producto', 'ph-camera')}<span>Producto</span><input type="file" accept="image/*" data-t="producto" hidden></label><label class="fv-f" title="Cambiar la foto de la caja">${thumb(srcCaja(p), 'Caja', 'ph-package')}<span>Caja</span><input type="file" accept="image/*" data-t="caja" hidden></label></div>
+                <div class="fv-fotos"><label class="fv-f" tabindex="0" title="Cambiar la foto del producto">${thumb(srcProd(p), 'Producto', 'ph-camera')}<span>Producto</span><input type="file" accept="image/*" data-t="producto" hidden></label><label class="fv-f" tabindex="0" title="Cambiar la foto de la caja">${thumb(srcCaja(p), 'Caja', 'ph-package')}<span>Caja</span><input type="file" accept="image/*" data-t="caja" hidden></label></div>
                 <div class="fv-txt"><b>${esc(p.nombre)}</b><small>${p.codigo ? 'ID ' + esc(p.codigo) + ' · ' : ''}${p.stock ? p.stock + ' u.' : 'sin stock'}${p.extra.length ? ` · ${p.extra.length} foto${p.extra.length > 1 ? 's' : ''} más` : ''}</small>${estado(p)}${ultimo(p) ? `<small class="ft-ult">${ultimo(p)}</small>` : ''}</div>
                 <button type="button" class="btn btn-sm btn-outline" data-pedir="1">${p.pedida ? '<i class="ph-bold ph-x" aria-hidden="true"></i> Quitar pedido' : '<i class="ph-bold ph-device-mobile-camera" aria-hidden="true"></i> Pedir al teléfono'}</button></article>`).join('') || '<p class="act-hint">Nada coincide con este filtro.</p>'}</div>
               ${vis.length > tope ? `<button type="button" class="btn btn-outline fv-mas" data-mas="1">Ver más (${vis.length - tope} restantes)</button>` : ''}`;
@@ -206,9 +227,10 @@
             if (b.dataset.f) { filtro = b.dataset.f; tope = 48; pintarCat(); return; }
             if (b.dataset.mas) { tope += 48; pintarCat(); return; }
             if (b.dataset.pedir) { const p = lista[Number(b.closest('.fv-p').dataset.i)]; if (!p) return; b.disabled = true;
-                try { if (p.pedida) { await quitarPedido(p); p.pedida = false; toast('Pedido quitado', p.nombre.slice(0, 40), 'success'); } else { await pedir(p.nombre, p.codigo); p.pedida = true; toast('Pedido al teléfono', p.nombre.slice(0, 40), 'success'); } pintarCat(); }
+                try { if (p.pedida) { await quitarPedido(p); p.pedida = false; toast('Pedido quitado', p.nombre.slice(0, 40), 'success'); } else { await pedir(p.nombre, p.codigo, p.id); p.pedida = true; toast('Pedido al teléfono', p.nombre.slice(0, 40), 'success'); } pintarCat(); }
                 catch (er) { b.disabled = false; toast('No se pudo', (er && er.message) || String(er), 'error'); } }
         };
+        root.onkeydown = (e) => { const l = e.target.closest && e.target.closest('label.fv-f'); if (l && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); const i = l.querySelector('input[type=file]'); if (i) i.click(); } };
         root.onchange = async (e) => {
             const inp = e.target; if (!inp || inp.type !== 'file') return;
             const p = lista[Number(inp.closest('.fv-p').dataset.i)], fi = inp.files && inp.files[0]; if (!p || !fi) return;
@@ -231,6 +253,6 @@
         const verCaja0 = verCaja;   /* espera a que el catálogo de fotos esté cargado */
         window.__ftVerCaja = () => { const I = window.SAR_Imagenes; if (I && I.cargar) I.cargar().then(verCaja0).catch(() => {}); else verCaja0(); };
     }
-    window.SAR_FotosTel = { abrirVista, catalogo, quitarPedido, verCaja: () => { if (window.__ftVerCaja) window.__ftVerCaja(); }, achicar, pendientes, guardarFoto, pedir, mostrarLink, pagina, idCatalogo, URL_FOTOS };
-    if (typeof module !== 'undefined') module.exports = { pendientes, catalogo, idCatalogo };
+    window.SAR_FotosTel = { migrarFicha, porMigrar, legado, abrirVista, catalogo, quitarPedido, verCaja: () => { if (window.__ftVerCaja) window.__ftVerCaja(); }, achicar, pendientes, guardarFoto, pedir, mostrarLink, pagina, idCatalogo, URL_FOTOS };
+    if (typeof module !== 'undefined') module.exports = { pendientes, catalogo, idCatalogo, normal, migrar, armarFotos, legado };
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : null);

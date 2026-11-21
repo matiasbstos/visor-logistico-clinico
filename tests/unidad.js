@@ -226,6 +226,19 @@ t('correlativos v21.220: formato, corte 2027 y provisional', () => {
   assert.strictEqual(F.anio('2027-01-01T02:00:00Z'), 2026);                                         // 23:00 del 31-dic en Chile
   const p = F.provisional('AJU', '2026-11-15T12:00:00'); assert.ok(/^AJU-P-20261115-[0-9A-HJKMNP-TV-Z]{4}$/.test(p), p); assert.ok(F.esProvisional(p));
 });
+t('fotos v21.241: ficha de v21.240 se migra sin perder fotos', () => { const F = require('../fotos-telefono.js');
+    const v240 = { imagen: 'PROD', imagenCaja: 'CAJA', fotosExtra: ['O1'], fotosPor: 'x' }, m = F.migrar(v240);
+    assert.strictEqual(m.imagen, 'CAJA'); assert.deepStrictEqual(m.fotosExtra.map(x => x.tipo + ':' + x.img), ['otra:O1', 'producto:PROD']);
+    const mixta = { imagen: 'CAJA203', fotosExtra: [{ tipo: 'producto', img: 'P203' }, 'O240'], fotosPor: 'x' }, n = F.normal(mixta);
+    assert.strictEqual(n.caja, 'CAJA203'); assert.strictEqual(n.producto, 'P203'); assert.deepStrictEqual(n.otras, ['O240']);
+    const auto = F.migrar({ imagen: 'PROD', imagenCaja: 'CAJA', fotosExtra: [{ tipo: 'producto', img: 'WEB', porConfirmar: true }] }); assert.deepStrictEqual(auto.fotosExtra.map(x => x.img), ['PROD']); });
+t('fotos v21.241: cambiar el producto reemplaza una sola y el tope de 4 avisa', () => { const F = require('../fotos-telefono.js');
+    const c = { imagen: 'C', fotosExtra: [1, 2, 3, 4].map(i => ({ tipo: 'producto', img: 'P' + i })) };
+    const r = F.armarFotos(c, 'producto', 'PN', 'm', 't'); assert.deepStrictEqual(r.fotosExtra.map(x => x.img), ['PN', 'P2', 'P3', 'P4']); assert.strictEqual(r.imagen, 'C');
+    assert.ok(F.armarFotos(c, 'otra', 'O', 'm', 't').error); assert.strictEqual(F.armarFotos(c, 'caja', 'C2', 'm', 't').imagen, 'C2'); });
+t('fotos v21.241: catálogo ordena sin fotos primero', () => { const F = require('../fotos-telefono.js');
+    const l = F.catalogo([{ name: 'A', quantity: 1 }, { name: 'B', quantity: 1 }], [{ __id: 'a', descripcion: 'A', imagen: 'c', fotosExtra: [{ tipo: 'producto', img: 'p' }] }]);
+    assert.deepStrictEqual(l.map(x => x.nombre + x.nivel), ['B0', 'A2']); });
 // contador con transacciones que se encolan: 20 pedidos simultáneos = 20 números distintos y seguidos (prueba asíncrona)
 (async () => {
   const F = require('../correlativos.js'), DB = {}; let cola = Promise.resolve();

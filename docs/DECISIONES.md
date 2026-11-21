@@ -1620,4 +1620,5 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
 **Decisión.**
 - El código de la etiqueta parte alineado a la grilla de puntos de la impresora (cada borde de barra cae en un punto exacto).
 - Etiquetas → «Probar la pistola»: descarga una hoja de prueba (100 × 60) con seis variantes —Code 128 a 5, 4 y 3 puntos, Code 39, Code 128 con letras e Interleaved 2 de 5—, cada una con un número distinto, y una línea que debe medir 50 mm para comprobar que no se imprimió escalado. Al pistolear cada una, la pantalla marca cuál leyó y qué texto escribió (sirve también para detectar el idioma del teclado de la pistola).
+- La pistola puede terminar con Enter, Tab o nada: el escaneo de bultos acepta los tres (sin nada, toma el folio completo cuando deja de escribir) y la prueba avisa cuál usa.
 - Con el resultado se fija el formato definitivo de la etiqueta (y, si hace falta, se activa la simbología en la pistola con los códigos de su manual).

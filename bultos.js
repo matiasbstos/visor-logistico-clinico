@@ -80,7 +80,7 @@
        Caja grande: «1000 u. = 20 cajas × 50». Caja interior: «50 u.» y a qué caja grande pertenece. */
     /* módulo entero de 5 puntos a 203 dpi (0,625 mm) y zona libre de 10 módulos a cada lado (la pistola láser la necesita) */
     const PUNTO = 25.4 / 203, MOD = 5 * PUNTO;
-    const barras = (b, y, h) => { if (!(P && P.barras)) return 0; const a = P.barras(digitos(b.folio)), tot = a.reduce((s2, w) => s2 + w, 0), mod = Math.min(MOD, 66 / tot), x0 = Math.round((3 + 10 * mod) / PUNTO) * PUNTO;   /* v21.242: cada borde de barra cae justo en un punto de la impresora */ let xx = x0; a.forEach((w, i) => { if (i % 2 === 0) d.rect(xx, y, w * mod, h, 'F'); xx += w * mod; }); return (x0 + xx) / 2; };
+    const barras = (b, y, h) => { if (!(P && P.barras)) return 0; const a = P.barras(digitos(b.folio)), tot = a.reduce((s2, w) => s2 + w, 0), mod = Math.min(MOD, Math.max(1, Math.floor(66 / tot / PUNTO)) * PUNTO), x0 = Math.round((3 + 10 * mod) / PUNTO) * PUNTO;   /* v21.242: cada borde de barra cae justo en un punto de la impresora */ let xx = x0; a.forEach((w, i) => { if (i % 2 === 0) d.rect(xx, y, w * mod, h, 'F'); xx += w * mod; }); return (x0 + xx) / 2; };
     const qr = (b, x0, y0, lado) => { const m = matrizQR(URL_APP + '#bulto=' + b.folio), cel = lado / m.length; m.forEach((fila, r) => fila.forEach((on, c) => { if (on) d.rect(x0 + c * cel, y0 + r * cel, cel + 0.02, cel + 0.02, 'F'); })); };
     lista.forEach((b, k) => {
       if (k) d.addPage([100, 60], 'landscape');
@@ -423,7 +423,10 @@
       } catch (e) { res.innerHTML = `<p class="cfg-mal">No se pudo leer: ${esc(e.message || e)}</p>`; }
       finally { ocupado = false; }
     };
-    inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); const t = inp.value; inp.value = ''; procesar(t); } };
+    /* v21.242: la pistola puede terminar con Enter, Tab o nada; sin nada, se toma cuando ya hay un folio completo y deja de escribir */
+    let tmIn = null; const tomar = () => { clearTimeout(tmIn); const t = inp.value; inp.value = ''; procesar(t); };
+    inp.onkeydown = (e) => { if (e.key === 'Enter' || (e.key === 'Tab' && inp.value.trim())) { e.preventDefault(); tomar(); } };
+    inp.oninput = () => { clearTimeout(tmIn); if (folioDe(inp.value)) tmIn = setTimeout(tomar, 300); };
     ov.querySelector('#bu-ok').onclick = () => { const t = inp.value; inp.value = ''; procesar(t); };
     pintarSuma(); camara(ov.querySelector('#bu-cam'), procesar); setTimeout(() => inp.focus(), 200);
     return ov;
@@ -694,11 +697,11 @@
   function i2de5(dig, n, w) { const r = [n, n, n, n]; for (let i = 0; i + 1 < dig.length; i += 2) { const a = I25[+dig[i]], b = I25[+dig[i + 1]]; for (let k = 0; k < 5; k++) { r.push(a[k] === '1' ? w : n, b[k] === '1' ? w : n); } } r.push(w, n, n); return r; }
   const PRUEBAS = [
     { id: 'A', t: 'Code 128 · grosor actual (5 puntos)', txt: '9990000001', anchos: (P) => P.barras('9990000001').map(x => x * 5), alto: 10.5 },
-    { id: 'B', t: 'Code 128 · más angosto (4 puntos), más alto', txt: '9990000002', anchos: (P) => P.barras('9990000002').map(x => x * 4), alto: 14 },
-    { id: 'C', t: 'Code 128 · corto (3 puntos), para pistolas de lectura angosta', txt: '9990000003', anchos: (P) => P.barras('9990000003').map(x => x * 3), alto: 12 },
+    { id: 'B', t: 'Code 128 · 4 puntos, más alto', txt: '9990000002', anchos: (P) => P.barras('9990000002').map(x => x * 4), alto: 14 },
+    { id: 'C', t: 'Code 128 · corto (3 puntos)', txt: '9990000003', anchos: (P) => P.barras('9990000003').map(x => x * 3), alto: 12 },
     { id: 'D', t: 'Code 39 · el más compatible', txt: '9990000004', anchos: () => code39('9990000004', 2, 5), alto: 12 },
-    { id: 'E', t: 'Code 128 con letras (revisa el teclado)', txt: 'PRUEBA-E', anchos: (P) => P.barrasB('PRUEBA-E').map(x => x * 4), alto: 12 },
-    { id: 'F', t: 'Interleaved 2 de 5', txt: '9990000006', anchos: () => i2de5('9990000006', 3, 8), alto: 12 }];
+    { id: 'E', t: 'Code 128 con letras', txt: 'PRUEBA-E', anchos: (P) => P.barrasB('PRUEBA-E').map(x => x * 4), alto: 12 },
+    { id: 'F', t: 'Interleaved 2 de 5 (14 dígitos)', txt: '99900000000006', anchos: () => i2de5('99900000000006', 3, 8), alto: 12 }];   /* muchas pistolas solo leen I2of5 de 14 */
   async function hojaPrueba() {
     const J = window.jspdf && window.jspdf.jsPDF, P = window.SAR_Precintos; if (!J || !P) throw new Error('La librería de PDF aún no carga; intenta de nuevo en unos segundos.');
     const d = new J({ orientation: 'landscape', unit: 'mm', format: [100, 60] }), PUNTO = 25.4 / 203;
@@ -711,7 +714,7 @@
       /* regla: si al imprimir no mide 50 mm, la impresora está escalando la hoja y las barras salen deformes */
       d.setLineWidth(0.3); d.line(25, 55.5, 75, 55.5); d.line(25, 54, 25, 57); d.line(75, 54, 75, 57); d.setFontSize(6.5); d.text('Esta línea debe medir 50 mm (imprimir a tamaño real, sin «ajustar»)', 50, 59, { align: 'center' });
     }
-    const url = URL.createObjectURL(d.output('blob')); window.open(url, '_blank');
+    const url = URL.createObjectURL(d.output('blob')), w = window.open(url, '_blank'); if (!w) d.save('prueba-pistola.pdf'); setTimeout(() => URL.revokeObjectURL(url), 120000);
   }
   /** Ventana: descargar la hoja, escanear cada código y ver cuál leyó (y qué texto escribió la pistola). */
   function probarPistola() {
@@ -721,10 +724,13 @@
       <div id="bu-pres" aria-live="polite"></div>`);
     const inp = ov.querySelector('#bu-pin'), res = ov.querySelector('#bu-pres'), leidas = new Map();
     ov.querySelector('#bu-hp').onclick = () => hojaPrueba().catch(e => alert(e.message));
-    const pintar = (ultimo) => { res.innerHTML = `<table class="si-tb"><thead><tr><th></th><th>Código</th><th>¿Lo leyó?</th></tr></thead><tbody>${PRUEBAS.map(v => { const l = leidas.get(v.id); return `<tr><td><b>${v.id}</b></td><td>${esc(v.t)}</td><td>${l ? (l === v.txt ? '<b style="color:#4D7C0F">Sí</b>' : `Sí, pero escribió «${esc(l)}» (revisar idioma del teclado de la pistola)`) : '—'}</td></tr>`; }).join('')}</tbody></table>${ultimo ? `<p class="si-s">Último leído: «${esc(ultimo)}»${PRUEBAS.some(v => v.txt === ultimo || norm(v.txt) === norm(ultimo)) ? '' : ' (no es de la hoja de prueba)'}</p>` : ''}`; };
-    inp.addEventListener('keydown', (e) => { if (e.key !== 'Enter') return; e.preventDefault(); const t = inp.value.trim(); inp.value = ''; if (!t) return;
-      const v = PRUEBAS.find(x => x.txt === t) || PRUEBAS.find(x => x.txt.replace(/\D/g, '') && x.txt.replace(/\D/g, '') === t.replace(/\D/g, '')) || (/PRUEBA/i.test(t) ? PRUEBAS[4] : null);
-      if (v) leidas.set(v.id, t); pintar(t); });
+    const pintar = (ultimo, vu) => { res.innerHTML = `<table class="si-tb"><thead><tr><th></th><th>Código</th><th>¿Lo leyó?</th></tr></thead><tbody>${PRUEBAS.map(v => { const l = leidas.get(v.id); return `<tr><td><b>${v.id}</b></td><td>${esc(v.t)}</td><td>${l ? (l === v.txt ? '<b style="color:#4D7C0F">Sí</b>' : `Sí, pero escribió «${esc(l)}» (revisar idioma del teclado de la pistola)`) : '—'}</td></tr>`; }).join('')}</tbody></table>${ultimo ? `<p class="si-s">Último leído: «${esc(ultimo)}»${vu ? ` (prueba ${vu.id})` : ' (no es de la hoja de prueba)'}${sufijo && sufijo !== 'Enter' ? ` · La pistola termina con <b>${sufijo === 'Tab' ? 'Tab' : 'nada'}</b> en vez de Enter: el Visor ya lo acepta en esta prueba, pero conviene configurarla con Enter (sufijo CR) desde su manual.` : ''}</p>` : ''}`; };
+    const buscarV = (t) => PRUEBAS.find(x => x.txt === t) || PRUEBAS.find(x => x.txt.replace(/\D/g, '') && x.txt.replace(/\D/g, '') === t.replace(/\D/g, '')) || (/PRUEBA/i.test(t) ? PRUEBAS[4] : null);
+    let tm = null, sufijo = '';
+    const registrar = (como) => { clearTimeout(tm); const t = inp.value.trim(); inp.value = ''; if (!t) return; if (!sufijo) sufijo = como; const v = buscarV(t); if (v) leidas.set(v.id, t); pintar(t, v); };
+    /* la pistola termina con Enter, con Tab o sin nada: se aceptan los tres (sin nada = deja de escribir 250 ms) */
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); registrar(e.key === 'Enter' ? 'Enter' : 'Tab'); } });
+    inp.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => registrar('nada'), 250); });
     pintar(''); setTimeout(() => inp.focus(), 50); return ov;
   }
   window.SAR_Bultos = { probarPistola, hojaPrueba, code39, i2de5, planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };

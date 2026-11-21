@@ -56,7 +56,7 @@
         window.firebaseFirestore = { doc, collection, setDoc, getDoc, getDocs, query, where, limit, serverTimestamp };
         window.showToast = (t, m, tipo) => { const pila = document.getElementById('sp-toasts') || Object.assign(document.body.appendChild(document.createElement('div')), { id: 'sp-toasts', className: 'sp-toasts' }); const d = document.createElement('div'); d.className = 'sp-toast ' + (tipo || ''); d.textContent = t + (m ? ' · ' + m : ''); pila.appendChild(d); setTimeout(() => d.remove(), 4000); };
         const main = document.getElementById('ft-main'), salir = document.getElementById('ft-salir');
-        const STAFF = ['superadmin'];   /* v21.242: sacar y cambiar fotos es solo del superadministrador */
+        const STAFF = ['superadmin'];   /* v21.241: sacar y cambiar fotos es solo del superadministrador */
         async function rolDe(u) { for (const id of [u.email, u.uid].filter(Boolean)) { try { const d = await getDoc(doc(db, 'Usuarios', id)); if (d.exists()) return String(d.data().rol || d.data().role || '').toLowerCase(); } catch (e) { /* sin permiso */ } } return ''; }
         function login(msg) {
             salir.hidden = true;

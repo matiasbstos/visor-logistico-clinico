@@ -1607,3 +1607,18 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
 - Las reglas de Firestore no se cambian: `fotosExtra` e `imagen` también los escriben la ficha del producto y la búsqueda automática (personal), así que la restricción es de pantalla. Si se quiere que la base lo impida, hay que separar esos flujos primero.
 
 **Corrección del modelo.** La v21.203 ya definía `imagen` = caja / envase (la foto que se ve en todo el sitio, o la automática en `imagenMP` / `imagenWeb`) y `fotosExtra` = [{tipo:'producto'|…, img, por, en}] = cómo es el producto. La v21.240 lo guardó al revés (`imagen` = producto, `imagenCaja` = caja, `fotosExtra` como textos). Desde v21.241 se usa el modelo de la casa: las fichas escritas por v21.240 (`fotosPor` sin `fotosV: 2`) se leen bien y se corrigen solas al guardar la siguiente foto. La foto automática de Convenio Marco o internet (no descartada) cuenta como caja; `fotoProdDescartada` cuenta como «producto resuelto», igual que en el catálogo.
+
+## 4.294 La pistola no lee el código de barras de las etiquetas: hoja de prueba (v21.242)
+
+**Problema.** El usuario informa que la pistola no lee el código de barras de las etiquetas de bulto.
+
+**Revisión.** El código está bien armado: Code 128 juego C de 10 dígitos (2026000123), decodificado y con dígito de control correcto; módulo de 5 puntos a 203 dpi y zona libre de 10 módulos. Las causas probables son de impresión o de la pistola:
+- la hoja se imprime escalada (PDF con «ajustar a la página» o un tamaño de papel distinto a 100 × 60 en el controlador de la Zebra): las barras quedan de anchos que no calzan con los puntos de la impresora y la pistola no las reconoce;
+- la pistola tiene Code 128 desactivado o una ventana de lectura angosta (el código mide 56 mm + zonas libres);
+- el primer borde del código no caía justo en un punto de la impresora.
+
+**Decisión.**
+- El código de la etiqueta parte alineado a la grilla de puntos de la impresora (cada borde de barra cae en un punto exacto).
+- Etiquetas → «Probar la pistola»: descarga una hoja de prueba (100 × 60) con seis variantes —Code 128 a 5, 4 y 3 puntos, Code 39, Code 128 con letras e Interleaved 2 de 5—, cada una con un número distinto, y una línea que debe medir 50 mm para comprobar que no se imprimió escalado. Al pistolear cada una, la pantalla marca cuál leyó y qué texto escribió (sirve también para detectar el idioma del teclado de la pistola).
+- La pistola puede terminar con Enter, Tab o nada: el escaneo de bultos acepta los tres (sin nada, toma el folio completo cuando deja de escribir) y la prueba avisa cuál usa.
+- Con el resultado se fija el formato definitivo de la etiqueta (y, si hace falta, se activa la simbología en la pistola con los códigos de su manual).

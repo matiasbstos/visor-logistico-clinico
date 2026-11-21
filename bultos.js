@@ -79,8 +79,8 @@
     /* v21.238: etiqueta «tipo tienda»: descripción grande, cantidad grande y código de barras ancho para la pistola.
        Caja grande: «1000 u. = 20 cajas × 50». Caja interior: «50 u.» y a qué caja grande pertenece. */
     /* módulo entero de 5 puntos a 203 dpi (0,625 mm) y zona libre de 10 módulos a cada lado (la pistola láser la necesita) */
-    const MOD = 5 * 25.4 / 203;
-    const barras = (b, y, h) => { if (!(P && P.barras)) return 0; const a = P.barras(digitos(b.folio)), tot = a.reduce((s2, w) => s2 + w, 0), mod = Math.min(MOD, 66 / tot), x0 = 3 + 10 * mod; let xx = x0; a.forEach((w, i) => { if (i % 2 === 0) d.rect(xx, y, w * mod, h, 'F'); xx += w * mod; }); return (x0 + xx) / 2; };
+    const PUNTO = 25.4 / 203, MOD = 5 * PUNTO;
+    const barras = (b, y, h) => { if (!(P && P.barras)) return 0; const a = P.barras(digitos(b.folio)), tot = a.reduce((s2, w) => s2 + w, 0), mod = Math.min(MOD, Math.max(1, Math.floor(66 / tot / PUNTO)) * PUNTO), x0 = Math.round((3 + 10 * mod) / PUNTO) * PUNTO;   /* v21.242: cada borde de barra cae justo en un punto de la impresora */ let xx = x0; a.forEach((w, i) => { if (i % 2 === 0) d.rect(xx, y, w * mod, h, 'F'); xx += w * mod; }); return (x0 + xx) / 2; };
     const qr = (b, x0, y0, lado) => { const m = matrizQR(URL_APP + '#bulto=' + b.folio), cel = lado / m.length; m.forEach((fila, r) => fila.forEach((on, c) => { if (on) d.rect(x0 + c * cel, y0 + r * cel, cel + 0.02, cel + 0.02, 'F'); })); };
     lista.forEach((b, k) => {
       if (k) d.addPage([100, 60], 'landscape');
@@ -423,7 +423,10 @@
       } catch (e) { res.innerHTML = `<p class="cfg-mal">No se pudo leer: ${esc(e.message || e)}</p>`; }
       finally { ocupado = false; }
     };
-    inp.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); const t = inp.value; inp.value = ''; procesar(t); } };
+    /* v21.242: la pistola puede terminar con Enter, Tab o nada; sin nada, se toma cuando ya hay un folio completo y deja de escribir */
+    let tmIn = null; const tomar = () => { clearTimeout(tmIn); const t = inp.value; inp.value = ''; procesar(t); };
+    inp.onkeydown = (e) => { if (e.key === 'Enter' || (e.key === 'Tab' && inp.value.trim())) { e.preventDefault(); tomar(); } };
+    inp.oninput = () => { clearTimeout(tmIn); if (folioDe(inp.value)) tmIn = setTimeout(tomar, 300); };
     ov.querySelector('#bu-ok').onclick = () => { const t = inp.value; inp.value = ''; procesar(t); };
     pintarSuma(); camara(ov.querySelector('#bu-cam'), procesar); setTimeout(() => inp.focus(), 200);
     return ov;
@@ -494,10 +497,10 @@
     /* opc.en: se dibuja en una página (menú «Impresión de etiquetas») en vez de una ventana */
     const en = opc && opc.en;
     if (en) en.innerHTML = `<div class="si-wrap si-ancho"><div class="si-cab"><div><h2 class="si-t">Impresión de etiquetas</h2><p class="si-s">Las etiquetas de bulto de cada orden de compra: imprime las que quedaron pendientes al recibir, reimprime o corrige datos.</p></div></div>
-      <div class="etq-acc"><button type="button" class="bu-big" data-ex="conteo"><i class="ph-bold ph-list-checks"></i><b>Etiquetar stock existente</b><small>Lo que ya estaba en el sistema sin etiqueta: cuéntalo, compara y etiqueta</small></button><button type="button" class="bu-big" data-ex="nueva"><i class="ph-bold ph-tag"></i><b>Crear etiquetas</b><small>Para un producto y lote, con cajas interiores</small></button></div><p class="etq-dif"><button type="button" class="bu-lnk" data-ex="dif"><i class="ph-bold ph-scales"></i> Diferencias de conteo</button> · <button type="button" class="bu-lnk" data-ex="contar"><i class="ph-bold ph-barcode"></i> Contar por bultos (pistola)</button></p>
+      <div class="etq-acc"><button type="button" class="bu-big" data-ex="conteo"><i class="ph-bold ph-list-checks"></i><b>Etiquetar stock existente</b><small>Lo que ya estaba en el sistema sin etiqueta: cuéntalo, compara y etiqueta</small></button><button type="button" class="bu-big" data-ex="nueva"><i class="ph-bold ph-tag"></i><b>Crear etiquetas</b><small>Para un producto y lote, con cajas interiores</small></button></div><p class="etq-dif"><button type="button" class="bu-lnk" data-ex="dif"><i class="ph-bold ph-scales"></i> Diferencias de conteo</button> · <button type="button" class="bu-lnk" data-ex="contar"><i class="ph-bold ph-barcode"></i> Contar por bultos (pistola)</button> · <button type="button" class="bu-lnk" data-ex="probar"><i class="ph-bold ph-scan"></i> Probar la pistola</button></p>
       <div class="bu-b etq-pag"><p class="si-v">Cargando órdenes y etiquetas…</p></div></div>`;
     if (en) en.querySelectorAll('[data-ex]').forEach(b => b.onclick = () => { const x = b.dataset.ex, re = (ov2) => { if (ov2) { const o = ov2._fin; ov2._fin = () => { if (o) o(); porOC({ en }); }; } };
-      if (x === 'dif') diferencias(); else if (x === 'contar') escanear('conteo').then(re); else etiquetar(x === 'conteo' ? { conteo: true } : {}).then(re); });
+      if (x === 'probar') probarPistola(); else if (x === 'dif') diferencias(); else if (x === 'contar') escanear('conteo').then(re); else etiquetar(x === 'conteo' ? { conteo: true } : {}).then(re); });
     const ov = en || ventana('Etiquetas por orden de compra', '<p class="si-v">Cargando órdenes y etiquetas…</p>');
     const caja = ov.querySelector('.bu-b');
     let ocs = [], bultos = [];
@@ -683,6 +686,53 @@
   if (typeof module === 'undefined' && typeof window.addEventListener === 'function' && document.getElementById) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', contarAlIniciar); else contarAlIniciar(); }
   if (typeof module === 'undefined' && typeof window.addEventListener === 'function') { window.addEventListener('hashchange', revisarHash); if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', revisarHash); else revisarHash(); }
 
-  window.SAR_Bultos = { planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
+  // ---------------- prueba de la pistola (v21.242) ----------------
+  /* Hoja con el mismo número en varios tipos y grosores de código de barras, para ver cuál lee la pistola.
+     Cada variante lleva un número distinto (999000000N) para saber cuál se leyó. */
+  const C39 = { '0': '000110100', '1': '100100001', '2': '001100001', '3': '101100000', '4': '000110001', '5': '100110000', '6': '001110000', '7': '000100101', '8': '100100100', '9': '001100100', '*': '010010100' };
+  /** Code 39 → anchos en «puntos» (n = angosto, w = ancho), con 1 angosto entre caracteres. */
+  function code39(txt, n, w) { const r = []; ('*' + txt + '*').split('').forEach((ch, k, arr) => { (C39[ch] || '').split('').forEach(b => r.push(b === '1' ? w : n)); if (k < arr.length - 1) r.push(n); }); return r; }
+  const I25 = ['00110', '10001', '01001', '11000', '00101', '10100', '01100', '00011', '10010', '01010'];
+  /** Interleaved 2 of 5 (cantidad par de dígitos) → anchos en puntos. */
+  function i2de5(dig, n, w) { const r = [n, n, n, n]; for (let i = 0; i + 1 < dig.length; i += 2) { const a = I25[+dig[i]], b = I25[+dig[i + 1]]; for (let k = 0; k < 5; k++) { r.push(a[k] === '1' ? w : n, b[k] === '1' ? w : n); } } r.push(w, n, n); return r; }
+  const PRUEBAS = [
+    { id: 'A', t: 'Code 128 · grosor actual (5 puntos)', txt: '9990000001', anchos: (P) => P.barras('9990000001').map(x => x * 5), alto: 10.5 },
+    { id: 'B', t: 'Code 128 · 4 puntos, más alto', txt: '9990000002', anchos: (P) => P.barras('9990000002').map(x => x * 4), alto: 14 },
+    { id: 'C', t: 'Code 128 · corto (3 puntos)', txt: '9990000003', anchos: (P) => P.barras('9990000003').map(x => x * 3), alto: 12 },
+    { id: 'D', t: 'Code 39 · el más compatible', txt: '9990000004', anchos: () => code39('9990000004', 2, 5), alto: 12 },
+    { id: 'E', t: 'Code 128 con letras', txt: 'PRUEBA-E', anchos: (P) => P.barrasB('PRUEBA-E').map(x => x * 4), alto: 12 },
+    { id: 'F', t: 'Interleaved 2 de 5 (14 dígitos)', txt: '99900000000006', anchos: () => i2de5('99900000000006', 3, 8), alto: 12 }];   /* muchas pistolas solo leen I2of5 de 14 */
+  async function hojaPrueba() {
+    const J = window.jspdf && window.jspdf.jsPDF, P = window.SAR_Precintos; if (!J || !P) throw new Error('La librería de PDF aún no carga; intenta de nuevo en unos segundos.');
+    const d = new J({ orientation: 'landscape', unit: 'mm', format: [100, 60] }), PUNTO = 25.4 / 203;
+    const dibujar = (v, y) => { const a = v.anchos(P), tot = a.reduce((s2, w) => s2 + w, 0) * PUNTO, x0 = Math.round(((100 - tot) / 2) / PUNTO) * PUNTO; let xx = x0;
+      a.forEach((w, i) => { if (i % 2 === 0) d.rect(xx, y, w * PUNTO, v.alto, 'F'); xx += w * PUNTO; });
+      d.setFont('helvetica', 'bold'); d.setFontSize(9); d.text(`${v.id}`, 3, y - 1.2); d.setFont('helvetica', 'normal'); d.setFontSize(7); d.text(`${v.t} · ${v.txt} · ${tot.toFixed(1)} mm`, 7, y - 1.2); };
+    for (let k = 0; k < PRUEBAS.length; k += 2) {
+      if (k) d.addPage([100, 60], 'landscape');
+      dibujar(PRUEBAS[k], 6); dibujar(PRUEBAS[k + 1], 6 + PRUEBAS[k].alto + 8);
+      /* regla: si al imprimir no mide 50 mm, la impresora está escalando la hoja y las barras salen deformes */
+      d.setLineWidth(0.3); d.line(25, 55.5, 75, 55.5); d.line(25, 54, 25, 57); d.line(75, 54, 75, 57); d.setFontSize(6.5); d.text('Esta línea debe medir 50 mm (imprimir a tamaño real, sin «ajustar»)', 50, 59, { align: 'center' });
+    }
+    const url = URL.createObjectURL(d.output('blob')), w = window.open(url, '_blank'); if (!w) d.save('prueba-pistola.pdf'); setTimeout(() => URL.revokeObjectURL(url), 120000);
+  }
+  /** Ventana: descargar la hoja, escanear cada código y ver cuál leyó (y qué texto escribió la pistola). */
+  function probarPistola() {
+    const ov = ventana('Probar la pistola', `<p class="si-s">1) Imprime la hoja de prueba en la Zebra a <b>tamaño real</b> (100 × 60 mm, sin «ajustar a la página»). 2) Mide la línea de abajo: debe medir 50 mm. 3) Pistolea cada código aquí abajo.</p>
+      <p><button type="button" class="btn btn-secondary" id="bu-hp"><i class="ph-bold ph-printer" aria-hidden="true"></i> Hoja de prueba (PDF)</button></p>
+      <div class="bu-man"><input id="bu-pin" class="si-in" placeholder="Pistolea aquí cada código de la hoja" autocomplete="off"></div>
+      <div id="bu-pres" aria-live="polite"></div>`);
+    const inp = ov.querySelector('#bu-pin'), res = ov.querySelector('#bu-pres'), leidas = new Map();
+    ov.querySelector('#bu-hp').onclick = () => hojaPrueba().catch(e => alert(e.message));
+    const pintar = (ultimo, vu) => { res.innerHTML = `<table class="si-tb"><thead><tr><th></th><th>Código</th><th>¿Lo leyó?</th></tr></thead><tbody>${PRUEBAS.map(v => { const l = leidas.get(v.id); return `<tr><td><b>${v.id}</b></td><td>${esc(v.t)}</td><td>${l ? (l === v.txt ? '<b style="color:#4D7C0F">Sí</b>' : `Sí, pero escribió «${esc(l)}» (revisar idioma del teclado de la pistola)`) : '—'}</td></tr>`; }).join('')}</tbody></table>${ultimo ? `<p class="si-s">Último leído: «${esc(ultimo)}»${vu ? ` (prueba ${vu.id})` : ' (no es de la hoja de prueba)'}${sufijo && sufijo !== 'Enter' ? ` · La pistola termina con <b>${sufijo === 'Tab' ? 'Tab' : 'nada'}</b> en vez de Enter: el Visor ya lo acepta en esta prueba, pero conviene configurarla con Enter (sufijo CR) desde su manual.` : ''}</p>` : ''}`; };
+    const buscarV = (t) => PRUEBAS.find(x => x.txt === t) || PRUEBAS.find(x => x.txt.replace(/\D/g, '') && x.txt.replace(/\D/g, '') === t.replace(/\D/g, '')) || (/PRUEBA/i.test(t) ? PRUEBAS[4] : null);
+    let tm = null, sufijo = '';
+    const registrar = (como) => { clearTimeout(tm); const t = inp.value.trim(); inp.value = ''; if (!t) return; if (!sufijo) sufijo = como; const v = buscarV(t); if (v) leidas.set(v.id, t); pintar(t, v); };
+    /* la pistola termina con Enter, con Tab o sin nada: se aceptan los tres (sin nada = deja de escribir 250 ms) */
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); registrar(e.key === 'Enter' ? 'Enter' : 'Tab'); } });
+    inp.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => registrar('nada'), 250); });
+    pintar(''); setTimeout(() => inp.focus(), 50); return ov;
+  }
+  window.SAR_Bultos = { probarPistola, hojaPrueba, code39, i2de5, planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_Bultos;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null, addEventListener() {} });

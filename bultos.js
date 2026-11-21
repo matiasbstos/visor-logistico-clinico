@@ -78,29 +78,34 @@
     const d = new J({ orientation: 'landscape', unit: 'mm', format: [100, 60] });
     /* v21.238: etiqueta «tipo tienda»: descripción grande, cantidad grande y código de barras ancho para la pistola.
        Caja grande: «1000 u. = 20 cajas × 50». Caja interior: «50 u.» y a qué caja grande pertenece. */
-    const barras = (b, y, h) => { if (!(P && P.barras)) return; const a = P.barras(digitos(b.folio)), tot = a.reduce((s2, w) => s2 + w, 0), mod = 74 / tot; let xx = 3; a.forEach((w, i) => { if (i % 2 === 0) d.rect(xx, y, w * mod, h, 'F'); xx += w * mod; }); };
+    /* módulo entero de 5 puntos a 203 dpi (0,625 mm) y zona libre de 10 módulos a cada lado (la pistola láser la necesita) */
+    const MOD = 5 * 25.4 / 203;
+    const barras = (b, y, h) => { if (!(P && P.barras)) return 0; const a = P.barras(digitos(b.folio)), tot = a.reduce((s2, w) => s2 + w, 0), mod = Math.min(MOD, 66 / tot), x0 = 3 + 10 * mod; let xx = x0; a.forEach((w, i) => { if (i % 2 === 0) d.rect(xx, y, w * mod, h, 'F'); xx += w * mod; }); return (x0 + xx) / 2; };
     const qr = (b, x0, y0, lado) => { const m = matrizQR(URL_APP + '#bulto=' + b.folio), cel = lado / m.length; m.forEach((fila, r) => fila.forEach((on, c) => { if (on) d.rect(x0 + c * cel, y0 + r * cel, cel + 0.02, cel + 0.02, 'F'); })); };
     lista.forEach((b, k) => {
       if (k) d.addPage([100, 60], 'landscape');
       d.setTextColor(0); d.setDrawColor(0);
       const interior = b.nivel === 'interior';
       if (logo) d.addImage(logo.d, 'JPEG', 3, 2.2, 18, 18 / logo.r, 'logo', 'FAST');
-      d.setFont('helvetica', 'bold'); d.setFontSize(7); d.text(interior ? 'CAJA INTERIOR' : 'CAJA', 97, 4.4, { align: 'right' });
+      d.setFont('helvetica', 'bold'); d.setFontSize(7); d.text(interior ? `CAJA ${num(b.padreN)}/${num(b.padreDe)} · INTERIOR` : 'CAJA', 97, 4.4, { align: 'right' });
       d.setFontSize(13); d.text(`${b.n} / ${b.de}`, 97, 9.4, { align: 'right' });
       d.setLineWidth(0.35); d.line(3, 11, 97, 11);
       // descripción grande (como etiqueta de tienda)
-      d.setFontSize(12); const nom = d.splitTextToSize(String(b.nombre || '').toUpperCase(), 94).slice(0, 2); d.text(nom, 3, 16); let y = 16 + nom.length * 4.6;
+      const nomT = String(b.nombre || '').toUpperCase(); let tam = 12; d.setFontSize(tam); let nom = d.splitTextToSize(nomT, 94);
+      if (nom.length > 2) { tam = 10; d.setFontSize(tam); nom = d.splitTextToSize(nomT, 94); if (nom.length > 3) { nom = nom.slice(0, 3); nom[2] = nom[2].replace(/\s*\S*$/, '') + '…'; } }
+      const paso = tam === 12 ? 4.6 : 3.9; d.text(nom, 3, 16); let y = 16 + nom.length * paso;
       d.setFontSize(8.5); d.text(`Lote ${b.lote || 'S/L'}`, 3, y); d.text(`Vence ${b.vence ? fechaCL(b.vence) : '—'}`, 97, y, { align: 'right' }); y += 1.5;
       // cantidad grande
-      d.setFontSize(24); d.text(`${num(b.inicial != null ? b.inicial : b.contenido)} u.`, 3, y + 9);
+      const cant = `${num(b.inicial != null ? b.inicial : b.contenido)} u.`; d.setFontSize(24); d.text(cant, 3, y + 9); const finCant = 3 + d.getTextWidth(cant) + 4;
       d.setFont('helvetica', 'normal'); d.setFontSize(7.5);
-      const det = interior ? [`Dentro de la caja ${num(b.padreN)}/${num(b.padreDe)} (${b.padre || ''})`, b.bodega || ''] : [b.subcajas ? `= ${num(b.subcajas)} cajas interiores × ${num(b.porSubcaja)} u.` : `${num(b.porCaja)} u. por caja · ${num(b.de)} caja${num(b.de) === 1 ? '' : 's'}`, `Total del lote: ${num(b.totalGrupo)} u.${b.bodega ? ' · ' + b.bodega : ''}`];
-      det.filter(Boolean).forEach((t, i) => d.text(String(t).slice(0, 44), 97, y + 4.2 + i * 3.4, { align: 'right' }));
+      const ajusta = (t, ancho) => { let x = String(t); while (x.length > 4 && d.getTextWidth(x) > ancho) x = x.slice(0, -2); return x === String(t) ? x : x.replace(/\s*$/, '') + '…'; };
+      const det = interior ? [`Va dentro de ${b.padre || 'la caja grande'}`, b.bodega || ''] : [b.subcajas ? `= ${num(b.subcajas)} cajas interiores × ${num(b.porSubcaja)} u.` : `${num(b.porCaja)} u. por caja · ${num(b.de)} caja${num(b.de) === 1 ? '' : 's'}`, `Total en cajas: ${num(b.totalGrupo)} u.${b.bodega ? ' · ' + b.bodega : ''}`];
+      det.filter(Boolean).forEach((t, i) => d.text(ajusta(t, 97 - finCant), 97, y + 4.2 + i * 3.4, { align: 'right' }));
       y += 12;
-      if (!interior) { const inf = [b.proveedor, b.oc ? 'OC ' + b.oc : '', b.rec, b.fechaRecepcion ? 'Recibido ' + fechaCL(b.fechaRecepcion) : ''].filter(Boolean).join(' · '); if (inf) { d.setFontSize(6.5); d.text(inf.slice(0, 92), 3, y); } }
+      if (!interior) { const inf = [b.proveedor, b.oc ? 'OC ' + b.oc : '', b.rec, b.fechaRecepcion ? 'Recibido ' + fechaCL(b.fechaRecepcion) : ''].filter(Boolean).join(' · '); if (inf) { d.setFontSize(7); d.text(ajusta(inf, 94), 3, y); } }
       // código de barras (pistola) + QR chico (teléfono)
-      barras(b, 44, 10.5); qr(b, 81.5, 41.5, 15.5);
-      d.setFont('helvetica', 'bold'); d.setFontSize(7.5); d.text(b.folio, 40, 57.6, { align: 'center' });
+      const cx = barras(b, 44, 10.5) || 40; qr(b, 81.5, 41.5, 15.5);
+      d.setFont('helvetica', 'bold'); d.setFontSize(7.5); d.text(b.folio, cx, 57.6, { align: 'center' });
     });
     const nom = nombreArchivo || ('bultos-' + lista[0].folio + (lista.length > 1 ? '_a_' + lista[lista.length - 1].folio : '') + '.pdf');
     const blob = d.output('blob'); if (opc && opc.soloBlob) return blob;
@@ -166,6 +171,7 @@
   /** pref: {nombre, insumoId, codigoMP, bodega, lote, vence, total, proveedor, oc, rec, fechaRecepcion, lineas:[…mismos campos], conteo}
    *  v21.238: cajas grandes con cajas interiores (subPor) y modo «conteo»: etiquetar stock que ya estaba en el sistema contándolo
    *  (si se cuenta más, se suma con un ajuste AJU; si se cuenta menos, queda en el informe de diferencias). */
+  const textoDif = (dif, esSuper) => dif > 0 ? (esSuper ? 'Se sumará al stock (ajuste por conteo, con código).' : 'Quedará como solicitud de ajuste para el superadministrador.') : dif < 0 ? 'Faltan unidades: queda en el informe de diferencias (el stock no se baja).' : dif === 0 ? 'Cuadra con el sistema.' : '';
   async function etiquetar(pref) {
     const p = pref || {}, lineas = Array.isArray(p.lineas) && p.lineas.length ? p.lineas : null, conteo = !!p.conteo;
     const ov = ventana(conteo ? 'Etiquetar stock existente (con conteo)' : 'Etiquetas de bulto', `<div class="bu-tabs"><button type="button" class="on" data-t="nueva">${conteo ? 'Contar y etiquetar' : 'Nuevas etiquetas'}</button><button type="button" data-t="re">Reimprimir existentes</button></div><div class="bu-pane" data-p="nueva"></div><div class="bu-pane" data-p="re" hidden></div>`, { encima: !!p.encima });
@@ -175,46 +181,64 @@
     if (conteo) { sel.total = 0; sel.sistema = num(p.total) || null; }
     const totalDe = () => conteo && !totalManual ? num(sel.cajas) * num(sel.porCaja) + num(sel.sueltas) : num(sel.total);
     const pintar = () => {
-      const sug = sugerirPorCaja(sel.nombre); if (!num(sel.porCaja) && sug) sel.porCaja = sug;
+      const sug = sugerirPorCaja(sel.nombre);
+      if (sug && sel.tieneSub) { if (!num(sel.subPor)) sel.subPor = sug; if (num(sel.porCaja) === sug && sel._sugPc) { sel.porCaja = 0; sel._sugPc = false; } }
+      else if (!num(sel.porCaja) && sug) { sel.porCaja = sug; sel._sugPc = true; }
+      const esSuper = String(document.body && document.body.dataset.userRole || '').toLowerCase() === 'superadmin';
       if (conteo && !totalManual) sel.total = totalDe();
       const enCajas = Math.max(0, num(sel.total) - (conteo ? num(sel.sueltas) : 0));
       const plan = planCajas({ total: enCajas, porCaja: sel.porCaja, subPor: sel.tieneSub ? sel.subPor : 0 });
       const nG = plan.length, nI = plan.reduce((t, x) => t + x.hijos.length, 0);
-      const dif = conteo && sel.sistema != null && sel.insumoId ? num(sel.total) - num(sel.sistema) : null;
+      const dif = conteo && sel.sistema != null && sel.insumoId ? num(sel.total) - num(sel.sistema) - num(sel.reservado) : null;
       pane.innerHTML = `${conteo ? '<p class="si-v">Para productos que <b>ya están en el sistema</b> y no tienen etiqueta: cuenta lo que hay, compara con el sistema y crea las etiquetas. No es un ingreso nuevo.</p>' : ''}
         ${lineas ? `<label class="bu-l">Producto de esta recepción<select id="bu-lin" class="si-in">${lineas.map((l, i) => `<option value="${i}"${i === sel.idx ? ' selected' : ''}>${esc(l.nombre)} · ${num(l.total)} u.${l.lote ? ' · lote ' + esc(l.lote) : ''}${l.hecho ? ' ✔' : ''}</option>`).join('')}</select></label>`
           : `<label class="bu-l">Producto${conteo ? ' (elige el lote que estás contando)' : ''}<input id="bu-q" class="si-in" placeholder="Busca por nombre…" value="${esc(sel.nombre || '')}" autocomplete="off"></label><div id="bu-sug" class="bu-sug"></div>`}
-        <div class="bu-g3"><label class="bu-l">Lote<input id="bu-lote" class="si-in" value="${esc(sel.lote || '')}"${conteo && sel.insumoId ? ' readonly' : ''}></label><label class="bu-l">Vence<input id="bu-vence" type="date" class="si-in" value="${esc(sel.vence || '')}"></label><label class="bu-l">Bodega<input id="bu-bod" class="si-in" value="${esc(sel.bodega || '')}"${conteo && sel.insumoId ? ' readonly' : ''}></label></div>
+        <div class="bu-g3"><label class="bu-l">Lote<input id="bu-lote" class="si-in" value="${esc(sel.lote || '')}"${conteo ? ' placeholder="S/L si no trae"' : ''}></label><label class="bu-l">Vence<input id="bu-vence" type="date" class="si-in" value="${esc(sel.vence || '')}"></label><label class="bu-l">Bodega<input id="bu-bod" class="si-in" value="${esc(sel.bodega || '')}"${conteo && sel.insumoId ? ' readonly title="Bodega del producto en el sistema"' : ''}></label></div>
         <h4 class="fp-sub">¿Cómo viene?</h4>
         <div class="bu-g3">
-          ${conteo ? `<label class="bu-l">Cajas grandes (cerradas o completas)<input id="bu-cajas" type="number" min="0" class="si-in" value="${num(sel.cajas) || ''}" inputmode="numeric"></label>` : `<label class="bu-l">Total de unidades<input id="bu-total" type="number" min="1" class="si-in" value="${num(sel.total) || ''}" inputmode="numeric"></label>`}
-          <label class="bu-l">Unidades por caja grande<input id="bu-pc" type="number" min="1" class="si-in" value="${num(sel.porCaja) || ''}" inputmode="numeric">${sug && num(sel.porCaja) === sug ? '<small>Sugerido por la descripción («caja x ' + sug + '»)</small>' : ''}</label>
-          ${conteo ? `<label class="bu-l">Unidades sueltas (sin caja)<input id="bu-sue" type="number" min="0" class="si-in" value="${num(sel.sueltas) || ''}" inputmode="numeric"><small>No llevan etiqueta.</small></label>` : `<label class="bu-l">Cajas grandes<input id="bu-cajas" type="number" min="1" class="si-in" value="${nG || ''}" inputmode="numeric"><small>Si cambias las cajas, se recalculan las unidades por caja.</small></label>`}
+          ${conteo ? `<label class="bu-l">Cajas grandes<input id="bu-cajas" type="number" min="0" class="si-in" value="${num(sel.cajas) || ''}" inputmode="numeric"><small>Las completas (una incompleta: corrige el total abajo).</small></label>` : `<label class="bu-l">Total de unidades<input id="bu-total" type="number" min="1" class="si-in" value="${num(sel.total) || ''}" inputmode="numeric"></label>`}
+          <label class="bu-l">Unidades por caja grande<input id="bu-pc" type="number" min="1" class="si-in" value="${num(sel.porCaja) || ''}" inputmode="numeric">${sug && !sel.tieneSub && num(sel.porCaja) === sug ? '<small>Sugerido por la descripción («caja x ' + sug + '»)</small>' : ''}</label>
+          ${conteo ? '' : `<label class="bu-l">Cajas grandes<input id="bu-cajas" type="number" min="1" class="si-in" value="${nG || ''}" inputmode="numeric"><small>Si cambias las cajas, se recalculan las unidades por caja.</small></label>`}
         </div>
         <label class="bu-chk"><input type="checkbox" id="bu-tsub"${sel.tieneSub ? ' checked' : ''}> La caja grande trae <b>cajas interiores</b> (ej. 1000 u. en 20 cajas de 50)</label>
-        ${sel.tieneSub ? `<div class="bu-g3"><label class="bu-l">Unidades por caja interior<input id="bu-sp" type="number" min="1" class="si-in" value="${num(sel.subPor) || ''}" inputmode="numeric"></label><div class="bu-l"><span>Cajas interiores por caja grande</span><b class="bu-cifra">${num(sel.subPor) > 0 && num(sel.porCaja) > 0 ? Math.ceil(num(sel.porCaja) / num(sel.subPor)) : '—'}</b></div></div>` : ''}
-        ${conteo ? `<div class="bu-g3"><label class="bu-l">Total contado (u.)<input id="bu-total" type="number" min="0" class="si-in" value="${num(sel.total) || ''}" inputmode="numeric"><small>${totalManual ? 'Escrito a mano (si la última caja no venía completa).' : 'Se calcula solo: cajas × unidades + sueltas. Corrígelo si una caja no está completa.'}</small></label>
-          <div class="bu-l"><span>En el sistema (este lote)</span><b class="bu-cifra">${sel.sistema == null ? '—' : num(sel.sistema)}</b>${sel.reservado ? `<small>+ ${num(sel.reservado)} reservadas para actas (siguen en el estante: no están en esta cifra)</small>` : ''}</div>
-          <div class="bu-l"><span>Diferencia</span><b class="bu-cifra ${dif > 0 ? 'bu-mas' : dif < 0 ? 'bu-menos' : ''}">${dif == null ? '—' : (dif > 0 ? '+' : '') + dif}</b><small>${dif > 0 ? 'Se sumará al stock con un ajuste AJU «Conteo físico».' : dif < 0 ? 'Faltan unidades: queda en el informe de diferencias (el stock no se baja).' : dif === 0 ? 'Cuadra con el sistema.' : ''}</small></div></div>` : ''}
-        <div class="bu-g3"><label class="bu-l">Proveedor<input id="bu-prov" class="si-in" value="${esc(sel.proveedor || '')}"></label><label class="bu-l">Orden de compra<input id="bu-oc" class="si-in" value="${esc(sel.oc || '')}"></label><label class="bu-l">Fecha de recepción<input id="bu-fr" type="date" class="si-in" value="${esc(sel.fechaRecepcion || hoyISO())}"></label></div>
+        ${sel.tieneSub ? `<div class="bu-g3"><label class="bu-l">Unidades por caja interior<input id="bu-sp" type="number" min="1" class="si-in" value="${num(sel.subPor) || ''}" inputmode="numeric"></label><div class="bu-l"><span>Cajas interiores por caja grande</span><b class="bu-cifra" id="bu-nint">${num(sel.subPor) > 0 && num(sel.porCaja) > 0 ? Math.ceil(num(sel.porCaja) / num(sel.subPor)) : '—'}</b></div></div>` : ''}
+        ${conteo ? `<div class="bu-g3"><label class="bu-l">Unidades sueltas (sin caja)<input id="bu-sue" type="number" min="0" class="si-in" value="${num(sel.sueltas) || ''}" inputmode="numeric"><small>No llevan etiqueta.</small></label></div>` : ''}
+        ${conteo ? `<div class="bu-g3"><label class="bu-l">Total contado (u.)<input id="bu-total" type="number" min="0" class="si-in" value="${num(sel.total) || ''}" inputmode="numeric"><small>${totalManual ? 'Escrito a mano. <button type="button" class="bu-lnk" id="bu-recalc">Volver a calcular</button>' : 'Se calcula solo: cajas × unidades + sueltas. Corrígelo si una caja no está completa.'}</small></label>
+          <div class="bu-l"><span>En el sistema (este lote)</span><b class="bu-cifra" id="bu-sis">${sel.sistema == null ? '—' : num(sel.sistema) + num(sel.reservado)}</b>${sel.reservado ? `<small>Incluye ${num(sel.reservado)} reservadas para actas (siguen en el estante).</small>` : ''}${sel.deuda ? `<small>Deuda del producto: ${num(sel.deuda)} u. (si sobra, se salda y el stock queda igual a lo contado).</small>` : ''}${sel.etiquetadas && sel.etiquetadas.n ? `<small class="bu-av">Este lote ya tiene ${sel.etiquetadas.n} caja(s) etiquetada(s) con ${sel.etiquetadas.u} u.: cuéntalas igual, pero no les crees etiqueta otra vez.</small>` : ''}</div>
+          <div class="bu-l"><span>Diferencia</span><b id="bu-dif" class="bu-cifra ${dif > 0 ? 'bu-mas' : dif < 0 ? 'bu-menos' : ''}">${dif == null ? '—' : (dif > 0 ? '+' : '') + dif}</b><small id="bu-difm">${textoDif(dif, esSuper)}</small></div></div>` : ''}
+        ${conteo ? '<details class="bu-opc"><summary>Datos opcionales para la etiqueta (proveedor, OC, fecha)</summary>' : ''}<div class="bu-g3"><label class="bu-l">Proveedor<input id="bu-prov" class="si-in" value="${esc(sel.proveedor || '')}"></label><label class="bu-l">Orden de compra<input id="bu-oc" class="si-in" value="${esc(sel.oc || '')}"></label><label class="bu-l">Fecha de recepción<input id="bu-fr" type="date" class="si-in" value="${esc(sel.fechaRecepcion || hoyISO())}"></label></div>${conteo ? '</details>' : ''}
         ${sel.rec ? `<p class="si-v">Recepción ${esc(sel.rec)}</p>` : ''}
-        <div class="bu-prev">${nG ? `<b>${nG + nI} etiqueta${nG + nI === 1 ? '' : 's'}</b>: ${nG} caja${nG === 1 ? '' : 's'} grande${nG === 1 ? '' : 's'}${nG > 1 && plan[nG - 1].q !== plan[0].q ? ` (${nG - 1} de ${plan[0].q} u. y la última de ${plan[nG - 1].q} u.)` : ` de ${plan[0].q} u.`}${nI ? ` + ${nI} cajas interiores de ${num(sel.subPor)} u.` : ''} · ${enCajas} u. en cajas${conteo && num(sel.sueltas) ? ` + ${num(sel.sueltas)} sueltas` : ''}` : (conteo ? 'Indica las cajas y las unidades por caja (o el total contado).' : 'Indica el total y las unidades por caja.')}</div>
-        <div class="fp-facc"><button type="button" class="btn btn-primary" id="bu-gen"${(nG || (conteo && num(sel.total) > 0)) ? '' : ' disabled'}><i class="ph-bold ph-${conteo ? 'check-circle' : 'tag'}"></i> ${conteo ? 'Registrar conteo y crear etiquetas' : 'Crear etiquetas'}</button></div>`;
+        <div class="bu-prev" id="bu-prevt">${nG ? `<b>${nG + nI} etiqueta${nG + nI === 1 ? '' : 's'}</b>: ${nG} caja${nG === 1 ? '' : 's'} grande${nG === 1 ? '' : 's'}${nG > 1 && plan[nG - 1].q !== plan[0].q ? ` (${nG - 1} de ${plan[0].q} u. y la última de ${plan[nG - 1].q} u.)` : ` de ${plan[0].q} u.`}${nI ? ` + ${nI} cajas interiores de ${num(sel.subPor)} u.` : ''} · ${enCajas} u. en cajas${conteo && num(sel.sueltas) ? ` + ${num(sel.sueltas)} sueltas` : ''}` : (conteo ? 'Indica las cajas y las unidades por caja (o el total contado).' : 'Indica el total y las unidades por caja.')}</div>
+        <div class="fp-facc"><button type="button" class="btn btn-primary" id="bu-gen"${(nG || (conteo && num(sel.total) > 0)) ? '' : ' disabled'}><i class="ph-bold ph-${conteo ? 'check-circle' : 'tag'}"></i> ${conteo ? (nG ? 'Registrar conteo y crear etiquetas' : 'Registrar conteo') : 'Crear etiquetas'}</button></div>`;
       const v = (id) => (pane.querySelector('#' + id) || {}).value;
       const leer2 = () => { sel.lote = v('bu-lote'); sel.vence = v('bu-vence'); sel.bodega = v('bu-bod'); sel.porCaja = num(v('bu-pc')); sel.proveedor = v('bu-prov'); sel.oc = v('bu-oc'); sel.fechaRecepcion = v('bu-fr');
         if (sel.tieneSub) sel.subPor = num(v('bu-sp')); if (conteo) { sel.cajas = num(v('bu-cajas')); sel.sueltas = num(v('bu-sue')); } else sel.total = num(v('bu-total')); };
-      ['bu-pc', 'bu-sp', 'bu-sue'].concat(conteo ? ['bu-cajas'] : ['bu-total']).forEach(id => { const e = pane.querySelector('#' + id); if (e) e.onchange = () => { leer2(); pintar(); }; });
-      if (conteo) { const et = pane.querySelector('#bu-total'); if (et) et.onchange = () => { leer2(); const t = Math.max(0, Math.floor(num(et.value))); totalManual = t !== num(sel.cajas) * num(sel.porCaja) + num(sel.sueltas); sel.total = t; pintar(); }; }
+      /* v21.238: se recalcula mientras se escribe, sin redibujar (no se pierde el foco ni se cierra el teclado del teléfono) */
+      const vivo = () => {
+        if (conteo && !totalManual) { sel.total = totalDe(); const et = pane.querySelector('#bu-total'); if (et) et.value = sel.total || ''; }
+        const enC = Math.max(0, num(sel.total) - (conteo ? num(sel.sueltas) : 0)), pl = planCajas({ total: enC, porCaja: sel.porCaja, subPor: sel.tieneSub ? sel.subPor : 0 }), g = pl.length, it = pl.reduce((t, x) => t + x.hijos.length, 0);
+        const pv = pane.querySelector('#bu-prevt'); if (pv) pv.innerHTML = g ? `<b>${g + it} etiqueta${g + it === 1 ? '' : 's'}</b>: ${g} caja${g === 1 ? '' : 's'} grande${g === 1 ? '' : 's'}${g > 1 && pl[g - 1].q !== pl[0].q ? ` (${g - 1} de ${pl[0].q} u. y la última de ${pl[g - 1].q} u.)` : ` de ${pl[0].q} u.`}${it ? ` + ${it} cajas interiores de ${num(sel.subPor)} u.` : ''} · ${enC} u. en cajas${conteo && num(sel.sueltas) ? ` + ${num(sel.sueltas)} sueltas` : ''}` : 'Indica las cajas y las unidades por caja.';
+        const ni = pane.querySelector('#bu-nint'); if (ni) ni.textContent = num(sel.subPor) > 0 && num(sel.porCaja) > 0 ? Math.ceil(num(sel.porCaja) / num(sel.subPor)) : '—';
+        const df = conteo && sel.sistema != null && sel.insumoId ? num(sel.total) - num(sel.sistema) - num(sel.reservado) : null, ed = pane.querySelector('#bu-dif'), em = pane.querySelector('#bu-difm');
+        if (ed) { ed.textContent = df == null ? '—' : (df > 0 ? '+' : '') + df; ed.className = 'bu-cifra ' + (df > 0 ? 'bu-mas' : df < 0 ? 'bu-menos' : ''); } if (em) em.textContent = textoDif(df, esSuper);
+        const bg = pane.querySelector('#bu-gen'); if (bg) { bg.disabled = !(g || (conteo && num(sel.total) > 0)); bg.lastChild.textContent = ' ' + (conteo ? (g ? 'Registrar conteo y crear etiquetas' : 'Registrar conteo') : 'Crear etiquetas'); }
+      };
+      ['bu-pc', 'bu-sp', 'bu-sue'].concat(conteo ? ['bu-cajas'] : ['bu-total']).forEach(id => { const e = pane.querySelector('#' + id); if (e) e.oninput = () => { leer2(); vivo(); }; });
+      if (conteo) { const et = pane.querySelector('#bu-total'); if (et) et.oninput = () => { leer2(); const t = Math.max(0, Math.floor(num(et.value))); totalManual = t !== num(sel.cajas) * num(sel.porCaja) + num(sel.sueltas); sel.total = t; vivo(); }; }
       else { const ec = pane.querySelector('#bu-cajas'); if (ec) ec.onchange = () => { leer2(); const n = Math.max(1, num(ec.value)); if (sel.total) sel.porCaja = Math.ceil(sel.total / n); pintar(); }; }
+      const rc = pane.querySelector('#bu-recalc'); if (rc) rc.onclick = () => { totalManual = false; leer2(); pintar(); };
+      if (conteo) { const el = pane.querySelector('#bu-lote'); if (el) el.onchange = () => { leer2(); const i = (insumos || []).find(x => x.id === sel.insumoId); if (i) { sel.sistema = enLote(i, sel.lote || 'S/L'); } pintar(); }; }
       const ts = pane.querySelector('#bu-tsub'); if (ts) ts.onchange = () => { leer2(); sel.tieneSub = ts.checked; pintar(); };
       const ls = pane.querySelector('#bu-lin'); if (ls) ls.onchange = () => { const i = num(ls.value); sel = { ...lineas[i], idx: i }; pintar(); };
       const q = pane.querySelector('#bu-q'); if (q) q.oninput = async () => {
         const t = norm(q.value), box = pane.querySelector('#bu-sug'); if (t.length < 2) { box.innerHTML = ''; return; }
-        const l = (await cargarInsumos()).filter(i => t.split(' ').every(w => norm(i.name).includes(w))).slice(0, 8);
-        box.innerHTML = l.map(i => lotesDe(i).map(b => `<button type="button" class="bu-op" data-id="${esc(i.id)}" data-lote="${esc(b.batch || 'S/L')}" data-v="${esc(b.expirationDate || '')}" data-q="${num(b.quantity)}"><b>${esc(i.name)}</b><small>${esc(i.location || '')} · lote ${esc(b.batch || 'S/L')}${b.expirationDate ? ' · vence ' + esc(fechaCL(b.expirationDate)) : ''} · ${num(b.quantity)} u.</small></button>`).join('')).join('') || '<p class="si-v">Sin coincidencias.</p>';
+        const l = (await cargarInsumos()).filter(i => i.status !== 'CUARENTENA' && t.split(' ').every(w => norm(i.name).includes(w))).slice(0, 8);
+        box.innerHTML = l.map(i => (conteo ? lotesTodos(i).concat([{ batch: '', quantity: 0, expirationDate: '', nuevo: true }]) : lotesDe(i)).map(b => b.nuevo ? `<button type="button" class="bu-op bu-op-n" data-id="${esc(i.id)}" data-lote="" data-v="" data-q="0"><b>${esc(i.name)}</b><small>${esc(i.location || '')} · <u>otro lote</u> (lo escribes tú: no está en el sistema)</small></button>` : `<button type="button" class="bu-op" data-id="${esc(i.id)}" data-lote="${esc(b.batch || 'S/L')}" data-v="${esc(b.expirationDate || '')}" data-q="${num(b.quantity)}"><b>${esc(i.name)}</b><small>${esc(i.location || '')} · lote ${esc(b.batch || 'S/L')}${b.expirationDate ? ' · vence ' + esc(fechaCL(b.expirationDate)) : ''} · ${num(b.quantity)} u.</small></button>`).join('')).join('') || '<p class="si-v">Sin coincidencias.</p>';
         box.querySelectorAll('.bu-op').forEach(b => b.onclick = () => { const i = insumos.find(x => x.id === b.dataset.id);
           sel = { ...sel, nombre: i.name, insumoId: i.id, codigoMP: i.codigoMP || '', bodega: i.location || '', lote: b.dataset.lote, vence: b.dataset.v, porCaja: num(i.unidadesPorCaja) || 0, proveedor: sel.proveedor || i.provider || '' };
-          if (conteo) { sel.sistema = num(b.dataset.q); sel.reservado = num(i.reservado); sel.cajas = 0; sel.sueltas = 0; totalManual = false; } else sel.total = num(b.dataset.q);
+          if (conteo) { sel.sistema = num(b.dataset.q); sel.reservado = num(i.reservado); sel.deuda = num(i.sobregiro); sel.cajas = 0; sel.sueltas = 0; totalManual = false; sel.etiquetadas = null;
+            listar(5000).then(bs => { const m = bs.filter(x => x.nivel !== 'interior' && x.estado !== 'VACIA' && (x.insumoId === i.id || norm(x.nombre) === norm(i.name)) && (x.lote || 'S/L') === (sel.lote || 'S/L')); sel.etiquetadas = { n: m.length, u: m.reduce((t2, x) => t2 + num(x.contenido), 0) }; pintar(); }).catch(() => {}); }
+          else sel.total = num(b.dataset.q);
           pintar(); });
       };
       pane.querySelector('#bu-gen').onclick = async (e) => {
@@ -225,11 +249,17 @@
           let msgConteo = '';
           if (conteo) {
             if (!sel.insumoId) throw new Error('Elige el producto y lote desde la lista (debe existir en el sistema).');
+            const dif = num(sel.total) - num(sel.sistema) - num(sel.reservado), P0 = window.SAR_Progreso;
+            /* primero se valida que las etiquetas se puedan crear (si no, el ajuste quedaría hecho sin etiquetas) */
+            const enC0 = Math.max(0, num(sel.total) - num(sel.sueltas)), g0 = { total: enC0, porCaja: sel.porCaja, cajas: num(sel.porCaja) > 0 ? 0 : sel.cajas, subPor: sel.tieneSub ? sel.subPor : 0 }, pl0 = enC0 > 0 ? planCajas(g0) : [];
+            if (enC0 > 0 && !pl0.length) throw new Error('Indica las unidades por caja grande (o cuántas cajas son).');
+            if (pl0.length > 300 || pl0.reduce((t, x) => t + 1 + x.hijos.length, 0) > 600) throw new Error('Serían demasiadas etiquetas: revisa las unidades por caja.');
+            if (dif !== 0 && P0 && P0.confirmar && !(await P0.confirmar({ titulo: dif > 0 ? `¿Sumar ${dif} u. al stock?` : `Faltan ${-dif} u.`, texto: `<b>${esc(sel.nombre)}</b> · lote ${esc(sel.lote || 'S/L')}: sistema <b>${num(sel.sistema) + num(sel.reservado)}</b>, contado <b>${num(sel.total)}</b>.`, lineas: [dif > 0 ? (esSuper ? `Se suman ${dif} u. al lote con un ajuste por conteo (código AJU).` : `Queda una solicitud de ajuste por ${dif} u. para el superadministrador.`) : 'El stock no se cambia: queda en el informe de diferencias.'], si: dif > 0 ? (esSuper ? 'Sumar y seguir' : 'Enviar solicitud y seguir') : 'Registrar y seguir', no: 'Revisar' }))) { btn.disabled = false; return; }
             msgConteo = await registrarConteo(sel);
           }
           const enC = Math.max(0, num(sel.total) - (conteo ? num(sel.sueltas) : 0));
           let l = [];
-          if (enC > 0) l = await crear({ ...sel, total: enC, subPor: sel.tieneSub ? sel.subPor : 0, cajas: 0, origen: conteo ? 'conteo' : (sel.rec ? 'recepcion' : 'manual') });
+          if (enC > 0) l = await crear({ ...sel, total: enC, subPor: sel.tieneSub ? sel.subPor : 0, cajas: conteo && !(num(sel.porCaja) > 0) ? sel.cajas : 0, origen: conteo ? 'conteo' : (sel.rec ? 'recepcion' : 'manual') });
           if (lineas) { lineas[sel.idx].hecho = true; const sig = lineas.findIndex(x => !x.hecho); if (sig >= 0) { sel = { ...lineas[sig], idx: sig }; } }
           if (l.length) {
             const P = window.SAR_Progreso, nI = l.filter(b => b.nivel === 'interior').length;
@@ -245,23 +275,51 @@
     return ov;
   }
   /** v21.238: compara lo contado con el sistema. Más → ajuste AJU «Conteo físico» (superadmin: directo; otros: solicitud). Menos → informe de diferencias. */
+  /** v21.238: unidades del sistema en un lote (suma todas sus entradas: el mismo lote puede estar dos veces con distinto vencimiento). */
+  const enLote = (d, lote) => { const l = Array.isArray(d.batches) && d.batches.length ? d.batches : [{ batch: d.batch || 'S/L', quantity: d.quantity }]; return l.filter(b => (b.batch || 'S/L') === (lote || 'S/L')).reduce((t, b) => t + num(b.quantity), 0); };
+  /** Lotes del producto, también los de 0 (para etiquetar lo que el sistema no tiene). */
+  const lotesTodos = (d) => { const l = Array.isArray(d.batches) && d.batches.length ? d.batches : [{ batch: d.batch || 'S/L', quantity: d.quantity, expirationDate: d.expirationDate || '' }]; const m = new Map(); l.forEach(b => { const k = b.batch || 'S/L'; const e = m.get(k) || { batch: k, quantity: 0, expirationDate: b.expirationDate || '' }; e.quantity += num(b.quantity); m.set(k, e); }); return [...m.values()]; };
+  const idConteo = () => 'conteo-etq-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+  /** v21.238: compara lo contado con el sistema. Más → ajuste AJU «Conteo físico» (superadmin: directo; otros: solicitud, una por lote). Menos → informe de diferencias.
+   *  Lo reservado por actas sigue en el estante: se suma a lo esperado. Si hay deuda, el stock queda igual a lo contado y la deuda se salda (ver ejecutarAjusteDirecto). */
   async function registrarConteo(sel) {
     const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), 'Insumos'), sel.insumoId)); if (!sn.exists()) throw new Error('El producto ya no existe.');
-    const d = sn.data(), lote = (lotesDe(d).find(b => (b.batch || 'S/L') === (sel.lote || 'S/L')) || { quantity: 0 }), sistema = num(lote.quantity), contado = Math.max(0, Math.floor(num(sel.total))), dif = contado - sistema;
-    const obs = `Conteo físico al etiquetar · lote ${sel.lote || 'S/L'} · sistema ${sistema}, contado ${contado}${num(sel.sueltas) ? ` (${num(sel.sueltas)} sueltas)` : ''}`;
-    const base = { tipo: 'conteo-etiquetado', insumoId: sel.insumoId, nombre: d.name, bodega: d.location || '', lote: sel.lote || 'S/L', sistema, contado, diferencia: dif, por: usuario(), en: new Date().toISOString() };
-    if (dif === 0) { await f.setDoc(f.doc(f.collection(db(), 'Contadores'), 'conteo-etq-' + Date.now()), base); return `Conteo cuadrado: ${contado} u.`; }
-    if (dif < 0) { await f.setDoc(f.doc(f.collection(db(), 'Contadores'), 'conteo-etq-' + Date.now()), { ...base, estado: 'FALTANTE' }); return `<b>Faltan ${-dif} u.</b> respecto del sistema (${sistema}): quedó en el informe de diferencias, el stock no se cambió.`; }
-    const rol = String(document.body && document.body.dataset.userRole || '').toLowerCase(), G = window.SAR_Gobernanza;
-    const codigo = G && G.codigo ? await G.codigo('AJU').catch(() => '') : '';
+    const d = sn.data(); if (d.status === 'CUARENTENA') throw new Error('El producto está en CUARENTENA: resuélvelo antes de contarlo.');
+    const lote = sel.lote || 'S/L', sistema = enLote(d, lote), nLotes = lotesTodos(d).filter(b => b.quantity > 0).length, res = num(d.reservado);
+    if (res > 0 && nLotes > 1) throw new Error(`Este producto tiene ${res} u. reservadas para actas por confirmar y varios lotes: no se puede saber en qué lote están. Confirma o elimina esas actas antes de contarlo.`);
+    const esperado = sistema + (res > 0 ? res : 0), contado = Math.max(0, Math.floor(num(sel.total))), dif = contado - esperado;
+    const obs = `Conteo físico al etiquetar · lote ${lote} · sistema ${sistema}${res ? ` + ${res} reservadas` : ''}, contado ${contado}${num(sel.sueltas) ? ` (${num(sel.sueltas)} sueltas)` : ''}${num(d.sobregiro) > 0 ? ` · deuda ${num(d.sobregiro)} u.` : ''}`;
+    const base = { tipo: 'conteo-etiquetado', insumoId: sel.insumoId, nombre: d.name, bodega: d.location || '', lote, sistema, reservado: res, contado, diferencia: dif, por: usuario(), en: new Date().toISOString() };
+    if (dif === 0) { await f.setDoc(f.doc(f.collection(db(), 'Contadores'), idConteo()), { ...base, estado: 'CUADRA' }); return `Conteo cuadrado: ${contado} u.`; }
+    if (dif < 0) { await f.setDoc(f.doc(f.collection(db(), 'Contadores'), idConteo()), { ...base, estado: 'FALTANTE' }); return `<b>Faltan ${-dif} u.</b> respecto del sistema (${esperado}): quedó en «Diferencias de conteo», el stock no se cambió.`; }
+    const rol = String(document.body && document.body.dataset.userRole || '').toLowerCase(), G = window.SAR_Gobernanza, just = `[Conteo físico (toma de inventario)] ${obs}`;
     if (rol === 'superadmin' && typeof window.ejecutarAjusteDirecto === 'function') {
-      const r = await window.ejecutarAjusteDirecto(sel.insumoId, num(d.quantity), d.name, dif, `[Conteo físico (toma de inventario)] ${obs}`, codigo || null, { motivo: 'Conteo físico (toma de inventario)', observacion: obs, lote: sel.lote || 'S/L', vence: sel.vence || '', cuadrar: true });
-      await f.setDoc(f.doc(f.collection(db(), 'Contadores'), 'conteo-etq-' + Date.now()), { ...base, estado: 'SUMADO', codigo: r.codigoAjuste });
-      return `<b>+${dif} u.</b> sumadas al stock con el ajuste <b>${esc(r.codigoAjuste)}</b>.`;
+      const codigo = G && G.codigo ? await G.codigo('AJU').catch(() => '') : '';
+      const r = await window.ejecutarAjusteDirecto(sel.insumoId, num(d.quantity), d.name, dif, just, codigo || null, { motivo: 'Conteo físico (toma de inventario)', observacion: obs, lote, vence: sel.vence || '', esperadoLote: sistema, saldarDeuda: true });
+      try { if (G && G.registrar) G.registrar({ nombre: d.name, lote, delta: dif, codigo: r.codigoAjuste, motivo: 'Conteo físico (toma de inventario)', nota: obs, origen: 'CONTEO_ETIQUETAS', antes: { cantidad: num(d.quantity) }, despues: { cantidad: num(d.quantity) + dif }, insumoId: sel.insumoId }).catch(() => {}); } catch (e) { /* sin gobernanza */ }
+      await f.setDoc(f.doc(f.collection(db(), 'Contadores'), idConteo()), { ...base, estado: 'SUMADO', codigo: r.codigoAjuste });
+      return `<b>+${dif} u.</b> sumadas al stock con el ajuste <b>${esc(r.codigoAjuste)}</b>.${num(d.sobregiro) > 0 ? ' La deuda del producto quedó saldada.' : ''}`;
     }
-    await f.setDoc(f.doc(f.collection(db(), 'Solicitudes_Ajuste')), { docId: sel.insumoId, insumoName: d.name, quantity: dif, justification: `[Conteo físico (toma de inventario)] ${obs}`, code: codigo || '', currentStock: num(d.quantity), projectedStock: num(d.quantity) + dif, motivo: 'Conteo físico (toma de inventario)', observacion: obs, status: 'pendiente', date: f.serverTimestamp(), requester: usuario(), lote: sel.lote || 'S/L' });
-    await f.setDoc(f.doc(f.collection(db(), 'Contadores'), 'conteo-etq-' + Date.now()), { ...base, estado: 'SOLICITADO', codigo });
+    /* una sola solicitud pendiente por producto y lote (un reintento no la duplica) */
+    const ps = await f.getDocs(f.query(f.collection(db(), 'Solicitudes_Ajuste'), f.where('insumoId', '==', sel.insumoId), f.limit(200))); let pend = null;
+    ps.forEach(x => { const y = x.data(); if (y.status === 'pendiente' && y.conteo && (y.lote || 'S/L') === lote) pend = y; });
+    if (pend) throw new Error(`Ya hay una solicitud de ajuste pendiente para este lote (${pend.code || ''}). Espera a que la aprueben o rechacen.`);
+    const sref = f.doc(f.collection(db(), 'Solicitudes_Ajuste'));
+    const codigo = G && G.codigo ? await G.codigo('AJU').catch(() => '') : '';
+    await f.setDoc(sref, { code: codigo || ('AJU-' + Date.now()), insumoId: sel.insumoId, insumoName: d.name, cantidad: dif, justificacion: just, previousStock: num(d.quantity), projectedStock: num(d.quantity) + dif, motivo: 'Conteo físico (toma de inventario)', observacion: obs, lote, vence: sel.vence || '', loteSistema: sistema, conteo: true, status: 'pendiente', date: f.serverTimestamp(), requester: usuario() });
+    await f.setDoc(f.doc(f.collection(db(), 'Contadores'), idConteo()), { ...base, estado: 'SOLICITADO', codigo });
     return `<b>+${dif} u.</b> quedaron como solicitud de ajuste${codigo ? ' <b>' + esc(codigo) + '</b>' : ''} (la aprueba el superadministrador).`;
+  }
+  /** v21.238: «Diferencias de conteo»: lo registrado al etiquetar stock existente (faltantes, sobrantes y solicitudes). */
+  async function diferencias() {
+    const ov = ventana('Diferencias de conteo', '<p class="si-v">Cargando…</p>', { encima: true }), b = ov.querySelector('.bu-b');
+    try {
+      const f = fs(), sn = await f.getDocs(f.query(f.collection(db(), 'Contadores'), f.where('tipo', '==', 'conteo-etiquetado'), f.limit(1000))), l = []; sn.forEach(x => l.push(x.data()));
+      l.sort((a, c) => String(c.en).localeCompare(String(a.en)));
+      const est = { FALTANTE: 'Faltan', SUMADO: 'Sumado al stock', SOLICITADO: 'Solicitud de ajuste', CUADRA: 'Cuadra' };
+      b.innerHTML = l.length ? `<p class="si-v">${l.filter(x => x.estado === 'FALTANTE').length} con faltante · ${l.filter(x => x.estado === 'SOLICITADO').length} solicitudes · ${l.filter(x => x.estado === 'SUMADO').length} sumados.</p><div class="fp-tw"><table class="si-tb"><thead><tr><th>Fecha</th><th>Producto</th><th>Lote</th><th>Sistema</th><th>Contado</th><th>Dif.</th><th>Estado</th><th>Por</th></tr></thead><tbody>${l.slice(0, 400).map(x => `<tr><td>${esc(fechaCL(String(x.en).slice(0, 10)))}</td><td>${esc(x.nombre)}<small class="si-v"> ${esc(x.bodega || '')}</small></td><td>${esc(x.lote)}</td><td>${num(x.sistema)}${num(x.reservado) ? ' + ' + num(x.reservado) + ' res.' : ''}</td><td>${num(x.contado)}</td><td class="${num(x.diferencia) < 0 ? 'si-poco' : ''}"><b>${num(x.diferencia) > 0 ? '+' : ''}${num(x.diferencia)}</b></td><td>${esc(est[x.estado] || x.estado || '')}${x.codigo ? ' · ' + esc(x.codigo) : ''}</td><td>${esc(x.por || '')}</td></tr>`).join('')}</tbody></table></div>` : '<p class="si-v">Aún no hay conteos registrados.</p>';
+    } catch (e) { b.innerHTML = '<p class="si-v">No pude leer los conteos.</p>'; }
+    return ov;
   }
   async function pintarReimprimir(el) {
     el.innerHTML = '<p class="si-v">Cargando bultos…</p>';
@@ -292,6 +350,8 @@
       <p class="bu-q"><b>${b.contenido}</b> u. en la caja <small>(${b.nivel === 'interior' ? 'caja interior' : b.porCaja + ' por caja'} · total del lote ${b.totalGrupo} u.)</small></p>
       <p class="si-v">${esc(b.bodega || '')}${b.proveedor ? ' · ' + esc(b.proveedor) : ''}${b.oc ? ' · OC ' + esc(b.oc) : ''}${b.rec ? ' · ' + esc(b.rec) : ''}</p></div>`;
   }
+  /** v21.238: tocar una caja interior (abrirla, vaciarla o pistolearla) significa que su caja grande está abierta. */
+  function abrirPadre(b) { if (!b || !b.padre) return; leer(b.padre).then(pa => { if (pa && pa.estado === 'CERRADA') guardar(pa, { estado: 'ABIERTA' }, 'ABIERTA', { porInterior: b.folio }).catch(() => {}); }).catch(() => {}); }
   async function escanear(modo) {
     const conteo = modo === 'conteo', leidos = [], vistos = new Set(), cubiertos = new Set(), abiertosPadre = new Set(), grandesCerradas = new Set();
     const ov = ventana(conteo ? 'Contar por bultos (pistolear)' : 'Escanear bulto', `
@@ -310,8 +370,10 @@
       res.innerHTML = fichaBulto(b) + `<div class="bu-queda"><b>Caja abierta: ¿cuántas unidades quedan?</b><div class="bu-man"><button type="button" class="si-pnav" data-d="-1">−</button><input id="bu-qq" type="number" min="0" max="${b.inicial || b.porCaja}" class="si-in si-cn" value="${b.contenido}" inputmode="numeric"><button type="button" class="si-pnav" data-d="1">+</button><button type="button" class="btn btn-primary" id="bu-qok">Listo</button><button type="button" class="btn btn-secondary" id="bu-vac">Está vacía</button></div></div>`;
       const qq = res.querySelector('#bu-qq'); qq.focus(); qq.select();
       res.querySelectorAll('[data-d]').forEach(x => x.onclick = () => { qq.value = Math.max(0, num(qq.value) + num(x.dataset.d)); });
-      const fin = async (n) => { const q = Math.max(0, Math.floor(n)); await guardar(b, q === 0 ? { contenido: 0, estado: 'VACIA' } : { contenido: q, estado: 'ABIERTA' }, q === 0 ? 'VACIA' : 'QUEDAN'); ok(q); };
-      res.querySelector('#bu-qok').onclick = () => fin(num(qq.value)); qq.onkeydown = (e) => { if (e.key === 'Enter') fin(num(qq.value)); };
+      const fin = async (n) => { const q = Math.max(0, Math.floor(n)); await guardar(b, q === 0 ? { contenido: 0, estado: 'VACIA' } : { contenido: q, estado: 'ABIERTA' }, q === 0 ? 'VACIA' : 'QUEDAN'); if (b.padre) abrirPadre(b); ok(q); };
+      /* v21.238: si la pistola escribió aquí un folio (o una cifra mayor que lo que cabe), no es la cantidad */
+      const valida = () => { const raw = String(qq.value || '').trim(), n = num(raw); if (raw.replace(/\D/g, '').length >= 7 || n > num(b.inicial || b.porCaja || b.contenido)) { qq.value = b.contenido; toast('Cantidad', folioDe(raw) ? 'Eso parece una etiqueta: primero indica cuánto queda en esta caja.' : `No puede quedar más de ${num(b.inicial || b.porCaja)} u.`, 'warning'); return false; } return true; };
+      res.querySelector('#bu-qok').onclick = () => { if (valida()) fin(num(qq.value)); }; qq.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); if (valida()) fin(num(qq.value)); } };
       res.querySelector('#bu-vac').onclick = () => fin(0);
     };
     const procesar = async (txt) => {
@@ -326,7 +388,7 @@
           res.querySelectorAll('[data-a]').forEach(x => x.onclick = async () => {
             const a = x.dataset.a;
             if (a === 'abrir' || a === 'queda') pedirQueda(b, () => { ultimo = ''; procesar(folio); });
-            else if (a === 'vacia') { await guardar(b, { contenido: 0, estado: 'VACIA' }, 'VACIA'); ultimo = ''; procesar(folio); }
+            else if (a === 'vacia') { await guardar(b, { contenido: 0, estado: 'VACIA' }, 'VACIA'); if (b.padre) abrirPadre(b); ultimo = ''; procesar(folio); }
             else if (a === 'cerrar') { await guardar(b, { contenido: b.inicial || b.porCaja, estado: 'CERRADA' }, 'CERRADA'); ultimo = ''; procesar(folio); }
             else if (a === 're') imprimir([b]).catch(e => toast('No se pudo', e.message, 'error'));
           });
@@ -339,13 +401,16 @@
         if (b.nivel === 'interior' && b.padre) {
           if (grandesCerradas.has(b.padre)) { res.innerHTML = `<p class="si-v">${esc(folio)} va dentro de ${esc(b.padre)}, que ya se contó cerrada: no se suma dos veces.</p>`; return; }
           abiertosPadre.add(b.padre);
-          leer(b.padre).then(pa => { if (pa && pa.estado === 'CERRADA') guardar(pa, { estado: 'ABIERTA' }, 'ABIERTA', { porInterior: folio }).catch(() => {}); }).catch(() => {});
+          abrirPadre(b);
         }
         const grande = Array.isArray(b.hijos) && b.hijos.length;
         if (grande && (b.estado === 'ABIERTA' || abiertosPadre.has(folio))) {
           res.innerHTML = fichaBulto(b) + `<div class="bu-queda"><b>Caja grande abierta: pistolea sus cajas interiores.</b> ¿Cuántas unidades <u>sueltas</u> (fuera de cajas interiores) hay dentro?<div class="bu-man"><input id="bu-sq" type="number" min="0" class="si-in si-cn" value="0" inputmode="numeric"><button type="button" class="btn btn-primary" id="bu-sok">Listo</button></div></div>`;
           const sq = res.querySelector('#bu-sq'); sq.focus(); sq.select();
-          const fin = () => { const q = Math.max(0, Math.floor(num(sq.value))); b.contado = q; vistos.add(folio); leidos.push(b); if (b.estado === 'CERRADA') guardar(b, { estado: 'ABIERTA' }, 'ABIERTA').catch(() => {}); res.innerHTML = `<p class="cfg-ok">✔ ${esc(folio)}: caja grande abierta · ${q} u. sueltas. Sigue con sus cajas interiores.</p>`; pintarSuma(); inp.focus(); };
+          const fin = () => { const raw = String(sq.value || '').trim(), q = Math.max(0, Math.floor(num(raw)));
+            /* si la pistola escribió aquí un folio (o una cifra imposible), no son sueltas: se toma como lectura */
+            if (q > num(b.inicial != null ? b.inicial : b.contenido) || raw.replace(/\D/g, '').length >= 7) { sq.value = '0'; if (folioDe(raw)) { fin(); setTimeout(() => procesar(raw), 0); } else toast('Sueltas', 'Esa cifra es mayor que lo que cabe en la caja: revísala.', 'warning'); return; }
+            b.contado = q; vistos.add(folio); leidos.push(b); if (b.estado === 'CERRADA') guardar(b, { estado: 'ABIERTA' }, 'ABIERTA').catch(() => {}); res.innerHTML = `<p class="cfg-ok">✔ ${esc(folio)}: caja grande abierta · ${q} u. sueltas. Sigue con sus cajas interiores.</p>`; pintarSuma(); inp.focus(); };
           res.querySelector('#bu-sok').onclick = fin; sq.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); fin(); } };
           return;
         }
@@ -426,10 +491,10 @@
     /* opc.en: se dibuja en una página (menú «Impresión de etiquetas») en vez de una ventana */
     const en = opc && opc.en;
     if (en) en.innerHTML = `<div class="si-wrap si-ancho"><div class="si-cab"><div><h2 class="si-t">Impresión de etiquetas</h2><p class="si-s">Las etiquetas de bulto de cada orden de compra: imprime las que quedaron pendientes al recibir, reimprime o corrige datos.</p></div></div>
-      <div class="etq-acc"><button type="button" class="bu-big" data-ex="conteo"><i class="ph-bold ph-list-checks"></i><b>Etiquetar stock existente</b><small>Lo que ya estaba en el sistema sin etiqueta: cuéntalo, compara y etiqueta</small></button><button type="button" class="bu-big" data-ex="nueva"><i class="ph-bold ph-tag"></i><b>Crear etiquetas</b><small>Para un producto y lote, con cajas interiores</small></button><button type="button" class="bu-big" data-ex="contar"><i class="ph-bold ph-barcode"></i><b>Contar por bultos</b><small>Pistolea: cajas cerradas suman solas</small></button></div>
+      <div class="etq-acc"><button type="button" class="bu-big" data-ex="conteo"><i class="ph-bold ph-list-checks"></i><b>Etiquetar stock existente</b><small>Lo que ya estaba en el sistema sin etiqueta: cuéntalo, compara y etiqueta</small></button><button type="button" class="bu-big" data-ex="nueva"><i class="ph-bold ph-tag"></i><b>Crear etiquetas</b><small>Para un producto y lote, con cajas interiores</small></button></div><p class="etq-dif"><button type="button" class="bu-lnk" data-ex="dif"><i class="ph-bold ph-scales"></i> Diferencias de conteo</button> · <button type="button" class="bu-lnk" data-ex="contar"><i class="ph-bold ph-barcode"></i> Contar por bultos (pistola)</button></p>
       <div class="bu-b etq-pag"><p class="si-v">Cargando órdenes y etiquetas…</p></div></div>`;
     if (en) en.querySelectorAll('[data-ex]').forEach(b => b.onclick = () => { const x = b.dataset.ex, re = (ov2) => { if (ov2) { const o = ov2._fin; ov2._fin = () => { if (o) o(); porOC({ en }); }; } };
-      if (x === 'contar') escanear('conteo').then(re); else etiquetar(x === 'conteo' ? { conteo: true } : {}).then(re); });
+      if (x === 'dif') diferencias(); else if (x === 'contar') escanear('conteo').then(re); else etiquetar(x === 'conteo' ? { conteo: true } : {}).then(re); });
     const ov = en || ventana('Etiquetas por orden de compra', '<p class="si-v">Cargando órdenes y etiquetas…</p>');
     const caja = ov.querySelector('.bu-b');
     let ocs = [], bultos = [];
@@ -615,6 +680,6 @@
   if (typeof module === 'undefined' && typeof window.addEventListener === 'function' && document.getElementById) { if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', contarAlIniciar); else contarAlIniciar(); }
   if (typeof module === 'undefined' && typeof window.addEventListener === 'function') { window.addEventListener('hashchange', revisarHash); if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', revisarHash); else revisarHash(); }
 
-  window.SAR_Bultos = { planCajas, registrarConteo, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
+  window.SAR_Bultos = { planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_Bultos;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null, addEventListener() {} });

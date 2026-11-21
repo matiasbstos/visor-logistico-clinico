@@ -894,13 +894,18 @@ document.addEventListener('DOMContentLoaded', () => {
                             throw new Error(`Operación denegada: El stock no puede ser menor a 0. Stock actual: ${stockReal}`);
                         }
 
-                        let currentBatches = dataActual.batches || [];
-                        if (currentBatches.length === 0 && dataActual.batch) {
+                        let currentBatches = (dataActual.batches || []).map(b => ({ ...b }));
+                        if (currentBatches.length === 0 && (dataActual.batch || stockReal > 0)) {   /* v21.238: sin lista de lotes, el stock existente queda como su lote (o S/L) antes de sumar */
                             currentBatches.push({
-                                batch: dataActual.batch,
+                                batch: dataActual.batch || 'S/L',
                                 quantity: stockReal,
                                 expirationDate: dataActual.expirationDate || ''
                             });
+                        }
+                        /* v21.238: conteo físico: el lote debe seguir como se contó (si cambió entre medio, se vuelve a contar) */
+                        if (opts && opts.lote && opts.esperadoLote != null) {
+                            const hay = currentBatches.filter(b => (b.batch || 'S/L') === opts.lote).reduce((t, b) => t + (Number(b.quantity) || 0), 0);
+                            if (hay !== Number(opts.esperadoLote)) throw new Error(`El lote ${opts.lote} cambió desde el conteo (tenía ${opts.esperadoLote}, ahora ${hay}). Vuelve a contarlo.`);
                         }
 
                         if (cantidadParsed < 0) {
@@ -937,11 +942,21 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         }
 
-                        /* v21.238: opts.cuadrar = si había deuda (sobregiro por actas sin stock), lo que se suma la salda primero (misma regla que un ingreso) */
-                        const cq = cantidadParsed > 0 && opts && opts.cuadrar && window.SAR_CuadreIngreso ? window.SAR_CuadreIngreso.aplicar(window.firebaseFirestore, db, transaction, { ref: insumoRef, antes: dataActual, quantity: stockReal + cantidadParsed, batches: currentBatches, documento: codigoAjuste, bodega: dataActual.location || '', nombre: insumoNombre, usuario: auth.currentUser.email }) : null;
-                        transaction.update(insumoRef, cq ? { quantity: cq.quantity, batches: cq.batches, sobregiro: cq.sobregiro, sobregiroDetalle: cq.sobregiroDetalle, lastUpdated: serverTimestamp() } : {
+                        /* v21.238: conteo físico con deuda (sobregiro): lo contado YA no incluye lo entregado sin stock, así que el stock queda igual
+                           a lo contado y la deuda se da por saldada (esas unidades existían sin ingresar: regla del usuario). Sin mover lotes ni cantidades. */
+                        let sd = null;
+                        if (cantidadParsed > 0 && opts && opts.saldarDeuda && Number(dataActual.sobregiro) > 0 && window.SAR_ActasEntrega && window.SAR_ActasEntrega.cuadrar) {
+                            const c = window.SAR_ActasEntrega.cuadrar({ ...dataActual, quantity: 1e9, batches: [{ batch: '_', quantity: 1e9, expirationDate: '' }] }, Number(dataActual.sobregiro));
+                            if (c && c.cuadrado > 0) {
+                                sd = c;
+                                (c.cubiertas || []).forEach(cu => transaction.set(doc(collection(db, 'Historial_Movimientos')), { insumoName: insumoNombre, item: insumoNombre, quantity: cu.qty, type: 'CUADRE_SOBREGIRO', delta: 0, user: auth.currentUser.email, date: serverTimestamp(), document: codigoAjuste, batch: opts.lote || '', origin: dataActual.location || '', idInsumoOrigen: docId, actaId: cu.acta, automatico: true,
+                                    observacion: `Deuda del acta ${cu.acta} (${cu.qty} u. entregadas sin stock en el sistema) saldada por el conteo físico ${codigoAjuste}: el estante ya no tenía esas unidades.` }));
+                            }
+                        }
+                        transaction.update(insumoRef, {
                             quantity: increment(cantidadParsed),
                             batches: currentBatches,
+                            ...(sd ? { sobregiro: sd.sobregiro, sobregiroDetalle: sd.sobregiroDetalle } : {}),
                             lastUpdated: serverTimestamp()
                         });
 
@@ -956,7 +971,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             origin: 'Ajuste Manual Crítico',
                             dest: 'N/A',
                             /* v21.233: código AJU y motivo visibles en el kárdex y el informe contable */
-                            codigoSeguimiento: codigoAjuste, delta: cantidadParsed,
+                            codigoSeguimiento: codigoAjuste, delta: cantidadParsed, ...(opts && opts.lote ? { batch: opts.lote } : {}),
                             ...(opts && opts.motivo ? { motivo: opts.motivo } : {}), ...(opts && opts.observacion ? { observacion: opts.observacion } : {})
                         });
 
@@ -1267,7 +1282,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             reqData.cantidad,
                             reqData.justificacion,
                             reqData.code,
-                            { solicitudId: docId, motivo: reqData.motivo || '', observacion: reqData.observacion || '', ...(reqData.lote ? { lote: reqData.lote, cuadrar: true } : {}) }   // v21.230: se marca aprobada en la misma transacción del ajuste
+                            { solicitudId: docId, motivo: reqData.motivo || '', observacion: reqData.observacion || '', ...(reqData.lote ? { lote: reqData.lote, vence: reqData.vence || '', saldarDeuda: !!reqData.conteo, ...(reqData.loteSistema != null ? { esperadoLote: reqData.loteSistema } : {}) } : {}) }   // v21.230: se marca aprobada en la misma transacción del ajuste
                         );
 
                         window.showToast("Solicitud Aprobada", `El ajuste ${reqData.code} fue ejecutado con éxito.`, "success");

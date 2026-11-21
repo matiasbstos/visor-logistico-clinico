@@ -1579,3 +1579,16 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
 - **Detalle de cada movimiento** (`saldos-contables.js` + `vida-producto.js`): en el libro contable cada línea se abre y muestra todo (tipo, fecha, producto, cantidad, efecto, lote, desde/hacia, código, responsable, motivo, observación, documentos y «todos los datos registrados»). En Disponible, tocar el nombre del insumo abre su libro contable.
 
 **4.291-b Revisión de Amy (v21.239).** Las tarjetas y los lotes de Ajustes se limpian en cada búsqueda y después de ajustar; si los lotes no suman el stock aparece «Sin lote específico» (el sistema elige por vencimiento, como antes), y un «lote nuevo» no puede repetir el nombre de uno existente. Aprobaciones y Mis solicitudes muestran el lote. El atajo «/» ya no se bloquea por los modales ocultos y gana sobre el del menú lateral; las clases del buscador pasan a `bs-` para no chocar con `buscador-global.js`. El detalle del movimiento usa `bloque` (un `<div>`) en `SAR_Progreso.confirmar`.
+
+## 4.292 Fotos desde el teléfono: producto + caja como estándar (v21.240)
+
+**Pedido.** «El estándar tiene que ser que aparezca la fotografía del producto y la de la caja», con un link que se guarda en la pantalla de inicio del teléfono para ir cargando fotos, y que lleguen como pendientes todos los productos con stock sin ninguna foto o con la del producto pero no la de la caja. Además, colores distintos para los accesos directos (Visor / Pedidos / Fotos).
+
+**Decisión.**
+- Página nueva `fotos.html` («Fotos SAR», naranja), con inicio de sesión del personal. Lista los pendientes (productos con stock sin `imagen` propia o sin `imagenCaja`, más los marcados con `fotoPedida`) con buscador y filtros; en cada uno se toma la foto del producto, de la caja u «otra» (máx. 3) con la cámara.
+- Las fotos se achican en el teléfono a 480 px JPEG y se guardan en `Catalogo_Productos` (merge; la regla ya permite a `isStaff()` crear/actualizar). Mismo id que usa Editar insumo (dígitos del ID Mercado Público o el nombre normalizado). Al tener producto y caja se borra `fotoPedida`.
+- En Editar insumo: botón «Pedir al teléfono» (marca `fotoPedida` y muestra el QR/link) y miniatura de la caja si existe. En Accesos, «Fotos desde el teléfono».
+- `SAR_Imagenes.fotos(nombre, código)` devuelve producto, caja, otras, nombre común y fabricante para las próximas pantallas (bandeja de solicitudes). Si dos fichas del catálogo apuntan al mismo producto, la que trae solo la caja completa a la que tiene foto en vez de taparla.
+- Íconos: Visor azul (sin cambio), Pedidos verde `#1F7A4D`, Fotos naranja `#C2410C`. En iPhone hay que quitar y volver a agregar el acceso directo para que tome el color nuevo.
+
+**Costo.** El catálogo se descarga entero para las fotos; cada foto de caja suma ~30–60 KB por producto. Si crece mucho, pasar las fotos a Storage.

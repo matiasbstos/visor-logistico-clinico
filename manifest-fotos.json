@@ -1,0 +1,15 @@
+{
+  "id": "fotos",
+  "name": "Fotos de productos · SAR",
+  "short_name": "Fotos SAR",
+  "description": "Cargar la foto del producto y de la caja desde el teléfono",
+  "start_url": "fotos.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#C2410C",
+  "icons": [
+    { "src": "assets/icon-fotos-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "assets/icon-fotos-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

@@ -6627,3 +6627,7 @@ body:not([data-user-role="solicitante"]) .menu-item[data-target="view-solicitud-
 .sar-conf__bl{text-align:left;max-height:60vh;overflow:auto}
 .aud-det-res{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:8px 0}.aud-det-res div{background:#f1f5f9;border-radius:8px;padding:6px 12px;display:flex;flex-direction:column;align-items:center}.aud-det-res b{font-size:1.1rem}.aud-det-res span{font-size:.72rem;color:#64748b}
 .aud-det-mas{text-align:left;margin-top:6px}.aud-det-mas summary{cursor:pointer;color:var(--sar-blue,#1A3668);font-weight:600;font-size:.85rem}
+
+/* v21.240: fotos desde el teléfono */
+.ft-link{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:10px}.ft-link input{width:100%;font-size:.8rem}
+.ft-cajamini{width:44px;height:44px;border:1px dashed #cbd5e1;border-radius:8px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;flex:none}.ft-cajamini img{width:100%;height:100%;object-fit:cover}

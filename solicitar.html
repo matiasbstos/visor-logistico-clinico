@@ -7,8 +7,8 @@
     <meta name="theme-color" content="#1A3668">
     <link rel="manifest" href="manifest-solicitar.json">
     <link rel="icon" href="assets/favicon-32.png">
-    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
-    <link rel="stylesheet" href="style.css?v=21.239">
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon-pedidos.png">
+    <link rel="stylesheet" href="style.css?v=21.240">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         body.sp { margin: 0; background: #f5f7fb; font-family: 'Outfit', system-ui, sans-serif; min-height: 100vh; }
@@ -78,14 +78,14 @@
             <li class="sp-paso"><b class="n">1</b><div class="tel"><div class="barra arr">sarinventario.web.app</div><div class="pag"></div><div class="ico" style="right:6px;top:8px">⋮</div></div><p>Abre el link en <b>Chrome</b> y toca los <b>tres puntos ⋮</b> de arriba a la derecha.</p></li>
             <li class="sp-paso"><b class="n">2</b><div class="tel"><div class="barra arr">sarinventario.web.app</div><div class="pag"></div><div class="menu"><div>Nueva pestaña</div><div>Historial</div><div class="si">Agregar a pantalla de inicio</div><div>Compartir…</div></div></div><p>Toca <b>«Agregar a pantalla de inicio»</b> (o «Instalar app»).</p></li>
             <li class="sp-paso"><b class="n">3</b><div class="tel"><div class="pag dlg" style="top:60px;bottom:60px;border-top:0;padding:8px;font-size:8px">¿Agregar a la pantalla principal?<br><br><b style="color:#1a3668">Pedir insumos</b></div><div class="ico" style="right:16px;bottom:66px">✓</div></div><p>Confirma con <b>«Agregar»</b> o <b>«Instalar»</b>.</p></li>
-            <li class="sp-paso"><b class="n">4</b><div class="tel"><div class="inicio"><span></span><span></span><span></span><span></span><img src="assets/icon-192.png" alt=""><span></span><small>Pedir insumos</small></div></div><p>Listo: queda el ícono <b>«Pedir insumos»</b> en tu inicio.</p></li>
+            <li class="sp-paso"><b class="n">4</b><div class="tel"><div class="inicio"><span></span><span></span><span></span><span></span><img src="assets/icon-pedidos-192.png" alt=""><span></span><small>Pedir insumos</small></div></div><p>Listo: queda el ícono <b>«Pedir insumos»</b> en tu inicio.</p></li>
         </ol></details>
         <details class="sp-acc" data-p="ios"><summary><span>Cómo instalar en <b>iPhone</b></span><i aria-hidden="true">▾</i></summary>
         <ol class="sp-pasos">
             <li class="sp-paso"><b class="n">1</b><div class="tel"><div class="pag" style="bottom:10px"></div><div class="ico" style="right:6px;top:8px">⋯</div></div><p>Si lo abriste desde WhatsApp, toca <b>⋯</b> y elige <b>«Abrir en Safari»</b>.</p></li>
             <li class="sp-paso"><b class="n">2</b><div class="tel"><div class="pag"></div><div class="barra aba">sarinventario.web.app</div><div class="ico" style="left:44px;bottom:30px">⇧</div></div><p>En Safari toca el botón <b>Compartir</b> (cuadrado con flecha hacia arriba).</p></li>
             <li class="sp-paso"><b class="n">3</b><div class="tel"><div class="pag"></div><div class="menu abajo"><div>Copiar</div><div>Agregar a favoritos</div><div class="si">Agregar a inicio ⊞</div><div>Imprimir</div></div></div><p>Desliza hacia abajo y toca <b>«Agregar a inicio»</b>.</p></li>
-            <li class="sp-paso"><b class="n">4</b><div class="tel"><div class="inicio"><span></span><span></span><span></span><span></span><img src="assets/icon-192.png" alt=""><span></span><small>Pedir insumos</small></div></div><p>Toca <b>«Agregar»</b> (arriba a la derecha). Queda el ícono en tu inicio.</p></li>
+            <li class="sp-paso"><b class="n">4</b><div class="tel"><div class="inicio"><span></span><span></span><span></span><span></span><img src="assets/icon-pedidos-192.png" alt=""><span></span><small>Pedir insumos</small></div></div><p>Toca <b>«Agregar»</b> (arriba a la derecha). Queda el ícono en tu inicio.</p></li>
         </ol></details>
     </div></section>
 
@@ -97,12 +97,12 @@
             bi.addEventListener('click', async () => { if (!evt) return; evt.prompt(); await evt.userChoice.catch(() => {}); evt = null; bi.hidden = true; });
         })();
     </script>
-    <script src="progreso.js?v=21.239"></script>
-    <script src="imagenes-producto.js?v=21.239"></script>
-    <script src="solicitudes-insumos.js?v=21.239"></script>
-    <script src="correlativos.js?v=21.239"></script>
-    <script src="bodega-transitoria.js?v=21.239"></script>
-    <script src="inventario-movil.js?v=21.239"></script>
+    <script src="progreso.js?v=21.240"></script>
+    <script src="imagenes-producto.js?v=21.240"></script>
+    <script src="solicitudes-insumos.js?v=21.240"></script>
+    <script src="correlativos.js?v=21.240"></script>
+    <script src="bodega-transitoria.js?v=21.240"></script>
+    <script src="inventario-movil.js?v=21.240"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";

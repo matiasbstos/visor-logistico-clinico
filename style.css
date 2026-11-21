@@ -6631,3 +6631,37 @@ body:not([data-user-role="solicitante"]) .menu-item[data-target="view-solicitud-
 /* v21.240: fotos desde el teléfono */
 .ft-link{display:flex;flex-direction:column;align-items:center;gap:10px;margin-top:10px}.ft-link input{width:100%;font-size:.8rem}
 .ft-cajamini{width:44px;height:44px;border:1px dashed #cbd5e1;border-radius:8px;overflow:hidden;display:inline-flex;align-items:center;justify-content:center;flex:none}.ft-cajamini img{width:100%;height:100%;object-fit:cover}
+/* v21.241: fotos de productos (solo superadministrador) */
+body:not([data-user-role="superadmin"]) .solo-superadmin{display:none !important}
+.ft-modo{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;background:#eef2f9;border-radius:var(--shape-card,8px 8px 8px 0);margin-bottom:10px}
+.ft-modo button{border:0;background:none;padding:10px;border-radius:6px;font:inherit;font-weight:600;font-size:.9rem;color:#1A3668;min-height:44px;cursor:pointer}
+.ft-modo button.on{background:#fff;box-shadow:0 1px 3px rgba(15,23,42,.12)}
+.ft-ult{display:flex;align-items:center;gap:4px;color:#64748b;font-size:.75rem;margin-top:2px}
+.ft-mas-btn,.fv-mas{display:block;width:100%;margin-top:12px;min-height:44px}
+.fv-cab h2{margin:0 0 4px;color:var(--sar-blue,#1A3668)}
+.fv-h{margin:18px 0 8px;font-size:.8rem;letter-spacing:.04em;text-transform:uppercase;color:#64748b}
+.fv-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:12px}
+.fv-link{display:flex;gap:12px;align-items:flex-start;background:#fff;border:1px solid #e2e8f0;border-radius:var(--shape-card,8px 8px 8px 0);padding:12px}
+.fv-link img{border-radius:10px;flex:none}
+.fv-link-t{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}.fv-link-t b{color:#0f172a}.fv-link-t small{color:#64748b;font-size:.78rem}.fv-link-t input{font-size:.75rem;min-height:32px;padding:4px 8px}
+.fv-link-b{display:flex;flex-direction:column;gap:6px}
+.fv-tabs{display:flex;gap:4px;align-items:center;border-bottom:1px solid #e2e8f0;margin:22px 0 12px}
+.fv-tabs [role=tab]{border:0;background:none;padding:10px 14px;font:inherit;font-weight:600;font-size:.9rem;color:#64748b;border-bottom:2px solid transparent;margin-bottom:-1px;cursor:pointer}
+.fv-tabs [role=tab].on{color:var(--sar-blue,#1A3668);border-bottom-color:var(--sar-blue,#1A3668)}
+.fv-rec{margin-left:auto}
+.fv-barra input{max-width:480px}
+.fv-chips{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}
+.fv-chips .ft-chip{border:1px solid #cbd5e1;background:#fff;border-radius:999px;padding:6px 12px;font-size:.82rem;cursor:pointer}
+.fv-chips .ft-chip.on{background:var(--sar-blue,#1A3668);border-color:var(--sar-blue,#1A3668);color:#fff}
+.fv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:10px}
+.fv-p{display:grid;grid-template-columns:auto 1fr;gap:8px 12px;background:#fff;border:1px solid #e2e8f0;border-radius:var(--shape-card,8px 8px 8px 0);padding:10px}
+.fv-p > .btn{grid-column:1 / -1;justify-self:start}
+.fv-fotos{display:flex;gap:6px}
+.fv-f{width:72px;display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;font-size:.68rem;color:#64748b}
+.fv-f img,.fv-sin{width:72px;height:72px;border-radius:8px;object-fit:contain;background:#f8fafc;border:1px solid #e2e8f0}
+.fv-sin{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-style:dashed;color:#94a3b8;font-size:.7rem}.fv-sin i{font-size:20px}
+.fv-f:hover img{outline:2px solid #cbd5e1}.fv-f:focus-visible{outline:none}.fv-f:focus-visible img,.fv-f:focus-visible .fv-sin{outline:3px solid var(--sar-green,#8CC63F);box-shadow:0 0 0 3px rgba(140,198,63,.35)}
+.fv-txt{display:flex;flex-direction:column;gap:3px;min-width:0}.fv-txt b{font-size:.88rem;color:#0f172a;line-height:1.25}.fv-txt small{color:#64748b;font-size:.75rem}
+.fv-est{display:inline-flex;align-items:center;gap:4px;font-size:.75rem;font-weight:600;width:max-content;padding:2px 8px;border-radius:999px}
+.fv-ok{background:#f7fbef;color:#4D7C0F}.fv-no{background:#fef2f2;color:#b91c1c}.fv-med{background:#fff7ed;color:#C2410C}
+.fv-tabla td,.fv-tabla th{font-size:.82rem}

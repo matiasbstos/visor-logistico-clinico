@@ -2125,6 +2125,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'view-sustituciones': 'Cuadre de sustituciones',
             'view-solicitud-insumos': 'Solicitud de insumos',
             'view-bultos': 'Bultos y etiquetas',
+            'view-fotos': 'Fotos de productos',
             'view-etiquetas': 'Impresión de etiquetas',
             'view-salud-inventario': 'Repetidos y salud del inventario',
             'view-solicitudes-insumos': 'Solicitudes recibidas',
@@ -2186,7 +2187,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (window.location.hash !== '#view-transitoria') window.location.hash = 'view-transitoria';
                 targetItem = document.querySelector('.sidebar .menu-item[data-target="view-transitoria"]');
             }
-            if ((VISTAS_BLOQUEADAS[rolActual] || []).includes(hash)) {
+            if ((VISTAS_BLOQUEADAS[rolActual] || []).includes(hash) || (hash === 'view-fotos' && rolActual !== 'superadmin')) {   /* v21.241: fotos solo superadministrador */
                 console.warn(`[Router] Vista ${hash} no permitida para el rol ${rolActual}.`);
                 showToast('Acceso restringido', 'Su rol no tiene acceso a esa sección.', 'warning');
                 hash = 'view-panel';
@@ -2245,6 +2246,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (window.SAR_Duplicados) window.SAR_Duplicados.abrir();
                 } else if (hash === 'view-bitacora-oc') {
                     if (window.SAR_Bitacora) window.SAR_Bitacora.abrir();
+                } else if (hash === 'view-fotos') {
+                    if (window.SAR_FotosTel && window.SAR_FotosTel.abrirVista) window.SAR_FotosTel.abrirVista(document.getElementById('fv-root'));
                 } else if (hash === 'view-bultos') {
                     if (window.SAR_Bultos) window.SAR_Bultos.abrir();
                 } else if (hash === 'view-salud-inventario') {

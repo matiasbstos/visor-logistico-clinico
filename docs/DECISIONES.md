@@ -1594,3 +1594,16 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
 **Costo.** El catálogo se descarga entero para las fotos; cada foto de caja suma ~30–60 KB por producto. Si crece mucho, pasar las fotos a Storage.
 
 **4.292-b Revisión de Amy (v21.240).** La caja, las otras fotos, el nombre común y el fabricante van en mapas aparte dentro de `SAR_Imagenes` (solo los lee `fotos()`): la búsqueda de la foto del producto queda igual que antes y ninguna ficha con solo caja tapa a otra con foto ni cuenta como «con foto». La lista del teléfono mira todas las fichas del mismo código o nombre (la foto de Mercado Público confirmada cuenta como foto del producto), guarda en la ficha que ya tiene fotos y no repite productos. Caja y otras fotos se achican a 360 px (producto 480 px), JPEG 0,72. Manifiestos con `purpose: any` (Android no recorta el símbolo). El buscador del teléfono ya no se vuelve a dibujar al escribir. «Pedir al teléfono» oculto para enfermería. Si el catálogo crece mucho con fotos, el paso siguiente es guardarlas fuera de la ficha (Storage o colección propia con su regla).
+
+## 4.293 Sección «Fotos de productos» solo para el superadministrador, y corrección del modelo de fotos (v21.241)
+
+**Pedido.** Ver en un solo lugar los enlaces del Visor, de Pedir insumos y de Fotos; una sección del menú lateral que cargue todo el catálogo priorizando lo que no tiene foto; poder cambiar cualquier foto desde el teléfono con seguimiento; y que esto lo haga solo el superadministrador.
+
+**Decisión.**
+- Menú lateral → «Fotos de productos» (`view-fotos`, clase `solo-superadmin`; el router la bloquea para cualquier otro rol). Tiene: los tres accesos directos con QR y copiar; el catálogo completo ordenado (sin ninguna foto → le falta una → completos) con filtros, búsqueda, «Pedir al teléfono / Quitar pedido» y cambiar la foto desde el computador; y «Seguimiento de cambios» (quién subió o cambió qué foto, cuándo y desde dónde).
+- `fotos.html` entra solo con superadministrador y tiene «Pendientes» y «Todo el catálogo» (para cambiar cualquier foto).
+- Seguimiento en la misma ficha: `fotosHist` (últimos 30: tipo, nueva/cambio, quién, cuándo, teléfono/computador), sin guardar la foto anterior para no pesar. Sin colección nueva.
+- «Pedir al teléfono» en Editar insumo y en Accesos: solo superadministrador.
+- Las reglas de Firestore no se cambian: `fotosExtra` e `imagen` también los escriben la ficha del producto y la búsqueda automática (personal), así que la restricción es de pantalla. Si se quiere que la base lo impida, hay que separar esos flujos primero.
+
+**Corrección del modelo.** La v21.203 ya definía `imagen` = caja / envase (la foto que se ve en todo el sitio, o la automática en `imagenMP` / `imagenWeb`) y `fotosExtra` = [{tipo:'producto'|…, img, por, en}] = cómo es el producto. La v21.240 lo guardó al revés (`imagen` = producto, `imagenCaja` = caja, `fotosExtra` como textos). Desde v21.241 se usa el modelo de la casa: las fichas escritas por v21.240 (`fotosPor` sin `fotosV: 2`) se leen bien y se corrigen solas al guardar la siguiente foto. La foto automática de Convenio Marco o internet (no descartada) cuenta como caja; `fotoProdDescartada` cuenta como «producto resuelto», igual que en el catálogo.

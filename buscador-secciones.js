@@ -23,6 +23,7 @@
         'view-solicitud-insumos': 'pedir solicitar pedido nuevo',
         'view-etiquetas': 'etiqueta imprimir zebra bulto reimprimir codigo barras',
         'view-bultos': 'bulto caja pistola escanear contar cajas',
+        'view-fotos': 'fotos fotografia imagen camara caja catalogo enlaces links accesos directos telefono qr',
         'view-historial': 'historial movimientos kardex',
         'view-informes': 'informe contable disponible reporte excel kardex saldos',
         'view-bodegas': 'bodega ubicacion estante cerrar bodega',

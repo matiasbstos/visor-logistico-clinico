@@ -753,6 +753,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.cargarInsumosParaAjuste = async function () {
                     if (selectInsumo) {
                         selectInsumo.innerHTML = '<option value="" disabled selected>Escriba en el buscador para cargar insumos...</option>';
+                        if (window.SAR_AjusteUI) { window.SAR_AjusteUI.lista(selectInsumo); window.SAR_AjusteUI.limpiar(); }   /* v21.239: sin tarjetas ni lotes viejos */
                     }
                     if (document.getElementById('lbl-insumo-seleccionado-nombre')) {
                         document.getElementById('lbl-insumo-seleccionado-nombre').textContent = "Ningún insumo seleccionado";
@@ -775,11 +776,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         const term = e.target.value.trim().toLowerCase();
                         if (term.length < 2) {
                             selectInsumo.innerHTML = '<option value="" disabled selected>Escriba al menos 2 letras...</option>';
-                            return;
+                            if (window.SAR_AjusteUI) window.SAR_AjusteUI.lista(selectInsumo); return;
                         }
 
                         clearTimeout(debounceAjusteTimeout);
                         selectInsumo.innerHTML = '<option value="" disabled selected>Buscando...</option>';
+                        if (window.SAR_AjusteUI) window.SAR_AjusteUI.lista(selectInsumo); window.SAR_AjusteUI && window.SAR_AjusteUI.limpiar(); 
 
                         debounceAjusteTimeout = setTimeout(async () => {
                             try {
@@ -804,7 +806,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                                 if (matches.length === 0) {
                                     selectInsumo.innerHTML = '<option disabled>No se encontraron insumos</option>';
-                                    return;
+                                    if (window.SAR_AjusteUI) window.SAR_AjusteUI.lista(selectInsumo); return;
                                 }
 
                                 selectInsumo.innerHTML = '<option value="" disabled selected>Seleccione un insumo...</option>';
@@ -825,6 +827,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             } catch (error) {
                                 console.error("Error buscando insumos para ajuste:", error);
                                 selectInsumo.innerHTML = '<option disabled>Error en búsqueda</option>';
+                                if (window.SAR_AjusteUI) window.SAR_AjusteUI.lista(selectInsumo); 
                             }
                         }, 400);
                     });
@@ -1032,10 +1035,10 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                         /* v21.239: el ajuste va a un lote específico (se ve en pantalla cuál) */
                         const loteAj = window.SAR_AjusteUI ? window.SAR_AjusteUI.elegido() : null;
-                        if (window.SAR_AjusteUI && !loteAj) return window.showAlertCenter("Notificación", 'Elige el lote al que va el ajuste.');
-                        if (loteAj && cantidadParsed < 0 && -cantidadParsed > loteAj.q) return window.showAlertCenter("Notificación", `El lote ${loteAj.lote} tiene ${loteAj.q} u.: no se pueden restar ${-cantidadParsed}.`);
+                        if (window.SAR_AjusteUI && !loteAj) return window.showAlertCenter("Notificación", 'Elige el lote al que va el ajuste. Si escribiste un lote nuevo, no puede repetir el nombre de uno que ya existe.');
+                        if (loteAj && !loteAj.fefo && cantidadParsed < 0 && -cantidadParsed > loteAj.q) return window.showAlertCenter("Notificación", `El lote ${loteAj.lote} tiene ${loteAj.q} u.: no se pueden restar ${-cantidadParsed}.`);
                         if (loteAj && loteAj.nuevo && cantidadParsed < 0) return window.showAlertCenter("Notificación", 'A un lote nuevo solo se le puede sumar.');
-                        const optLote = loteAj ? { lote: loteAj.lote, vence: loteAj.vence || '' } : {};
+                        const optLote = loteAj && !loteAj.fefo ? { lote: loteAj.lote, vence: loteAj.vence || '' } : {};
 
                         const isSuperAdmin = userRole === 'superadmin';
 
@@ -1043,7 +1046,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         /* v21.233: una sola confirmación, con la ventana del sitio: resumen + código AJU que se asignará */
                         {
                             const P = window.SAR_Progreso, e = window.escapeHTML;
-                            const ok = P && P.confirmar ? await P.confirmar({ titulo: '¿Confirmar el ajuste?', texto: `<b>${e(insumoNombre)}</b>: ${stockActual} → <b>${nuevoStock}</b> (${cantidadParsed > 0 ? '+' : ''}${cantidadParsed}).`, lineas: [...(loteAj ? [`Lote: <b>${e(loteAj.lote)}</b>${loteAj.nuevo ? ' (nuevo)' : ` · ${loteAj.q} → ${loteAj.q + cantidadParsed}`}${loteAj.vence ? ' · vence ' + e(loteAj.vence) : ''}`] : []), `Motivo: <b>${e(motivoSel)}</b>`, `Observación: ${e(justificacion)}`, isSuperAdmin ? 'Se aplica ahora y recibe un código <b>AJU</b>.' : 'Queda como solicitud con código <b>AJU</b> para que la apruebe el superadministrador.'], si: isSuperAdmin ? 'Confirmar ajuste' : 'Enviar solicitud', no: 'Revisar' }) : true;
+                            const ok = P && P.confirmar ? await P.confirmar({ titulo: '¿Confirmar el ajuste?', texto: `<b>${e(insumoNombre)}</b>: ${stockActual} → <b>${nuevoStock}</b> (${cantidadParsed > 0 ? '+' : ''}${cantidadParsed}).`, lineas: [...(loteAj && loteAj.fefo ? ['Lote: <b>el sistema elige</b> (primero el que vence antes)'] : []), ...(loteAj && !loteAj.fefo ? [`Lote: <b>${e(loteAj.lote)}</b>${loteAj.nuevo ? ' (nuevo)' : ` · ${loteAj.q} → ${loteAj.q + cantidadParsed}`}${loteAj.vence ? ' · vence ' + e(loteAj.vence) : ''}`] : []), `Motivo: <b>${e(motivoSel)}</b>`, `Observación: ${e(justificacion)}`, isSuperAdmin ? 'Se aplica ahora y recibe un código <b>AJU</b>.' : 'Queda como solicitud con código <b>AJU</b> para que la apruebe el superadministrador.'], si: isSuperAdmin ? 'Confirmar ajuste' : 'Enviar solicitud', no: 'Revisar' }) : true;
                             if (!ok) return;
                         }
                         if (window.SAR_Gobernanza) {
@@ -1191,6 +1194,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const variation = `<span style="font-weight:700; color:${data.cantidad > 0 ? 'var(--success)' : 'var(--danger)'}">${data.cantidad > 0 ? '+' : ''}${data.cantidad}</span>`;
 
                         let detalles = `Prev: ${data.previousStock} -> Proy: ${data.projectedStock}`;
+                        if (data.lote) detalles += ` | Lote: <strong>${window.escapeHTML(data.lote)}</strong>${data.vence ? ' (vence ' + window.escapeHTML(data.vence) + ')' : ''}`;   /* v21.239 */
                         if (data.status === 'rechazado' && data.rejectionReason) {
                             detalles += ` | Motivo Rechazo: <strong>${window.escapeHTML(data.rejectionReason)}</strong>`;
                         }
@@ -1259,7 +1263,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 <td>${window.escapeHTML(data.requester || 'Desconocido')}</td>
                                 <td>${window.escapeHTML(data.insumoName || 'Desconocido')}</td>
                                 <td>${dateStr}</td>
-                                <td>${variation}</td>
+                                <td>${variation}${data.lote ? `<br><small>Lote <b>${window.escapeHTML(data.lote)}</b>${data.vence ? ' · vence ' + window.escapeHTML(data.vence) : ''}</small>` : ''}</td>
                                 <td style="max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${window.escapeHTML(data.justificacion || '')}">${window.escapeHTML(data.justificacion || '')}</td>
                                 <td>${actions}</td>
                             `;

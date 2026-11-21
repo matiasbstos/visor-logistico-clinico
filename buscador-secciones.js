@@ -35,7 +35,7 @@
         'view-errores': 'directorio nomenclaturas codigos errores contactos',
         'view-donde-esta': 'donde esta ubicar encontrar estante'
     };
-    const visible = (el) => { if (!el) return false; const cs = window.getComputedStyle(el); if (cs.display === 'none' || cs.visibility === 'hidden') return false; let p = el.parentElement; while (p && p !== document.body) { if (window.getComputedStyle(p).display === 'none') return false; p = p.parentElement; } return true; };
+    const visible = (el) => { if (!el) return false; const cs = window.getComputedStyle(el); if (cs.display === 'none') return false;   /* solo display: el menú lateral pliega grupos con visibility */ let p = el.parentElement; while (p && p !== document.body) { if (window.getComputedStyle(p).display === 'none') return false; p = p.parentElement; } return true; };
     function secciones() {
         const vistos = new Set(), out = [];
         document.querySelectorAll('#app-sidebar .menu-item').forEach(a => {
@@ -56,19 +56,19 @@
     function abrir() {
         if (ov) { ov.querySelector('input').focus(); return; }
         const lista = secciones();
-        ov = document.createElement('div'); ov.className = 'bg-ov'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', 'Buscar en el Visor');
-        ov.innerHTML = `<div class="bg-c"><div class="bg-in"><i class="ph-bold ph-magnifying-glass" aria-hidden="true"></i><input type="search" placeholder="¿Qué buscas? Ej: ajustes, actas, etiquetas, un producto…" aria-label="Buscar en el Visor" autocomplete="off"><kbd>Esc</kbd></div><div class="bg-res" role="listbox"></div><p class="bg-pie">Enter abre el primero · ↑ ↓ para moverte · Ctrl+K para volver a abrir</p></div>`;
+        ov = document.createElement('div'); ov.className = 'bs-ov'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', 'Buscar en el Visor');
+        ov.innerHTML = `<div class="bs-c"><div class="bs-in"><i class="ph-bold ph-magnifying-glass" aria-hidden="true"></i><input type="search" placeholder="¿Qué buscas? Ej: ajustes, actas, etiquetas, un producto…" aria-label="Buscar en el Visor" autocomplete="off"><kbd>Esc</kbd></div><div class="bs-res" role="listbox"></div><p class="bs-pie">Enter abre el primero · ↑ ↓ para moverte · Ctrl+K para volver a abrir</p></div>`;
         document.body.appendChild(ov);
-        const inp = ov.querySelector('input'), res = ov.querySelector('.bg-res'); let sel = 0, items = [];
+        const inp = ov.querySelector('input'), res = ov.querySelector('.bs-res'); let sel = 0, items = [];
         const pintar = () => {
             const q = norm(inp.value);
             const secs = q ? lista.map(s => ({ s, p: puntaje(s, q) })).filter(x => x.p).sort((a, b) => b.p - a.p).map(x => x.s).slice(0, 8) : lista.slice(0, 8);
             items = secs.map(s => ({ tipo: 'sec', s }));
-            if (q.length >= 2) items.push({ tipo: 'prod', q: inp.value.trim() });
+            if (q.length >= 2 && visible(document.querySelector('#app-sidebar .menu-item[data-target="view-inventario"]'))) items.push({ tipo: 'prod', q: inp.value.trim() });
             if (sel >= items.length) sel = 0;
             res.innerHTML = items.map((x, i) => x.tipo === 'sec'
-                ? `<button type="button" class="bg-it${i === sel ? ' on' : ''}" data-i="${i}" role="option"><i class="${esc(x.s.ico)}" aria-hidden="true"></i><span>${esc(x.s.t)}</span><small>Sección</small></button>`
-                : `<button type="button" class="bg-it${i === sel ? ' on' : ''}" data-i="${i}" role="option"><i class="ph-bold ph-pill" aria-hidden="true"></i><span>Buscar «${esc(x.q)}» en Existencias</span><small>Producto</small></button>`).join('') || '<p class="bg-nada">Sin resultados.</p>';
+                ? `<button type="button" class="bs-it${i === sel ? ' on' : ''}" data-i="${i}" role="option"><i class="${esc(x.s.ico)}" aria-hidden="true"></i><span>${esc(x.s.t)}</span><small>Sección</small></button>`
+                : `<button type="button" class="bs-it${i === sel ? ' on' : ''}" data-i="${i}" role="option"><i class="ph-bold ph-pill" aria-hidden="true"></i><span>Buscar «${esc(x.q)}» en Existencias</span><small>Producto</small></button>`).join('') || '<p class="bs-nada">Sin resultados.</p>';
         };
         const ir = (i) => {
             const x = items[i]; if (!x) return; cerrar();
@@ -90,15 +90,17 @@
     function iniciar() {
         const qa = document.getElementById('quick-access');
         if (qa && !document.getElementById('btn-buscar-global')) {
-            const b = document.createElement('button'); b.type = 'button'; b.id = 'btn-buscar-global'; b.className = 'erp-btn erp-btn--outline bg-btn'; b.title = 'Buscar en el Visor (Ctrl+K)';
+            const b = document.createElement('button'); b.type = 'button'; b.id = 'btn-buscar-global'; b.className = 'erp-btn erp-btn--outline bs-btn'; b.title = 'Buscar en el Visor (Ctrl+K)';
             b.innerHTML = '<i class="ph-bold ph-magnifying-glass" aria-hidden="true"></i><span>Buscar</span><kbd>Ctrl K</kbd>';
             b.addEventListener('click', abrir); qa.parentNode.insertBefore(b, qa);
         }
-        document.addEventListener('keydown', (e) => {
+        /* fase de captura en window: gana sobre el atajo de menu-lateral.js (?activar=menu), así no se disparan los dos */
+        window.addEventListener('keydown', (e) => {
             const enCampo = /^(input|textarea|select)$/i.test((e.target && e.target.tagName) || '') || (e.target && e.target.isContentEditable);
-            if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); abrir(); }
-            else if (e.key === '/' && !enCampo && !document.querySelector('.sar-conf, .bu-ov, .modal-overlay')) { e.preventDefault(); abrir(); }
-        });
+            const hayVentana = [...document.querySelectorAll('.sar-conf, .bu-ov, .modal-overlay, .bs-ov')].some(m => { const cs = getComputedStyle(m); return cs.display !== 'none' && cs.visibility !== 'hidden' && Number(cs.opacity) > 0.05; })   /* los .modal-overlay ocultos siguen en la página con opacidad 0 */;
+            if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) { e.preventDefault(); e.stopPropagation(); if (!document.querySelector('.bs-ov')) abrir(); }
+            else if (e.key === '/' && !enCampo && !hayVentana) { e.preventDefault(); e.stopPropagation(); abrir(); }
+        }, true);
     }
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
     window.SAR_Buscador = { abrir, secciones };

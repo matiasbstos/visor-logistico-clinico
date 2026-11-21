@@ -6590,3 +6590,8 @@ body:not([data-user-role="solicitante"]) .menu-item[data-target="view-solicitud-
 /* v21.237: respaldo semanal en Excel */
 .bks-form{display:grid;grid-template-columns:1fr 2fr 1fr;gap:10px 14px;align-items:end;margin:10px 0}.bks-form label{display:flex;flex-direction:column;gap:4px;font-size:.85rem;font-weight:600;color:#334155}.bks-form label small{font-weight:400;color:#64748b}.bks-form .bks-chk{flex-direction:row;align-items:center;gap:8px;grid-column:1/-1}
 @media (max-width:640px){.bks-form{grid-template-columns:1fr}}
+
+/* v21.238: etiquetas por niveles y etiquetar stock existente */
+.etq-acc{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:0 0 14px}@media(max-width:760px){.etq-acc{grid-template-columns:1fr}}
+.bu-chk{display:flex;align-items:center;gap:8px;margin:10px 0;font-size:.88rem;color:#1e293b}.bu-chk input{width:18px;height:18px}
+.bu-cifra{font-size:1.35rem;font-weight:800;color:#0f172a;line-height:1.6}.bu-cifra.bu-mas{color:#15803d}.bu-cifra.bu-menos{color:#b91c1c}

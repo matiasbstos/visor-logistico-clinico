@@ -922,9 +922,12 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                             currentBatches = currentBatches.filter(b => b.quantity > 0);
                         } else {
-                            // SUMA
-                            if (currentBatches.length > 0) {
-                                currentBatches[0].quantity += cantidadParsed;
+                            // SUMA (v21.238: opts.lote = al lote contado; si no existe, se crea)
+                            const iLote = opts && opts.lote ? currentBatches.findIndex(b => (b.batch || 'S/L') === opts.lote) : -1;
+                            if (opts && opts.lote && iLote < 0) {
+                                currentBatches.push({ batch: opts.lote, quantity: cantidadParsed, expirationDate: opts.vence || '' });
+                            } else if (currentBatches.length > 0) {
+                                currentBatches[iLote >= 0 ? iLote : 0].quantity += cantidadParsed;
                             } else {
                                 currentBatches.push({
                                     batch: "AJUSTE",
@@ -934,7 +937,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         }
 
-                        transaction.update(insumoRef, {
+                        /* v21.238: opts.cuadrar = si había deuda (sobregiro por actas sin stock), lo que se suma la salda primero (misma regla que un ingreso) */
+                        const cq = cantidadParsed > 0 && opts && opts.cuadrar && window.SAR_CuadreIngreso ? window.SAR_CuadreIngreso.aplicar(window.firebaseFirestore, db, transaction, { ref: insumoRef, antes: dataActual, quantity: stockReal + cantidadParsed, batches: currentBatches, documento: codigoAjuste, bodega: dataActual.location || '', nombre: insumoNombre, usuario: auth.currentUser.email }) : null;
+                        transaction.update(insumoRef, cq ? { quantity: cq.quantity, batches: cq.batches, sobregiro: cq.sobregiro, sobregiroDetalle: cq.sobregiroDetalle, lastUpdated: serverTimestamp() } : {
                             quantity: increment(cantidadParsed),
                             batches: currentBatches,
                             lastUpdated: serverTimestamp()
@@ -1262,7 +1267,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             reqData.cantidad,
                             reqData.justificacion,
                             reqData.code,
-                            { solicitudId: docId, motivo: reqData.motivo || '', observacion: reqData.observacion || '' }   // v21.230: se marca aprobada en la misma transacción del ajuste
+                            { solicitudId: docId, motivo: reqData.motivo || '', observacion: reqData.observacion || '', ...(reqData.lote ? { lote: reqData.lote, cuadrar: true } : {}) }   // v21.230: se marca aprobada en la misma transacción del ajuste
                         );
 
                         window.showToast("Solicitud Aprobada", `El ajuste ${reqData.code} fue ejecutado con éxito.`, "success");

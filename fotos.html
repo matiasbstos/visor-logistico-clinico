@@ -10,7 +10,7 @@
     <link rel="manifest" href="manifest-fotos.json">
     <link rel="icon" href="assets/icon-fotos-192.png">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-fotos.png">
-    <link rel="stylesheet" href="style.css?v=21.240">
+    <link rel="stylesheet" href="style.css?v=21.241">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@phosphor-icons/web@2.1.1" defer></script>
     <style>
@@ -43,8 +43,8 @@
 <body class="ft" data-user-role="">
     <header class="ft-cab"><img src="assets/icon-fotos-192.png" alt=""><div><b>Fotos de productos</b><small>Producto y caja · SAR Elsa Romo</small></div><button type="button" id="ft-salir" hidden>Salir</button></header>
     <main id="ft-main"><p class="ft-nada" role="status">Abriendo Fotos SAR…</p></main>
-    <script src="progreso.js?v=21.240"></script>
-    <script src="fotos-telefono.js?v=21.240"></script>
+    <script src="progreso.js?v=21.241"></script>
+    <script src="fotos-telefono.js?v=21.241"></script>
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
         import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
@@ -56,7 +56,7 @@
         window.firebaseFirestore = { doc, collection, setDoc, getDoc, getDocs, query, where, limit, serverTimestamp };
         window.showToast = (t, m, tipo) => { const pila = document.getElementById('sp-toasts') || Object.assign(document.body.appendChild(document.createElement('div')), { id: 'sp-toasts', className: 'sp-toasts' }); const d = document.createElement('div'); d.className = 'sp-toast ' + (tipo || ''); d.textContent = t + (m ? ' · ' + m : ''); pila.appendChild(d); setTimeout(() => d.remove(), 4000); };
         const main = document.getElementById('ft-main'), salir = document.getElementById('ft-salir');
-        const STAFF = ['admin', 'administrador', 'operador', 'global', 'superadmin'];
+        const STAFF = ['superadmin'];   /* v21.241: sacar y cambiar fotos es solo del superadministrador */
         async function rolDe(u) { for (const id of [u.email, u.uid].filter(Boolean)) { try { const d = await getDoc(doc(db, 'Usuarios', id)); if (d.exists()) return String(d.data().rol || d.data().role || '').toLowerCase(); } catch (e) { /* sin permiso */ } } return ''; }
         function login(msg) {
             salir.hidden = true;
@@ -68,7 +68,7 @@
         onAuthStateChanged(auth, async (u) => {
             if (!u || u.isAnonymous) { login(); return; }
             const rol = await rolDe(u); document.body.dataset.userRole = rol;
-            if (!STAFF.includes(rol)) { await signOut(auth); login('Esta cuenta no puede cargar fotos (solo personal de bodega).'); return; }
+            if (!STAFF.includes(rol)) { await signOut(auth); login('Esta cuenta no puede cargar fotos: solo el superadministrador.'); return; }
             salir.hidden = false; window.SAR_FotosTel.pagina(main);
         });
         if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));

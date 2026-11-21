@@ -25,21 +25,23 @@
     // Una foto de la tienda solo se muestra si está CONFIRMADA: la que quedó "por_confirmar" (código nuevo o con descripción
     // parecida a otro producto) o "descartada" no se usa en ninguna pantalla hasta que la persona la mire en la tienda y la confirme.
     const sinConfirmar = (c) => c.fotoEstado === 'por_confirmar' || c.fotoEstado === 'descartada';
-    function entrada(c) { return { codigo: c.codigoMP ? String(c.codigoMP) : '', imagen: c.imagen || '', caja: c.imagenCaja || '', extra: Array.isArray(c.fotosExtra) ? c.fotosExtra : [], comun: c.nombreComun || '', fabricante: c.fabricante || '', archivo: sinConfirmar(c) ? '' : (c.imagenMP || (c.codigoMP && semilla[String(c.codigoMP)]) || '') }; }   /* v21.240: + foto de la caja, otras fotos, nombre común y fabricante */
+    function entrada(c) { return { codigo: c.codigoMP ? String(c.codigoMP) : '', imagen: c.imagen || '', archivo: sinConfirmar(c) ? '' : (c.imagenMP || (c.codigoMP && semilla[String(c.codigoMP)]) || '') }; }
+    /* v21.240: caja, otras fotos, nombre común y fabricante van en mapas aparte (solo los lee fotos()), para no tapar la foto del producto de otra ficha */
+    let masCod = new Map(), masNom = new Map();
+    function sumarMas(m, k, c) { const y = m.get(k) || { caja: '', extra: [], comun: '', fabricante: '' }; if (!y.caja && c.imagenCaja) y.caja = c.imagenCaja; if (!y.extra.length && Array.isArray(c.fotosExtra)) y.extra = c.fotosExtra.slice(); if (!y.comun && c.nombreComun) y.comun = c.nombreComun; if (!y.fabricante && c.fabricante) y.fabricante = c.fabricante; m.set(k, y); }
     function indexar(lista) {
-        porCodigo = new Map(); porNombre = new Map(); descartados = new Set(); candidatas = new Map();
+        porCodigo = new Map(); porNombre = new Map(); descartados = new Set(); candidatas = new Map(); masCod = new Map(); masNom = new Map();
         lista.forEach(c => {
+            if (c.imagenCaja || (Array.isArray(c.fotosExtra) && c.fotosExtra.length) || c.nombreComun || c.fabricante) { if (c.codigoMP) sumarMas(masCod, String(c.codigoMP), c); [c.descripcion, c.insumoName].forEach(n => { if (n) sumarMas(masNom, norm(n), c); }); }
             if (c.codigoMP && c.fotoEstado === 'por_confirmar' && c.imagenMP) candidatas.set(String(c.codigoMP), { codigo: String(c.codigoMP), imagen: '', archivo: c.imagenMP, pendiente: true });
             if (c.codigoMP && sinConfirmar(c)) descartados.add(String(c.codigoMP));
             // Foto hallada automáticamente y aún «por confirmar»: se muestra igual (con la marca «por confirmar») para que el catálogo esté completo; las descartadas nunca (v21.198)
             if (c.fotoEstado === 'por_confirmar' && !c.imagen && (c.imagenMP || c.imagenWeb)) { const p = { codigo: c.codigoMP ? String(c.codigoMP) : '', imagen: c.imagenWeb && !c.imagenMP ? c.imagenWeb : '', archivo: c.imagenMP || '', pendiente: true };
                 if (c.codigoMP && !porCodigo.has(String(c.codigoMP))) porCodigo.set(String(c.codigoMP), p);
                 [c.descripcion, c.insumoName].forEach(n => { if (n && !porNombre.has(norm(n))) porNombre.set(norm(n), p); }); return; }
-            const e = entrada(c); if (!e.imagen && !e.archivo && !e.caja && !e.comun && !e.fabricante) return;
-            /* v21.240: si ya hay una ficha con foto para ese código o nombre (otro documento del catálogo), se completan sus datos en vez de taparla */
-            const poner = (m, k) => { const y = m.get(k); if (y && !y.pendiente && (y.imagen || y.archivo) && !e.imagen && !e.archivo) { ['caja', 'comun', 'fabricante'].forEach(f => { if (!y[f] && e[f]) y[f] = e[f]; }); if ((!y.extra || !y.extra.length) && e.extra.length) y.extra = e.extra; } else { if (y && !y.pendiente) ['caja', 'comun', 'fabricante'].forEach(f => { if (!e[f] && y[f]) e[f] = y[f]; }); m.set(k, e); } };
-            if (c.codigoMP) poner(porCodigo, String(c.codigoMP));
-            [c.descripcion, c.insumoName].forEach(n => { if (n) poner(porNombre, norm(n)); });
+            const e = entrada(c); if (!e.imagen && !e.archivo) return;
+            if (c.codigoMP) porCodigo.set(String(c.codigoMP), e);
+            [c.descripcion, c.insumoName].forEach(n => { if (n) porNombre.set(norm(n), e); });
         });
         Object.keys(semilla).forEach(cod => { if (!porCodigo.has(cod) && !descartados.has(cod)) porCodigo.set(cod, { codigo: cod, imagen: '', archivo: semilla[cod] }); });
     }
@@ -65,7 +67,7 @@
     function buscarConCandidata(nombre, codigo) { return buscar(nombre, codigo) || (codigo ? candidatas.get(String(codigo)) || null : null); }
     function src(e, tam) { return e ? (e.imagen || (e.archivo ? urlMP(e.archivo, tam) : '')) : ''; }
     /** v21.240: todas las fotos de un producto: {producto, caja, extra[], propia (foto tomada aquí), comun, fabricante}. */
-    function fotos(nombre, codigo) { const e = buscar(nombre, codigo); return { producto: src(e, 320), caja: e ? e.caja : '', extra: e ? e.extra : [], propia: !!(e && e.imagen), comun: e ? e.comun : '', fabricante: e ? e.fabricante : '' }; }
+    function fotos(nombre, codigo) { const e = buscar(nombre, codigo), c = codigo ? String(codigo) : '', a = (c && masCod.get(c)) || {}, b = masNom.get(norm(nombre)) || {}; return { producto: src(e, 320), caja: a.caja || b.caja || '', extra: (a.extra && a.extra.length ? a.extra : b.extra) || [], propia: !!(e && e.imagen), comun: a.comun || b.comun || '', fabricante: a.fabricante || b.fabricante || '' }; }
     function imgHTML(e, tam, alt) { const s = src(e, tam); return s ? `<img src="${esc(s)}" alt="${esc(alt || '')}" loading="lazy" referrerpolicy="no-referrer" onerror="this.parentNode&&this.parentNode.classList.add('prod-img--sin');this.remove()">` : ''; }
     /** Marcador con la foto del producto (se completa solo cuando el catálogo termina de cargar). */
     function thumb(nombre, opc) {

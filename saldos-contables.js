@@ -192,6 +192,22 @@
         const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['﻿' + l.map(x => x.map(celda).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
         a.download = `Contable_${(cont.sel.nombre || 'producto').replace(/[^a-z0-9]+/gi, '_').slice(0, 40)}_${new Date().toISOString().slice(0, 10)}.csv`; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
     }
+    /** v21.239: ventana con todo lo que se sabe de un movimiento del libro (cuándo, quién, lote, código, documento, motivo…). */
+    const ETQ = { type: 'Tipo', tipo: 'Tipo', date: 'Fecha', fecha: 'Fecha', fechaDocumento: 'Fecha del documento', insumoName: 'Producto', producto: 'Producto', item: 'Producto', quantity: 'Cantidad', cantidad: 'Cantidad', delta: 'Efecto en el stock', batch: 'Lote', lote: 'Lote', vence: 'Vence', expirationDate: 'Vence', lotes: 'Lotes', origin: 'Desde', dest: 'Hacia', bodega: 'Bodega', bodegaOrigen: 'Bodega de origen', centro: 'Centro', document: 'Documento', codigoSeguimiento: 'Código', codigoIngreso: 'Código de ingreso', actaId: 'Acta', numero: 'N°', recepcion: 'Recepción', orden: 'Orden de compra', oc: 'Orden de compra', proveedor: 'Proveedor', documentos: 'Documentos', user: 'Responsable', usuario: 'Responsable', recibidoPor: 'Recibido por', emitidaPor: 'Emitida por', motivo: 'Motivo', observacion: 'Observación', estado: 'Estado', confirmacion: 'Confirmación', solicitado: 'Pedido', reservado: 'Reservado', reservaPrevia: 'Ya reservado', sinRespaldo: 'Sin respaldo (deuda)', cajas: 'Cajas', ingresoAStock: 'Ingresó a stock' };
+    const valTxt = (k, v) => { if (v == null || v === '') return ''; if (typeof v === 'object' && typeof v.toDate === 'function') return v.toDate().toLocaleString('es-CL'); if (typeof v === 'object' && v.seconds != null) return new Date(v.seconds * 1000).toLocaleString('es-CL'); if (Array.isArray(v)) return v.map(x => x && typeof x === 'object' ? [x.batch || x.lote, x.used != null ? x.used + ' u.' : x.quantity != null ? x.quantity + ' u.' : '', x.expirationDate ? 'vence ' + x.expirationDate : ''].filter(Boolean).join(' · ') : String(x)).join(' | '); if (typeof v === 'object') return JSON.stringify(v).slice(0, 300); if (typeof v === 'boolean') return v ? 'Sí' : 'No'; if (k === 'delta') return (Number(v) > 0 ? '+' : '') + v + ' u.'; return String(v); };
+    function detalleMov(e) {
+        if (!e) return; const raw = e.raw || {}, V = window.SAR_VidaProducto;
+        const tit = (V && V.TIPOS[e.tipo] ? V.TIPOS[e.tipo][0] : e.titulo) || 'Movimiento';
+        const prim = Object.keys(ETQ).filter(k => raw[k] != null && raw[k] !== '' && valTxt(k, raw[k]) !== '');
+        const vistos = new Set(prim.map(k => ETQ[k])), filas = []; prim.forEach(k => { const l = ETQ[k]; if (filas.some(f => f[0] === l)) return; filas.push([l, (k === 'type' && V && V.TIPOS[raw[k]]) ? V.TIPOS[raw[k]][0] : valTxt(k, raw[k])]); });
+        const resto = Object.keys(raw).filter(k => !ETQ[k] && !/^(raw|historial|b64|imagen)$/i.test(k) && valTxt(k, raw[k]) !== '');
+        const html = `<p class="act-hint">${esc(fCL(e.f))}${e.bodega ? ' · ' + esc(e.bodega) : ''}${e.lote ? ' · lote ' + esc(e.lote) : ''}</p>
+          <div class="aud-det-res"><div><b>${e.entra ? '+' + e.entra : e.sale ? '−' + e.sale : '0'}</b><span>efecto en el stock</span></div><div><b>${e.saldo}</b><span>saldo después</span></div>${e.codigo ? `<div><b>${esc(e.codigo)}</b><span>código</span></div>` : ''}</div>
+          ${filas.length ? `<dl class="aud-det">${filas.map(([l, v]) => `<dt>${esc(l)}</dt><dd>${esc(v)}</dd>`).join('')}</dl>` : `<p>${esc(e.detalle || '')}</p>`}
+          ${e.motivo && !raw.motivo ? `<p><b>Motivo:</b> ${esc(e.motivo)}</p>` : ''}
+          ${resto.length ? `<details class="aud-det-mas"><summary>Todos los datos registrados (${resto.length})</summary><dl class="aud-det">${resto.map(k => `<dt>${esc(k)}</dt><dd>${esc(valTxt(k, raw[k]))}</dd>`).join('')}</dl></details>` : ''}`;
+        if (window.SAR_Progreso && window.SAR_Progreso.confirmar) window.SAR_Progreso.confirmar({ titulo: tit, bloque: html, si: 'Cerrar', soloSi: true })   /* bloque: un <div>, no un <p>, porque trae <dl> y <details> */; void vistos;
+    }
     function libroHtml() {
         if (contCargando) return window.SAR_Progreso ? window.SAR_Progreso.cargando('Armando el libro del producto…') : '<p class="act-hint">Armando el libro…</p>';
         if (!cont) return '<p class="act-hint">Busca un producto por nombre o ID para ver toda su historia: cuándo llegó, a qué bodega, cuándo se movió, cuándo salió, ajustes y ediciones.</p>';
@@ -201,7 +217,7 @@
         <div class="sal-res">${k(cont.stock, 'Stock actual (todas las bodegas)', 'var(--sar-blue)')}${k(cont.porMov, 'Saldo según movimientos', 'var(--sar-green)')}${k(cont.sg, 'Sobregiro', 'var(--sar-orange)')}${k(cont.reservado, 'Reservado por actas', 'var(--sar-yellow)')}</div>
         ${dif ? `<p class="aud-dif">El stock actual difiere en <b>${dif > 0 ? '+' : ''}${dif}</b> u. de lo que suman los movimientos registrados (ingresos anteriores al sistema, tomas de inventario o cargas sin movimiento). Cualquier cambio desde hoy queda con su código.</p>` : '<p class="aud-ok">El stock actual coincide con la suma de los movimientos.</p>'}
         <div class="sal-tabla"><table class="aud-lib"><thead><tr><th>Fecha</th><th>Evento</th><th>Bodega · lote</th><th class="n">Entra</th><th class="n">Sale</th><th class="n">Saldo</th><th>Código · responsable</th></tr></thead><tbody>
-        ${cont.lib.map(e => `<tr class="aud-${esc(e.clase)}"><td>${esc(fCL(e.f))}</td><td><b>${esc(tipo(e))}</b><small>${esc(e.motivo ? e.motivo + ' · ' : '')}${esc(e.detalle || '')}</small></td><td>${esc(e.bodega || '—')}${e.lote ? '<small>' + esc(e.lote) + '</small>' : ''}</td><td class="n">${e.entra || ''}</td><td class="n">${e.sale || ''}</td><td class="n">${e.mueve ? '<b>' + e.saldo + '</b>' : ''}</td><td>${esc(e.codigo || '')}${e.user ? '<small>' + esc(e.user) + '</small>' : ''}</td></tr>`).join('')}</tbody></table></div>`;
+        ${cont.lib.map((e, i) => `<tr class="aud-${esc(e.clase)} aud-click" data-ev="${i}" tabindex="0" title="Ver todo el detalle"><td>${esc(fCL(e.f))}</td><td><b>${esc(tipo(e))}</b><small>${esc(e.motivo ? e.motivo + ' · ' : '')}${esc(e.detalle || '')}</small></td><td>${esc(e.bodega || '—')}${e.lote ? '<small>' + esc(e.lote) + '</small>' : ''}</td><td class="n">${e.entra || ''}</td><td class="n">${e.sale || ''}</td><td class="n">${e.mueve ? '<b>' + e.saldo + '</b>' : ''}</td><td>${esc(e.codigo || '')}${e.user ? '<small>' + esc(e.user) + '</small>' : ''}</td></tr>`).join('')}</tbody></table></div>`;
     }
 
     function pintar() {
@@ -225,8 +241,9 @@
         </div>
         <div class="sal-res"><div><b>${vis.reduce((s, x) => s + x.disp, 0).toLocaleString('es-CL')}</b><span>unidades disponibles</span></div><div><b>${vis.length}</b><span>productos en bodega</span></div><div><b>${vis.filter(x => x.sg > 0).length}</b><span>con sobregiro (${sum('sg')} u.)</span></div><div><b>${clp(vis.reduce((s, x) => s + x.valDisp, 0))}</b><span>valor disponible</span></div></div>
         ${cargando ? (window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando el informe…') : 'Cargando el informe…') : !vis.length ? '<p class="act-hint">Sin insumos para mostrar.</p>' : `
+        <p class="act-hint">Toca el nombre de un insumo para ver toda su historia (contable) con el detalle de cada movimiento.</p>
         <div class="sal-tabla"><div class="sal-fila sal-cab"><span>Insumo</span><span>Disponible</span><span>En sistema</span><span>Sobregiro</span><span>Bodega</span><span>Estado</span><span></span></div>
-        ${vis.slice(0, 400).map(x => `<div class="sal-fila"><span class="sal-n">${esc(x.nombre)}<small>${x.codigo ? 'ID ' + esc(x.codigo) + ' · ' : (x.provisional ? 'sin ID · ' : '')}${x.actas.length ? esc(actasTxt(x)) : ''}</small></span><span><b>${x.disp}</b></span><span>${x.q}</span><span class="${x.sg > 0 ? 'act-sin' : ''}">${x.sg}</span><span>${esc(x.bodega)}</span><span><i class="sal-e sal-e--${x.estado}">${ETIQ[x.estado]}</i></span><span>${x.estado === 'LISTO' ? `<button type="button" class="btn btn-outline sal-q" data-id="${esc(x.id)}">Cuadrar</button>` : ''}${x.provisional && !x.codigo ? `<button type="button" class="btn btn-outline sal-id" data-id="${esc(x.id)}" data-n="${esc(x.nombre)}">Asignar ID</button>` : ''}</span></div>`).join('')}</div>${vis.length > 400 ? '<p class="act-hint">Se muestran 400; el informe Excel incluye todos.</p>' : ''}`}`;
+        ${vis.slice(0, 400).map(x => `<div class="sal-fila"><span class="sal-n"><button type="button" class="sal-ver" data-n="${esc(x.nombre)}" data-c="${esc(x.codigo || '')}">${esc(x.nombre)}</button><small>${x.codigo ? 'ID ' + esc(x.codigo) + ' · ' : (x.provisional ? 'sin ID · ' : '')}${x.actas.length ? esc(actasTxt(x)) : ''}</small></span><span><b>${x.disp}</b></span><span>${x.q}</span><span class="${x.sg > 0 ? 'act-sin' : ''}">${x.sg}</span><span>${esc(x.bodega)}</span><span><i class="sal-e sal-e--${x.estado}">${ETIQ[x.estado]}</i></span><span>${x.estado === 'LISTO' ? `<button type="button" class="btn btn-outline sal-q" data-id="${esc(x.id)}">Cuadrar</button>` : ''}${x.provisional && !x.codigo ? `<button type="button" class="btn btn-outline sal-id" data-id="${esc(x.id)}" data-n="${esc(x.nombre)}">Asignar ID</button>` : ''}</span></div>`).join('')}</div>${vis.length > 400 ? '<p class="act-hint">Se muestran 400; el informe Excel incluye todos.</p>' : ''}`}`;
         const oxiD = '<div id="oxi-aud-d"></div><div id="sol-aud-d" class="sol-aud"></div>', oxiC = '<div id="oxi-aud-c"></div><div id="sol-aud-c" class="sol-aud"></div>';
         const conta = `
         <p class="act-hint"><b>Contable</b> es la historia completa de un producto, como un libro: cuándo llegó, a qué bodega, cuándo se movió o salió, ajustes, ediciones y recepciones, cada línea con su motivo y código.</p>
@@ -243,12 +260,15 @@
             q.addEventListener('input', () => { contQ = q.value; clearTimeout(tmr); tmr = setTimeout(async () => { lista = window.SAR_VidaProducto ? await window.SAR_VidaProducto.sugerencias(q.value) : []; sug.innerHTML = lista.map((x, i) => `<button type="button" class="vp-op" data-i="${i}"><b>${esc(x.nombre)}</b>${x.codigo ? ' <small>ID ' + esc(x.codigo) + '</small>' : ''}</button>`).join(''); }, 250); });
             sug.addEventListener('click', (e) => { const b = e.target.closest('.vp-op'); if (!b) return; const x = lista[Number(b.dataset.i)]; if (x) { contQ = x.nombre; abrirLibro(x); } });
             const c = r.querySelector('#aud-lib-csv'); if (c) c.addEventListener('click', csvLibro);
+            /* v21.239: clic en una línea del libro → todo el detalle del movimiento */
+            const lib = r.querySelector('#aud-lib'); if (lib && !lib.dataset.det) { lib.dataset.det = '1'; const abre = (e) => { const tr = e.target.closest('tr[data-ev]'); if (tr && cont) detalleMov(cont.lib[Number(tr.dataset.ev)]); }; lib.addEventListener('click', abre); lib.addEventListener('keydown', (e) => { if (e.key === 'Enter') abre(e); }); }
             return;
         }
         r.querySelector('#sal-b').addEventListener('change', (e) => { bodega = e.target.value; pintar(); });
         r.querySelector('#sal-sp').addEventListener('change', (e) => { soloPend = e.target.checked; pintar(); });
         const sq = r.querySelector('#sal-q'); sq.addEventListener('input', () => { busq = sq.value; const pos = sq.selectionStart; pintar(); const n = document.getElementById('sal-q'); if (n) { n.focus(); n.setSelectionRange(pos, pos); } });
         r.querySelector('#sal-act').addEventListener('click', cargar);
+        r.querySelectorAll('.sal-ver').forEach(b => b.addEventListener('click', () => { tab = 'cont'; contQ = b.dataset.n; abrirLibro({ nombre: b.dataset.n, codigo: b.dataset.c }); }));
         r.querySelector('#sal-cd').addEventListener('click', () => descargar('disponible'));
         r.querySelectorAll('.sal-q').forEach(b => b.addEventListener('click', async () => {
             const ref = (prompt('N° de la OC/SDC con que ingresó este stock (opcional):') || '').trim();
@@ -279,5 +299,5 @@
         });
     }
     function abrir() { cargar(); }
-    window.SAR_Saldos = { abrir, seguir, pintarSeg, _id: (v) => { segId = v; }, fila, csv: (t) => csv(t), _set: (f) => { filas = f; } };
+    window.SAR_Saldos = { detalleMov, abrir, seguir, pintarSeg, _id: (v) => { segId = v; }, fila, csv: (t) => csv(t), _set: (f) => { filas = f; } };
 })(window, document);

@@ -6596,3 +6596,34 @@ body:not([data-user-role="solicitante"]) .menu-item[data-target="view-solicitud-
 .bu-chk{display:flex;align-items:center;gap:8px;margin:10px 0;padding:10px 0;min-height:40px;font-size:.88rem;color:var(--sar-texto,#1e293b);cursor:pointer}.bu-opc{margin:10px 0}.bu-opc summary{cursor:pointer;font-weight:600;color:var(--sar-blue,#1e3a8a);padding:6px 0}.bu-l input[readonly]{background:#f1f5f9;color:#475569}.bu-chk input{width:18px;height:18px}
 .bu-cifra{font-size:1.35rem;font-weight:800;color:#0f172a;line-height:1.6}.bu-cifra.bu-mas{color:#15803d}.bu-cifra.bu-menos{color:#b91c1c}
 .bu-lnk{background:none;border:0;padding:0;color:var(--sar-blue,#1d4ed8);font-weight:600;cursor:pointer;text-decoration:underline;font:inherit}.etq-dif{margin:-4px 0 12px;font-size:.88rem}.bu-av{color:#b45309!important;font-weight:600}.bu-op-n{border-style:dashed}
+
+/* v21.239: buscador de secciones (Ctrl+K) */
+.bs-btn{display:inline-flex;align-items:center;gap:6px}.bs-btn kbd{font-size:10px;padding:1px 5px;border:1px solid #cbd5e1;border-radius:4px;color:#64748b;background:#f8fafc}@media(max-width:900px){.bs-btn kbd,.bs-btn span{display:none}}
+.bs-ov{position:fixed;inset:0;z-index:10050;background:rgba(15,23,42,.45);display:flex;justify-content:center;align-items:flex-start;padding:12vh 16px 16px}
+.bs-c{width:100%;max-width:560px;background:#fff;border-radius:14px;box-shadow:0 20px 50px rgba(15,23,42,.3);overflow:hidden}
+.bs-in{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid #e2e8f0}.bs-in i{font-size:20px;color:#64748b}.bs-in input{flex:1;border:0;outline:0;font-size:1.05rem;background:transparent;min-width:0}.bs-in kbd{font-size:11px;padding:2px 6px;border:1px solid #cbd5e1;border-radius:4px;color:#64748b}
+.bs-res{max-height:52vh;overflow:auto;padding:6px}.bs-it{display:flex;align-items:center;gap:12px;width:100%;padding:11px 12px;border:0;border-radius:10px;background:none;text-align:left;cursor:pointer;font-size:.95rem;color:#0f172a}.bs-it i{font-size:18px;color:var(--sar-blue,#1A3668)}.bs-it span{flex:1}.bs-it small{color:#94a3b8;font-size:.75rem}.bs-it.on,.bs-it:hover{background:#eef2fb}.bs-it:focus-visible{outline:2px solid var(--sar-blue,#1A3668)}
+.bs-nada{padding:14px;color:#64748b;margin:0}.bs-pie{margin:0;padding:8px 14px;border-top:1px solid #e2e8f0;font-size:.75rem;color:#94a3b8}
+
+/* v21.239: ajustes con foto, lotes y vencimientos */
+.aj-oculto{display:none!important}
+.aj-lista{display:flex;flex-direction:column;gap:8px;max-height:520px;overflow:auto;padding:2px}
+.aj-item{display:flex;align-items:flex-start;gap:12px;width:100%;text-align:left;padding:10px 12px;border:1px solid #e2e8f0;border-radius:12px;background:#fff;cursor:pointer}
+.aj-item:hover{border-color:#94a3b8}.aj-item.on{border-color:var(--sar-blue,#1A3668);box-shadow:0 0 0 2px rgba(26,54,104,.15);background:#f5f8fd}.aj-item:focus-visible{outline:2px solid var(--sar-blue,#1A3668)}
+.aj-item>img,.aj-item>.img-thumb,.aj-item>span:first-child:not(.aj-txt){flex:0 0 auto}
+.aj-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}.aj-txt b{font-size:.9rem;line-height:1.3;color:#0f172a;white-space:normal}.aj-txt small{color:#64748b;font-size:.75rem}
+.aj-chips{display:flex;flex-wrap:wrap;gap:4px;margin-top:2px}.aj-chip{font-size:.72rem;padding:2px 7px;border-radius:999px;background:#eef2f7;color:#334155}.aj-chip.aj-pronto{background:#fef3c7;color:#92400e}.aj-chip.aj-venc{background:#fee2e2;color:#991b1b}
+.aj-stock{flex:0 0 auto;text-align:right;display:flex;flex-direction:column}.aj-stock b{font-size:1.25rem;color:#0f172a}.aj-stock small{color:#64748b;font-size:.72rem}
+.aj-vacio{color:#64748b;padding:10px}
+.aj-lotes{background:#f8fafc;border:1px solid var(--border-color,#e2e8f0);border-radius:8px;padding:12px;margin:-8px 0 18px}
+.aj-lot-h{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:8px}
+.aj-lot-g{display:flex;flex-wrap:wrap;gap:8px}.aj-lot{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid #cbd5e1;border-radius:10px;background:#fff;cursor:pointer;min-height:44px}.aj-lot.on{border-color:var(--sar-blue,#1A3668);background:#eef2fb}.aj-lot span{display:flex;flex-direction:column}.aj-lot small{color:#64748b;font-size:.72rem}
+.aj-nuevo{margin-top:10px;gap:10px}.aj-proy{margin:10px 0 0;font-size:.85rem;color:#334155}.aj-neg{color:#b91c1c}
+
+/* v21.239: detalle de cada movimiento del libro contable */
+.aud-click{cursor:pointer}.aud-click:hover td{background:#f5f8fd}.aud-click:focus-visible{outline:2px solid var(--sar-blue,#1A3668)}
+.sal-ver{background:none;border:0;padding:0;font:inherit;font-weight:700;color:var(--sar-blue,#1A3668);text-align:left;cursor:pointer;text-decoration:underline;text-decoration-color:#cbd5e1}
+.sar-conf .aud-det{display:grid;grid-template-columns:max-content 1fr;gap:4px 12px;text-align:left;margin:10px 0;font-size:.85rem}.aud-det dt{color:#64748b;font-weight:600}.aud-det dd{margin:0;color:#0f172a;word-break:break-word}
+.sar-conf__bl{text-align:left;max-height:60vh;overflow:auto}
+.aud-det-res{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin:8px 0}.aud-det-res div{background:#f1f5f9;border-radius:8px;padding:6px 12px;display:flex;flex-direction:column;align-items:center}.aud-det-res b{font-size:1.1rem}.aud-det-res span{font-size:.72rem;color:#64748b}
+.aud-det-mas{text-align:left;margin-top:6px}.aud-det-mas summary{cursor:pointer;color:var(--sar-blue,#1A3668);font-weight:600;font-size:.85rem}

@@ -4,37 +4,38 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Fotos de productos · SAR</title>
-    <meta name="theme-color" content="#C2410C">
+    <meta name="theme-color" content="#1A3668">
     <link rel="manifest" href="manifest-fotos.json">
     <link rel="icon" href="assets/icon-fotos-192.png">
     <link rel="apple-touch-icon" href="assets/apple-touch-icon-fotos.png">
     <link rel="stylesheet" href="style.css?v=21.240">
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/@phosphor-icons/web@2.1.1" defer></script>
     <style>
         body.ft { margin: 0; background: #f5f7fb; font-family: 'Outfit', system-ui, sans-serif; min-height: 100vh; }
-        .ft-cab { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: #fff; border-bottom: 3px solid #C2410C; box-shadow: 0 2px 8px rgba(15,23,42,.06); }
+        .ft-cab { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: #fff; border-bottom: 3px solid #1A3668; box-shadow: 0 2px 8px rgba(15,23,42,.06); }
         .ft-cab img { height: 40px; width: 40px; border-radius: 10px; }
-        .ft-cab div { flex: 1; line-height: 1.15; } .ft-cab b { color: #9a3412; font-size: 1rem; display: block; } .ft-cab small { color: #64748b; font-size: .75rem; }
+        .ft-cab div { flex: 1; line-height: 1.15; } .ft-cab b { color: #1A3668; font-size: 1rem; display: block; } .ft-cab small { color: #64748b; font-size: .75rem; }
         .ft-cab button { border: 1px solid #cbd5e1; background: #fff; border-radius: 8px; padding: 6px 10px; font-size: .8rem; color: #334155; }
         .ft-wrap { max-width: 720px; margin: 0 auto; padding: 12px 16px 40px; }
         .ft-barra input { width: 100%; min-height: 46px; font-size: 1rem; }
         .ft-chips { display: flex; gap: 6px; overflow-x: auto; padding: 10px 0; }
         .ft-chip { flex: 0 0 auto; border: 1px solid #cbd5e1; background: #fff; border-radius: 999px; padding: 8px 12px; font-size: .85rem; min-height: 40px; }
-        .ft-chip.on { background: #9a3412; border-color: #9a3412; color: #fff; }
+        .ft-chip.on { background: #1A3668; border-color: #1A3668; color: #fff; }
         .ft-p { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 12px; margin-top: 10px; }
         .ft-p header b { display: block; color: #0f172a; font-size: .95rem; line-height: 1.3; } .ft-p header small { color: #64748b; font-size: .78rem; }
-        .ft-ped { color: #9a3412; font-weight: 700; }
+        .ft-ped { color: #1A3668; font-weight: 700; }
         .ft-fotos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 10px; }
-        .ft-f { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 120px; border: 2px dashed #f59e0b; border-radius: 10px; background: #fffbeb; font-size: .8rem; text-align: center; color: #78350f; cursor: pointer; padding: 6px; }
-        .ft-f.ok { border-style: solid; border-color: #16a34a; background: #f0fdf4; color: #14532d; }
+        .ft-f { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; min-height: 120px; border: 2px dashed #cbd5e1; border-radius: 10px; background: #f8fafc; font-size: .8rem; text-align: center; color: #1A3668; cursor: pointer; padding: 6px; }
+        .ft-f.ok { border-style: solid; border-color: #8CC63F; background: #f7fbef; color: #4D7C0F; }
         .ft-f.ft-mas { border-color: #cbd5e1; background: #f8fafc; color: #334155; }
         .ft-f img { width: 100%; height: 80px; object-fit: contain; border-radius: 6px; background: #fff; }
-        .ft-ico { font-size: 1.8rem; } .ft-sub { opacity: .5; pointer-events: none; }
+        .ft-ico { font-size: 1.9rem; color: #1A3668; } .ft-sub { opacity: .5; pointer-events: none; }
         .ft-nada { text-align: center; color: #64748b; padding: 30px 16px; }
         .ft-login { max-width: 420px; margin: 8vh auto 0; padding: 24px; background: #fff; border-radius: 12px; box-shadow: 0 10px 30px rgba(15,23,42,.1); display: flex; flex-direction: column; gap: 12px; }
-        .ft-login h1 { margin: 0; color: #9a3412; font-size: 1.3rem; } .ft-login p { margin: 0; color: #64748b; font-size: .9rem; } .ft-login .btn { min-height: 48px; font-size: 1rem; } .ft-err { color: #b91c1c; font-size: .85rem; min-height: 1em; }
+        .ft-login h1 { margin: 0; color: #1A3668; font-size: 1.3rem; } .ft-login p { margin: 0; color: #64748b; font-size: .9rem; } .ft-login .btn { min-height: 48px; font-size: 1rem; } .ft-err { color: #b91c1c; font-size: .85rem; min-height: 1em; }
         .sp-toasts { position: fixed; left: 16px; right: 16px; top: 12px; z-index: 10000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
-        .sp-toast { pointer-events: auto; background: #1a3668; color: #fff; padding: 12px 16px; border-radius: 12px; box-shadow: 0 10px 30px rgba(15,23,42,.3); font-size: .9rem; } .sp-toast.error { background: #b91c1c; } .sp-toast.success { background: #166534; } .sp-toast.warning { background: #92400e; }
+        .sp-toast { pointer-events: auto; background: #1a3668; color: #fff; padding: 12px 16px; border-radius: 12px; box-shadow: 0 10px 30px rgba(15,23,42,.3); font-size: .9rem; } .sp-toast.error { background: #b91c1c; } .sp-toast.success { background: #4D7C0F; } .sp-toast.warning { background: #92400e; }
     </style>
 </head>
 <body class="ft" data-user-role="">

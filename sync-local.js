@@ -47,6 +47,7 @@
       }
       if (partes === PARTES_STAFF && !vivos) { try { badge('bajando', 'Descargando etiquetas de cajas…'); const sb = await f.getDocs(f.query(f.collection(db(), 'Contadores'), f.where('tipo', '==', 'bulto'), f.limit(8000))); n += sb.size; } catch (e) { /* sin permiso o sin red */ } }   /* v21.244: todas las cajas (pistolear sin internet) */
       completaHecha = true; vivo(partes === PARTES_STAFF);
+      if (partes === PARTES_STAFF && window.SAR_Bultos && window.SAR_Bultos.reservarTramo) window.SAR_Bultos.reservarTramo().catch(() => {});   /* v21.247: folios de etiquetas listos para usar sin internet */
       if (window.SAR_Solicitudes && window.SAR_Solicitudes.publicarCatalogo && partes === PARTES_STAFF) await window.SAR_Solicitudes.publicarCatalogo().catch(() => {});
       if (window.SAR_Imagenes) await window.SAR_Imagenes.cargar(true).catch(() => {});
       if (partes === PARTES_STAFF) { try { const pc = await f.getDocs(f.query(f.collection(db(), 'Catalogo_Productos'), f.where('fotoEstado', '==', 'por_confirmar'), f.limit(2000))); window.SAR_FotosPorConfirmar = pc.size; } catch (e) { /* sin permiso */ } }

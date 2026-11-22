@@ -131,13 +131,39 @@
     const cajas = num(g.cajas) > 0 ? repartirEnCajas(g.total, g.cajas) : repartirCajas(g.total, g.porCaja), sub = Math.floor(num(g.subPor));
     return cajas.map(q => ({ q, hijos: sub > 0 && sub < q ? repartirCajas(q, sub) : [] }));
   }
+  /* v21.247: etiquetas sin internet. El folio va impreso y lo lee la pistola (10 dígitos), así que no puede ser provisional:
+     con internet cada equipo reserva un tramo de folios BUL (60) del mismo contador; sin internet usa los de su tramo.
+     Las cajas se guardan con setDoc (id = folio), que la copia local de Firestore sube sola al volver la conexión. Los folios
+     reservados que no se usen quedan como hueco justificado (registro reserva-bul-…). */
+  const RANGO = 'sar-bul-rango', TRAMO = 60;
+  const equipo = () => { try { let e = localStorage.getItem('sar-equipo'); if (!e) { e = Math.random().toString(36).slice(2, 8); localStorage.setItem('sar-equipo', e); } return e; } catch (e) { return 'x'; } };
+  function rangos() { try { const r = JSON.parse(localStorage.getItem(RANGO) || '[]'); return Array.isArray(r) ? r.filter(x => x.anio === new Date().getFullYear() && x.sig <= x.fin) : []; } catch (e) { return []; } }
+  const guardarRangos = (r) => { try { localStorage.setItem(RANGO, JSON.stringify(r)); } catch (e) { /* sin almacenamiento */ } };
+  const quedanReservados = () => rangos().reduce((t, x) => t + (x.fin - x.sig + 1), 0);
+  /** Con internet: si quedan menos de 20 reservados, reserva otro tramo (una transacción sobre el contador de BUL). */
+  async function reservarTramo(forzar) {
+    if (!forzar && quedanReservados() >= 20) return quedanReservados();
+    const f = fs(), anio = new Date().getFullYear(), rc = f.doc(f.collection(db(), 'Contadores'), 'correlativo-bultos-' + anio);
+    const ini = await f.runTransaction(db(), async (tx) => { const s = await tx.get(rc), v = s.exists() ? num(s.data().valor) : 0; tx.set(rc, { valor: v + TRAMO, actualizado: new Date().toISOString() }); return v + 1; });
+    const r = rangos(); r.push({ anio, ini, fin: ini + TRAMO - 1, sig: ini }); guardarRangos(r);
+    try { await f.setDoc(f.doc(f.collection(db(), 'Contadores'), `reserva-bul-${equipo()}-${anio}-${ini}`), { tipo: 'reserva-bul', equipo: equipo(), anio, desde: ini, hasta: ini + TRAMO - 1, por: usuario(), en: new Date().toISOString() }); } catch (e) { /* el tramo ya quedó reservado en el contador */ }
+    return quedanReservados();
+  }
+  /** Sin internet: toma n folios seguidos de un tramo reservado (o lanza error si no alcanzan). */
+  function tomarReservados(n) {
+    const r = rangos(), t = r.find(x => x.fin - x.sig + 1 >= n);
+    if (!t) throw new Error(`Sin internet solo puedes crear ${Math.max(0, ...r.map(x => x.fin - x.sig + 1), 0)} etiqueta(s) seguidas con los folios reservados en este equipo (necesitas ${n}). Crea menos cajas o espera la conexión.`);
+    const ini = t.sig; t.sig += n; guardarRangos(r); return ini;
+  }
   async function crear(g) {
     const plan = planCajas(g), cajas = plan.map(p => p.q); if (!cajas.length) throw new Error('Indica el total de unidades y cuántas cajas son (o cuántas vienen por caja).');
     const nFol = plan.reduce((t, p) => t + 1 + p.hijos.length, 0);
     if (cajas.length > 300) throw new Error('Son más de 300 cajas: revisa las unidades por caja.');
     if (nFol > 600) throw new Error(`Serían ${nFol} etiquetas (cajas grandes + interiores): revisa las unidades por caja interior.`);
     const f = fs(), anio = new Date().getFullYear(), rc = f.doc(f.collection(db(), 'Contadores'), 'correlativo-bultos-' + anio);
-    const ini = await f.runTransaction(db(), async (tx) => { const s = await tx.get(rc), v = s.exists() ? num(s.data().valor) : 0; tx.set(rc, { valor: v + nFol, actualizado: new Date().toISOString() }); return v + 1; });
+    const enLinea = !(window.SAR_Cola && !(await window.SAR_Cola.hayConexion()));
+    const ini = enLinea ? await f.runTransaction(db(), async (tx) => { const s = await tx.get(rc), v = s.exists() ? num(s.data().valor) : 0; tx.set(rc, { valor: v + nFol, actualizado: new Date().toISOString() }); return v + 1; }) : tomarReservados(nFol);
+    if (enLinea) reservarTramo().catch(() => {});   /* deja folios listos para la próxima vez sin internet */
     const ahora = new Date().toISOString(), fol = (k) => `BUL-${anio}-${String(ini + k).padStart(6, '0')}`, grupo = fol(0);
     const comun = { tipo: 'bulto', grupo, estado: 'CERRADA', nombre: g.nombre, insumoId: g.insumoId || '', codigoMP: g.codigoMP || '', bodega: g.bodega || '', lote: g.lote || 'S/L', vence: g.vence || '', proveedor: g.proveedor || '', oc: g.oc || '', rec: g.rec || '', fechaRecepcion: g.fechaRecepcion || hoyISO(), creadoEn: ahora, creadoPor: usuario(), impresiones: 0, historial: [{ accion: 'CREADO', por: usuario(), en: ahora }], ...(g.origen ? { origen: g.origen } : {}) };
     const lista = []; let k = 0;
@@ -147,7 +173,8 @@
       lista.push({ ...comun, folio: fp, n: i + 1, de: cajas.length, contenido: p.q, inicial: p.q, porCaja, totalGrupo, ...(hijos.length ? { hijos, subcajas: hijos.length, porSubcaja: Math.floor(num(g.subPor)) } : {}) });
       p.hijos.forEach((q, j) => lista.push({ ...comun, folio: hijos[j], nivel: 'interior', padre: fp, padreN: i + 1, padreDe: cajas.length, n: j + 1, de: hijos.length, contenido: q, inicial: q, porCaja: Math.floor(num(g.subPor)), totalGrupo }));
     });
-    for (const b of lista) await f.setDoc(ref(b.folio), b);
+    if (enLinea) { for (const b of lista) await f.setDoc(ref(b.folio), b); }
+    else { lista.forEach(b => { b.sinConexion = true; f.setDoc(ref(b.folio), b).catch(e => console.warn('[Bultos] se subirá al volver internet', b.folio, e)); }); }   /* sin internet: no se espera al servidor; la copia local la sube sola */
     try { sessionStorage.removeItem('etq-pend'); } catch (e) { /* sin almacenamiento */ }
     return lista;
   }
@@ -790,6 +817,6 @@
     inp.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => registrar('nada'), 250); });
     pintar(''); setTimeout(() => inp.focus(), 50); return ov;
   }
-  window.SAR_Bultos = { leerCajasTx, leerConCamara, leer, sacar, probarPistola, hojaPrueba, code39, i2de5, planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
+  window.SAR_Bultos = { reservarTramo, quedanReservados, leerCajasTx, leerConCamara, leer, sacar, probarPistola, hojaPrueba, code39, i2de5, planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_Bultos;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null, addEventListener() {} });

@@ -162,7 +162,7 @@
     if (nFol > 600) throw new Error(`Serían ${nFol} etiquetas (cajas grandes + interiores): revisa las unidades por caja interior.`);
     const f = fs(), anio = new Date().getFullYear(), rc = f.doc(f.collection(db(), 'Contadores'), 'correlativo-bultos-' + anio);
     const enLinea = !(window.SAR_Cola && !(await window.SAR_Cola.hayConexion()));
-    const ini = enLinea ? await f.runTransaction(db(), async (tx) => { const s = await tx.get(rc), v = s.exists() ? num(s.data().valor) : 0; tx.set(rc, { valor: v + nFol, actualizado: new Date().toISOString() }); return v + 1; }) : tomarReservados(nFol);
+    const ini = enLinea ? await f.runTransaction(db(), async (tx) => { const s = await tx.get(rc), v = s.exists() ? num(s.data().valor) : 0; tx.set(rc, { valor: v + nFol, actualizado: new Date().toISOString() }); return v + 1; }) : (navigator.locks && navigator.locks.request ? await navigator.locks.request('sar-bul', () => tomarReservados(nFol)) : tomarReservados(nFol));   /* dos pestañas no toman el mismo folio */
     if (enLinea) reservarTramo().catch(() => {});   /* deja folios listos para la próxima vez sin internet */
     const ahora = new Date().toISOString(), fol = (k) => `BUL-${anio}-${String(ini + k).padStart(6, '0')}`, grupo = fol(0);
     const comun = { tipo: 'bulto', grupo, estado: 'CERRADA', nombre: g.nombre, insumoId: g.insumoId || '', codigoMP: g.codigoMP || '', bodega: g.bodega || '', lote: g.lote || 'S/L', vence: g.vence || '', proveedor: g.proveedor || '', oc: g.oc || '', rec: g.rec || '', fechaRecepcion: g.fechaRecepcion || hoyISO(), creadoEn: ahora, creadoPor: usuario(), impresiones: 0, historial: [{ accion: 'CREADO', por: usuario(), en: ahora }], ...(g.origen ? { origen: g.origen } : {}) };

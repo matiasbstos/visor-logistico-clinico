@@ -26,7 +26,9 @@
   function encolar(op) {
     const l = leer(), id = 'op-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
     l.push({ id, tipo: op.tipo, titulo: op.titulo || op.tipo, datos: op.datos || {}, creadoEn: new Date().toISOString(), por: usuario(), estado: 'pendiente', intentos: 0 });
-    guardar(l); return id;
+    guardar(l);
+    if (!leer().some(x => x.id === id)) throw new Error('No hay espacio en este teléfono para guardar la operación sin internet.');   /* v21.245: nunca decir «en cola» si no quedó guardada */
+    return id;
   }
   function registrar(tipo, fn) { ejecutores[tipo] = fn; }
   /** v21.246: guarda datos nuevos de una operación (p. ej. el folio definitivo tomado al volver internet) para que un reintento use el mismo. */

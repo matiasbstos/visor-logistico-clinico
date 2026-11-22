@@ -364,7 +364,7 @@
                 confirmacion: { estado: 'PENDIENTE' },
                 items: itemsActa, pendientes: [...b.pendientes.map(p => ({ nombre: p.nombre, cantidad: num(p.cantidad), ...(p.codigoMP ? { codigoMP: String(p.codigoMP) } : {}) })), ...autoPend],
                 documentos: b.documentos.map(d => ({ tipo: d.tipo, numero: d.numero, detalle: d.detalle || '' })),
-                entrega: { nombre: firma.nombre, cargo: firma.cargo }, recibe: { nombre: (b.recibe && b.recibe.nombre) || '', cargo: (b.recibe && b.recibe.cargo) || '' },
+                entrega: b.entrega && b.entrega.nombre ? { nombre: b.entrega.nombre, cargo: b.entrega.cargo || '' } : { nombre: firma.nombre, cargo: firma.cargo }, recibe: { nombre: (b.recibe && b.recibe.nombre) || '', cargo: (b.recibe && b.recibe.cargo) || '' },
                 creadoPor: usuario, creadoEn: f.serverTimestamp()
             };
             if (b.oc) acta.oc = { id: b.oc.id, numeroOC: b.oc.numeroOC || '', columna: b.oc.key, memo: b.oc.memo || '', cdp: b.oc.cdp || '' };
@@ -1150,8 +1150,10 @@
            al volver la conexión se emite con su AE definitivo y reserva el stock (lo que falte queda como sobregiro, igual que con internet). */
         if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) {
             if (borrador.oc) { toast('Sin internet', 'Las actas de una orden de compra necesitan internet (validan lo recibido de la orden). Emítela al volver la conexión; el borrador queda guardado.', 'warning'); return; }
-            const fol = window.SAR_Folio ? window.SAR_Folio.provisional('AE') : 'AE-P-' + Date.now().toString(36).toUpperCase(), b = JSON.parse(JSON.stringify({ ...borrador, folioProvisional: fol }));
-            window.SAR_Cola.encolar({ tipo: 'acta-emitir', titulo: `Acta ${fol} · ${String(borrador.centro).trim()} · ${total} u.`, datos: { b, usuario: usuarioEmail(), en: new Date().toISOString() } });
+            const fol = window.SAR_Folio ? window.SAR_Folio.provisional('AE') : 'AE-P-' + Date.now().toString(36).toUpperCase(), b = JSON.parse(JSON.stringify({ ...borrador, folioProvisional: fol, entrega: { nombre: firma.nombre, cargo: firma.cargo } }));   /* la misma firma del PDF provisional */
+            (b.items || []).forEach(i => { delete i.imagen; });   /* las fotos no viajan en la cola (espacio del teléfono) */
+            try { window.SAR_Cola.encolar({ tipo: 'acta-emitir', titulo: `Acta ${fol} · ${String(borrador.centro).trim()} · ${total} u.`, datos: { b, usuario: usuarioEmail(), en: new Date().toISOString() } }); }
+            catch (e) { toast('No se guardó en el teléfono', (e.message || e) + ' El borrador sigue aquí: libera espacio o espera la conexión.', 'error'); return; }
             guardarCentro(borrador.centro).catch(() => {});
             const local = { numero: `${fol} (PROVISIONAL)`, fecha: new Date().toISOString().slice(0, 10), centro: borrador.centro.trim(), bodegaOrigen: borrador.origen, estado: 'EMITIDA', items: borrador.items.map(i => ({ id: i.id || null, nombre: i.nombre, cantidad: num(i.cantidad), ...(i.codigo ? { codigo: i.codigo } : {}), ...(i.solicitado != null ? { solicitado: num(i.solicitado) } : {}) })), pendientes: (borrador.pendientes || []).map(p => ({ nombre: p.nombre, cantidad: num(p.cantidad) })), documentos: (borrador.documentos || []).map(d => ({ tipo: d.tipo, numero: d.numero, detalle: d.detalle || '' })), entrega: { nombre: firma.nombre, cargo: firma.cargo }, recibe: { nombre: (borrador.recibe && borrador.recibe.nombre) || '', cargo: (borrador.recibe && borrador.recibe.cargo) || '' }, creadoEn: new Date().toISOString() };
             borrador = { ...vacio(), origen: borrador.origen, centro: '' }; guardarBorrador(); pintar();

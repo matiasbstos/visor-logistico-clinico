@@ -1280,13 +1280,22 @@
     }
     /** Fila de una guía de despacho en «Recibir productos» (v21.226: se pueden agregar varias). */
     function filaGuiaR() { return `<div class="rc-doc"><div class="soc-fila"><label>N° guía de despacho<input type="text" class="r-gn" autocomplete="off"></label><label>Foto o PDF de la guía<input type="file" class="r-gf" accept="application/pdf,image/*"></label></div><div class="rc-doc-f"><button type="button" class="btn btn-outline btn-sm rc-dq" aria-label="Quitar esta guía"><i class="ph-bold ph-trash"></i> Quitar</button></div></div>`; }
-    /* v21.246: recepción hecha sin internet → se aplica al volver la conexión. Toma el folio REC definitivo una sola vez (queda en la op) y
-       recepcionConStock no la repite si la orden ya tiene ese REC. */
+    /* v21.245: recepción hecha sin internet → UNA operación con todos sus memos, como con internet. Los folios REC definitivos se toman
+       una sola vez (quedan en la op); recepcionConStock no repite un REC ya guardado; el correo se envía aparte y queda marcado. */
     if (window.SAR_Cola && window.SAR_Cola.registrar) window.SAR_Cola.registrar('recepcion-oc', async (d, op) => {
-        let recId = d.recFinal; if (!recId) { recId = window.SAR_Folio ? await window.SAR_Folio.siguiente('REC') : d.recP; if (window.SAR_Cola.actualizar) window.SAR_Cola.actualizar(op.id, { recFinal: recId }); }
+        const memos = d.memos || [];
+        let ids = d.recFinales; if (!ids) { ids = window.SAR_Folio ? await window.SAR_Folio.varios('REC', memos.length, { estricto: true }) : memos.map(m => m.recP); ids = [].concat(ids); if (window.SAR_Cola.actualizar) window.SAR_Cola.actualizar(op.id, { recFinales: ids }); }
         const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), 'Seguimiento_OC'), d.ocId)); if (!sn.exists()) throw new Error('La orden ya no existe.');
-        const oc = { id: d.ocId, ...sn.data() }, texto = String(d.textoBase || '').split('§REC§').join(recId) + (recId !== d.recP ? `\n(Hecha sin conexión el ${new Date(d.en || Date.now()).toLocaleString('es-CL')}; folio provisional ${d.recP}.)` : '');
-        await recepcionConStock(oc, { provDoc: d.provDoc, extras: d.extras || [], baseN: d.baseN, onPaso: null, recId, hora: d.hora, key: d.key, det: d.det, incidencias: d.incidencias || [], guia: d.guia, fecha: d.fecha, obs: d.obs, notificar: d.notificar, ingresaStock: d.ingresaStock, central: d.central, texto, titulo: d.titulo, textoCorreo: String(d.textoCorreo || '').split('§REC§').join(recId) });
+        const oc = { id: d.ocId, ...sn.data() };
+        const nota = `\n(Hecha sin conexión el ${new Date(d.en || Date.now()).toLocaleString('es-CL')}; folios provisionales ${memos.map(m => m.recP).join(', ')}.)`;
+        const poner = (t) => { let x = String(t || ''); memos.forEach((m, n) => { x = x.split('§REC' + n + '§').join(ids[n]); }); return x; };
+        for (const [n, m] of memos.entries()) {
+            /* la línea agregada en la recepción solo existe en la orden después del primer memo: la copia local la incluye para los índices */
+            if (n === 0 && (d.extras || []).length && (oc.lineas || []).length === d.baseN) oc.lineas = [...(oc.lineas || []), ...d.extras];
+            await recepcionConStock(oc, { provDoc: d.provDoc, extras: n === 0 ? (d.extras || []) : [], baseN: d.baseN, onPaso: null, recId: ids[n], hora: d.hora, key: m.key, det: m.det, incidencias: m.incidencias || [], guia: d.guia, fecha: d.fecha, obs: d.obs, notificar: false, ingresaStock: d.ingresaStock, central: d.central, texto: poner(m.textoBase) + nota, titulo: d.titulo, textoCorreo: '' });
+            oc.lineas = aplicarRecepcion(oc, m.key, m.det, [], null, d.ingresaStock).lineas;
+        }
+        if (d.notificar && !d.correoEnviado) { await enviarCorreo(DESTINO_RECEPCION, armarCorreo(oc, d.titulo, poner(d.textoCorreo) + nota, usuario())); if (window.SAR_Cola.actualizar) window.SAR_Cola.actualizar(op.id, { correoEnviado: true }); }
     });
     async function recepcionConStock(oc, { provDoc, extras, baseN, onPaso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar, ingresaStock, central, texto, titulo, textoCorreo }) {
         const f = fs(); const paso = (t) => { if (onPaso) onPaso(t); };
@@ -1562,8 +1571,9 @@
                 const fGuiasN = filasG.filter(x => x.file).length, unidadesOff = allDet.reduce((t, d) => t + d.cantidad, 0);
                 const tituloOff = (activos.some(k => porKey.get(k).incidencias.length) ? 'Recepción con incidencias' : 'Recepción') + (activos.length > 1 ? ` de ${activos.length} memos` : ` en ${(cols.find(c => c.key === activos[0]) || {}).centro}`), textoOff = activos.map(k => textoDe(k, '§REC§')).join('\n\n');
                 if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) {
-                    activos.forEach((k, n) => { const g = porKey.get(k), recP = window.SAR_Folio ? window.SAR_Folio.provisional('REC') : 'REC-P-' + Date.now().toString(36);
-                        window.SAR_Cola.encolar({ tipo: 'recepcion-oc', titulo: `Recepción ${recP} · OC ${oc.numeroOC} · ${g.det.reduce((t, d) => t + d.cantidad, 0)} u.`, datos: { ocId: oc.id, recP, provDoc: (docLeido && docLeido.empresa) || '', extras: n === 0 ? extras : [], baseN, hora, key: k, det: g.det.map(d => ({ ...d })), incidencias: g.incidencias, guia, fecha, obs, notificar: n === activos.length - 1 && q('#r-correo').checked, ingresaStock, central, titulo: tituloOff, textoCorreo: textoOff, textoBase: textoDe(k, '§REC§'), en: new Date().toISOString() } }); });
+                    if (window.SAR_Cola.pendientes().some(x => x.tipo === 'recepcion-oc' && x.datos && x.datos.ocId === oc.id)) { toast('Ya hay una recepción en cola', `La OC ${oc.numeroOC} tiene una recepción esperando internet: recibe lo demás cuando se aplique, para no sumar dos veces.`, 'warning'); return false; }
+                    const memos = activos.map((k, n) => { const g = porKey.get(k); return { key: k, recP: window.SAR_Folio ? window.SAR_Folio.provisional('REC') : 'REC-P-' + Date.now().toString(36) + n, det: g.det.map(d => ({ ...d })), incidencias: g.incidencias, textoBase: textoDe(k, '§REC' + n + '§') }; });
+                    window.SAR_Cola.encolar({ tipo: 'recepcion-oc', titulo: `Recepción ${memos.map(m => m.recP).join(' + ')} · OC ${oc.numeroOC} · ${unidadesOff} u.`, datos: { ocId: oc.id, memos, provDoc: (docLeido && docLeido.empresa) || '', extras, baseN, hora, guia, fecha, obs, notificar: q('#r-correo').checked, ingresaStock, central, titulo: tituloOff, textoCorreo: activos.map((k, n) => textoDe(k, '§REC' + n + '§')).join('\n\n'), en: new Date().toISOString() } });
                     toast('Sin internet: recepción en cola', `OC ${oc.numeroOC}: ${unidadesOff} u.${ingresaStock ? ' entrarán a ' + central : ''} apenas vuelva la conexión (mantén el Visor abierto).${fGuiasN ? ' Las guías escaneadas adjúntalas después desde la orden.' : ''}`, 'info');
                     return;
                 }

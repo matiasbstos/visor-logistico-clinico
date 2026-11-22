@@ -91,7 +91,7 @@
       // Folio TRA-AAAA-NNNNN (estándar de correlativos): uno por operación si viene dado; si no, se toma aquí, en la misma transacción
       const ctr = !(marca && marca.folio) && window.SAR_Folio ? await window.SAR_Folio.leer(tx, 'TRA') : null;
       { const h = await tx.get(refH); if (h.exists()) throw Object.assign(new Error('Ya estaba hecho.'), { ya: true }); }   /* v21.230: siempre (un reintento del SDK tras confirmar no vuelve a mover) */
-      const cajasW = marca && Array.isArray(marca.cajas) && marca.cajas.length && window.SAR_Bultos && window.SAR_Bultos.leerCajasTx ? await window.SAR_Bultos.leerCajasTx(tx, F, D, marca.cajas, { ref: marca.numero, destino: marca.destinoCaja || '' }) : null;   /* v21.243: cajas pistoleadas en la misma transacción */
+      const cajasW = marca && Array.isArray(marca.cajas) && marca.cajas.length && window.SAR_Bultos && window.SAR_Bultos.leerCajasTx ? await window.SAR_Bultos.leerCajasTx(tx, F, D, marca.cajas, { ref: marca.numero, destino: marca.destinoCaja || '', soloTraslado: !!marca.soloTraslado }) : null;   /* v21.243: cajas pistoleadas en la misma transacción */
       if (d.status === 'CUARENTENA') throw new Error('En CUARENTENA: no se puede mover.');
       if (qty > num(d.quantity)) throw new Error('Stock insuficiente.');
       const { lotes, movidos } = sacarLotes(d, sel);

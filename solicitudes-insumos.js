@@ -519,12 +519,14 @@
     if (!folio) { pist.msg = `«${String(txt).slice(0, 30)}» no es una etiqueta de caja (BUL).`; return pintarBandeja(); }
     const yaCs = cajasL[keyL(n, i)] || [];
     /* B.A.: una caja física sale una sola vez: no puede estar en otra línea ni en otra solicitud sin procesar */
-    const otraL = Object.entries(cajasL).find(([k, a]) => k !== keyL(n, i) && a.some(x => x.folio === folio));
-    const enSol = solicitudes.find(x => x.estado !== 'ANULADA' && x.estado !== 'ENTREGADA' && (x.lineas || []).some((l2, i2) => !(x.numero === n && i2 === i) && (l2.seleccion || []).some(z => (z.bultos || []).some(bx => bx.folio === folio) && !(l2.movidos || []).includes(grupoDe(z)))));
-    if (otraL || enSol) { pist.msg = `${folio} ya está elegida en ${enSol ? 'la solicitud ' + (enSol.correlativo || enSol.numero) : 'otro producto'}: una caja sale una sola vez.`; return pintarBandeja(); }
     if (yaCs.some(x => x.folio === folio)) { pist.msg = `${folio} ya está pistoleada en este producto.`; return pintarBandeja(); }
     let b; try { b = await B.leer(folio); } catch (e) { pist.msg = 'No pude leer la caja: ' + (e.message || e); return pintarBandeja(); }
     if (!b) { pist.msg = `${folio} no existe en el sistema.`; return pintarBandeja(); }
+    /* B.A.: la caja, su caja grande y sus cajas pequeñas son la misma mercadería: ninguna puede estar elegida en otra línea u otra solicitud sin procesar */
+    const familia = new Set([folio, b.padre, ...(Array.isArray(b.hijos) ? b.hijos : [])].filter(Boolean));
+    const otraL = Object.entries(cajasL).find(([k, a]) => k !== keyL(n, i) && a.some(x => familia.has(x.folio)));
+    const enSol = solicitudes.find(x => x.estado !== 'ANULADA' && x.estado !== 'ENTREGADA' && (x.lineas || []).some((l2, i2) => !(x.numero === n && i2 === i) && (l2.seleccion || []).some(z => (z.bultos || []).some(bx => familia.has(bx.folio)) && !(l2.movidos || []).includes(grupoDe(z)))));
+    if (otraL || enSol) { pist.msg = `${folio} (o su caja grande / sus cajas pequeñas) ya está elegida en ${enSol ? 'la solicitud ' + (enSol.correlativo || enSol.numero) : 'otro producto'}: una caja sale una sola vez.`; return pintarBandeja(); }
     if (b.padre && yaCs.some(x => x.folio === b.padre)) { pist.msg = `${folio} va dentro de ${b.padre}, que ya pistoleaste: no se cuenta dos veces.`; return pintarBandeja(); }
     if (Array.isArray(b.hijos) && yaCs.some(x => b.hijos.includes(x.folio))) { pist.msg = `Ya pistoleaste una caja pequeña de ${folio}: sigue con sus cajas pequeñas.`; return pintarBandeja(); }
     try { if (window.SAR_Sonidos) window.SAR_Sonidos.tocar('ok'); } catch (e) { /* sin sonido */ }
@@ -709,7 +711,7 @@
     const tareas = []; (s.lineas || []).forEach((l, i) => (l.movidos || []).filter(g => !(l.recibidos || []).includes(g)).forEach(g => { const x = (l.seleccion || []).find(y => grupoDe(y) === g), tid = (l.transito || {})[g]; if (x && tid) tareas.push({ l, i, g, x, tid }); }));
     if (!sDoc) { const si = P && P.confirmar ? await P.confirmar({ titulo: `¿Recibido en ${esc(s.bodega)}?`, texto: `${esc(s.correlativo || n)}: entra a ${esc(s.bodega)} lo que estaba en camino.`, lineas: tareas.map(t => `${esc(t.l.asociado || t.l.nombre)} · <b>${num(t.x.qty)}</b> u. · lote ${esc(t.x.lote)}`), si: 'Recibido' }) : confirm('¿Recibido?'); if (!si) return; }
     ocupado.add(n); pintarBandeja(); let mal = 0; const nota = `Solicitud ${s.correlativo || n} · recibido`, folioRec = tareas.length && window.SAR_Folio ? await window.SAR_Folio.siguiente('TRA') : '';
-    for (const t of tareas) { try { await T.moverUno(t.tid, TRANSITO, String(s.bodega || '').trim().replace(/\s+/g, ' '), [{ clave: t.x.clave, qty: num(t.x.qty) }], nota, { numero: n, i: t.i, grupo: t.g, campo: 'recibidos', nombre: t.l.nombre, ...(folioRec ? { folio: folioRec } : {}) }); } catch (e) { if (!e.ya) { mal++; toast('No se recibió', `${esc(t.l.nombre)}: ${esc(e.message || e)}`, 'error'); } } }
+    for (const t of tareas) { try { await T.moverUno(t.tid, TRANSITO, String(s.bodega || '').trim().replace(/\s+/g, ' '), [{ clave: t.x.clave, qty: num(t.x.qty) }], nota, { numero: n, i: t.i, grupo: t.g, campo: 'recibidos', nombre: t.l.nombre, ...(folioRec ? { folio: folioRec } : {}), ...(Array.isArray(t.x.bultos) && t.x.bultos.length ? { cajas: t.x.bultos.map(bx => ({ folio: bx.folio, qty: num(bx.qty) })), destinoCaja: String(s.bodega || '').trim(), soloTraslado: true } : {}) }); } catch (e) { if (!e.ya) { mal++; toast('No se recibió', `${esc(t.l.nombre)}: ${esc(e.message || e)}`, 'error'); } } }
     try { const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), COL), n)), x = sn.exists() ? limpiarSol(sn.data(), n) : null;
       if (x && (x.lineas || []).every(recibidaL) && x.estado === 'LISTA') { const ahora = new Date().toISOString(); await f.updateDoc(f.doc(f.collection(db(), COL), n), { estado: 'ENTREGADA', recibidoEn: ahora, historial: (x.historial || []).concat([{ estado: 'ENTREGADA', por: usuario(), en: ahora, nota: 'Recibido en ' + s.bodega }]) }); } } catch (e) { mal++; }
     ocupado.delete(n); try { await cargarBase(); } catch (e) { errorBase(e); } pintarBandeja();

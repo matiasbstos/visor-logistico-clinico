@@ -386,15 +386,18 @@
       if (b.nivel === 'interior' && b.padre) await traer(b.padre);
       if (Array.isArray(b.hijos) && entera) for (const h of b.hijos) await traer(h);
       plan.push({ b, q, entera }); }
+    /* una caja pequeña y su caja grande en el mismo movimiento contarían dos veces la misma mercadería */
+    if (!o.soloTraslado) { const fs2 = new Set(plan.map(x => x.b.folio)); if (plan.some(x => x.b.padre && fs2.has(x.b.padre))) throw new Error('Se eligió una caja grande y también una de sus cajas pequeñas: quita una de las dos.'); }
     return () => {
       const ahora = new Date().toISOString(), por = usuario(), cambios = new Map();
       const mod = (b, campos, accion, det) => { const prev = cambios.get(b.folio) || { ...b }; Object.assign(prev, campos); prev.historial = (prev.historial || b.historial || []).concat([{ accion, por, en: ahora, ...det }]).slice(-40); prev.actualizado = ahora; cambios.set(b.folio, prev); return prev; };
       const actual = (fo) => cambios.get(fo) || mapa.get(fo);
+      if (o.soloTraslado) { plan.forEach(({ b: b0 }) => { const b = actual(b0.folio); if (b.bodega === 'En tránsito') { mod(b, { bodega: o.destino }, 'TRASLADO', { ref: o.ref || '', a: o.destino, recibido: true }); (b.hijos || []).forEach(h => { const hb = actual(h); if (hb && hb.bodega === 'En tránsito') mod(hb, { bodega: o.destino }, 'TRASLADO', { ref: o.ref || '', a: o.destino, recibido: true }); }); } }); cambios.forEach((x, fo) => tx.set(rf(fo), x, { merge: true })); return; }   /* recepción de una reposición: la caja llega a su bodega */
       plan.forEach(({ b: b0, q, entera }) => { const b = actual(b0.folio), tiene = num(b.contenido), sale = Math.min(q, tiene), det = { qty: sale, ref: o.ref || '', ...(q > tiene ? { pedido: q, nota: 'la caja tenía menos según el sistema' } : {}) };
-        if (o.destino && entera) mod(b, { bodega: o.destino, estado: b.estado === 'VACIA' ? 'CERRADA' : b.estado }, 'TRASLADO', { ...det, a: o.destino });   /* reposición: la caja completa viaja */
+        if (o.destino && entera) mod(b, { bodega: 'En tránsito', ...(b.padre ? { padre: null, padreAntes: b.padre } : {}) }, 'TRASLADO', { ...det, a: o.destino, enCamino: true });   /* reposición: la caja completa viaja («En tránsito» hasta que se reciba); una caja pequeña que viaja sola deja de colgar de su caja grande */
         else mod(b, { contenido: tiene - sale, estado: tiene - sale > 0 ? 'ABIERTA' : 'VACIA' }, 'SALIDA', det);
         if (b.nivel === 'interior' && b.padre && actual(b.padre)) { const pa = actual(b.padre), r = Math.max(0, num(pa.contenido) - sale); mod(pa, o.destino && entera ? { contenido: r, estado: r > 0 ? 'ABIERTA' : 'VACIA' } : { contenido: r, estado: r > 0 ? 'ABIERTA' : 'VACIA' }, 'SALIDA', { qty: sale, ref: o.ref || '', porInterior: b.folio }); }
-        if (Array.isArray(b.hijos) && entera) b.hijos.forEach(h => { const hb = actual(h); if (hb && hb.estado !== 'VACIA') mod(hb, o.destino ? { bodega: o.destino } : { contenido: 0, estado: 'VACIA' }, o.destino ? 'TRASLADO' : 'SALIDA', { ref: o.ref || '', enCajaGrande: b.folio }); });
+        if (Array.isArray(b.hijos) && entera) b.hijos.forEach(h => { const hb = actual(h); if (hb && hb.estado !== 'VACIA') mod(hb, o.destino ? { bodega: 'En tránsito' } : { contenido: 0, estado: 'VACIA' }, o.destino ? 'TRASLADO' : 'SALIDA', { ref: o.ref || '', enCajaGrande: b.folio }); });
       });
       cambios.forEach((x, fo) => tx.set(rf(fo), x, { merge: true }));
     };

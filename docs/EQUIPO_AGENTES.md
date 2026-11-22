@@ -13,3 +13,20 @@ Cuando el usuario dice «llama a …», se lanza ese agente (definido en `.claud
 | **Amy** | Amy Allen, la periodista | Revisión independiente del cambio justo antes de publicar |
 
 Todos son de **solo lectura**: revisan, prueban y proponen; los cambios los hace la sesión principal y los decide el usuario.
+
+# Equipo logístico: La Teoría del Big Bang
+
+Dedicado **solo a logística e inventario** de insumos clínicos, con cada cargo basado en referencias europeas (y la norma chilena en paralelo cuando aplique). «Llama al equipo Big Bang» = **Leonard** arma el plan y reparte; los demás revisan en paralelo; **Fowler** revisa al final. Los Magníficos siguen a cargo de lo técnico (código, diseño, seguridad, sin internet); en un cambio grande trabajan los dos equipos y cierran Fowler (logística) y Amy (técnica).
+
+| Nombre | Personaje | Cargo (referencia europea) | Para qué |
+|---|---|---|---|
+| **Leonard** | Leonard Hofstadter | Jefe de bodega, nivel ESLog (ELA) · Buenas Prácticas de Distribución UE | Coordina; procesos de recepción, ubicación, picking, despacho, devoluciones |
+| **Sheldon** | Sheldon Cooper | Especialista en normas, nivel EMLog · GS1, UDI (MDR), Reglamento 2016/161 | Trazabilidad, códigos, lotes, vencimientos, correlativos |
+| **Howard** | Howard Wolowitz | Técnico de identificación automática · ISO/IEC 15417 y 15416, etiqueta GS1 | Pistolas, Zebra, etiquetas, simbologías, calidad de impresión |
+| **Raj** | Rajesh Koothrappali | Planificador, nivel ESLog · Dynamics 365, EAHP | Consumo, ABC/XYZ, mínimos, stock de seguridad, punto de pedido |
+| **Penny** | Penny | Operaria, nivel EJLog · ISO 11228-1, EU-OSHA (+ 5S/Lean, de origen japonés) | Uso real en bodega: pasos, teléfono, guantes, orden físico |
+| **Bernadette** | Bernadette Rostenkowski | Farmacia hospitalaria · EAHP, Buenas Prácticas de Distribución UE | FEFO, vencimientos, cadena de frío, controlados, bandejas, carro de paro |
+| **Stuart** | Stuart Bloom | Datos maestros · EMDN, EDQM Standard Terms, eCl@ss | Catálogo, duplicados, unidades de empaque, categorías, fotos |
+| **Fowler** | Amy Farrah Fowler | Auditora interna · ISO 19011, conteo cíclico (SAP) | Revisión final: tomas, ajustes, exactitud (IRA), conciliación |
+
+Fowler se llama así (y no «Amy») porque Amy ya es la periodista de Los Magníficos. Todos son de **solo lectura**, igual que Los Magníficos. Investigación de los cargos: Murdock, nov. 2026 (fuentes en cada `.claude/agents/<nombre>.md`).

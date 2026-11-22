@@ -355,6 +355,16 @@
   }
   /** v21.238: tocar una caja interior (abrirla, vaciarla o pistolearla) significa que su caja grande está abierta. */
   function abrirPadre(b) { if (!b || !b.padre) return; leer(b.padre).then(pa => { if (pa && pa.estado === 'CERRADA') guardar(pa, { estado: 'ABIERTA' }, 'ABIERTA', { porInterior: b.folio }).catch(() => {}); }).catch(() => {}); }
+  /** v21.243: salida desde una caja pistoleada (p. ej. al despachar una solicitud): baja su contenido y lo deja en el historial.
+   *  Caja interior → baja también la caja grande (y la marca abierta). Caja grande con `cajasChicas` → esas interiores salen enteras (VACIA en la caja). */
+  async function sacar(folio, qty, ref, cajasChicas) {
+    const b = await leer(folio); if (!b) throw new Error(folio + ' no existe.'); const q = Math.max(0, Math.floor(num(qty))); if (!q) return b;
+    const baja = (x, n) => { const r = Math.max(0, num(x.contenido) - n); return { contenido: r, estado: r > 0 ? 'ABIERTA' : 'VACIA' }; };
+    await guardar(b, (x) => baja(x, q), 'SALIDA', { qty: q, ref: ref || '' });
+    if (b.nivel === 'interior' && b.padre) { const pa = await leer(b.padre); if (pa) await guardar(pa, (x) => baja(x, q), 'SALIDA', { qty: q, ref: ref || '', porInterior: folio }); }
+    else if (Array.isArray(b.hijos) && num(cajasChicas) > 0) { let k = 0; for (const h of b.hijos) { if (k >= num(cajasChicas)) break; const hb = await leer(h); if (hb && hb.estado !== 'VACIA') { await guardar(hb, { contenido: 0, estado: 'VACIA' }, 'SALIDA', { qty: num(hb.contenido), ref: ref || '', enCajaGrande: folio }); k++; } } }
+    return b;
+  }
   async function escanear(modo) {
     const conteo = modo === 'conteo', leidos = [], vistos = new Set(), cubiertos = new Set(), abiertosPadre = new Set(), grandesCerradas = new Set();
     const ov = ventana(conteo ? 'Contar por bultos (pistolear)' : 'Escanear bulto', `
@@ -733,6 +743,6 @@
     inp.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => registrar('nada'), 250); });
     pintar(''); setTimeout(() => inp.focus(), 50); return ov;
   }
-  window.SAR_Bultos = { probarPistola, hojaPrueba, code39, i2de5, planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
+  window.SAR_Bultos = { leer, sacar, probarPistola, hojaPrueba, code39, i2de5, planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_Bultos;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null, addEventListener() {} });

@@ -1622,3 +1622,20 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
 - Etiquetas → «Probar la pistola»: descarga una hoja de prueba (100 × 60) con seis variantes —Code 128 a 5, 4 y 3 puntos, Code 39, Code 128 con letras e Interleaved 2 de 5—, cada una con un número distinto, y una línea que debe medir 50 mm para comprobar que no se imprimió escalado. Al pistolear cada una, la pantalla marca cuál leyó y qué texto escribió (sirve también para detectar el idioma del teclado de la pistola).
 - La pistola puede terminar con Enter, Tab o nada: el escaneo de bultos acepta los tres (sin nada, toma el folio completo cuando deja de escribir) y la prueba avisa cuál usa.
 - Con el resultado se fija el formato definitivo de la etiqueta (y, si hace falta, se activa la simbología en la pistola con los códigos de su manual).
+
+## 4.295 Pistolear la caja al despachar una solicitud (v21.243)
+
+**Pedido.** En la bandeja de solicitudes de insumos, pinchar el producto pedido, pistolear la etiqueta de la caja que se va a sacar y que se descuente del lote de esa caja; si la caja trae cajas pequeñas, preguntar cuántas cajas pequeñas o cuántas unidades, para que el stock (y la caja) quede cuadrado.
+
+**Decisión.**
+- En cada producto de la solicitud: «Pistolear caja». Se lee el folio BUL (Enter, Tab o sin sufijo). Se valida que la caja sea de ese producto, que no esté vacía y que su lote tenga stock en el sistema (si no, se avisa; no se adivina otro lote).
+- Se pregunta qué sale de esa caja: **cajas pequeñas** (si la caja trae interiores, × unidades por caja pequeña), **la caja completa** o **unidades sueltas**. No deja sacar más de lo que tiene la caja ni del lote.
+- Lo pistoleado manda en «Sacar»: ese lote queda con lo de las cajas (y los demás en 0, editable). Se pueden pistolear varias cajas; cada una se puede quitar.
+- Al **Procesar**, el stock sale del lote como siempre (transacción de traspasos) y, solo si se movió, cada caja baja su contenido con historial «SALIDA» y la referencia de la solicitud: caja interior → baja también su caja grande; cajas pequeñas sacadas de una grande → esas interiores quedan VACÍAS.
+- Las cajas quedan guardadas en la línea (`seleccion[].bultos: [{folio, qty, sub}]`) para la trazabilidad.
+
+## 4.296 Equipo logístico «La Teoría del Big Bang»
+
+**Pedido.** Un segundo equipo de agentes, inspirado en The Big Bang Theory, dedicado solo a logística e inventario, con cada cargo basado en referencias europeas.
+
+**Decisión.** Ocho agentes de solo lectura en `.claude/agents/` (Leonard coordina, Fowler revisa al final): Leonard (jefe de bodega, BPD UE), Sheldon (normas y trazabilidad: GS1, UDI, 2016/161), Howard (pistolas, Zebra, simbologías ISO/IEC 15417/15416), Raj (planificación y reposición), Penny (operaria en terreno, ergonomía), Bernadette (farmacia: FEFO, frío, controlados), Stuart (catálogo y unidades: EMDN, EDQM, eCl@ss), Fowler (auditoría: ISO 19011, conteo cíclico, IRA). Investigación de Murdock con fuentes; norma chilena (ISP, Minsal) en paralelo cuando aplique. Detalle en `docs/EQUIPO_AGENTES.md`.

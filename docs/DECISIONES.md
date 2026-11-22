@@ -1653,3 +1653,27 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
 - **Confirmar un producto** (con o sin cajas pistoleadas) sin internet también queda en la cola (`solicitud-linea`) y se guarda con su transacción al volver; en pantalla se ve «en cola». Las cajas se leen de la copia local (están escuchadas en vivo).
 - Revisión de Frankie: una operación sale de la cola **solo si se hizo** (sin red / solicitud ocupada → sigue pendiente; lotes con error → «para revisar»); los oyentes se cortan y rearman al cambiar de usuario y salen de la lista si caen; para ahorrar lecturas, lo que se escucha en vivo no se vuelve a bajar entero cada 30 min, solo se escuchan las solicitudes abiertas, los usuarios básicos no escuchan en vivo y el evento «volvió internet» sube la cola al tiro pero respeta 10 min para la descarga completa; la hora «en vivo» solo cuenta datos que llegaron del servidor.
 - Límites conocidos: en iPhone no hay sincronización en segundo plano (la cola avanza con el Visor abierto y con el mismo usuario) y Safari sin instalar la app puede borrar los datos tras ~7 días sin uso: conviene instalar el Visor en la pantalla de inicio. Todavía **no** funcionan sin internet: actas de entrega, recepción de OC, ingreso de existencias y crear etiquetas nuevas (próximo paso: cola con folio provisional, como los ajustes).
+
+## 4.298 Ingreso de existencias sin internet (v21.245)
+
+**Pedido.** Que todo funcione sin internet; plan de Hannibal (4.297 → paso 1: ingresos, después recepción de OC, etiquetas de cajas y actas).
+
+**Decisión.**
+- **Ingreso de existencias** (formulario normal) e **Ingreso rápido de inventario**: sin conexión quedan en la cola del teléfono con folio provisional (`ING-P-…` / `INV-P-…`) y se aplican solos al volver internet, con su transacción y el folio definitivo (que guarda el provisional entre paréntesis).
+- **Sin duplicar al reintentar:** el movimiento del historial se escribe con id fijo por operación (`ing-<op>` en el ingreso normal; `ing-<op>-<producto>-<lote>` en el rápido) y se lee primero dentro de la transacción; si ya existe, no se vuelve a sumar (con internet protege el reintento interno de Firestore; reenviar el formulario a mano sigue siendo otro ingreso). El código ING y el folio INV/REC definitivos se toman una sola vez por operación. Un producto nuevo se busca en Firestore antes de crearlo y, si no existe, usa un id fijo por nombre y bodega (dos ingresos en cola del mismo producto nuevo no crean dos fichas).
+- El núcleo del ingreso de proveedor quedó en `aplicarIngresoProveedor(p, opId)` (script.js), separado del formulario. El documento de respaldo (archivo) no viaja en la cola: se adjunta después; queda su nombre.
+
+## 4.299 Recepción de OC sin internet (v21.245)
+
+- Sin conexión, «Guardar recepción» deja una operación por memo en la cola (`recepcion-oc`) con folio provisional `REC-P-…`; al volver internet toma el folio REC definitivo **una sola vez** (queda guardado en la operación con `SAR_Cola.actualizar`) y aplica la misma transacción de siempre (`recepcionConStock`), que ya no repite una recepción si la orden tiene ese REC. El correo sale al aplicarse. Las guías escaneadas (archivos) no viajan en la cola: se adjuntan después desde la orden. Conflictos («la orden cambió», «solo quedan N») quedan «para revisar».
+- El ingreso rápido usa el mismo mecanismo para su folio INV definitivo.
+
+## 4.300 Etiquetas de cajas sin internet (v21.245)
+
+- El folio BUL va impreso y lo lee la pistola (10 dígitos), así que no puede ser provisional. Con internet, cada equipo **reserva un tramo de 60 folios** del mismo contador (`correlativo-bultos-AAAA`) y lo renueva al bajar de 20 (al sincronizar y al crear etiquetas); queda el registro `Contadores/reserva-bul-<equipo>-<año>-<desde>`. Sin internet, `crear()` usa folios seguidos de su tramo y guarda las cajas con `setDoc` (id = folio): la copia local de Firestore las sube sola. Si no alcanzan, avisa cuántas puede crear. Los folios reservados que no se usen quedan como hueco justificado (nunca se reutilizan).
+
+## 4.301 Actas de entrega sin internet (v21.245)
+
+- Sin conexión, «Emitir» deja el acta en la cola (`acta-emitir`) con folio provisional `AE-P-…` y genera un **PDF provisional** para firmar (el número dice «PROVISIONAL»). Al volver internet se emite con su AE definitivo y reserva el stock en la misma transacción de siempre; lo que no alcance queda como sobregiro, igual que con internet (la entrega ya ocurrió). El acta definitiva guarda `folioProvisional` y `hechaSinConexion`.
+- Sin duplicar: marca `Contadores/cola-ae-<operación>` → {numero} escrita en la misma transacción y leída al inicio; un reintento no emite dos actas.
+- Las actas de una orden de compra siguen necesitando internet (validan lo recibido de la OC); el borrador queda guardado. Confirmar con el acta firmada (subir archivo) y anular también necesitan internet.

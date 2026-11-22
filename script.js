@@ -4803,6 +4803,173 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // B. SWITCHER DE TABS REMOVIDO PARA INGRESOS
 
+    /* v21.245: núcleo del ingreso de proveedor, separado del formulario para poder aplicarlo desde la cola sin internet.
+       p = {data, nombreInput, insumoNormalizado, quantity, cleanBatch, formattedDate, porCajaIng, destinoNombre, destinoId, categoriaSel, codigoMP, docNombre, sinConexion?, en?} */
+    async function aplicarIngresoProveedor(p, opId, alCodigo) {
+        const { data, nombreInput, insumoNormalizado, quantity, cleanBatch, formattedDate, porCajaIng } = p;
+        const auditRef = doc(db, 'Historial_Movimientos', 'ing-' + opId);   /* id fijo por operación: un reintento no suma dos veces */
+        let repetido = false;
+        let insumoId = null;
+        // Un insumo se identifica por nombre Y bodega de destino: lo ingresado a otra bodega no se suma al stock de la Central
+        const _nb = (t) => String(t || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+(sar)$/, '').trim();
+        const destinoNombre = p.destinoNombre;
+                            const destinoId = p.destinoId;
+        const _nn = (t) => String(t || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+        const match = (window.insumosDataCache || []).find(i =>
+            (_nn(i.name) === insumoNormalizado || (Array.isArray(i.nombresAnteriores) && i.nombresAnteriores.some(a => _nn(a) === insumoNormalizado)))
+            && _nb(i.location || i.ubicacion || 'Bodega Central') === _nb(destinoNombre)
+        );
+
+        if (match) {
+            insumoId = match.id;
+        } else {
+            /* v21.245 (B.A.): la lista en memoria puede no estar al día (cola al volver internet): se busca en Firestore antes de crear uno nuevo,
+               y si no existe se usa un id fijo por nombre y bodega, así dos ingresos en cola del mismo producto nuevo no crean dos fichas */
+            try { const qs = await getDocs(query(collection(db, 'Insumos'), where('name_lowercase', '==', nombreInput.trim().toLowerCase()), limit(10))); qs.forEach(x => { if (!insumoId && _nb(x.data().location || x.data().ubicacion || 'Bodega Central') === _nb(destinoNombre)) insumoId = x.id; }); } catch (eQ) { /* sin red: id fijo */ }
+            const sl = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+            if (!insumoId) insumoId = `ing_${sl(nombreInput)}__${sl(destinoNombre)}`;
+        }
+
+        // v21.128: código SAR del producto (y ID de Mercado Público opcional para la foto del catálogo)
+        const categoriaSel = p.categoriaSel;
+        const codigoSAR = window.SAR_CodigoSAR ? await window.SAR_CodigoSAR.asignar(nombreInput.trim()) : '';
+        const codigoMP = p.codigoMP;
+
+        // EJECUCIÓN ATÓMICA DE INGRESO (Transaction Recovery)
+        const codigoLote = window.SAR_CodigoSAR ? await window.SAR_CodigoSAR.asignarLote(nombreInput.trim(), cleanBatch, formattedDate === 'N/A' ? '' : formattedDate) : '';
+        /* el código ING se toma una sola vez por operación (alCodigo lo guarda en la cola): un reintento no gasta otro número */
+        let codigoIngreso = p.codigoIngreso || ''; if (!codigoIngreso) { codigoIngreso = window.SAR_Gobernanza ? await window.SAR_Gobernanza.codigo('ING').catch(() => '') : ''; if (codigoIngreso && alCodigo) alCodigo(codigoIngreso); }
+        await runTransaction(db, async (transaction) => {
+            const insumoRef = doc(db, 'Insumos', insumoId);
+            const yaHecho = await transaction.get(auditRef); if (yaHecho.exists()) { repetido = true; return; }
+            const insumoSnap = await transaction.get(insumoRef);
+
+            if (!insumoSnap.exists()) {
+                transaction.set(insumoRef, {
+                    name: nombreInput.trim(),
+                    quantity: quantity,
+                    batches: [{
+                        batch: cleanBatch,
+                        quantity: quantity,
+                        expirationDate: formattedDate,
+                        provider: data.providerId || 'S/I',
+                        ...(codigoLote ? { codigoLote } : {}),
+                        ...(porCajaIng ? { porCaja: porCajaIng } : {})
+                    }],
+                    ...(porCajaIng ? { unidadesPorCaja: porCajaIng } : {}),
+                    batch: cleanBatch, // Mantenemos por retrocompatibilidad UI temporal
+                    expirationDate: formattedDate,
+                    provider: data.providerId || "S/I",
+                    purchaseType: data.purchaseType || "S/I",
+                    tipoInsumo: ['medico', 'aseo', 'oficina'].includes(data.tipoInsumo) ? data.tipoInsumo : 'medico',
+                    ...(codigoSAR ? { codigoSAR } : {}),
+                    ...(codigoMP ? { codigoMP } : {}),
+                    origenOC: true,   // v21.124: sin esta marca la fase «solo OC» lo ocultaba de Existencias
+                    name_lowercase: nombreInput.trim().toLowerCase(),
+                    category: categoriaSel,
+                    location: destinoNombre,
+                    bodegaNombre: destinoNombre,
+                    ...(destinoId ? { bodegaId: destinoId } : {}),
+                    createdAt: serverTimestamp(),
+                    updatedAt: serverTimestamp()
+                });
+            } else {
+                const dataAnterior = insumoSnap.data();
+                let currentBatches = dataAnterior.batches || [];
+
+                // Migración On-The-Fly si no tiene array batches
+                if (currentBatches.length === 0 && dataAnterior.batch) {
+                    currentBatches.push({
+                        batch: dataAnterior.batch,
+                        quantity: dataAnterior.quantity || 0,
+                        expirationDate: dataAnterior.expirationDate || ''
+                    });
+                }
+
+                /* v21.230: mismo lote = mismo número Y mismo vencimiento (antes se sumaba por número y se pisaba el vencimiento del stock que ya estaba) */
+                const vNorm = (v) => { const t = String(v || '').trim(); return /^(n\/?a|s\/v|-)?$/i.test(t) ? '' : t; };
+                const batchIndex = currentBatches.findIndex(b => b.batch === cleanBatch && (!formattedDate || !vNorm(b.expirationDate) || vNorm(b.expirationDate) === vNorm(formattedDate)));
+                if (batchIndex !== -1) {
+                    currentBatches[batchIndex].quantity += quantity;
+                    if (!currentBatches[batchIndex].codigoLote && codigoLote) currentBatches[batchIndex].codigoLote = codigoLote;
+                    if (formattedDate && !vNorm(currentBatches[batchIndex].expirationDate)) currentBatches[batchIndex].expirationDate = formattedDate;   // solo completa si no tenía
+                    if (porCajaIng && !(Number(currentBatches[batchIndex].porCaja) > 0)) currentBatches[batchIndex].porCaja = porCajaIng;
+                } else {
+                    currentBatches.push({
+                        batch: cleanBatch,
+                        quantity: quantity,
+                        expirationDate: formattedDate,
+                        provider: data.providerId || 'S/I',
+                        ...(codigoLote ? { codigoLote } : {}),
+                        ...(porCajaIng ? { porCaja: porCajaIng } : {})
+                    });
+                }
+
+                // FEFO: Ordenar array por fecha de vencimiento ascendente
+                currentBatches.sort(window.fefoCompare);
+                /* v21.228: lo adeudado (entregado antes con acta sin stock en el sistema) se descuenta primero de lo que ingresa */
+                const cq = window.SAR_CuadreIngreso ? window.SAR_CuadreIngreso.aplicar({ doc, collection, serverTimestamp }, db, transaction, { ref: insumoRef, antes: dataAnterior, quantity: (Number(dataAnterior.quantity) || 0) + quantity, batches: currentBatches, documento: codigoIngreso || 'Ingreso', bodega: dataAnterior.location || destinoNombre, nombre: dataAnterior.name, usuario: (auth.currentUser && auth.currentUser.email) || '' }) : null;
+
+                transaction.update(insumoRef, {
+                    ...(cq ? { quantity: cq.quantity, batches: cq.batches, sobregiro: cq.sobregiro, sobregiroDetalle: cq.sobregiroDetalle } : { quantity: increment(quantity), batches: currentBatches }),
+                    provider: String(data.providerId || dataAnterior.provider || 'S/I').trim(),
+                    purchaseType: String(data.purchaseType || dataAnterior.purchaseType || 'S/I').trim(),
+                    ...(!dataAnterior.codigoSAR && codigoSAR ? { codigoSAR } : {}),
+                    ...((!dataAnterior.category || dataAnterior.category === 'General') && categoriaSel !== 'General' ? { category: categoriaSel } : {}),
+                    ...(!dataAnterior.codigoMP && codigoMP ? { codigoMP } : {}),
+                    ...(porCajaIng && !(Number(dataAnterior.unidadesPorCaja) > 0) ? { unidadesPorCaja: porCajaIng } : {}),
+                    // El tipo de un insumo ya clasificado no se cambia desde un ingreso
+                    tipoInsumo: dataAnterior.tipoInsumo || (['medico', 'aseo', 'oficina'].includes(data.tipoInsumo) ? data.tipoInsumo : 'medico'),
+                    updatedAt: serverTimestamp()
+                });
+            }
+
+            // Log de Auditoría dentro de la misma transacción para consistencia
+            transaction.set(auditRef, {
+                insumoName: insumoSnap.exists() ? insumoSnap.data().name : nombreInput.trim(),
+                item: insumoSnap.exists() ? insumoSnap.data().name : nombreInput.trim(),
+                quantity: quantity,
+                type: 'INGRESO_PROVEEDOR',
+                ...(codigoIngreso ? { codigoIngreso } : {}),
+                ...(codigoLote ? { codigoLote } : {}),
+                batch: cleanBatch,
+                destination: data.destinationId || "Principal",
+                provider: data.providerId || "S/I",
+                purchaseType: data.purchaseType || "S/I",
+                tipoInsumo: ['medico', 'aseo', 'oficina'].includes(data.tipoInsumo) ? data.tipoInsumo : 'medico',
+                insumoId: insumoId,
+                expirationDate: formattedDate === 'N/A' ? '' : formattedDate,
+                observations: (data.observations || '').trim(),
+                origenTipo: /pr[eé]stamo|traspaso/i.test(data.purchaseType || '') ? 'prestamo_otro_centro' : 'compra',
+                origenCentro: /pr[eé]stamo|traspaso/i.test(data.purchaseType || '') ? (data.providerId || '') : '',
+                user: auth.currentUser ? auth.currentUser.email : 'Admin Local',
+                date: serverTimestamp(),
+                document: (String(data.ordenDocumento || '').trim().toUpperCase() || p.docNombre || 'S/N') + (p.folioProvisional ? ` (hecho sin conexión: ${p.folioProvisional})` : ''), ...(p.sinConexion ? { sinConexion: true, hechoEn: p.en || '', ...(p.folioProvisional ? { folioProvisional: p.folioProvisional } : {}) } : {})
+            });
+            // Préstamo / traspaso desde otro centro: queda pendiente de devolver (v21.82)
+            if (/pr[eé]stamo|traspaso/i.test(data.purchaseType || '')) {
+                transaction.set(doc(db, 'Contadores', 'prestamo-' + auditRef.id), {
+                    tipo: 'prestamo-recibido', estado: 'PENDIENTE', centro: (data.providerId || 'S/I'), insumoId: insumoId,
+                    insumoName: insumoSnap.exists() ? insumoSnap.data().name : nombreInput.trim(), batch: cleanBatch,
+                    cantidad: quantity, devuelto: 0, creadoPor: auth.currentUser ? auth.currentUser.email : 'Admin Local',
+                    fecha: serverTimestamp(), updatedAt: serverTimestamp()
+                });
+            }
+        });
+
+        // Todo producto ingresado entra al catálogo (compra directa, convenio marco o Mercado Público); con ID se le busca la foto
+        if (true) {
+            try {
+                const idCat = codigoMP ? String(codigoMP) : (nombreInput.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, '-').toLowerCase().replace(/^-|-$/g, '').slice(0, 60) || 'manual');
+                await setDoc(doc(db, 'Catalogo_Productos', idCat), { descripcion: nombreInput.trim(), descripcion_lower: nombreInput.trim().toLowerCase(), codigoMP: codigoMP || '', insumoName: nombreInput.trim(), ...(codigoMP ? {} : { sinOrden: true, origen: 'INGRESO' }), ...(codigoSAR ? { codigoSAR } : {}), actualizado: serverTimestamp() }, { merge: true });
+            } catch (eCat) { console.warn('Catálogo:', eCat); }
+        }
+        return { insumoId, repetido };
+    }
+    window.__aplicarIngresoProveedor = aplicarIngresoProveedor;
+    { const reg = () => { if (window.SAR_Cola && window.SAR_Cola.registrar) { window.SAR_Cola.registrar('ingreso', async (d, op) => { const r = await aplicarIngresoProveedor(d, op.id, (c) => { if (window.SAR_Cola.actualizar) window.SAR_Cola.actualizar(op.id, { codigoIngreso: c }); }); if (r && r.insumoId && Array.isArray(window.insumosDataCache) && !window.insumosDataCache.some(x => x.id === r.insumoId)) window.insumosDataCache.push({ id: r.insumoId, name: d.nombreInput.trim(), location: d.destinoNombre }); }); return true; } return false; };
+      if (!reg()) { let n = 0; const t = setInterval(() => { if (reg() || ++n > 40) clearInterval(t); }, 500); } }
+
         // C. GUARDADO DE INGRESO (LOGICA DE NÚCLEO)
         const moveForm = document.getElementById('form-movimiento');
         if (moveForm) {
@@ -4856,159 +5023,20 @@ document.addEventListener('DOMContentLoaded', () => {
                 btn.disabled = true;
 
                 try {
-                    let insumoId = null;
-                    // Un insumo se identifica por nombre Y bodega de destino: lo ingresado a otra bodega no se suma al stock de la Central
-                    const _nb = (t) => String(t || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+(sar)$/, '').trim();
-                    const destinoNombre = (data.destinationId || '').trim() || 'Bodega Central';
+                    /* v21.245: datos del formulario en un objeto plano (sirve también para la cola sin internet) */
                     const destinoSel = document.getElementById('movimiento-destino');
-                    const destinoId = (destinoSel && destinoSel.selectedOptions[0] && destinoSel.selectedOptions[0].dataset.id) || '';
-                    const _nn = (t) => String(t || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
-                    const match = (window.insumosDataCache || []).find(i =>
-                        (_nn(i.name) === insumoNormalizado || (Array.isArray(i.nombresAnteriores) && i.nombresAnteriores.some(a => _nn(a) === insumoNormalizado)))
-                        && _nb(i.location || i.ubicacion || 'Bodega Central') === _nb(destinoNombre)
-                    );
-
-                    if (match) {
-                        insumoId = match.id;
-                    } else {
-                        // Documento nuevo
-                        const nuevoDocRef = doc(collection(db, 'Insumos'));
-                        insumoId = nuevoDocRef.id;
+                    const pIng = { data: { ...data, supportDocument: undefined }, nombreInput, insumoNormalizado, quantity, cleanBatch, formattedDate, porCajaIng,
+                        destinoNombre: (data.destinationId || '').trim() || 'Bodega Central', destinoId: (destinoSel && destinoSel.selectedOptions[0] && destinoSel.selectedOptions[0].dataset.id) || '',
+                        categoriaSel: (() => { const v = String((document.getElementById('movimiento-categoria') || {}).value || '').trim(); return v && v !== '__nueva__' ? v : 'General'; })(),
+                        codigoMP: String((document.getElementById('movimiento-codigoMP') || {}).value || '').replace(/\D/g, ''), docNombre: (data.supportDocument && data.supportDocument.name) ? data.supportDocument.name : '' };
+                    delete pIng.data.supportDocument;
+                    if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) {
+                        const fol = window.SAR_Folio ? window.SAR_Folio.provisional('ING') : 'ING-P';
+                        window.SAR_Cola.encolar({ tipo: 'ingreso', titulo: `Ingreso ${fol} · ${quantity} u. ${nombreInput.trim().slice(0, 40)} → ${pIng.destinoNombre}`, datos: { ...pIng, folioProvisional: fol, sinConexion: true, en: new Date().toISOString() } });
+                        showToast('Sin internet: ingreso en cola', `${fol}: ${quantity} u. de ${nombreInput.trim()} se sumarán a ${pIng.destinoNombre} apenas vuelva la conexión (mantén el Visor abierto).`, 'info');
+                        moveForm.reset(); return;
                     }
-
-                    // v21.128: código SAR del producto (y ID de Mercado Público opcional para la foto del catálogo)
-                    const categoriaSel = (() => { const v = String((document.getElementById('movimiento-categoria') || {}).value || '').trim(); return v && v !== '__nueva__' ? v : 'General'; })();
-                    const codigoSAR = window.SAR_CodigoSAR ? await window.SAR_CodigoSAR.asignar(nombreInput.trim()) : '';
-                    const codigoMP = String((document.getElementById('movimiento-codigoMP') || {}).value || '').replace(/\D/g, '');
-
-                    // EJECUCIÓN ATÓMICA DE INGRESO (Transaction Recovery)
-                    const codigoLote = window.SAR_CodigoSAR ? await window.SAR_CodigoSAR.asignarLote(nombreInput.trim(), cleanBatch, formattedDate === 'N/A' ? '' : formattedDate) : '';
-                    const codigoIngreso = window.SAR_Gobernanza ? await window.SAR_Gobernanza.codigo('ING').catch(() => '') : '';
-                    await runTransaction(db, async (transaction) => {
-                        const insumoRef = doc(db, 'Insumos', insumoId);
-                        const insumoSnap = await transaction.get(insumoRef);
-
-                        if (!insumoSnap.exists()) {
-                            transaction.set(insumoRef, {
-                                name: nombreInput.trim(),
-                                quantity: quantity,
-                                batches: [{
-                                    batch: cleanBatch,
-                                    quantity: quantity,
-                                    expirationDate: formattedDate,
-                                    provider: data.providerId || 'S/I',
-                                    ...(codigoLote ? { codigoLote } : {}),
-                                    ...(porCajaIng ? { porCaja: porCajaIng } : {})
-                                }],
-                                ...(porCajaIng ? { unidadesPorCaja: porCajaIng } : {}),
-                                batch: cleanBatch, // Mantenemos por retrocompatibilidad UI temporal
-                                expirationDate: formattedDate,
-                                provider: data.providerId || "S/I",
-                                purchaseType: data.purchaseType || "S/I",
-                                tipoInsumo: ['medico', 'aseo', 'oficina'].includes(data.tipoInsumo) ? data.tipoInsumo : 'medico',
-                                ...(codigoSAR ? { codigoSAR } : {}),
-                                ...(codigoMP ? { codigoMP } : {}),
-                                origenOC: true,   // v21.124: sin esta marca la fase «solo OC» lo ocultaba de Existencias
-                                name_lowercase: nombreInput.trim().toLowerCase(),
-                                category: categoriaSel,
-                                location: destinoNombre,
-                                bodegaNombre: destinoNombre,
-                                ...(destinoId ? { bodegaId: destinoId } : {}),
-                                createdAt: serverTimestamp(),
-                                updatedAt: serverTimestamp()
-                            });
-                        } else {
-                            const dataAnterior = insumoSnap.data();
-                            let currentBatches = dataAnterior.batches || [];
-
-                            // Migración On-The-Fly si no tiene array batches
-                            if (currentBatches.length === 0 && dataAnterior.batch) {
-                                currentBatches.push({
-                                    batch: dataAnterior.batch,
-                                    quantity: dataAnterior.quantity || 0,
-                                    expirationDate: dataAnterior.expirationDate || ''
-                                });
-                            }
-
-                            /* v21.230: mismo lote = mismo número Y mismo vencimiento (antes se sumaba por número y se pisaba el vencimiento del stock que ya estaba) */
-                            const vNorm = (v) => { const t = String(v || '').trim(); return /^(n\/?a|s\/v|-)?$/i.test(t) ? '' : t; };
-                            const batchIndex = currentBatches.findIndex(b => b.batch === cleanBatch && (!formattedDate || !vNorm(b.expirationDate) || vNorm(b.expirationDate) === vNorm(formattedDate)));
-                            if (batchIndex !== -1) {
-                                currentBatches[batchIndex].quantity += quantity;
-                                if (!currentBatches[batchIndex].codigoLote && codigoLote) currentBatches[batchIndex].codigoLote = codigoLote;
-                                if (formattedDate && !vNorm(currentBatches[batchIndex].expirationDate)) currentBatches[batchIndex].expirationDate = formattedDate;   // solo completa si no tenía
-                                if (porCajaIng && !(Number(currentBatches[batchIndex].porCaja) > 0)) currentBatches[batchIndex].porCaja = porCajaIng;
-                            } else {
-                                currentBatches.push({
-                                    batch: cleanBatch,
-                                    quantity: quantity,
-                                    expirationDate: formattedDate,
-                                    provider: data.providerId || 'S/I',
-                                    ...(codigoLote ? { codigoLote } : {}),
-                                    ...(porCajaIng ? { porCaja: porCajaIng } : {})
-                                });
-                            }
-
-                            // FEFO: Ordenar array por fecha de vencimiento ascendente
-                            currentBatches.sort(window.fefoCompare);
-                            /* v21.228: lo adeudado (entregado antes con acta sin stock en el sistema) se descuenta primero de lo que ingresa */
-                            const cq = window.SAR_CuadreIngreso ? window.SAR_CuadreIngreso.aplicar({ doc, collection, serverTimestamp }, db, transaction, { ref: insumoRef, antes: dataAnterior, quantity: (Number(dataAnterior.quantity) || 0) + quantity, batches: currentBatches, documento: codigoIngreso || 'Ingreso', bodega: dataAnterior.location || destinoNombre, nombre: dataAnterior.name, usuario: (auth.currentUser && auth.currentUser.email) || '' }) : null;
-
-                            transaction.update(insumoRef, {
-                                ...(cq ? { quantity: cq.quantity, batches: cq.batches, sobregiro: cq.sobregiro, sobregiroDetalle: cq.sobregiroDetalle } : { quantity: increment(quantity), batches: currentBatches }),
-                                provider: String(data.providerId || dataAnterior.provider || 'S/I').trim(),
-                                purchaseType: String(data.purchaseType || dataAnterior.purchaseType || 'S/I').trim(),
-                                ...(!dataAnterior.codigoSAR && codigoSAR ? { codigoSAR } : {}),
-                                ...((!dataAnterior.category || dataAnterior.category === 'General') && categoriaSel !== 'General' ? { category: categoriaSel } : {}),
-                                ...(!dataAnterior.codigoMP && codigoMP ? { codigoMP } : {}),
-                                ...(porCajaIng && !(Number(dataAnterior.unidadesPorCaja) > 0) ? { unidadesPorCaja: porCajaIng } : {}),
-                                // El tipo de un insumo ya clasificado no se cambia desde un ingreso
-                                tipoInsumo: dataAnterior.tipoInsumo || (['medico', 'aseo', 'oficina'].includes(data.tipoInsumo) ? data.tipoInsumo : 'medico'),
-                                updatedAt: serverTimestamp()
-                            });
-                        }
-
-                        // Log de Auditoría dentro de la misma transacción para consistencia
-                        const auditRef = doc(collection(db, 'Historial_Movimientos'));
-                        transaction.set(auditRef, {
-                            insumoName: insumoSnap.exists() ? insumoSnap.data().name : nombreInput.trim(),
-                            item: insumoSnap.exists() ? insumoSnap.data().name : nombreInput.trim(),
-                            quantity: quantity,
-                            type: 'INGRESO_PROVEEDOR',
-                            ...(codigoIngreso ? { codigoIngreso } : {}),
-                            ...(codigoLote ? { codigoLote } : {}),
-                            batch: cleanBatch,
-                            destination: data.destinationId || "Principal",
-                            provider: data.providerId || "S/I",
-                            purchaseType: data.purchaseType || "S/I",
-                            tipoInsumo: ['medico', 'aseo', 'oficina'].includes(data.tipoInsumo) ? data.tipoInsumo : 'medico',
-                            insumoId: insumoId,
-                            expirationDate: formattedDate === 'N/A' ? '' : formattedDate,
-                            observations: (data.observations || '').trim(),
-                            origenTipo: /pr[eé]stamo|traspaso/i.test(data.purchaseType || '') ? 'prestamo_otro_centro' : 'compra',
-                            origenCentro: /pr[eé]stamo|traspaso/i.test(data.purchaseType || '') ? (data.providerId || '') : '',
-                            user: auth.currentUser ? auth.currentUser.email : 'Admin Local',
-                            date: serverTimestamp(),
-                            document: String(data.ordenDocumento || '').trim().toUpperCase() || ((data.supportDocument && data.supportDocument.name) ? data.supportDocument.name : 'S/N')
-                        });
-                        // Préstamo / traspaso desde otro centro: queda pendiente de devolver (v21.82)
-                        if (/pr[eé]stamo|traspaso/i.test(data.purchaseType || '')) {
-                            transaction.set(doc(db, 'Contadores', 'prestamo-' + auditRef.id), {
-                                tipo: 'prestamo-recibido', estado: 'PENDIENTE', centro: (data.providerId || 'S/I'), insumoId: insumoId,
-                                insumoName: insumoSnap.exists() ? insumoSnap.data().name : nombreInput.trim(), batch: cleanBatch,
-                                cantidad: quantity, devuelto: 0, creadoPor: auth.currentUser ? auth.currentUser.email : 'Admin Local',
-                                fecha: serverTimestamp(), updatedAt: serverTimestamp()
-                            });
-                        }
-                    });
-
-                    // Todo producto ingresado entra al catálogo (compra directa, convenio marco o Mercado Público); con ID se le busca la foto
-                    if (true) {
-                        try {
-                            const idCat = codigoMP ? String(codigoMP) : (nombreInput.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/gi, '-').toLowerCase().replace(/^-|-$/g, '').slice(0, 60) || 'manual');
-                            await setDoc(doc(db, 'Catalogo_Productos', idCat), { descripcion: nombreInput.trim(), descripcion_lower: nombreInput.trim().toLowerCase(), codigoMP: codigoMP || '', insumoName: nombreInput.trim(), ...(codigoMP ? {} : { sinOrden: true, origen: 'INGRESO' }), ...(codigoSAR ? { codigoSAR } : {}), actualizado: serverTimestamp() }, { merge: true });
-                        } catch (eCat) { console.warn('Catálogo:', eCat); }
-                    }
+                    const { insumoId } = await aplicarIngresoProveedor(pIng, 'ip' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
 
                     // Verificación (v21.119): confirma que el producto quedó realmente en Existencias
                     try {

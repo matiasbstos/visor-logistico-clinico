@@ -327,14 +327,15 @@
         return { ok, unidades, errores, total: lista.length };
     }
     /** Emite el acta SIN descontar stock: queda "por confirmar" hasta subir el acta firmada (el stock solo se reserva). */
-    async function emitirDiferido(b, usuario) {
-        const f = fs();
+    async function emitirDiferido(b, usuario, opc) {
+        const f = fs(), marcaRef = opc && opc.opId ? f.doc(f.collection(db(), 'Contadores'), 'cola-ae-' + opc.opId) : null;   /* v21.248: acta hecha sin internet: un reintento no emite dos actas */
         const soloPend = b.items.filter(i => num(i.cantidad) === 0 && num(i.solicitado) > 0);
         if (soloPend.length) b = { ...b, items: b.items.filter(i => num(i.cantidad) > 0), pendientes: [...(b.pendientes || []), ...soloPend.map(i => ({ nombre: i.nombre, cantidad: num(i.solicitado), ...(i.codigo ? { codigoMP: String(i.codigo) } : {}) }))] };
         const anio = new Date().getFullYear(), ctrRef = f.doc(f.collection(db(), 'Contadores'), `acta-${anio}`), fecha = new Date().toISOString().slice(0, 10);
         const items = b.items.map(i => ({ ...i }));
         await cargarPendConf();
         const resultado = await f.runTransaction(db(), async (tx) => {
+            if (marcaRef) { const mk = await tx.get(marcaRef); if (mk.exists()) return { yaHecha: true, numero: mk.data().numero }; }
             const cs = await tx.get(ctrRef); const n = (cs.exists() ? num(cs.data().ultimo) : 0) + 1; const numero = numeroActa(anio, n);
             let ocLineas = null, autoPend = [];
             if (b.oc) {
@@ -363,12 +364,14 @@
                 confirmacion: { estado: 'PENDIENTE' },
                 items: itemsActa, pendientes: [...b.pendientes.map(p => ({ nombre: p.nombre, cantidad: num(p.cantidad), ...(p.codigoMP ? { codigoMP: String(p.codigoMP) } : {}) })), ...autoPend],
                 documentos: b.documentos.map(d => ({ tipo: d.tipo, numero: d.numero, detalle: d.detalle || '' })),
-                entrega: { nombre: firma.nombre, cargo: firma.cargo }, recibe: { nombre: (b.recibe && b.recibe.nombre) || '', cargo: (b.recibe && b.recibe.cargo) || '' },
+                entrega: b.entrega && b.entrega.nombre ? { nombre: b.entrega.nombre, cargo: b.entrega.cargo || '' } : { nombre: firma.nombre, cargo: firma.cargo }, recibe: { nombre: (b.recibe && b.recibe.nombre) || '', cargo: (b.recibe && b.recibe.cargo) || '' },
                 creadoPor: usuario, creadoEn: f.serverTimestamp()
             };
             if (b.oc) acta.oc = { id: b.oc.id, numeroOC: b.oc.numeroOC || '', columna: b.oc.key, memo: b.oc.memo || '', cdp: b.oc.cdp || '' };
             if (b.dist && b.dist.id) acta.distribucion = { id: b.dist.id, correlativo: b.dist.correlativo || '', centro: b.dist.centro || '', ci: b.dist.ci == null ? null : b.dist.ci };
+            if (b.folioProvisional) { acta.folioProvisional = b.folioProvisional; acta.hechaSinConexion = true; }
             tx.set(f.doc(f.collection(db(), 'Actas_Entrega'), numero), acta);
+            if (marcaRef) tx.set(marcaRef, { tipo: 'cola-ae', numero, provisional: b.folioProvisional || '', en: new Date().toISOString() });
             return { ...acta, creadoEn: new Date().toISOString() };
         });
         for (const i of [...items, ...soloPend].filter(x => x.manual || x.codigoNuevo || x.imagen)) {
@@ -1143,6 +1146,21 @@
         const sin = borrador.items.map(i => ({ n: i.nombre, f: Math.max(0, num(i.cantidad) - num(i.stock)) })).filter(x => x.f > 0);
         const avisoSin = sin.length ? `<span class="sar-conf__aviso"><b>Sin respaldo en sistema</b> (${sin.length}): quedan como sobregiro hasta cuadrar con la OC/SDC.</span>` : '';
         if (!(await preg({ titulo: '¿Emitir el acta?', texto: `Para <b>${esc(borrador.centro.trim())}</b> con ${borrador.items.length} productos (${total} unidades) desde ${esc(borrador.origen)}.<br>El stock <b>no se descuenta ahora</b>: queda reservado hasta que subas el acta firmada (en «Actas emitidas»).${avisoSin}`, lineas: sin.map(x => `${esc(x.n)}: <b>${x.f}</b> u. sin respaldo`), si: 'Emitir acta', no: 'Revisar' }))) return;
+        /* v21.248: sin internet el acta queda en la cola del teléfono con folio provisional AE-P y PDF provisional para firmar;
+           al volver la conexión se emite con su AE definitivo y reserva el stock (lo que falte queda como sobregiro, igual que con internet). */
+        if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) {
+            if (borrador.oc) { toast('Sin internet', 'Las actas de una orden de compra necesitan internet (validan lo recibido de la orden). Emítela al volver la conexión; el borrador queda guardado.', 'warning'); return; }
+            const fol = window.SAR_Folio ? window.SAR_Folio.provisional('AE') : 'AE-P-' + Date.now().toString(36).toUpperCase(), b = JSON.parse(JSON.stringify({ ...borrador, folioProvisional: fol, entrega: { nombre: firma.nombre, cargo: firma.cargo } }));   /* la misma firma del PDF provisional */
+            (b.items || []).forEach(i => { delete i.imagen; });   /* las fotos no viajan en la cola (espacio del teléfono) */
+            try { window.SAR_Cola.encolar({ tipo: 'acta-emitir', titulo: `Acta ${fol} · ${String(borrador.centro).trim()} · ${total} u.`, datos: { b, usuario: usuarioEmail(), en: new Date().toISOString() } }); }
+            catch (e) { toast('No se guardó en el teléfono', (e.message || e) + ' El borrador sigue aquí: libera espacio o espera la conexión.', 'error'); return; }
+            guardarCentro(borrador.centro).catch(() => {});
+            const local = { numero: `${fol} (PROVISIONAL)`, fecha: new Date().toISOString().slice(0, 10), centro: borrador.centro.trim(), bodegaOrigen: borrador.origen, estado: 'EMITIDA', items: borrador.items.map(i => ({ id: i.id || null, nombre: i.nombre, cantidad: num(i.cantidad), ...(i.codigo ? { codigo: i.codigo } : {}), ...(i.solicitado != null ? { solicitado: num(i.solicitado) } : {}) })), pendientes: (borrador.pendientes || []).map(p => ({ nombre: p.nombre, cantidad: num(p.cantidad) })), documentos: (borrador.documentos || []).map(d => ({ tipo: d.tipo, numero: d.numero, detalle: d.detalle || '' })), entrega: { nombre: firma.nombre, cargo: firma.cargo }, recibe: { nombre: (borrador.recibe && borrador.recibe.nombre) || '', cargo: (borrador.recibe && borrador.recibe.cargo) || '' }, creadoEn: new Date().toISOString() };
+            borrador = { ...vacio(), origen: borrador.origen, centro: '' }; guardarBorrador(); pintar();
+            toast('Sin internet: acta en cola', `${fol}: se emitirá con su número AE definitivo apenas vuelva la conexión (mantén el Visor abierto). Puedes imprimir el PDF provisional para firmar.`, 'info');
+            try { await descargar(actaParaDoc(local), 'pdf'); } catch (e) { toast('PDF provisional', 'No se pudo generar sin internet: ' + (e.message || e), 'warning'); }
+            return;
+        }
         emitiendo = true; const btn = document.getElementById('act-emitir'); if (btn) btn.disabled = true;
         const prog = window.SAR_Progreso.iniciar('Emitiendo el acta de entrega…', ['Numerando el acta…']);
         try {
@@ -1167,6 +1185,10 @@
         finally { emitiendo = false; }
     }
 
+    if (window.SAR_Cola && window.SAR_Cola.registrar) window.SAR_Cola.registrar('acta-emitir', async (d, op) => {
+        const a = await emitirDiferido(d.b, d.usuario || usuarioEmail(), { opId: op.id });
+        if (a && !a.yaHecha) { toast('Acta emitida (hecha sin internet)', `${d.b.folioProvisional} quedó como ${a.numero}. Descarga el PDF definitivo desde «Actas emitidas».`, 'success'); try { await Promise.all([cargarStock(), cargarHistorial()]); pintar(); } catch (e) { /* pantalla cerrada */ } }
+    });
     async function abrir() {
         const r = root(); if (!r) return;
         const f = leerFirma(); if (f) firma = f;

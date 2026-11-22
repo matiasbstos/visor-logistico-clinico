@@ -79,7 +79,8 @@
       "patch-recepcion-logic.js",
       "patch-render.js",
       "patch-terminar.js",
-      "patch-turno.js"
+      "patch-turno.js",
+      "graphify-out/**"
     ],
     "headers": [
       {

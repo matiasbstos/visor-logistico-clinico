@@ -876,7 +876,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     let tipoAjuste = cantidadParsed > 0 ? 'sumar' : 'restar';
                     const cantidadAbs = Math.abs(cantidadParsed);
 
-                    if (tipoAjuste === 'sumar') {
+                    if (cantidadParsed === 0) {
+                        accionDetallada = `Cuadre de deuda por conteo físico (stock sin cambio: ${stockActual})`;
+                    } else if (tipoAjuste === 'sumar') {
                         accionDetallada = `Suma de stock: ${stockActual} -> ${nuevoStock} (+${cantidadAbs})`;
                     } else if (tipoAjuste === 'restar') {
                         accionDetallada = `Resta de stock: ${stockActual} -> ${nuevoStock} (-${cantidadAbs})`;
@@ -912,7 +914,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                         /* v21.246: con opts.mesLote (AAAA-MM o N/A) el lote se identifica por nombre Y mes de vencimiento (mismo lote con dos vencimientos) */
                         const mesL = (v) => (window.SAR_Toma && window.SAR_Toma.mes) ? window.SAR_Toma.mes(v) : String(v || '');
-                        const esLote = (b) => (b.batch || 'S/L') === opts.lote && (!opts.mesLote || mesL(b.expirationDate) === opts.mesLote);
+                        const loteN = (v) => (window.SAR_Toma && window.SAR_Toma.lote) ? window.SAR_Toma.lote(v) : String(v || 'S/L');
+                        const esLote = (b) => opts.mesLote ? (loteN(b.batch) === loteN(opts.lote) && mesL(b.expirationDate) === opts.mesLote) : (b.batch || 'S/L') === opts.lote;   /* toma: mismo criterio que la conciliación (S/L = N/A = vacío; mayúsculas) */
                         /* v21.238: conteo físico: el lote debe seguir como se contó (si cambió entre medio, se vuelve a contar) */
                         if (opts && opts.lote && opts.esperadoLote != null) {
                             const hay = currentBatches.filter(esLote).reduce((t, b) => t + (Number(b.quantity) || 0), 0);

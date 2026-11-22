@@ -66,7 +66,7 @@
   /** Lo contado sin lo reservado en actas. Lo reservado solo se puede descontar si se contaron TODOS los lotes del producto
       (en la parcial, si falta alguno, no se sabe de qué lote salió la reserva). */
   function neto(p, completa) {
-    const t = T(), c = contadoDe(p), todos = completa || t.conciliar(p.snap.batches, c, { completa: false }).lineas.every(l => l.estado !== 'sin_contar');
+    const t = T(), c = contadoDe(p), todos = completa || p.conteos.length > 0 && t.conciliar(p.snap.batches, c, { completa: false }).lineas.every(l => l.estado !== 'sin_contar');
     if (!todos) { const o = c.slice(); o.reservadoSinCubrir = 0; o.todos = false; return o; }
     const o = t.quitarReservado(c, p.snap.reservado); o.todos = true; return o;
   }
@@ -189,7 +189,7 @@
     /* deuda de un producto contado entero sin sobrante: línea 0 que solo la salda (con sobrante, la salda esa línea) */
     filas.filter(x => x.aviso === 'deuda' && !lineas.some(l => l.insumoId === x.id && l.delta > 0)).forEach(x => lineas.push({ n: lineas.length, clave: '_deuda', insumoId: x.id, nombre: x.p.nombre, lote: '', mesLote: '', vence: '', delta: 0, sistema: x.p.snap.deuda, contado: 0, estado: 'deuda', snapEn: x.p.snap.en, saldarDeuda: true }));
     const avisos = filas.filter(x => x.aviso === 'reserva-falta').map(x => ({ insumoId: x.id, nombre: x.p.nombre, reservadoNoEncontrado: x.l.sistema, revisado: x.p.recontado._rsc || null }));
-    let contados = 0, sinDiferencia = 0; conc.forEach(r => r.lineas.forEach(l => { if (l.estado === 'sin_contar') return; contados++; if (l.estado === 'ok') sinDiferencia++; }));
+    let contados = 0, sinDiferencia = 0; conc.forEach(r => r.lineas.forEach(l => { if (l.estado === 'sin_contar') return; if (l.estado === 'ok' && !l.sistema && !l.contado) return; contados++; if (l.estado === 'ok') sinDiferencia++;   /* un lote en 0 que nadie contó no infla el IRA */ }));
     const plan = { id: toma.id, folio: toma.folio, bodega: toma.bodega, tipo: toma.tipo, motivo, obs, por: usuario(), superadmin: esSuper(), admin: esAdmin(), en: new Date().toISOString(), lineas, avisos, contados, sinDiferencia, abiertaPor: toma.por, abiertaEn: toma.abiertaEn };
     const P = window.SAR_Progreso;
     if (P && P.confirmar && !(await P.confirmar({ titulo: `Cerrar toma ${toma.folio}`, texto: `${plan.lineas.filter(l => l.delta).length} diferencia(s) en ${esc(toma.bodega)}. El sistema queda con lo contado.`, si: 'Cerrar toma', no: 'Volver' }))) return;
@@ -200,9 +200,9 @@
       toma = null; sel = null; loteSel = null; guardarToma(); vista = 'contar';
     } catch (e) {
       const camb = (e && e.cambiados) || [];
-      for (const id of camb) { await reSnap(id); const p = toma.productos[id]; if (p) p.recontado = {}; }
+      for (const id of camb) { await reSnap(id); const p = toma.productos[id]; if (p) { p.recontado = {}; p.conteos = []; } }   /* lo contado ya no vale contra la foto nueva: se cuenta de nuevo */
       if (camb.length) guardarToma();
-      toast('No se cerró la toma', (e.message || String(e)) + (camb.length ? ` ${camb.length} producto(s) tuvieron movimientos mientras contabas: ya se actualizó lo que dice el sistema; vuelve a contarlos y cierra de nuevo.` : '') + ' Lo aplicado no se repetirá al reintentar.', 'error'); }
+      toast('No se cerró la toma', (e.message || String(e)) + (camb.length ? ` ${camb.length} producto(s) tuvieron movimientos mientras contabas: se borró su conteo y ya se actualizó lo que dice el sistema: vuelve a contarlos y cierra de nuevo.` : '') + ' Lo aplicado no se repetirá al reintentar.', 'error'); }
     finally { cerrando = false; pintar(); }
   }
   /** Aplica el cierre. Idempotente: idMov / id de solicitud fijos por toma, producto y línea. */
@@ -210,7 +210,7 @@
     const f = fs(), aj = window.ejecutarAjusteDirecto; if (typeof aj !== 'function') throw new Error('sin conexión: el módulo de ajustes aún no carga');
     let aplicadas = 0, solicitudes = 0; const errores = [], cambiados = new Set(), admin = plan.admin !== false && (plan.admin || plan.superadmin);
     for (const l of plan.lineas) {
-      const idMov = `toma-${plan.id}-${l.insumoId}-${l.clave || l.n}`.replace(/[^\w-]/g, '_'),   /* por lote (no por posición): un reintento con el conteo cambiado no repite */ just = `Toma ${plan.folio} (${plan.tipo}) · ${plan.bodega} · lote ${l.lote}: sistema ${l.sistema}, contado ${l.contado}${plan.obs ? ' · ' + plan.obs : ''}`;
+      const idMov = `toma-${plan.id}-${l.insumoId}-${encodeURIComponent(l.clave || String(l.n))}`,   /* por lote (no por posición): un reintento con el conteo cambiado no repite */ just = `Toma ${plan.folio} (${plan.tipo}) · ${plan.bodega} · lote ${l.lote}: sistema ${l.sistema}, contado ${l.contado}${plan.obs ? ' · ' + plan.obs : ''}`;
       try {
         const sn = await f.getDoc(f.doc(f.collection(db(), 'Insumos'), l.insumoId)); if (!sn.exists()) throw new Error('el producto ya no existe');
         const stock = num(sn.data().quantity), deuda = l.estado === 'deuda';
@@ -218,7 +218,7 @@
         const opts = { idMov, motivo: l.delta < 0 ? plan.motivo : MOTIVO, observacion: just, ...(deuda ? { saldarDeudaConteoTotal: true } : { lote: l.lote, mesLote: l.mesLote, esperadoLote: l.estado === 'nuevo' ? 0 : l.sistema }), ...(l.estado === 'nuevo' && l.vence && l.vence !== 'N/A' ? { vence: l.vence } : {}), saldarDeuda: !!l.saldarDeuda };
         if (l.delta < 0 ? plan.superadmin : admin) {
           const ya = await f.getDoc(f.doc(f.collection(db(), 'Historial_Movimientos'), 'aju-' + idMov)); if (ya.exists()) { aplicadas++; continue; }   /* sin gastar otro correlativo AJU */
-          const codigo = window.SAR_Gobernanza ? await window.SAR_Gobernanza.codigo('AJU').catch(() => null) : null;
+          const codigo = deuda ? plan.folio : (window.SAR_Gobernanza ? await window.SAR_Gobernanza.codigo('AJU').catch(() => null) : null);   /* saldar deuda no mueve stock: lleva el folio INV, no gasta AJU */
           await aj(l.insumoId, stock, l.nombre, l.delta, just, codigo, opts); aplicadas++;
         } else {
           const ref = f.doc(f.collection(db(), 'Solicitudes_Ajuste'), idMov), ya = await f.getDoc(ref);

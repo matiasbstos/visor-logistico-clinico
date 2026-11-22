@@ -1710,4 +1710,12 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
   - Las solicitudes de la toma llevan lote crudo, mes, `loteSistema` (se valida al aprobar), código AJU y `snapEn`.
 - **Registro de la toma:** incluye contados, sinDiferencia, IRA (%), quién recontó y cuándo, abiertaPor/En y errores. Una toma descartada queda «anulada», sin dejar un hueco de folio. Si falla el registro, se avisa sin bloquear.
 - **Cola sin internet:** un error que no es de conexión no se reintenta para siempre: se avisa y esos lotes se cuentan en otra toma.
+- **Segunda revisión de Fowler:**
+  - Si un lote se rechaza porque cambió, se borra el conteo de ese producto y se vuelve a contar; así no aparece una sobra falsa.
+  - En la parcial, la deuda solo se salda si el producto tiene al menos un conteo (puede ser 0).
+  - idMov con `encodeURIComponent(clave)`: «A/1» y «A.1» no chocan.
+  - En la toma, el lote se compara con el mismo criterio que la conciliación: S/L = N/A = vacío.
+  - La línea que solo salda deuda usa el folio INV como documento, no gasta AJU y dice «Cuadre de deuda».
+  - El IRA no cuenta los lotes en 0 que nadie contó.
 - **Pendiente:** dos pestañas del mismo equipo comparten el borrador. Hoy gana la última que guarda.
+- **Pendiente (reglas, las publica el usuario):** cualquier rol puede editar una `Solicitudes_Ajuste` pendiente (cantidad, loteSistema). Conviene limitar `update` a superadmin o a quien la creó, y solo mientras esté pendiente.

@@ -1261,7 +1261,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             const actions = `
                                 <div style="display:flex; gap:8px;">
-                                    <button class="btn btn-success btn-sm" onclick="window.aprobarSolicitudAjuste('${item.id}')" style="padding: 6px 12px; font-size:12px;"><i class="ph ph-check"></i> Aprobar</button>
+                                    <button class="btn btn-success btn-sm" onclick="window.aprobarSolicitudAjuste('${item.id}', ${Number(item.cantidad) || 0})" style="padding: 6px 12px; font-size:12px;"><i class="ph ph-check"></i> Aprobar</button>
                                     <button class="btn btn-danger btn-sm" onclick="window.rechazarSolicitudAjuste('${item.id}')" style="padding: 6px 12px; font-size:12px;"><i class="ph ph-x"></i> Rechazar</button>
                                 </div>
                             `;
@@ -1283,7 +1283,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 // 3. ACCIONES GLOBALES DE APROBACIÓN / RECHAZO
-                window.aprobarSolicitudAjuste = async function(docId) {
+                window.aprobarSolicitudAjuste = async function(docId, cantidadMostrada) {   /* v21.247: la cantidad que vio el superadministrador */
                     if (userRole !== 'superadmin') {
                         return window.showAlertCenter("Notificación", "No tienes permisos para autorizar ajustes.");
                     }
@@ -1309,7 +1309,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             reqData.cantidad,
                             reqData.justificacion,
                             reqData.code,
-                            { solicitudId: docId, cantidadVista: reqData.cantidad, motivo: reqData.motivo || '', observacion: reqData.observacion || '', ...(reqData.lote ? { lote: reqData.lote, vence: reqData.vence || '', saldarDeuda: !!reqData.conteo, ...(reqData.mesLote ? { mesLote: reqData.mesLote } : {}), ...(reqData.loteSistema != null ? { esperadoLote: reqData.loteSistema } : {}) } : {}), ...(reqData.deudaTotal ? { saldarDeuda: true, saldarDeudaConteoTotal: true } : {}), ...(reqData.conteo && reqData.esperadoDeuda != null ? { esperadoDeuda: reqData.esperadoDeuda } : {}) }   // v21.230: se marca aprobada en la misma transacción del ajuste
+                            { solicitudId: docId, cantidadVista: cantidadMostrada != null ? cantidadMostrada : reqData.cantidad, motivo: reqData.motivo || '', observacion: reqData.observacion || '', ...(reqData.lote ? { lote: reqData.lote, vence: reqData.vence || '', saldarDeuda: !!reqData.conteo, ...(reqData.mesLote ? { mesLote: reqData.mesLote } : {}), ...(reqData.loteSistema != null ? { esperadoLote: reqData.loteSistema } : {}) } : {}), ...(reqData.deudaTotal ? { saldarDeuda: true, saldarDeudaConteoTotal: true } : {}), ...(reqData.conteo && reqData.esperadoDeuda != null ? { esperadoDeuda: reqData.esperadoDeuda } : {}) }   // v21.230: se marca aprobada en la misma transacción del ajuste
                         );
 
                         window.showToast("Solicitud Aprobada", `El ajuste ${reqData.code} fue ejecutado con éxito.`, "success");

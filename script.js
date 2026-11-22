@@ -910,9 +910,12 @@ document.addEventListener('DOMContentLoaded', () => {
                                 expirationDate: dataActual.expirationDate || ''
                             });
                         }
+                        /* v21.246: con opts.mesLote (AAAA-MM o N/A) el lote se identifica por nombre Y mes de vencimiento (mismo lote con dos vencimientos) */
+                        const mesL = (v) => (window.SAR_Toma && window.SAR_Toma.mes) ? window.SAR_Toma.mes(v) : String(v || '');
+                        const esLote = (b) => (b.batch || 'S/L') === opts.lote && (!opts.mesLote || mesL(b.expirationDate) === opts.mesLote);
                         /* v21.238: conteo físico: el lote debe seguir como se contó (si cambió entre medio, se vuelve a contar) */
                         if (opts && opts.lote && opts.esperadoLote != null) {
-                            const hay = currentBatches.filter(b => (b.batch || 'S/L') === opts.lote).reduce((t, b) => t + (Number(b.quantity) || 0), 0);
+                            const hay = currentBatches.filter(esLote).reduce((t, b) => t + (Number(b.quantity) || 0), 0);
                             if (hay !== Number(opts.esperadoLote)) throw new Error(`El lote ${opts.lote} cambió desde el conteo (tenía ${opts.esperadoLote}, ahora ${hay}).${opts.solicitudId ? ' Rechaza esta solicitud y vuelve a contar el lote.' : ' Vuelve a contarlo.'}`);
                         }
 
@@ -920,10 +923,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             // RESTA - FEFO (v21.238: con opts.lote, solo de ese lote)
                             let qtyToReduce = Math.abs(cantidadParsed);
                             currentBatches.sort(window.fefoCompare);
-                            if (opts && opts.lote) { const hayL = currentBatches.filter(b => (b.batch || 'S/L') === opts.lote).reduce((t, b) => t + (Number(b.quantity) || 0), 0); if (hayL < qtyToReduce) throw new Error(`El lote ${opts.lote} tiene ${hayL} u.: no se pueden descontar ${qtyToReduce}.`); }
+                            if (opts && opts.lote) { const hayL = currentBatches.filter(esLote).reduce((t, b) => t + (Number(b.quantity) || 0), 0); if (hayL < qtyToReduce) throw new Error(`El lote ${opts.lote} tiene ${hayL} u.: no se pueden descontar ${qtyToReduce}.`); }
 
                             for (let i = 0; i < currentBatches.length && qtyToReduce > 0; i++) {
-                                if (opts && opts.lote && (currentBatches[i].batch || 'S/L') !== opts.lote) continue;
+                                if (opts && opts.lote && !esLote(currentBatches[i])) continue;
                                 if (currentBatches[i].quantity > 0) {
                                     const available = currentBatches[i].quantity;
                                     if (available >= qtyToReduce) {
@@ -936,9 +939,9 @@ document.addEventListener('DOMContentLoaded', () => {
                                 }
                             }
                             currentBatches = currentBatches.filter(b => b.quantity > 0);
-                        } else {
+                        } else if (cantidadParsed > 0) {   /* v21.246: 0 = solo saldar deuda (toma), sin tocar lotes */
                             // SUMA (v21.238: opts.lote = al lote contado; si no existe, se crea)
-                            const iLote = opts && opts.lote ? currentBatches.findIndex(b => (b.batch || 'S/L') === opts.lote) : -1;
+                            const iLote = opts && opts.lote ? currentBatches.findIndex(esLote) : -1;
                             if (opts && opts.lote && iLote < 0) {
                                 currentBatches.push({ batch: opts.lote, quantity: cantidadParsed, expirationDate: opts.vence || '' });
                             } else if (currentBatches.length > 0) {
@@ -955,7 +958,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         /* v21.238: conteo físico con deuda (sobregiro): lo contado YA no incluye lo entregado sin stock, así que el stock queda igual
                            a lo contado y la deuda se da por saldada (esas unidades existían sin ingresar: regla del usuario). Sin mover lotes ni cantidades. */
                         let sd = null;
-                        if (cantidadParsed > 0 && opts && opts.saldarDeuda && Number(dataActual.sobregiro) > 0 && window.SAR_ActasEntrega && window.SAR_ActasEntrega.cuadrar) {
+                        if ((cantidadParsed > 0 || (cantidadParsed === 0 && opts && opts.saldarDeudaConteoTotal)) && opts && opts.saldarDeuda && Number(dataActual.sobregiro) > 0 && window.SAR_ActasEntrega && window.SAR_ActasEntrega.cuadrar) {
                             const c = window.SAR_ActasEntrega.cuadrar({ ...dataActual, quantity: 1e9, batches: [{ batch: '_', quantity: 1e9, expirationDate: '' }] }, Number(dataActual.sobregiro));
                             if (c && c.cuadrado > 0) {
                                 sd = c;
@@ -1300,7 +1303,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             reqData.cantidad,
                             reqData.justificacion,
                             reqData.code,
-                            { solicitudId: docId, motivo: reqData.motivo || '', observacion: reqData.observacion || '', ...(reqData.lote ? { lote: reqData.lote, vence: reqData.vence || '', saldarDeuda: !!reqData.conteo, ...(reqData.loteSistema != null ? { esperadoLote: reqData.loteSistema } : {}) } : {}) }   // v21.230: se marca aprobada en la misma transacción del ajuste
+                            { solicitudId: docId, motivo: reqData.motivo || '', observacion: reqData.observacion || '', ...(reqData.lote ? { lote: reqData.lote, vence: reqData.vence || '', saldarDeuda: !!reqData.conteo, ...(reqData.mesLote ? { mesLote: reqData.mesLote } : {}), ...(reqData.loteSistema != null ? { esperadoLote: reqData.loteSistema } : {}) } : {}), ...(reqData.deudaTotal ? { saldarDeuda: true, saldarDeudaConteoTotal: true } : {}) }   // v21.230: se marca aprobada en la misma transacción del ajuste
                         );
 
                         window.showToast("Solicitud Aprobada", `El ajuste ${reqData.code} fue ejecutado con éxito.`, "success");

@@ -23,7 +23,7 @@
   /** Junta lotes repetidos (mismo lote y mes) sumando cantidades. Entrada: [{batch, expirationDate, quantity}] */
   function agrupar(lista) {
     const m = new Map();
-    (lista || []).forEach(x => { if (!x) return; const k = clave(x.batch, x.expirationDate), e = m.get(k) || { clave: k, batch: lote(x.batch), vence: mes(x.expirationDate), quantity: 0, original: x.expirationDate || '' }; e.quantity += num(x.quantity); if (!e.original && x.expirationDate) e.original = x.expirationDate; m.set(k, e); });
+    (lista || []).forEach(x => { if (!x) return; const k = clave(x.batch, x.expirationDate), e = m.get(k) || { clave: k, batch: lote(x.batch), vence: mes(x.expirationDate), quantity: 0, original: x.expirationDate || '', crudo: x.batch == null ? '' : String(x.batch) }; e.quantity += num(x.quantity); if (!e.original && x.expirationDate) e.original = x.expirationDate; m.set(k, e); });
     return m;
   }
   /**
@@ -32,11 +32,13 @@
    * opc.completa: lo no contado = 0 (falta). Si no, queda 'sin_contar' (delta 0).
    */
   function conciliar(sistema, contado, opc) {
-    const o = opc || {}, S = agrupar(sistema), C = agrupar(contado), lineas = [];
+    const o = opc || {}, S = agrupar(sistema), C0 = agrupar(contado), lineas = [];
+    /* el mismo lote contado con otro mes (error al leer el vencimiento) se concilia con el del sistema si ese lote no se contó con su mes */
+    const C = new Map(); C0.forEach((c, k) => { if (S.has(k)) { C.set(k, c); return; } const mismos = [...S.values()].filter(s => s.batch === c.batch && !C0.has(s.clave)); if (mismos.length === 1) { const k2 = mismos[0].clave, prev = C.get(k2); C.set(k2, prev ? { ...prev, quantity: prev.quantity + c.quantity } : { ...c, clave: k2, mesContado: c.vence }); } else C.set(k, c); });
     S.forEach((s, k) => {
       const c = C.get(k);
-      if (!c) { if (o.completa) lineas.push({ clave: k, batch: s.batch, vence: s.vence, sistema: s.quantity, contado: 0, delta: -s.quantity, estado: s.quantity > 0 ? 'falta' : 'ok' }); else lineas.push({ clave: k, batch: s.batch, vence: s.vence, sistema: s.quantity, contado: null, delta: 0, estado: 'sin_contar' }); return; }
-      const d = c.quantity - s.quantity; lineas.push({ clave: k, batch: s.batch, vence: s.vence, sistema: s.quantity, contado: c.quantity, delta: d, estado: d === 0 ? 'ok' : d > 0 ? 'sobra' : 'falta' });
+      if (!c) { if (o.completa) lineas.push({ clave: k, batch: s.batch, loteSistema: s.crudo, vence: s.vence, sistema: s.quantity, contado: 0, delta: -s.quantity, estado: s.quantity > 0 ? 'falta' : 'ok' }); else lineas.push({ clave: k, batch: s.batch, loteSistema: s.crudo, vence: s.vence, sistema: s.quantity, contado: null, delta: 0, estado: 'sin_contar' }); return; }
+      const d = c.quantity - s.quantity; lineas.push({ clave: k, batch: s.batch, loteSistema: s.crudo, vence: s.vence, sistema: s.quantity, contado: c.quantity, delta: d, estado: d === 0 ? 'ok' : d > 0 ? 'sobra' : 'falta', ...(c.mesContado ? { mesContado: c.mesContado } : {}) });
     });
     C.forEach((c, k) => { if (!S.has(k)) lineas.push({ clave: k, batch: c.batch, vence: c.vence, venceOriginal: c.original, sistema: 0, contado: c.quantity, delta: c.quantity, estado: c.quantity > 0 ? 'nuevo' : 'ok' }); });
     const t = { sistema: 0, contado: 0, sobra: 0, falta: 0, nuevo: 0, sinContar: 0 };
@@ -68,10 +70,11 @@
   }
   /** Lo reservado en actas sigue físicamente en la bodega: se descuenta de lo contado en orden de vencimiento (como se reservó), antes de comparar. */
   function quitarReservado(contado, reservado) {
-    let r = Math.max(0, num(reservado)); if (!r) return (contado || []).slice();
+    let r = Math.max(0, num(reservado)); if (!r) { const o0 = (contado || []).slice(); o0.reservadoSinCubrir = 0; return o0; }
     const ord = (contado || []).map((x, i) => ({ ...x, _i: i })).sort((a, b) => String(mes(a.expirationDate)).localeCompare(String(mes(b.expirationDate))));
     ord.forEach(x => { const q = Math.min(num(x.quantity), r); x.quantity = num(x.quantity) - q; r -= q; });
-    return ord.sort((a, b) => a._i - b._i).map(({ _i, ...x }) => x);
+    const out = ord.sort((a, b) => a._i - b._i).map(({ _i, ...x }) => x); out.reservadoSinCubrir = r;   /* reservado que no apareció en el conteo */
+    return out;
   }
   const api = { lote, mes, clave, agrupar, conciliar, requiereReconteo, aplicar, avance, quitarReservado };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

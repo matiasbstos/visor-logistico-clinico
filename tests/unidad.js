@@ -260,6 +260,13 @@ t('toma v21.246: cierre fija lo contado contra lo que había al contar', () => {
     const neg = T.aplicar([{ batch: 'A', quantity: 5 }], T.conciliar([{ batch: 'A', quantity: 100 }], [{ batch: 'A', quantity: 0 }], { completa: true }).lineas);
     assert.deepStrictEqual(neg.negativos, ['A|N/A']); assert.strictEqual(neg.quantity, 0);
   });
+t('toma v21.246: mismo lote con otro mes, lote crudo y reservado no encontrado (revisión B.A./Fowler)', () => { const T = require('../toma-conciliacion.js');
+  const r = T.conciliar([{ batch: 'q ', expirationDate: '2027-01-01', quantity: 10 }], [{ batch: 'Q', expirationDate: '2027-02', quantity: 12 }]);
+  if (r.lineas.length !== 1 || r.lineas[0].estado !== 'sobra' || r.lineas[0].delta !== 2 || r.lineas[0].vence !== '2027-01' || r.lineas[0].loteSistema !== 'q ') throw new Error(JSON.stringify(r.lineas));
+  const d = T.conciliar([{ batch: 'L1', expirationDate: '2027-01', quantity: 10 }, { batch: 'L1', expirationDate: '2028-01', quantity: 50 }], [{ batch: 'L1', expirationDate: '2028-01', quantity: 45 }]);
+  if (d.lineas.find(l => l.vence === '2028-01').delta !== -5 || d.lineas.find(l => l.vence === '2027-01').estado !== 'sin_contar') throw new Error('dos vencimientos del mismo lote');
+  const q = T.quitarReservado([{ batch: 'A', expirationDate: '2027-01', quantity: 5 }], 8); if (q.reservadoSinCubrir !== 3 || q[0].quantity !== 0) throw new Error('reservado sin cubrir ' + q.reservadoSinCubrir);
+});
 t('toma v21.246: umbral de reconteo', () => { const T = require('../toma-conciliacion.js');
     assert.strictEqual(T.requiereReconteo({ delta: 4, sistema: 1000 }), false); assert.strictEqual(T.requiereReconteo({ delta: 11, sistema: 1000 }), true);
     assert.strictEqual(T.requiereReconteo({ delta: 3, sistema: 20 }), true); assert.strictEqual(T.requiereReconteo({ delta: 1, sistema: 1000 }, { controlado: true }), true);

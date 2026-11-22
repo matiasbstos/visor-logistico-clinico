@@ -6678,3 +6678,6 @@ body:not([data-user-role="superadmin"]) .solo-superadmin{display:none !important
 .si-cajas li{display:flex;align-items:center;gap:6px;background:#f7fbef;border:1px solid #d9ecbf;border-radius:6px;padding:4px 8px;color:#365314}
 .si-pq-x{margin-left:auto;border:0;background:none;color:#64748b;cursor:pointer;min-width:32px;min-height:32px;font-size:1rem}
 .si-tr-caja td{background:#f7fbef}
+/* v21.244: trabajo sin internet en solicitudes */
+.si-le-cola{background:#eef2f9;color:#1A3668;display:inline-flex;align-items:center;gap:4px}
+.si-cola{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:8px;background:#eef2f9;color:#1A3668;font-weight:600;font-size:.85rem}

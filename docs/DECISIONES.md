@@ -1677,3 +1677,51 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
 - Sin conexión, «Emitir» deja el acta en la cola (`acta-emitir`) con folio provisional `AE-P-…` y genera un **PDF provisional** para firmar (el número dice «PROVISIONAL»). Al volver internet se emite con su AE definitivo y reserva el stock en la misma transacción de siempre; lo que no alcance queda como sobregiro, igual que con internet (la entrega ya ocurrió). El acta definitiva guarda `folioProvisional` y `hechaSinConexion`.
 - Sin duplicar: marca `Contadores/cola-ae-<operación>` → {numero} escrita en la misma transacción y leída al inicio; un reintento no emite dos actas.
 - Las actas de una orden de compra siguen necesitando internet (validan lo recibido de la OC); el borrador queda guardado. Confirmar con el acta firmada (subir archivo) y anular también necesitan internet.
+
+## 4.302 Rediseño de la toma de inventario y del ingreso de existencias — decisiones (nov. 2026)
+
+**Equipos.** Hannibal (plan técnico), Leonard (proceso de bodega, BPD UE), Fowler (reglas de auditoría), Stuart (campos y categorías), Face/Penny (pantallas).
+
+**Hallazgo principal.** La toma actual SUMA lo contado al stock (`syncToFirestore`, `finalQty = q0 + addedQty`): contar 1.100 de un lote con 1.000 deja 2.100. Contradice 4.2 («el cierre fija la cantidad contada»). Además «Ingreso de Existencias» del menú abre la toma, y el formulario de ingreso es «Ingresos».
+
+**Decisiones del usuario.**
+1. **Lote no contado:** se elige el tipo de toma. **Completa:** lo no contado cuenta como 0 y genera faltante. **Parcial:** queda igual, marcado «sin contar».
+2. **Aprobación:** los faltantes los aprueba el superadministrador; los sobrantes pequeños entran con el cierre. Diferencia > 5 % o > 10 u. → se pide recontar; en controlados, cualquier diferencia se recuenta.
+3. **No es a ciegas:** quien cuenta ve lo que dice el sistema y, a medida que pistolea, se va descontando: la pantalla muestra en vivo si faltan o sobran unidades por lote.
+4. **Sin lote ni vencimiento:** entra igual al stock como S/L. Pero al **despachar** (acta de entrega, movimiento entre bodegas, procesar una solicitud de medicamentos, insumos médicos o aseo) el sistema **exige ingresar el lote** de lo S/L para poder cerrar/procesar. Y en las **actas de entrega**, cuando lo entregado tiene lote, el lote va en la descripción del acta.
+
+**Lo que decide el equipo (recomendaciones aceptadas por defecto).** Diferencia contra lo que había **al contar** (lo que salió entre el conteo y el cierre no se pierde); una transacción por producto con marca fija `toma-<INV>-<insumo>` (no se aplica dos veces); «Ingreso de Existencias» de la toma pasa a llamarse «Toma de inventario»; cualquier rol de bodega puede cerrar, las faltas esperan al superadministrador; tipos y categorías en una sola constante (COCINA no puede volver a guardarse como médico); el autocompletado reconoce primero por ID Mercado Público.
+
+**Orden.** PR1 `toma-conciliacion.js` (función pura `conciliar`) → PR2 pantalla de toma por lote (borrador, en vivo) → PR3 «Cerrar toma» (Tomas_Inventario, AJU, cola) → PR4 ficha de ingreso con foto y embalaje → PR5 lote obligatorio al despachar lo S/L y lote en el acta → PR6 migración de categorías (la ejecuta el usuario).
+
+**4.302-b Implementado en v21.246 (PR1+PR2+PR3 juntos).** `toma-conciliacion.js` (`SAR_Toma`: conciliar, aplicar, avance, quitarReservado, requiereReconteo; pruebas en tests/unidad.js) y `toma-pantalla.js` (`SAR_TomaUI`) reemplazan la toma anterior, que queda oculta (`#toma-legado`, sus IDs siguen para script.js). Menú: «Toma de inventario». Abrir toma (bodega + completa/parcial, folio INV o INV-P sin internet) → contar con pistola (etiqueta BUL cerrada suma su contenido al lote; abierta pide contar), cámara (QR) o búsqueda con foto; por lote se ve sistema / contado / «quedan N» / «sobran N» en vivo, y lo reservado en actas se descuenta de lo contado por vencimiento → Revisar y cerrar: diferencias por lote contra lo que había al empezar a contar ese producto; > 5 % o > 10 u. (o controlado) pide «Volví a contar»; sobrantes y lotes nuevos entran con `ejecutarAjusteDirecto` (AJU, idMov `toma-<id>-<insumo>-<n>`); faltantes: superadministrador → se aplican; otro rol → `Solicitudes_Ajuste/<mismo id>` pendientes con el lote. Sin internet el cierre queda en la cola (`toma-cierre`). Registro de la toma en `Contadores/toma-<id>`. El conteo vive en el equipo (`sar-toma-v2`) hasta cerrar o descartar; no toca el stock.
+
+**4.302-c Correcciones de la revisión (Fowler + B.A., v21.246).**
+- **Foto del sistema al contar**, no al abrir: al primer conteo de un producto se relee del servidor; en la completa, al revisar y al cerrar se recarga la bodega (incluye lo que llegó después) y lo no contado se arma al vuelo.
+- **Cada lote debe seguir con lo que tenía al contar** (`esperadoLote`). Si otro cierre, otra toma de la misma bodega o un movimiento lo cambió, ese ajuste se rechaza (no descuenta dos veces), el producto se relee y se pide recontarlo. Al abrir, se avisa si ya hay una toma abierta en esa bodega (`Contadores/toma-<id>` con estado abierta/cerrada/anulada).
+- **Lote exacto:** el ajuste usa el nombre del lote tal como está en el sistema (minúsculas, N/A, espacios) y su mes de vencimiento (`opts.mesLote` en `ejecutarAjusteDirecto`). Así, el mismo lote con dos vencimientos o un lote nuevo con otro vencimiento no se mezclan. Un lote contado con el mes mal leído se concilia con el del sistema si ese lote no se contó con su mes.
+- **idMov por lote:** `toma-<id>-<insumo>-<LOTE|AAAA-MM>`. Los reintentos no repiten aunque cambie el orden de las líneas, y no se gasta otro correlativo AJU si el ajuste ya estaba.
+- **Deuda (sobregiro):** se salda solo si se contaron **todos** los lotes del producto (o en la toma completa), sin importar el signo. Sin sobrante, una línea de 0 solo salda la deuda (`saldarDeudaConteoTotal`). En una parcial incompleta, la deuda no cambia.
+- **Reservado en actas:**
+  - En la parcial, solo se descuenta de lo contado si se contaron todos los lotes del producto; si no, se pide contarlos (se acepta 0).
+  - Lo reservado que no apareció se muestra, exige «Revisado» y queda en el registro (`avisos`); no se descuenta aquí.
+- **Roles:**
+  - El ajuste escribe en `Auditoria` (solo administradores), así que para un rol que no es administrador también los sobrantes quedan como solicitudes.
+  - Las solicitudes de la toma llevan lote crudo, mes, `loteSistema` (se valida al aprobar), código AJU y `snapEn`.
+- **Registro de la toma:** incluye contados, sinDiferencia, IRA (%), quién recontó y cuándo, abiertaPor/En y errores. Una toma descartada queda «anulada», sin dejar un hueco de folio. Si falla el registro, se avisa sin bloquear.
+- **Cola sin internet:** un error que no es de conexión no se reintenta para siempre: se avisa y esos lotes se cuentan en otra toma.
+- **Segunda revisión de Fowler:**
+  - Si un lote se rechaza porque cambió, se borra el conteo de ese producto y se vuelve a contar; así no aparece una sobra falsa.
+  - En la parcial, la deuda solo se salda si el producto tiene al menos un conteo (puede ser 0).
+  - idMov con `encodeURIComponent(clave)`: «A/1» y «A.1» no chocan.
+  - En la toma, el lote se compara con el mismo criterio que la conciliación: S/L = N/A = vacío.
+  - La línea que solo salda deuda usa el folio INV como documento, no gasta AJU y dice «Cuadre de deuda».
+  - El IRA no cuenta los lotes en 0 que nadie contó.
+- **Segunda revisión de B.A.:**
+  - Con `mesLote`, el lote se compara normalizado: «l7» y «L7» del mismo mes son el mismo lote, y un lote guardado como número también coincide.
+  - La deuda que se salda debe ser la que había al contar (`esperadoDeuda`; con otra acta entremedio, se rechaza). Solo la salda una línea por producto, y no se salda si el producto cambió.
+  - Lo que está en cuarentena no entra a la toma.
+  - `mes()` acepta Timestamp o Date.
+- **Pendiente (decisión del usuario):** un acta «por confirmar» cuyo material ya salió físicamente se ve como faltante, porque lo reservado se da por presente en la bodega.
+- **Pendiente:** dos pestañas del mismo equipo comparten el borrador. Hoy gana la última que guarda.
+- **Pendiente (reglas, las publica el usuario):** cualquier rol puede editar una `Solicitudes_Ajuste` pendiente (cantidad, loteSistema). Conviene limitar `update` a superadmin o a quien la creó, y solo mientras esté pendiente.

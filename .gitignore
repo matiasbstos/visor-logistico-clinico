@@ -69,3 +69,6 @@ users.json
 
 # dataconnect generated files
 .dataconnect
+
+# graphify (mapa del código para el asistente): no se sube al repo
+graphify-out/

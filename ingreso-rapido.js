@@ -181,37 +181,52 @@
         });
         const lista = [...grupos.values()];
         if (!confirm(`Se ingresarán ${v.unidades} unidades de ${lista.length} productos a "${bodegaSel}". ¿Confirmas?`)) return;
+        /* v21.245: sin internet el ingreso queda en la cola del teléfono con folio provisional y se aplica solo al volver la conexión.
+           Cada producto escribe su historial con id fijo (ing-<op>-<k>-<j>): un reintento no vuelve a sumar. */
+        const sinRed = window.SAR_Cola && !(await window.SAR_Cola.hayConexion());
+        if (sinRed) {
+            const recIdP = window.SAR_Folio && window.SAR_Folio.provisional ? window.SAR_Folio.provisional('INV') : 'INV-P-' + Date.now().toString(36).toUpperCase();
+            window.SAR_Cola.encolar({ tipo: 'ingreso-rapido', titulo: `Ingreso ${recIdP} · ${v.unidades} u. a ${bodegaSel}`, datos: { bodega: bodegaSel, grupos: lista, recId: recIdP, ocRef, en: new Date().toISOString() } });
+            toast('Sin internet: ingreso en cola', `${recIdP}: ${v.unidades} u. de ${lista.length} producto(s) se sumarán a ${bodegaSel} apenas vuelva la conexión (mantén el Visor abierto).`, 'info');
+            filas = []; pintar(); return;
+        }
         const prog = window.SAR_Progreso.iniciar(`Ingresando el inventario a ${bodegaSel}…`, ['Tomando el número de registro…']);
         const recId = window.SAR_Folio ? await window.SAR_Folio.siguiente('INV') : 'INV-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+        const opId = 'ir' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
         try {
-            const f = fs(); let n = 0;
-            for (const g of lista) {
-                n++; prog.paso(`Guardando ${n} de ${lista.length}: ${g.nombre.slice(0, 40)}…`);
-                let ref = null;
-                const s1 = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('name', '==', g.nombre), f.limit(10)));
-                s1.forEach(x => { if (!ref && x.data().location === bodegaSel) ref = f.doc(f.collection(db(), 'Insumos'), x.id); });
-                if (!ref && g.codigo) { const s2 = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('codigoMP', '==', g.codigo), f.limit(10))); s2.forEach(x => { if (!ref && x.data().location === bodegaSel) ref = f.doc(f.collection(db(), 'Insumos'), x.id); }); }
-                if (!ref) ref = f.doc(f.collection(db(), 'Insumos'), `inv_${slug(g.codigo || g.nombre)}__${slug(bodegaSel)}`);
-                await f.runTransaction(db(), async (tx) => {
-                    const sn = await tx.get(ref), actual = sn.exists() ? sn.data() : null, m = mezclar(actual, g.ingresos), limite = num(actual && (actual.criticalLimit || actual.stock_minimo)) || 50;
-                    /* v21.228: el ingreso rápido carga lo CONTADO físicamente: lo adeudado no se descuenta solo (ya salió de bodega);
-                       queda en «Salud del inventario» para descontar o regularizar. */
-                    const cq = null;
-                    if (cq) { m.quantity = cq.quantity; m.batches = cq.batches; m.sobregiro = cq.sobregiro; m.sobregiroDetalle = cq.sobregiroDetalle; }
-                    const prox = m.batches[0];
-                    const base = { origenOC: true, origenIngreso: (actual && actual.origenIngreso) || 'INVENTARIO_RAPIDO', ...(ocRef ? { ultimaOC: ocRef } : {}), ...(g.codigo ? { codigoMP: g.codigo } : {}), quantity: m.quantity, batches: m.batches, ...(m.sobregiro != null ? { sobregiro: m.sobregiro, sobregiroDetalle: m.sobregiroDetalle } : {}), isCritical: m.quantity <= limite, batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', updatedAt: f.serverTimestamp() };
-                    if (actual) tx.update(ref, base); else tx.set(ref, { name: g.nombre, name_lowercase: g.nombre.toLowerCase(), location: bodegaSel, criticalLimit: 50, category: 'General', ...base });
-                    g.ingresos.forEach(ing => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: g.nombre, item: g.nombre, quantity: ing.cantidad, type: 'INGRESO_INVENTARIO', batch: ing.lote, expirationDate: ing.vence, destination: bodegaSel, dest: bodegaSel, origin: 'Inventario inicial', user: usuario(), date: f.serverTimestamp(), document: `${recId} · Ingreso rápido${ocRef ? ' · OC ' + ocRef : ''}`, observacion: 'Ingreso rápido de inventario' + (ocRef ? ' (llegó con la OC ' + ocRef + ')' : ''), idInsumoDestino: ref.id }));
-                });
-                try {
-                    const id = slug(g.codigo || g.nombre) || 'manual';
-                    await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: g.nombre, descripcion_lower: g.nombre.toLowerCase(), codigoMP: g.codigo, insumoName: g.nombre, sinOrden: true, origen: 'INVENTARIO', creadoPor: usuario(), actualizado: f.serverTimestamp() }, { merge: true });
-                } catch (e) { /* el stock ya entró */ }
-            }
+            let n = 0;
+            for (const [k, g] of lista.entries()) { n++; prog.paso(`Guardando ${n} de ${lista.length}: ${g.nombre.slice(0, 40)}…`); await aplicarGrupo(g, k, { bodega: bodegaSel, recId, ocRef, opId }); }
             prog.listo(`${v.unidades} unidades de ${lista.length} productos ingresadas a ${bodegaSel} (${recId})`, { informe: true });
             filas = []; await cargarDatos(); pintar();
         } catch (e) { prog.error(); toast('No se terminó el ingreso', (e.message || String(e)) + ' Lo ya guardado queda en la bodega; revisa antes de repetir.', 'error'); }
     }
+    /** Suma un producto a la bodega (una transacción). Idempotente: si ya existe el historial ing-<opId>-<k>-0, ya se hizo. */
+    async function aplicarGrupo(g, k, o) {
+        const f = fs(), bod = o.bodega; let ref = null;
+        const s1 = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('name', '==', g.nombre), f.limit(10)));
+        s1.forEach(x => { if (!ref && x.data().location === bod) ref = f.doc(f.collection(db(), 'Insumos'), x.id); });
+        if (!ref && g.codigo) { const s2 = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('codigoMP', '==', g.codigo), f.limit(10))); s2.forEach(x => { if (!ref && x.data().location === bod) ref = f.doc(f.collection(db(), 'Insumos'), x.id); }); }
+        if (!ref) ref = f.doc(f.collection(db(), 'Insumos'), `inv_${slug(g.codigo || g.nombre)}__${slug(bod)}`);
+        const refsH = g.ingresos.map((_, j) => f.doc(f.collection(db(), 'Historial_Movimientos'), `ing-${o.opId}-${k}-${j}`));
+        await f.runTransaction(db(), async (tx) => {
+            const ya = await tx.get(refsH[0]); if (ya.exists()) return;   /* reintento: ya sumado */
+            const sn = await tx.get(ref), actual = sn.exists() ? sn.data() : null, m = mezclar(actual, g.ingresos), limite = num(actual && (actual.criticalLimit || actual.stock_minimo)) || 50;
+            /* v21.228: el ingreso rápido carga lo CONTADO físicamente: lo adeudado no se descuenta solo (ya salió de bodega) */
+            const prox = m.batches[0];
+            const base = { origenOC: true, origenIngreso: (actual && actual.origenIngreso) || 'INVENTARIO_RAPIDO', ...(o.ocRef ? { ultimaOC: o.ocRef } : {}), ...(g.codigo ? { codigoMP: g.codigo } : {}), quantity: m.quantity, batches: m.batches, isCritical: m.quantity <= limite, batch: prox ? prox.batch : '', expirationDate: prox ? prox.expirationDate : 'N/A', updatedAt: f.serverTimestamp() };
+            if (actual) tx.update(ref, base); else tx.set(ref, { name: g.nombre, name_lowercase: g.nombre.toLowerCase(), location: bod, criticalLimit: 50, category: 'General', ...base });
+            g.ingresos.forEach((ing, j) => tx.set(refsH[j], { insumoName: g.nombre, item: g.nombre, quantity: ing.cantidad, type: 'INGRESO_INVENTARIO', batch: ing.lote, expirationDate: ing.vence, destination: bod, dest: bod, origin: 'Inventario inicial', user: usuario(), date: f.serverTimestamp(), document: `${o.recId} · Ingreso rápido${o.ocRef ? ' · OC ' + o.ocRef : ''}${o.desdeCola ? ' · hecho sin conexión' : ''}`, ...(o.desdeCola ? { sinConexion: true, hechoEn: o.en || '' } : {}) }));
+        });
+        try {
+            const id = slug(g.codigo || g.nombre) || 'manual';
+            await f.setDoc(f.doc(f.collection(db(), 'Catalogo_Productos'), id), { descripcion: g.nombre, descripcion_lower: g.nombre.toLowerCase(), codigoMP: g.codigo, insumoName: g.nombre, sinOrden: true, origen: 'INVENTARIO', creadoPor: usuario(), actualizado: f.serverTimestamp() }, { merge: true });
+        } catch (e) { /* el stock ya entró */ }
+    }
+    if (window.SAR_Cola && window.SAR_Cola.registrar) window.SAR_Cola.registrar('ingreso-rapido', async (d, op) => {
+        /* al volver internet: el folio definitivo se toma ahora y queda junto al provisional */
+        let recId = d.recIdFinal; if (!recId) { recId = window.SAR_Folio ? await window.SAR_Folio.siguiente('INV') : d.recId; d.recIdFinal = recId; }
+        for (const [k, g] of (d.grupos || []).entries()) await aplicarGrupo(g, k, { bodega: d.bodega, recId: `${recId}${d.recId && d.recId !== recId ? ' (provisional ' + d.recId + ')' : ''}`, ocRef: d.ocRef || '', opId: op.id, desdeCola: true, en: d.en });
+    });
 
     async function abrir() {
         const r = root(); if (!r) return;

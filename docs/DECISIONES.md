@@ -1653,3 +1653,12 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
 - **Confirmar un producto** (con o sin cajas pistoleadas) sin internet también queda en la cola (`solicitud-linea`) y se guarda con su transacción al volver; en pantalla se ve «en cola». Las cajas se leen de la copia local (están escuchadas en vivo).
 - Revisión de Frankie: una operación sale de la cola **solo si se hizo** (sin red / solicitud ocupada → sigue pendiente; lotes con error → «para revisar»); los oyentes se cortan y rearman al cambiar de usuario y salen de la lista si caen; para ahorrar lecturas, lo que se escucha en vivo no se vuelve a bajar entero cada 30 min, solo se escuchan las solicitudes abiertas, los usuarios básicos no escuchan en vivo y el evento «volvió internet» sube la cola al tiro pero respeta 10 min para la descarga completa; la hora «en vivo» solo cuenta datos que llegaron del servidor.
 - Límites conocidos: en iPhone no hay sincronización en segundo plano (la cola avanza con el Visor abierto y con el mismo usuario) y Safari sin instalar la app puede borrar los datos tras ~7 días sin uso: conviene instalar el Visor en la pantalla de inicio. Todavía **no** funcionan sin internet: actas de entrega, recepción de OC, ingreso de existencias y crear etiquetas nuevas (próximo paso: cola con folio provisional, como los ajustes).
+
+## 4.298 Ingreso de existencias sin internet (v21.245)
+
+**Pedido.** Que todo funcione sin internet; plan de Hannibal (4.297 → paso 1: ingresos, después recepción de OC, etiquetas de cajas y actas).
+
+**Decisión.**
+- **Ingreso de existencias** (formulario normal) e **Ingreso rápido de inventario**: sin conexión quedan en la cola del teléfono con folio provisional (`ING-P-…` / `INV-P-…`) y se aplican solos al volver internet, con su transacción y el folio definitivo (que guarda el provisional entre paréntesis).
+- **Sin duplicar al reintentar:** el movimiento del historial se escribe con id fijo por operación (`ing-<op>` en el ingreso normal; `ing-<op>-<producto>-<lote>` en el rápido) y se lee primero dentro de la transacción; si ya existe, no se vuelve a sumar. Esto también protege los ingresos con internet ante un reintento automático.
+- El núcleo del ingreso de proveedor quedó en `aplicarIngresoProveedor(p, opId)` (script.js), separado del formulario. El documento de respaldo (archivo) no viaja en la cola: se adjunta después; queda su nombre.

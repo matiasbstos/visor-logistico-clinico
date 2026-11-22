@@ -13,6 +13,7 @@
   const lote = (b) => { const t = String(b == null ? '' : b).trim().replace(/\s+/g, ' ').toUpperCase(); return !t || /^(S\/?L|SIN LOTE|N\/?A|-)$/.test(t) ? 'S/L' : t; };
   /** Vencimiento → AAAA-MM (acepta AAAA-MM-DD, AAAA-MM, MM/AAAA, DD/MM/AAAA, DD-MM-AAAA, ISO). Vacío o N/A → 'N/A'. */
   function mes(v) {
+    if (v && typeof v === 'object') { const d = typeof v.toDate === 'function' ? v.toDate() : v instanceof Date ? v : (v.seconds != null ? new Date(v.seconds * 1000) : null); if (d && !isNaN(d)) return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; }   /* Timestamp / Date / Timestamp guardado como JSON */
     const t = String(v == null ? '' : v).trim(); if (!t || /^(n\/?a|s\/v|-|sin)/i.test(t)) return 'N/A';
     let m = /^(\d{4})-(\d{1,2})/.exec(t); if (m) return `${m[1]}-${m[2].padStart(2, '0')}`;
     m = /^(\d{1,2})[\/\-.](\d{4})$/.exec(t); if (m) return `${m[2]}-${m[1].padStart(2, '0')}`;

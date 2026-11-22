@@ -1717,5 +1717,11 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
   - En la toma, el lote se compara con el mismo criterio que la conciliación: S/L = N/A = vacío.
   - La línea que solo salda deuda usa el folio INV como documento, no gasta AJU y dice «Cuadre de deuda».
   - El IRA no cuenta los lotes en 0 que nadie contó.
+- **Segunda revisión de B.A.:**
+  - Con `mesLote`, el lote se compara normalizado: «l7» y «L7» del mismo mes son el mismo lote, y un lote guardado como número también coincide.
+  - La deuda que se salda debe ser la que había al contar (`esperadoDeuda`; con otra acta entremedio, se rechaza). Solo la salda una línea por producto, y no se salda si el producto cambió.
+  - Lo que está en cuarentena no entra a la toma.
+  - `mes()` acepta Timestamp o Date.
+- **Pendiente (decisión del usuario):** un acta «por confirmar» cuyo material ya salió físicamente se ve como faltante, porque lo reservado se da por presente en la bodega.
 - **Pendiente:** dos pestañas del mismo equipo comparten el borrador. Hoy gana la última que guarda.
 - **Pendiente (reglas, las publica el usuario):** cualquier rol puede editar una `Solicitudes_Ajuste` pendiente (cantidad, loteSistema). Conviene limitar `update` a superadmin o a quien la creó, y solo mientras esté pendiente.

@@ -43,7 +43,7 @@
   }
   async function cargarInsumos() {
     const f = fs(), sn = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('location', '==', toma.bodega)));
-    insumos = []; sn.forEach(d => { const x = d.data(); if (x.status === 'ELIMINADO') return; insumos.push({ id: d.id, ...x }); });
+    insumos = []; sn.forEach(d => { const x = d.data(); if (x.status === 'ELIMINADO' || x.status === 'CUARENTENA') return;   /* lo en cuarentena no entra a la toma (tiene su propio control; si no, un conteo pasaría stock activo a cuarentena) */ insumos.push({ id: d.id, ...x }); });
     insumos.sort((a, b) => String(a.name).localeCompare(String(b.name), 'es'));
   }
   const lotesDe = (x) => (Array.isArray(x.batches) && x.batches.length ? x.batches : (num(x.quantity) ? [{ batch: x.batch || 'S/L', quantity: num(x.quantity), expirationDate: x.expirationDate || 'N/A' }] : [])).map(b => ({ batch: b.batch, quantity: num(b.quantity), expirationDate: b.expirationDate }));
@@ -185,9 +185,10 @@
     const filas = resumen(); if (filas.some(x => x.reconteo)) { pintar(); return; }
     const completa = toma.tipo === 'completa', prods = productosCierre(), conc = new Map(prods.map(({ id, p }) => [id, concilia(p, completa)]));
     const saldar = (id) => { const x = prods.find(z => z.id === id); return !!(x && x.p.snap.deuda > 0 && conc.get(id).todos); };
-    const lineas = filas.filter(x => !x.aviso).map((x, n) => ({ n, clave: x.l.clave, insumoId: x.id, nombre: x.p.nombre, lote: x.l.estado === 'nuevo' ? x.l.batch : (x.l.loteSistema != null && x.l.loteSistema !== '' ? x.l.loteSistema : x.l.batch), mesLote: x.l.vence, vence: x.l.venceOriginal || (x.l.vence === 'N/A' ? 'N/A' : x.l.vence), delta: x.l.delta, sistema: x.l.sistema, contado: x.l.contado == null ? 0 : x.l.contado, estado: x.l.estado, snapEn: x.p.snap.en, saldarDeuda: saldar(x.id), ...(x.p.recontado[x.l.clave] ? { recontado: x.p.recontado[x.l.clave] } : {}) }));
+    const lineas = filas.filter(x => !x.aviso).map((x, n) => ({ n, clave: x.l.clave, insumoId: x.id, nombre: x.p.nombre, lote: x.l.estado === 'nuevo' ? x.l.batch : (x.l.loteSistema != null && x.l.loteSistema !== '' ? x.l.loteSistema : x.l.batch), mesLote: x.l.vence, vence: x.l.venceOriginal || (x.l.vence === 'N/A' ? 'N/A' : x.l.vence), delta: x.l.delta, sistema: x.l.sistema, contado: x.l.contado == null ? 0 : x.l.contado, estado: x.l.estado, snapEn: x.p.snap.en, saldarDeuda: saldar(x.id), deudaSnap: x.p.snap.deuda, ...(x.p.recontado[x.l.clave] ? { recontado: x.p.recontado[x.l.clave] } : {}) }));
+    { const ya = new Set(); lineas.forEach(l => { if (!l.saldarDeuda) return; if (l.delta > 0 && !ya.has(l.insumoId)) { ya.add(l.insumoId); return; } l.saldarDeuda = false; }); }   /* la deuda la salda UNA línea por producto (la primera con sobrante) */
     /* deuda de un producto contado entero sin sobrante: línea 0 que solo la salda (con sobrante, la salda esa línea) */
-    filas.filter(x => x.aviso === 'deuda' && !lineas.some(l => l.insumoId === x.id && l.delta > 0)).forEach(x => lineas.push({ n: lineas.length, clave: '_deuda', insumoId: x.id, nombre: x.p.nombre, lote: '', mesLote: '', vence: '', delta: 0, sistema: x.p.snap.deuda, contado: 0, estado: 'deuda', snapEn: x.p.snap.en, saldarDeuda: true }));
+    filas.filter(x => x.aviso === 'deuda' && !lineas.some(l => l.insumoId === x.id && l.delta > 0)).forEach(x => lineas.push({ n: lineas.length, clave: '_deuda', insumoId: x.id, nombre: x.p.nombre, lote: '', mesLote: '', vence: '', delta: 0, sistema: x.p.snap.deuda, contado: 0, estado: 'deuda', snapEn: x.p.snap.en, saldarDeuda: true, deudaSnap: x.p.snap.deuda }));
     const avisos = filas.filter(x => x.aviso === 'reserva-falta').map(x => ({ insumoId: x.id, nombre: x.p.nombre, reservadoNoEncontrado: x.l.sistema, revisado: x.p.recontado._rsc || null }));
     let contados = 0, sinDiferencia = 0; conc.forEach(r => r.lineas.forEach(l => { if (l.estado === 'sin_contar') return; if (l.estado === 'ok' && !l.sistema && !l.contado) return; contados++; if (l.estado === 'ok') sinDiferencia++;   /* un lote en 0 que nadie contó no infla el IRA */ }));
     const plan = { id: toma.id, folio: toma.folio, bodega: toma.bodega, tipo: toma.tipo, motivo, obs, por: usuario(), superadmin: esSuper(), admin: esAdmin(), en: new Date().toISOString(), lineas, avisos, contados, sinDiferencia, abiertaPor: toma.por, abiertaEn: toma.abiertaEn };
@@ -214,8 +215,9 @@
       try {
         const sn = await f.getDoc(f.doc(f.collection(db(), 'Insumos'), l.insumoId)); if (!sn.exists()) throw new Error('el producto ya no existe');
         const stock = num(sn.data().quantity), deuda = l.estado === 'deuda';
+        if (deuda && cambiados.has(l.insumoId)) { errores.push(`${l.nombre}: la deuda no se saldó porque el producto cambió`); continue; }   /* no se salda a medias */
         /* el lote se identifica por su nombre tal como está en el sistema + mes de vencimiento, y debe seguir con lo que tenía al contar (si no, se rechaza: otro cierre u otro movimiento lo cambió) */
-        const opts = { idMov, motivo: l.delta < 0 ? plan.motivo : MOTIVO, observacion: just, ...(deuda ? { saldarDeudaConteoTotal: true } : { lote: l.lote, mesLote: l.mesLote, esperadoLote: l.estado === 'nuevo' ? 0 : l.sistema }), ...(l.estado === 'nuevo' && l.vence && l.vence !== 'N/A' ? { vence: l.vence } : {}), saldarDeuda: !!l.saldarDeuda };
+        const opts = { idMov, motivo: l.delta < 0 ? plan.motivo : MOTIVO, observacion: just, ...(deuda ? { saldarDeudaConteoTotal: true } : { lote: l.lote, mesLote: l.mesLote, esperadoLote: l.estado === 'nuevo' ? 0 : l.sistema }), ...(l.estado === 'nuevo' && l.vence && l.vence !== 'N/A' ? { vence: l.vence } : {}), saldarDeuda: !!l.saldarDeuda, ...(l.saldarDeuda && l.deudaSnap != null ? { esperadoDeuda: num(l.deudaSnap) } : {}) };
         if (l.delta < 0 ? plan.superadmin : admin) {
           const ya = await f.getDoc(f.doc(f.collection(db(), 'Historial_Movimientos'), 'aju-' + idMov)); if (ya.exists()) { aplicadas++; continue; }   /* sin gastar otro correlativo AJU */
           const codigo = deuda ? plan.folio : (window.SAR_Gobernanza ? await window.SAR_Gobernanza.codigo('AJU').catch(() => null) : null);   /* saldar deuda no mueve stock: lleva el folio INV, no gasta AJU */
@@ -224,7 +226,7 @@
           const ref = f.doc(f.collection(db(), 'Solicitudes_Ajuste'), idMov), ya = await f.getDoc(ref);
           if (!ya.exists()) { const codigo = (window.SAR_Gobernanza ? await window.SAR_Gobernanza.codigo('AJU').catch(() => null) : null) || (window.SAR_Folio ? window.SAR_Folio.provisional('AJU') : 'AJU-P');
             await f.setDoc(ref, { code: codigo, insumoId: l.insumoId, insumoName: l.nombre, cantidad: l.delta, justificacion: just, previousStock: stock, projectedStock: stock + l.delta, motivo: opts.motivo, observacion: just, status: 'pendiente', date: f.serverTimestamp(), requester: plan.por || usuario(), inv: plan.folio, toma: plan.id, snapEn: l.snapEn || '',
-              ...(deuda ? { conteo: true, deudaTotal: true } : { lote: l.lote, mesLote: l.mesLote, vence: l.estado === 'nuevo' && l.vence !== 'N/A' ? l.vence : '', loteSistema: l.estado === 'nuevo' ? 0 : l.sistema, conteo: !!l.saldarDeuda }) }); }
+              ...(deuda ? { conteo: true, deudaTotal: true } : { lote: l.lote, mesLote: l.mesLote, vence: l.estado === 'nuevo' && l.vence !== 'N/A' ? l.vence : '', loteSistema: l.estado === 'nuevo' ? 0 : l.sistema, conteo: !!l.saldarDeuda }), ...(l.saldarDeuda && l.deudaSnap != null ? { esperadoDeuda: num(l.deudaSnap) } : {}) }); }
           solicitudes++;
         }
       } catch (e) {

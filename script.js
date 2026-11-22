@@ -916,6 +916,8 @@ document.addEventListener('DOMContentLoaded', () => {
                         const mesL = (v) => (window.SAR_Toma && window.SAR_Toma.mes) ? window.SAR_Toma.mes(v) : String(v || '');
                         const loteN = (v) => (window.SAR_Toma && window.SAR_Toma.lote) ? window.SAR_Toma.lote(v) : String(v || 'S/L');
                         const esLote = (b) => opts.mesLote ? (loteN(b.batch) === loteN(opts.lote) && mesL(b.expirationDate) === opts.mesLote) : (b.batch || 'S/L') === opts.lote;   /* toma: mismo criterio que la conciliación (S/L = N/A = vacío; mayúsculas) */
+                        /* v21.246: la deuda que salda un conteo debe ser la que había al contar (otra acta entremedio no se da por saldada) */
+                        if (opts && opts.saldarDeuda && opts.esperadoDeuda != null && (Number(dataActual.sobregiro) || 0) !== Number(opts.esperadoDeuda)) throw new Error(`La deuda de ${insumoNombre} cambió desde el conteo (era ${opts.esperadoDeuda}, ahora ${Number(dataActual.sobregiro) || 0}). Vuelve a contarlo.`);
                         /* v21.238: conteo físico: el lote debe seguir como se contó (si cambió entre medio, se vuelve a contar) */
                         if (opts && opts.lote && opts.esperadoLote != null) {
                             const hay = currentBatches.filter(esLote).reduce((t, b) => t + (Number(b.quantity) || 0), 0);
@@ -1306,7 +1308,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             reqData.cantidad,
                             reqData.justificacion,
                             reqData.code,
-                            { solicitudId: docId, motivo: reqData.motivo || '', observacion: reqData.observacion || '', ...(reqData.lote ? { lote: reqData.lote, vence: reqData.vence || '', saldarDeuda: !!reqData.conteo, ...(reqData.mesLote ? { mesLote: reqData.mesLote } : {}), ...(reqData.loteSistema != null ? { esperadoLote: reqData.loteSistema } : {}) } : {}), ...(reqData.deudaTotal ? { saldarDeuda: true, saldarDeudaConteoTotal: true } : {}) }   // v21.230: se marca aprobada en la misma transacción del ajuste
+                            { solicitudId: docId, motivo: reqData.motivo || '', observacion: reqData.observacion || '', ...(reqData.lote ? { lote: reqData.lote, vence: reqData.vence || '', saldarDeuda: !!reqData.conteo, ...(reqData.mesLote ? { mesLote: reqData.mesLote } : {}), ...(reqData.loteSistema != null ? { esperadoLote: reqData.loteSistema } : {}) } : {}), ...(reqData.deudaTotal ? { saldarDeuda: true, saldarDeudaConteoTotal: true } : {}), ...(reqData.conteo && reqData.esperadoDeuda != null ? { esperadoDeuda: reqData.esperadoDeuda } : {}) }   // v21.230: se marca aprobada en la misma transacción del ajuste
                         );
 
                         window.showToast("Solicitud Aprobada", `El ajuste ${reqData.code} fue ejecutado con éxito.`, "success");

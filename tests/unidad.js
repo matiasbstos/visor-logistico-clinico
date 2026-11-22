@@ -265,6 +265,7 @@ t('toma v21.246: mismo lote con otro mes, lote crudo y reservado no encontrado (
   if (r.lineas.length !== 1 || r.lineas[0].estado !== 'sobra' || r.lineas[0].delta !== 2 || r.lineas[0].vence !== '2027-01' || r.lineas[0].loteSistema !== 'q ') throw new Error(JSON.stringify(r.lineas));
   const d = T.conciliar([{ batch: 'L1', expirationDate: '2027-01', quantity: 10 }, { batch: 'L1', expirationDate: '2028-01', quantity: 50 }], [{ batch: 'L1', expirationDate: '2028-01', quantity: 45 }]);
   if (d.lineas.find(l => l.vence === '2028-01').delta !== -5 || d.lineas.find(l => l.vence === '2027-01').estado !== 'sin_contar') throw new Error('dos vencimientos del mismo lote');
+  if (T.mes({ seconds: 1800000000, nanoseconds: 0 }) !== '2027-01' || T.mes(new Date(2027, 4, 3)) !== '2027-05') throw new Error('mes de Timestamp/Date');
   const q = T.quitarReservado([{ batch: 'A', expirationDate: '2027-01', quantity: 5 }], 8); if (q.reservadoSinCubrir !== 3 || q[0].quantity !== 0) throw new Error('reservado sin cubrir ' + q.reservadoSinCubrir);
 });
 t('toma v21.246: umbral de reconteo', () => { const T = require('../toma-conciliacion.js');

@@ -487,7 +487,7 @@
   const ocupado = new Set();   // solicitudes procesándose en esta sesión: el botón queda bloqueado
   const candDe = (l, s) => lotesCandidatos(l, insumos, s.bodega, esRepo(s));
   const EST_L = { pendiente: 'Pendiente', ok: 'Confirmado', parcial: 'Parcial', no_hay: 'No hay' };
-  const chipL = (l) => { const e = l.estado || 'pendiente'; return `<span class="si-le si-le-${e}">${e === 'ok' ? '✔ ' + num(l.entregar) + ' confirmado' + (num(l.entregar) === 1 ? '' : 's') : e === 'parcial' ? `Parcial: ${num(l.entregar)} de ${l.cantidad}` : EST_L[e]}</span>`; };
+  const chipL = (l) => { const e = l.estado || 'pendiente'; return (l.enCola ? '<span class="si-le si-le-cola" title="Guardado en este teléfono: se sube solo al volver internet"><i class="ph-bold ph-cloud-slash" aria-hidden="true"></i> en cola</span> ' : '') + `<span class="si-le si-le-${e}">${e === 'ok' ? '✔ ' + num(l.entregar) + ' confirmado' + (num(l.entregar) === 1 ? '' : 's') : e === 'parcial' ? `Parcial: ${num(l.entregar)} de ${l.cantidad}` : EST_L[e]}</span>`; };
   const fmtV = (v) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(v || ''); return m ? `${m[3]}-${m[2]}-${m[1]}` : (v || '—'); };
   // ---- asociar lo pedido (nombre escrito por quien pide) a un producto del inventario (v21.210) ----
   let asoc = null, alias = {}; const ALIAS_ID = 'solicitudes-alias';
@@ -578,8 +578,10 @@
   async function cargarRevision(s) { const ver = String((s.conteo || {}).recontadoEn || (s.conteo || {}).fin || ''); revs[s.numero] = { estado: 'cargando', ver }; try { const F = await window.SAR_Transitoria.revisar(s); const pre = new Set(F.filter(x => x.usado > 0 && x.alContar > 0 && x.usado / x.alContar >= 0.3).map(x => x.k)); revs[s.numero] = { estado: 'ok', filas: F, sel: pre, ver }; } catch (e) { revs[s.numero] = { estado: 'error', error: e.message || String(e), ver }; } pintarBandeja(); }
   let abiertoL = {}, sel = '';   // sel: solicitud abierta en el panel lateral ('' = la primera; null = cerrado)   // numero|i → mostrar lotes aunque ya esté decidida
 
+  /** Lo que está en la cola del teléfono se ve en pantalla aunque la copia local aún no lo tenga. */
+  function aplicarColaLocal() { if (!window.SAR_Cola) return; window.SAR_Cola.pendientes().filter(op => op.tipo === 'solicitud-linea' && op.datos).forEach(op => { const s = solicitudes.find(x => x.numero === op.datos.numero), l = s && (s.lineas || [])[op.datos.i]; if (l && !l.enCola) { s.lineas = s.lineas.slice(); s.lineas[op.datos.i] = { ...l, ...op.datos.nueva, enCola: true }; if (s.estado === 'NUEVA') s.estado = 'PREPARACION'; } }); }
   function pintarBandeja() {
-    const r = rootBandeja(); if (!r) return;
+    const r = rootBandeja(); if (!r) return; aplicarColaLocal();
     if (pist && !pist.caja) queueMicrotask(() => { const x = r.querySelector('.si-pist-in'); if (x && document.activeElement !== x) x.focus(); });
     if (pist && pist.caja && !pist.enfocado) { pist.enfocado = true; queueMicrotask(() => { const x = r.querySelector('.si-pq-n'); if (x && !x.disabled) { x.focus(); x.select(); } }); }
     if (asoc) queueMicrotask(() => { const x = r.querySelector('.si-asoc-in'); if (x && document.activeElement !== x) { x.focus(); x.setSelectionRange(x.value.length, x.value.length); } });
@@ -626,7 +628,7 @@
           if (!colaS && s.estado === 'LISTA' && repo && todoMov && !todoRec) h += `<button class="btn btn-primary" data-recibir="1"${busy ? ' disabled' : ''}>${s.recibidoSolicitado ? 'Confirmar recibido (lo marcó ' + esc(s.recibidoSolicitado.por || 'la encargada') + ')' : `Marcar recibido en ${esc(s.bodega)}`}</button>`;
           if (!colaS && s.estado === 'LISTA' && (!repo || todoRec) && todoMov) h += '<button class="btn btn-primary" data-e="ENTREGADA">Cerrar solicitud (entregada)</button>';
           h += '<button class="btn btn-secondary" data-c="1">Copiar para WhatsApp</button>';
-          if (ab(s) && !tocada) h += '<button class="btn btn-secondary si-peligro" data-e="ANULADA">Anular</button>';
+          if (ab(s) && !tocada && !colaS) h += '<button class="btn btn-secondary si-peligro" data-e="ANULADA">Anular</button>';
           return h; })()}</footer></article>`; };
     r.innerHTML = `<div class="si-wrap si-ancho${costado ? ' si-wrap--costado' : ''}"><div class="si-cab"><div><h2 class="si-t">Solicitudes de insumos</h2><p class="si-s">Revisa cada producto: foto, dónde hay y de qué lote sacar. Confirma o marca «No hay»; quien pidió lo ve en su teléfono.</p></div>
       <div class="si-acc"><input id="si-bq" class="si-in si-bq" type="search" value="${esc(bq)}" placeholder="Buscar N° (SOL-…), nombre, correo o producto" autocomplete="off" aria-label="Buscar solicitud"><select id="si-fil" class="si-in">${[['ABIERTAS', 'Abiertas'], ['NUEVA', 'Enviadas'], ['PREPARACION', 'Procesando'], ['LISTA', 'Procesadas'], ['ENTREGADA', 'Cerradas'], ['TODAS', 'Todas']].map(([v, t]) => `<option value="${v}"${v === filtro ? ' selected' : ''}>${t}</option>`).join('')}</select>
@@ -640,13 +642,18 @@
   /** Guarda UNA línea leyendo la solicitud en una transacción: no pisa las marcas de movimiento de las demás líneas
    *  ni lo que otra sesión hizo entre medio. Sin internet (las transacciones no funcionan) guarda como antes. */
   async function guardarLinea(s, i, nueva, opc) {
+    /* v21.244: sin internet la línea queda en la cola del teléfono (se guarda con su transacción al volver la conexión) y se ve como «en cola» */
+    if (!(opc && opc.desdeCola) && window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) {
+      window.SAR_Cola.encolar({ tipo: 'solicitud-linea', titulo: `${s.correlativo || s.numero} · ${String(nueva.nombre || '').slice(0, 40)}`, datos: { numero: s.numero, i, nueva, opc: opc && opc.permitirTocada ? { permitirTocada: true } : {} } });
+      const L = (s.lineas || []).map(y => ({ ...y })); L[i] = { ...L[i], ...nueva, enCola: true }; toast('Sin internet: quedó en cola', 'Se guardará solo al volver la conexión. Mantén el Visor abierto cuando tengas internet.', 'info'); return { lineas: L, ...(s.estado === 'NUEVA' ? { estado: 'PREPARACION' } : {}) };
+    }
     const f = fs(), ref = f.doc(f.collection(db(), s._col || COL), s.numero), ahora = new Date().toISOString();
     const aplicar = (x) => { const L = (x.lineas || []).map(y => ({ ...y })), act = L[i]; if (!act || norm(act.nombre) !== norm((opc && opc.nombreOrig) || nueva.nombre)) throw new Error('La solicitud cambió: actualiza y vuelve a intentar.');
       if (tocadaL(act) && !(opc && opc.permitirTocada)) throw new Error('Este producto ya salió de su bodega: no se puede cambiar.');
       L[i] = { ...nueva, ...(act.movidos ? { movidos: act.movidos } : {}), ...(act.recibidos ? { recibidos: act.recibidos } : {}), ...(act.transito ? { transito: act.transito } : {}) };
       const cambios = { lineas: L }; if (x.estado === 'NUEVA') { cambios.estado = 'PREPARACION'; cambios.historial = (x.historial || []).concat([{ estado: 'PREPARACION', por: usuario(), en: ahora }]); } return cambios; };
     try { let c; await f.runTransaction(db(), async (tx) => { const sn = await tx.get(ref); if (!sn.exists()) throw new Error('La solicitud ya no existe.'); c = aplicar(sn.data()); tx.update(ref, c); }); return c; }
-    catch (e) { if (!/offline|unavailable|network|failed to get/i.test(String(e && (e.code || '') + ' ' + (e.message || '')))) throw e;
+    catch (e) { if (opc && opc.desdeCola) throw e; if (!/offline|unavailable|network|failed to get/i.test(String(e && (e.code || '') + ' ' + (e.message || '')))) throw e;
       /* v21.230: sin conexión NO se guarda con la copia local: al volver internet reemplazaría las líneas y borraría las marcas de lo ya movido
          (y el stock podría moverse dos veces). */
       throw new Error('Sin conexión: no se guardó el cambio. Vuelve a intentarlo cuando haya internet.'); }
@@ -679,45 +686,51 @@
    *  · Pedido de una persona sin bodega de uso: salida por lote (se descuenta del stock).
    *  Cada lote movido queda anotado en la línea dentro de la misma transacción: reintentar o procesar desde dos
    *  sesiones nunca mueve dos veces. La solicitud pasa a «Procesada» solo si todo se movió. */
-  async function procesar(n, sDoc) {
-    const s = sDoc || solicitudes.find(x => x.numero === n); if (!s || ocupado.has(n)) return; const T = window.SAR_Traspaso, P = window.SAR_Progreso;
-    if (!T || !T.moverUno || !T.salidaUno) { toast('Procesar', 'El módulo de traspasos aún no carga. Espera un momento.', 'warning'); return; }
-    if (s.conteo && s.conteo.estado !== 'aplicado') { toast('Inventario', 'Primero acepta el inventario (o espera el reconteo).', 'warning'); return; }
-    if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) { if (!sDoc) encolarSol('solicitud-procesar', n, `Procesar ${s.correlativo || n}`); return; }   /* v21.244: sin internet queda en cola y se procesa sola al volver */
+  /** Devuelve {hecho} o {reintentar} (sin red, ocupada o módulo sin cargar: la cola lo intenta de nuevo) o {mal} (lotes que fallaron: quedan «para revisar»). */
+  async function procesar(n, sDoc, opc) {
+    const desdeCola = !!(opc && opc.desdeCola);
+    const s = sDoc || solicitudes.find(x => x.numero === n); if (!s) return { hecho: true }; if (ocupado.has(n)) return { reintentar: 'ocupada' }; const T = window.SAR_Traspaso, P = window.SAR_Progreso;
+    if (!T || !T.moverUno || !T.salidaUno) { if (!desdeCola) toast('Procesar', 'El módulo de traspasos aún no carga. Espera un momento.', 'warning'); return { reintentar: 'módulo sin cargar' }; }
+    if (s.conteo && s.conteo.estado !== 'aplicado') { toast('Inventario', 'Primero acepta el inventario (o espera el reconteo).', 'warning'); return { mal: 'Falta aceptar el inventario de la solicitud.' }; }
+    if (!desdeCola && window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) { if (!sDoc) encolarSol('solicitud-procesar', n, `Procesar ${s.correlativo || n}`); return; }   /* v21.244: sin internet queda en cola y se procesa sola al volver */
     const repo = esRepo(s), tareas = [];
-    if (legado(s)) { toast('Procesar', 'Esta solicitud se procesó con la versión anterior: ciérrala directamente.', 'info'); return; }
+    if (legado(s)) { toast('Procesar', 'Esta solicitud se procesó con la versión anterior: ciérrala directamente.', 'info'); return { hecho: true }; }
     (s.lineas || []).forEach((l, i) => { if (l.soloConteo || l.estado === 'no_hay' || l.movido === true) return; (l.seleccion || []).filter(x => num(x.qty) > 0 && !(l.movidos || []).includes(grupoDe(x))).forEach(x => tareas.push({ l, i, x })); });
     const L = (s.lineas || []).filter(l => !l.soloConteo), ok = L.filter(l => l.estado === 'ok').length, par = L.filter(l => l.estado === 'parcial').length, nh = L.filter(l => l.estado === 'no_hay').length, u = tareas.reduce((t, z) => t + num(z.x.qty), 0);
     if (!sDoc) { const si = P && P.confirmar ? await P.confirmar({ titulo: `¿Procesar ${esc(s.correlativo || n)}?`, texto: `Para <b>${esc(s.solicitante || s.requester)}</b>${s.servicio ? ' · ' + esc(s.servicio) : ''}.`, lineas: [`${ok} completo(s)${par ? ` · ${par} parcial(es)` : ''}${nh ? ` · ${nh} sin stock (quedan avisados)` : ''}`, u ? (repo ? `Salen <b>${u}</b> u. de su bodega y quedan <b>en camino</b> a ${esc(s.bodega)} hasta que se marquen recibidas.` : `Se entregan <b>${u}</b> u.: salen del stock por lote.`) : 'No hay nada que mover.', 'Quien pidió verá la solicitud como «Procesada».'], si: 'Procesar' }) : confirm('¿Procesar?'); if (!si) return; }
-    ocupado.add(n); pintarBandeja(); const folioTra = repo && tareas.length && window.SAR_Folio ? await window.SAR_Folio.siguiente('TRA') : ''; const nota = `Solicitud ${s.correlativo || n}`, prog = P && tareas.length ? P.iniciar('Procesando la solicitud…', []) : null; let mal = 0; const errs = [];
+    let deRed = 0; ocupado.add(n); pintarBandeja(); const folioTra = repo && tareas.length && window.SAR_Folio ? await window.SAR_Folio.siguiente('TRA') : ''; const nota = `Solicitud ${s.correlativo || n}`, prog = P && tareas.length ? P.iniciar('Procesando la solicitud…', []) : null; let mal = 0; const errs = [];
     for (const [k, t] of tareas.entries()) {
       if (prog) prog.paso(`${k + 1} de ${tareas.length}: ${t.l.asociado || t.l.nombre}`);
       const marca = { numero: n, i: t.i, grupo: grupoDe(t.x), campo: 'movidos', nombre: t.l.nombre, transito: repo, ...(folioTra ? { folio: folioTra } : {}), ...(Array.isArray(t.x.bultos) && t.x.bultos.length ? { cajas: t.x.bultos.map(bx => ({ folio: bx.folio, qty: num(bx.qty) })), ...(repo ? { destinoCaja: s.bodega } : {}) } : {}) };   /* v21.243: cajas en la misma transacción */
       let movido = false;
       try { if (repo) await T.moverUno(t.x.insumoId, t.x.bodega, TRANSITO, [{ clave: t.x.clave, qty: num(t.x.qty) }], nota + ' · en camino a ' + s.bodega, marca); else await T.salidaUno(t.x.insumoId, t.x.bodega, [{ clave: t.x.clave, qty: num(t.x.qty) }], nota + ' · entregado a ' + (s.solicitante || '') + (s.servicio ? ' (' + s.servicio + ')' : ''), marca); movido = true; }
-      catch (e) { if (!e.ya) { mal++; errs.push(`${t.l.nombre}: ${e.message || e}`); } }
+      catch (e) { if (!e.ya) { mal++; errs.push(`${t.l.nombre}: ${e.message || e}`); if (/unavailable|offline|network|failed to fetch|deadline|timeout|sin conexi/i.test(String((e && (e.code || '')) + ' ' + (e && e.message)))) deRed++; } }
       void movido;
     }
     try { const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), COL), n)), x = sn.exists() ? limpiarSol(sn.data(), n) : null;
       if (x && (x.lineas || []).filter(l => !l.soloConteo).every(movidaL) && x.estado !== 'LISTA' && x.estado !== 'ENTREGADA') { const ahora = new Date().toISOString(); await f.updateDoc(f.doc(f.collection(db(), COL), n), { estado: 'LISTA', historial: (x.historial || []).concat([{ estado: 'LISTA', por: usuario(), en: ahora }]) }); } } catch (e) { mal++; errs.push(e.message || String(e)); }
     ocupado.delete(n); if (prog) { if (mal) prog.error(); else prog.listo(repo ? `En camino a ${s.bodega}` : 'Entregado', { aviso: false }); }
     try { await cargarBase(); } catch (e) { errorBase(e); } pintarBandeja();
-    if (mal) { toast('Procesar', `${mal} lote(s) no se movieron: ${esc(errs.slice(0, 2).join(' · '))}. Revisa y toca «Reintentar».`, 'error'); return; }
+    if (mal) { if (deRed === mal && desdeCola) return { reintentar: 'sin conexión' }; toast('Procesar', `${mal} lote(s) no se movieron: ${esc(errs.slice(0, 2).join(' · '))}. Revisa y toca «Reintentar».`, 'error'); return { mal: errs.slice(0, 3).join(' · ') }; }
     try { const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), COL), n)); if (sn.exists() && sn.data().estado === 'LISTA') correoSolicitud(limpiarSol(sn.data(), n), 'procesada'); } catch (e) { /* el correo es secundario */ }
     avisar({ titulo: `Solicitud ${s.correlativo || n} procesada`, texto: repo ? `${u} u. en camino a ${esc(s.bodega)}.` : `${esc(s.solicitante || '')} ya lo ve.`, estado: 'procesada' });
+    return { hecho: true };
   }
   /** Recibido: lo que está «En tránsito» de esta solicitud entra a la bodega de uso; con todo recibido, se cierra. */
-  async function recibir(n, sDoc) {
-    const s = sDoc || solicitudes.find(x => x.numero === n); if (!s || ocupado.has(n)) return; const T = window.SAR_Traspaso, P = window.SAR_Progreso;
-    if (!T || !T.moverUno) return; if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) { if (!sDoc) encolarSol('solicitud-recibir', n, `Recibir ${s.correlativo || n} en ${s.bodega}`); return; }
+  async function recibir(n, sDoc, opc) {
+    const desdeCola = !!(opc && opc.desdeCola);
+    const s = sDoc || solicitudes.find(x => x.numero === n); if (!s) return { hecho: true }; if (ocupado.has(n)) return { reintentar: 'ocupada' }; const T = window.SAR_Traspaso, P = window.SAR_Progreso;
+    if (!T || !T.moverUno) return { reintentar: 'módulo sin cargar' }; if (!desdeCola && window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) { if (!sDoc) encolarSol('solicitud-recibir', n, `Recibir ${s.correlativo || n} en ${s.bodega}`); return; }
     const tareas = []; (s.lineas || []).forEach((l, i) => (l.movidos || []).filter(g => !(l.recibidos || []).includes(g)).forEach(g => { const x = (l.seleccion || []).find(y => grupoDe(y) === g), tid = (l.transito || {})[g]; if (x && tid) tareas.push({ l, i, g, x, tid }); }));
     if (!sDoc) { const si = P && P.confirmar ? await P.confirmar({ titulo: `¿Recibido en ${esc(s.bodega)}?`, texto: `${esc(s.correlativo || n)}: entra a ${esc(s.bodega)} lo que estaba en camino.`, lineas: tareas.map(t => `${esc(t.l.asociado || t.l.nombre)} · <b>${num(t.x.qty)}</b> u. · lote ${esc(t.x.lote)}`), si: 'Recibido' }) : confirm('¿Recibido?'); if (!si) return; }
-    ocupado.add(n); pintarBandeja(); let mal = 0; const nota = `Solicitud ${s.correlativo || n} · recibido`, folioRec = tareas.length && window.SAR_Folio ? await window.SAR_Folio.siguiente('TRA') : '';
-    for (const t of tareas) { try { await T.moverUno(t.tid, TRANSITO, String(s.bodega || '').trim().replace(/\s+/g, ' '), [{ clave: t.x.clave, qty: num(t.x.qty) }], nota, { numero: n, i: t.i, grupo: t.g, campo: 'recibidos', nombre: t.l.nombre, ...(folioRec ? { folio: folioRec } : {}), ...(Array.isArray(t.x.bultos) && t.x.bultos.length ? { cajas: t.x.bultos.map(bx => ({ folio: bx.folio, qty: num(bx.qty) })), destinoCaja: String(s.bodega || '').trim(), soloTraslado: true } : {}) }); } catch (e) { if (!e.ya) { mal++; toast('No se recibió', `${esc(t.l.nombre)}: ${esc(e.message || e)}`, 'error'); } } }
+    ocupado.add(n); pintarBandeja(); let mal = 0, deRed = 0; const nota = `Solicitud ${s.correlativo || n} · recibido`, folioRec = tareas.length && window.SAR_Folio ? await window.SAR_Folio.siguiente('TRA') : '';
+    for (const t of tareas) { try { await T.moverUno(t.tid, TRANSITO, String(s.bodega || '').trim().replace(/\s+/g, ' '), [{ clave: t.x.clave, qty: num(t.x.qty) }], nota, { numero: n, i: t.i, grupo: t.g, campo: 'recibidos', nombre: t.l.nombre, ...(folioRec ? { folio: folioRec } : {}), ...(Array.isArray(t.x.bultos) && t.x.bultos.length ? { cajas: t.x.bultos.map(bx => ({ folio: bx.folio, qty: num(bx.qty) })), destinoCaja: String(s.bodega || '').trim(), soloTraslado: true } : {}) }); } catch (e) { if (!e.ya) { mal++; if (/unavailable|offline|network|failed to fetch|deadline|timeout|sin conexi/i.test(String((e && (e.code || '')) + ' ' + (e && e.message)))) deRed++; toast('No se recibió', `${esc(t.l.nombre)}: ${esc(e.message || e)}`, 'error'); } } }
     try { const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), COL), n)), x = sn.exists() ? limpiarSol(sn.data(), n) : null;
       if (x && (x.lineas || []).every(recibidaL) && x.estado === 'LISTA') { const ahora = new Date().toISOString(); await f.updateDoc(f.doc(f.collection(db(), COL), n), { estado: 'ENTREGADA', recibidoEn: ahora, historial: (x.historial || []).concat([{ estado: 'ENTREGADA', por: usuario(), en: ahora, nota: 'Recibido en ' + s.bodega }]) }); } } catch (e) { mal++; }
     ocupado.delete(n); try { await cargarBase(); } catch (e) { errorBase(e); } pintarBandeja();
     if (!mal) { try { const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), COL), n)); if (sn.exists() && sn.data().estado === 'ENTREGADA') correoSolicitud(limpiarSol(sn.data(), n), 'cerrada'); } catch (e) { /* secundario */ } avisar({ titulo: `Solicitud ${s.correlativo || n} cerrada`, texto: `Recibido en ${esc(s.bodega)}.`, estado: 'cerrada' }); }
+    if (mal) return deRed === mal && desdeCola ? { reintentar: 'sin conexión' } : { mal: mal + ' lote(s) no se recibieron' };
+    return { hecho: true };
   }
   async function cambiarEstado(n, e, callado) {
     const f = fs(), s = solicitudes.find(x => x.numero === n); if (!s) return;
@@ -730,26 +743,19 @@
   function encolarSol(tipo, n, titulo) {
     if (!window.SAR_Cola) { toast('Sin internet', 'Vuelve a intentar cuando haya conexión.', 'warning'); return; }
     if (!enColaSol(tipo, n)) window.SAR_Cola.encolar({ tipo, titulo, datos: { numero: n } });
-    toast('Sin internet: quedó en cola', `${esc(titulo)} se hará solo apenas vuelva la conexión (no cierres sesión).`, 'info'); pintarBandeja();
+    toast('Sin internet: quedó en cola', `${esc(titulo)} se hará solo apenas vuelva la conexión. Mantén el Visor abierto (o ábrelo) cuando tengas internet y no cierres sesión.`, 'info'); pintarBandeja();
   }
   async function leerSolDoc(n) { const f = fs(); for (const c of [COL, COL_ANT]) { const sn = await f.getDoc(f.doc(f.collection(db(), c), n)); if (sn.exists()) return { ...limpiarSol(sn.data(), n), _col: c }; } return null; }
   if (window.SAR_Cola && window.SAR_Cola.registrar) {
-    window.SAR_Cola.registrar('solicitud-procesar', async (d) => { if (!cargado) await cargarBase(); const s = await leerSolDoc(d.numero); if (!s || s.estado === 'ANULADA' || s.estado === 'ENTREGADA') return; await procesar(d.numero, s); });
-    window.SAR_Cola.registrar('solicitud-recibir', async (d) => { const s = await leerSolDoc(d.numero); if (!s || s.estado === 'ANULADA' || s.estado === 'ENTREGADA') return; await recibir(d.numero, s); });
+    /* la operación sale de la cola SOLO si se hizo: sin red / ocupada → sigue pendiente; lotes con error → «para revisar» */
+    const resultado = (r) => { if (r && r.reintentar) throw new Error('sin conexión: ' + r.reintentar); if (r && r.mal) throw new Error(String(r.mal)); };
+    window.SAR_Cola.registrar('solicitud-procesar', async (d) => { if (!cargado) await cargarBase(); const s = await leerSolDoc(d.numero); if (!s || s.estado === 'ANULADA' || s.estado === 'ENTREGADA') return; resultado(await procesar(d.numero, s, { desdeCola: true })); });
+    window.SAR_Cola.registrar('solicitud-recibir', async (d) => { if (!cargado) await cargarBase(); const s = await leerSolDoc(d.numero); if (!s || s.estado === 'ANULADA' || s.estado === 'ENTREGADA') return; resultado(await recibir(d.numero, s, { desdeCola: true })); });
+    window.SAR_Cola.registrar('solicitud-linea', async (d) => { const s = await leerSolDoc(d.numero); if (!s) return; await guardarLinea(s, d.i, d.nueva, { ...(d.opc || {}), desdeCola: true }); });
   }
   function estadoCopia() { let u = ''; try { u = localStorage.getItem('sar-sync-ult') || ''; } catch (e) { /* sin almacenamiento */ } const en = window.SAR_Cola ? window.SAR_Cola.pendientes().length : 0;
     return `${navigator.onLine === false ? 'Sin internet: trabajas con la copia de este equipo' : 'Copia para trabajar sin internet: se actualiza sola'}${u ? ' · última ' + new Date(u).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}${en ? ` · ${en} cambio(s) esperando internet` : ''}`; }
-  async function descargarOffline() {
-    const f = fs(), btn = document.getElementById('si-off'), m = document.getElementById('si-offm'); if (btn) btn.disabled = true;
-    const prog = window.SAR_Progreso ? window.SAR_Progreso.iniciar('Descargando para usar sin internet…', []) : null;
-    try {
-      const partes = [['Insumos', 'Insumos'], ['Bodegas', 'Bodegas'], ['Asignaciones_Ubicacion', 'Ubicaciones'], ['Catalogo_Productos', 'Catálogo'], [COL, 'Solicitudes'], [COL_ANT, 'Solicitudes anteriores']]; let n = 0, k = 0;
-      for (const [c, t] of partes) { if (prog) prog.paso(`Descargando ${t} (${++k} de ${partes.length})`); const sn = await f.getDocs(f.query(f.collection(db(), c), f.limit(3000))); n += sn.size; }
-      await cargarBase(); await publicarCatalogo(true).catch(() => {}); localStorage.setItem('si-off', new Date().toISOString());
-      if (prog) prog.listo(`Listo: ${n} registros guardados en este teléfono`, { aviso: false });
-    } catch (e) { if (prog) prog.error(); toast('Descarga', 'No se pudo completar: ' + (e.message || e), 'error'); }
-    pintarBandeja();
-  }
+
   function moverSel(d) {
     const ab = (x) => x.estado !== 'ENTREGADA' && x.estado !== 'ANULADA', vis = solicitudes.filter(x => filtro === 'TODAS' ? true : filtro === 'ABIERTAS' ? ab(x) : x.estado === filtro);
     if (!vis.length) return; const i = Math.max(0, vis.findIndex(x => x.numero === sel)); sel = vis[Math.min(vis.length - 1, Math.max(0, i + d))].numero; pintarBandeja();

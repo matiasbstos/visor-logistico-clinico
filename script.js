@@ -892,7 +892,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
                         /* v21.230: la solicitud se lee y se marca aprobada DENTRO de la transacción (dos clics o dos personas no la aplican dos veces) */
                         const solRef = opts && opts.solicitudId ? doc(db, 'Solicitudes_Ajuste', opts.solicitudId) : null;
-                        if (solRef) { const ss = await transaction.get(solRef); if (!ss.exists()) throw new Error('La solicitud no existe.'); if (ss.data().status !== 'pendiente') { const e = new Error('Esta solicitud ya fue procesada.'); e.ya = true; throw e; } }
+                        if (solRef) { const ss = await transaction.get(solRef); if (!ss.exists()) throw new Error('La solicitud no existe.'); if (ss.data().status !== 'pendiente') { const e = new Error('Esta solicitud ya fue procesada.'); e.ya = true; throw e; } if (ss.data().tipo === 'SOLICITUD_INSUMOS') throw new Error('Esto es una solicitud de insumos, no un ajuste.'); if (opts.cantidadVista != null && Number(ss.data().cantidad) !== Number(opts.cantidadVista)) throw new Error('La solicitud cambió mientras la revisabas: vuelve a abrirla.'); }   /* v21.247 */
                         const movRef = opts && opts.idMov ? doc(db, 'Historial_Movimientos', 'aju-' + opts.idMov) : doc(collection(db, 'Historial_Movimientos'));
                         if (opts && opts.idMov) { const ms = await transaction.get(movRef); if (ms.exists()) { const e = new Error('Este ajuste ya estaba aplicado.'); e.ya = true; throw e; } }
 
@@ -1299,6 +1299,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (reqData.status !== 'pendiente') {
                             throw new Error("Esta solicitud ya ha sido procesada.");
                         }
+                        if (reqData.tipo === 'SOLICITUD_INSUMOS') throw new Error("Esto es una solicitud de insumos, no un ajuste.");   // v21.247
 
                         // Ejecutar el ajuste en la base de datos
                         const res = await window.ejecutarAjusteDirecto(
@@ -1308,7 +1309,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             reqData.cantidad,
                             reqData.justificacion,
                             reqData.code,
-                            { solicitudId: docId, motivo: reqData.motivo || '', observacion: reqData.observacion || '', ...(reqData.lote ? { lote: reqData.lote, vence: reqData.vence || '', saldarDeuda: !!reqData.conteo, ...(reqData.mesLote ? { mesLote: reqData.mesLote } : {}), ...(reqData.loteSistema != null ? { esperadoLote: reqData.loteSistema } : {}) } : {}), ...(reqData.deudaTotal ? { saldarDeuda: true, saldarDeudaConteoTotal: true } : {}), ...(reqData.conteo && reqData.esperadoDeuda != null ? { esperadoDeuda: reqData.esperadoDeuda } : {}) }   // v21.230: se marca aprobada en la misma transacción del ajuste
+                            { solicitudId: docId, cantidadVista: reqData.cantidad, motivo: reqData.motivo || '', observacion: reqData.observacion || '', ...(reqData.lote ? { lote: reqData.lote, vence: reqData.vence || '', saldarDeuda: !!reqData.conteo, ...(reqData.mesLote ? { mesLote: reqData.mesLote } : {}), ...(reqData.loteSistema != null ? { esperadoLote: reqData.loteSistema } : {}) } : {}), ...(reqData.deudaTotal ? { saldarDeuda: true, saldarDeudaConteoTotal: true } : {}), ...(reqData.conteo && reqData.esperadoDeuda != null ? { esperadoDeuda: reqData.esperadoDeuda } : {}) }   // v21.230: se marca aprobada en la misma transacción del ajuste
                         );
 
                         window.showToast("Solicitud Aprobada", `El ajuste ${reqData.code} fue ejecutado con éxito.`, "success");

@@ -245,8 +245,8 @@
                     <a href="#" class="menu-item normal admin-only menu-sub" data-target="view-salud-inventario" data-title="Repetidos y salud del inventario">
                         <i class="ph-bold ph-git-merge"></i><span class="menu-label">Repetidos y salud <span id="sal-badge" class="home-badge" style="display:none"></span></span>
                     </a>
-                    <a href="#" class="menu-item normal" data-target="view-toma-inventario" data-title="Ingreso de Existencias">
-                        <i class="ph-bold ph-clipboard-text"></i><span class="menu-label">Ingreso de Existencias</span>
+                    <a href="#" class="menu-item normal" data-target="view-toma-inventario" data-title="Toma de inventario">
+                        <i class="ph-bold ph-clipboard-text"></i><span class="menu-label">Toma de inventario</span>
                     </a>
                     <a href="#" class="menu-item normal" data-target="view-donde-esta" data-title="¿Dónde está?">
                         <i class="ph-bold ph-map-pin-line"></i><span class="menu-label">¿Dónde está?</span>
@@ -984,6 +984,9 @@
                         <button type="button" class="btn btn-outline" data-go="view-inventario"><i class="ph-bold ph-archive-box"></i> Ver existencias</button>
                         <button type="button" class="btn btn-outline" data-go="view-historial"><i class="ph-bold ph-clock-counter-clockwise"></i> Historial</button>
                     </div>
+                    <div id="toma2-root" class="toma2"></div>
+                    <!-- v21.246: la toma anterior (sumaba lo contado) queda oculta; sus IDs siguen existiendo para script.js -->
+                    <div id="toma-legado" hidden>
                     <div class="page-header mb-16">
                         <div class="page-title">
                             <h1><i class="ph ph-clipboard-text" style="color:var(--primary); margin-right:8px;"></i>Ingreso de Existencias</h1>
@@ -1316,6 +1319,7 @@
                             </div>
                         </div>
                     </div>
+                    </div><!-- /toma-legado -->
                 </div>
             </section>
 

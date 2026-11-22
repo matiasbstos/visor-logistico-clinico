@@ -1677,3 +1677,19 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
 - Sin conexión, «Emitir» deja el acta en la cola (`acta-emitir`) con folio provisional `AE-P-…` y genera un **PDF provisional** para firmar (el número dice «PROVISIONAL»). Al volver internet se emite con su AE definitivo y reserva el stock en la misma transacción de siempre; lo que no alcance queda como sobregiro, igual que con internet (la entrega ya ocurrió). El acta definitiva guarda `folioProvisional` y `hechaSinConexion`.
 - Sin duplicar: marca `Contadores/cola-ae-<operación>` → {numero} escrita en la misma transacción y leída al inicio; un reintento no emite dos actas.
 - Las actas de una orden de compra siguen necesitando internet (validan lo recibido de la OC); el borrador queda guardado. Confirmar con el acta firmada (subir archivo) y anular también necesitan internet.
+
+## 4.302 Rediseño de la toma de inventario y del ingreso de existencias — decisiones (nov. 2026)
+
+**Equipos.** Hannibal (plan técnico), Leonard (proceso de bodega, BPD UE), Fowler (reglas de auditoría), Stuart (campos y categorías), Face/Penny (pantallas).
+
+**Hallazgo principal.** La toma actual SUMA lo contado al stock (`syncToFirestore`, `finalQty = q0 + addedQty`): contar 1.100 de un lote con 1.000 deja 2.100. Contradice 4.2 («el cierre fija la cantidad contada»). Además «Ingreso de Existencias» del menú abre la toma, y el formulario de ingreso es «Ingresos».
+
+**Decisiones del usuario.**
+1. **Lote no contado:** se elige el tipo de toma. **Completa:** lo no contado cuenta como 0 y genera faltante. **Parcial:** queda igual, marcado «sin contar».
+2. **Aprobación:** los faltantes los aprueba el superadministrador; los sobrantes pequeños entran con el cierre. Diferencia > 5 % o > 10 u. → se pide recontar; en controlados, cualquier diferencia se recuenta.
+3. **No es a ciegas:** quien cuenta ve lo que dice el sistema y, a medida que pistolea, se va descontando: la pantalla muestra en vivo si faltan o sobran unidades por lote.
+4. **Sin lote ni vencimiento:** entra igual al stock como S/L. Pero al **despachar** (acta de entrega, movimiento entre bodegas, procesar una solicitud de medicamentos, insumos médicos o aseo) el sistema **exige ingresar el lote** de lo S/L para poder cerrar/procesar. Y en las **actas de entrega**, cuando lo entregado tiene lote, el lote va en la descripción del acta.
+
+**Lo que decide el equipo (recomendaciones aceptadas por defecto).** Diferencia contra lo que había **al contar** (lo que salió entre el conteo y el cierre no se pierde); una transacción por producto con marca fija `toma-<INV>-<insumo>` (no se aplica dos veces); «Ingreso de Existencias» de la toma pasa a llamarse «Toma de inventario»; cualquier rol de bodega puede cerrar, las faltas esperan al superadministrador; tipos y categorías en una sola constante (COCINA no puede volver a guardarse como médico); el autocompletado reconoce primero por ID Mercado Público.
+
+**Orden.** PR1 `toma-conciliacion.js` (función pura `conciliar`) → PR2 pantalla de toma por lote (borrador, en vivo) → PR3 «Cerrar toma» (Tomas_Inventario, AJU, cola) → PR4 ficha de ingreso con foto y embalaje → PR5 lote obligatorio al despachar lo S/L y lote en el acta → PR6 migración de categorías (la ejecuta el usuario).

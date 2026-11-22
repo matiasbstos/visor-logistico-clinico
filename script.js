@@ -2107,7 +2107,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const viewTitles = {
             'view-panel': 'Inicio',
             'view-inventario': 'Existencias',
-            'view-toma-inventario': 'Ingreso de Existencias',
+            'view-toma-inventario': 'Toma de inventario',
             'view-inventario-semanal': 'Inventario Semanal por Racks',
             'view-compras': 'Gestión de Abastecimiento',
             'view-movimientos': 'Ingresos',

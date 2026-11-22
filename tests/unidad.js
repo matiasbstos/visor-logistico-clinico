@@ -239,6 +239,32 @@ t('fotos v21.241: cambiar el producto reemplaza una sola y el tope de 4 avisa', 
 t('fotos v21.241: catálogo ordena sin fotos primero', () => { const F = require('../fotos-telefono.js');
     const l = F.catalogo([{ name: 'A', quantity: 1 }, { name: 'B', quantity: 1 }], [{ __id: 'a', descripcion: 'A', imagen: 'c', fotosExtra: [{ tipo: 'producto', img: 'p' }] }]);
     assert.deepStrictEqual(l.map(x => x.nombre + x.nivel), ['B0', 'A2']); });
+t('toma v21.246: conciliar por lote (casos de Fowler)', () => { const T = require('../toma-conciliacion.js');
+    const est = (r) => r.lineas.map(l => l.batch + ':' + l.estado + ':' + l.delta).join(' ');
+    assert.strictEqual(est(T.conciliar([{ batch: 'A', quantity: 1000, expirationDate: '2027-05-01' }], [{ batch: 'a ', quantity: 1100, expirationDate: '05/2027' }])), 'A:sobra:100');
+    assert.strictEqual(est(T.conciliar([{ batch: 'A', quantity: 1000 }], [{ batch: 'A', quantity: 900 }])), 'A:falta:-100');
+    assert.strictEqual(est(T.conciliar([{ batch: 'A', quantity: 100 }], [{ batch: 'A', quantity: 100 }, { batch: 'C', quantity: 30, expirationDate: '2028-01-31' }])), 'A:ok:0 C:nuevo:30');
+    assert.strictEqual(est(T.conciliar([{ batch: 'A', quantity: 100 }, { batch: 'B', quantity: 50 }], [{ batch: 'A', quantity: 100 }], { completa: true })), 'A:ok:0 B:falta:-50');
+    assert.strictEqual(est(T.conciliar([{ batch: 'A', quantity: 100 }, { batch: 'B', quantity: 50 }], [{ batch: 'A', quantity: 100 }])), 'A:ok:0 B:sin_contar:0');
+    assert.strictEqual(est(T.conciliar([{ batch: '', quantity: 10 }], [{ batch: 'S/L', quantity: 10 }])), 'S/L:ok:0');
+    assert.strictEqual(est(T.conciliar([{ batch: 'A', quantity: 100 }], [{ batch: 'A', quantity: 60 }, { batch: 'A', quantity: 40 }])), 'A:ok:0');   /* pistoleado dos veces en partes = se suma una vez */
+  });
+t('toma v21.246: cierre fija lo contado contra lo que había al contar', () => { const T = require('../toma-conciliacion.js');
+    const r = T.conciliar([{ batch: 'A', quantity: 100 }], [{ batch: 'A', quantity: 100 }]);
+    assert.strictEqual(T.aplicar([{ batch: 'A', quantity: 90 }], r.lineas).quantity, 90);   /* salieron 10 después de contar: quedan 90, no 100 */
+    const r2 = T.conciliar([{ batch: 'A', quantity: 1000, expirationDate: '2027-05-01' }], [{ batch: 'A', quantity: 1100, expirationDate: '2027-05-01' }, { batch: 'N1', quantity: 5, expirationDate: '2028-02-01' }]);
+    const a = T.aplicar([{ batch: 'A', quantity: 1000, expirationDate: '2027-05-01' }], r2.lineas);
+    assert.strictEqual(a.quantity, 1105); assert.deepStrictEqual(a.batches.map(b => b.batch + '=' + b.quantity + '@' + b.expirationDate), ['A=1100@2027-05-01', 'N1=5@2028-02-01']);
+    const solo = T.aplicar([{ batch: 'A', quantity: 1000 }], T.conciliar([{ batch: 'A', quantity: 1000 }], [{ batch: 'A', quantity: 900 }]).lineas, l => l.delta > 0);
+    assert.strictEqual(solo.quantity, 1000);   /* el faltante espera al superadministrador */
+    const neg = T.aplicar([{ batch: 'A', quantity: 5 }], T.conciliar([{ batch: 'A', quantity: 100 }], [{ batch: 'A', quantity: 0 }], { completa: true }).lineas);
+    assert.deepStrictEqual(neg.negativos, ['A|N/A']); assert.strictEqual(neg.quantity, 0);
+  });
+t('toma v21.246: umbral de reconteo', () => { const T = require('../toma-conciliacion.js');
+    assert.strictEqual(T.requiereReconteo({ delta: 4, sistema: 1000 }), false); assert.strictEqual(T.requiereReconteo({ delta: 11, sistema: 1000 }), true);
+    assert.strictEqual(T.requiereReconteo({ delta: 3, sistema: 20 }), true); assert.strictEqual(T.requiereReconteo({ delta: 1, sistema: 1000 }, { controlado: true }), true);
+    assert.strictEqual(T.requiereReconteo({ delta: 0, sistema: 5 }, { controlado: true }), false);
+  });
 // contador con transacciones que se encolan: 20 pedidos simultáneos = 20 números distintos y seguidos (prueba asíncrona)
 (async () => {
   const F = require('../correlativos.js'), DB = {}; let cola = Promise.resolve();

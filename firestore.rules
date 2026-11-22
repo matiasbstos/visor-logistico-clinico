@@ -217,7 +217,16 @@ service cloud.firestore {
     }
 
     match /Solicitudes_Ajuste/{id} {
-       allow read, write: if hasRole();
+       // v21.247: una solicitud de ajuste la edita solo quien la creó (mientras siga pendiente) o el superadministrador
+       // (aprobar / rechazar). Así nadie cambia la cantidad o el lote de una solicitud ajena antes de aprobarla.
+       // Las solicitudes de insumos antiguas (tipo SOLICITUD_INSUMOS) guardadas aquí siguen como antes.
+       function esMia(d) { return request.auth != null && 'email' in request.auth.token && d.get('requester', '') == request.auth.token.email; }
+       function antigua(d) { return d.get('tipo', '') == 'SOLICITUD_INSUMOS'; }
+       allow read: if hasRole();
+       allow create: if hasRole() && (antigua(request.resource.data) || (esMia(request.resource.data) && request.resource.data.get('status', '') == 'pendiente'));
+       allow update: if hasRole() && (antigua(resource.data) || isSuperAdmin()
+         || (esMia(resource.data) && esMia(request.resource.data) && resource.data.get('status', '') == 'pendiente' && request.resource.data.get('status', '') == 'pendiente'));
+       allow delete: if isSuperAdmin();
     }
     
     match /Auditoria/{id} {

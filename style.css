@@ -6665,3 +6665,16 @@ body:not([data-user-role="superadmin"]) .solo-superadmin{display:none !important
 .fv-est{display:inline-flex;align-items:center;gap:4px;font-size:.75rem;font-weight:600;width:max-content;padding:2px 8px;border-radius:999px}
 .fv-ok{background:#f7fbef;color:#4D7C0F}.fv-no{background:#fef2f2;color:#b91c1c}.fv-med{background:#fff7ed;color:#C2410C}
 .fv-tabla td,.fv-tabla th{font-size:.82rem}
+/* v21.243: pistolear cajas al despachar una solicitud */
+.si-pbtn{margin:8px 0 2px}
+.si-pist{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:8px 0;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:var(--shape-card,8px 8px 8px 0)}
+.si-pist .si-pist-in{flex:1 1 240px;min-height:44px}
+.si-pist small,.si-pmsg{flex-basis:100%;margin:0;font-size:.8rem;color:#64748b}.si-pmsg{color:#b91c1c;font-weight:600}
+.si-pist--q{display:block}.si-pist--q p{margin:0 0 8px}
+.si-pq{border:0;padding:0;margin:0 0 8px;display:flex;flex-wrap:wrap;gap:6px 16px}.si-pq legend{font-weight:600;font-size:.85rem;color:#1A3668;margin-bottom:4px;padding:0}
+.si-pq label{display:inline-flex;align-items:center;gap:6px;min-height:36px;cursor:pointer}
+.si-pist--q .bu-man{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.si-pist--q .si-pq-n{width:110px;flex:none;min-height:44px}.si-pq-u{color:#64748b;font-size:.85rem}
+.si-cajas{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:.82rem}
+.si-cajas li{display:flex;align-items:center;gap:6px;background:#f7fbef;border:1px solid #d9ecbf;border-radius:6px;padding:4px 8px;color:#365314}
+.si-pq-x{margin-left:auto;border:0;background:none;color:#64748b;cursor:pointer;min-width:32px;min-height:32px;font-size:1rem}
+.si-tr-caja td{background:#f7fbef}

@@ -159,7 +159,7 @@
   const lotesDe = (d) => (Array.isArray(d.batches) && d.batches.length ? d.batches : [{ batch: d.batch || 'S/L', quantity: d.quantity, expirationDate: d.expirationDate || '' }]).filter(b => num(b.quantity) > 0);
 
   function ventana(titulo, html, opc) {
-    if (!(opc && opc.encima)) document.querySelectorAll('.bu-ov').forEach(x => x.remove());
+    if (!(opc && opc.encima)) document.querySelectorAll('.bu-ov').forEach(x => (x.cerrar ? x.cerrar() : x.remove()));   /* cerrar: también apaga su cámara */
     const ov = document.createElement('div'); ov.className = 'bu-ov'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
     ov.innerHTML = `<div class="bu-c"><div class="bu-cab"><h3>${esc(titulo)}</h3><button type="button" class="fp-x bu-x" aria-label="Cerrar">×</button></div><div class="bu-b">${html}</div></div>`;
     const cerrar = () => { ov.remove(); document.removeEventListener('keydown', tecla, true); if (ov._fin) ov._fin(); };
@@ -342,10 +342,28 @@
   let lector = null;
   async function camara(el, alLeer) {
     if (!window.Html5Qrcode) { el.innerHTML = '<p class="si-v">La cámara no está disponible: usa la pistola o escribe el folio.</p>'; return; }
-    try { lector = new window.Html5Qrcode(el.id); await lector.start({ facingMode: 'environment' }, { fps: 10, qrbox: (w, h) => ({ width: Math.min(w, h) * 0.8, height: Math.min(w, h) * 0.55 }) }, (txt) => alLeer(txt), () => {}); }
-    catch (e) { el.innerHTML = '<p class="si-v">No se pudo abrir la cámara (permiso o equipo sin cámara). Usa la pistola o escribe el folio.</p>'; lector = null; }
+    const mio = new window.Html5Qrcode(el.id); lector = mio;
+    try { await mio.start({ facingMode: 'environment' }, { fps: 10, qrbox: (w, h) => ({ width: Math.min(w, h) * 0.8, height: Math.min(w, h) * 0.55 }) }, (txt) => alLeer(txt), () => {});
+      /* v21.243: si la ventana se cerró mientras la cámara arrancaba (p. ej. aviso de permiso), se apaga aquí */
+      if (!el.isConnected) { await pararCamara(mio); return null; } }
+    catch (e) { el.innerHTML = '<p class="si-v">No se pudo abrir la cámara (permiso o equipo sin cámara). Usa la pistola o escribe el folio.</p>'; if (lector === mio) lector = null; return null; }
+    return mio;
   }
-  async function pararCamara() { if (lector) { try { await lector.stop(); } catch (e) { /* ya detenida */ } try { lector.clear(); } catch (e) { /* nada */ } lector = null; } }
+  /** v21.243: abre la cámara del teléfono en una ventana y devuelve lo primero que lea (QR o código de barras de la etiqueta); null si se cierra. */
+  let camAbierta = null;   /* una sola lectura a la vez: un doble toque devuelve la misma */
+  function leerConCamara(titulo) {
+    if (camAbierta) return camAbierta;
+    camAbierta = new Promise((ok) => {
+      let listo = false, mio = null; const id = 'bu-cam-' + Date.now();
+      const fin = (v) => { if (listo) return; listo = true; Promise.resolve(arranque).then(() => pararCamara(mio)).finally(() => { if (ov.parentNode) ov.remove(); camAbierta = null; ok(v); }); };
+      const ov = ventana(titulo || 'Leer la etiqueta con la cámara', `<div id="${id}" class="bu-cam"></div><p class="si-s">Apunta al QR (o al código de barras) de la etiqueta de la caja.</p>`, { encima: true });
+      ov._fin = () => fin(null);
+      const arranque = camara(ov.querySelector('#' + id), (txt) => { if (folioDe(txt)) { try { if (navigator.vibrate) navigator.vibrate(60); } catch (e) { /* sin vibración */ } fin(txt); } }).then(l => { mio = l; if (listo) pararCamara(l); });
+    });
+    return camAbierta;
+  }
+  /** Detiene un lector (el indicado, o el último abierto). */
+  async function pararCamara(cual) { const l = cual && cual.stop ? cual : lector; if (!l) return; try { await l.stop(); } catch (e) { /* ya detenida */ } try { l.clear(); } catch (e) { /* nada */ } if (lector === l) lector = null; }
 
   function fichaBulto(b) {
     return `<div class="bu-card"><div class="bu-card-h"><b>${esc(b.folio)}</b><span class="bu-est bu-est-${esc(b.estado)}">${esc(b.estado === 'CERRADA' ? 'Cerrada' : b.estado === 'ABIERTA' ? 'Abierta' : 'Vacía')}</span></div>
@@ -355,6 +373,45 @@
   }
   /** v21.238: tocar una caja interior (abrirla, vaciarla o pistolearla) significa que su caja grande está abierta. */
   function abrirPadre(b) { if (!b || !b.padre) return; leer(b.padre).then(pa => { if (pa && pa.estado === 'CERRADA') guardar(pa, { estado: 'ABIERTA' }, 'ABIERTA', { porInterior: b.folio }).catch(() => {}); }).catch(() => {}); }
+  /** v21.243 (B.A.): cajas pistoleadas dentro de la MISMA transacción del movimiento de stock (Regla 7).
+   *  leerCajasTx lee todas las cajas involucradas (y su caja grande / sus interiores) ANTES de cualquier escritura y
+   *  devuelve una función que escribe. cajas = [{folio, qty}]; opc = {ref, destino} (destino: reposición → la caja entera cambia de bodega).
+   *  Nunca baja más de lo que la caja tiene (si el sistema decía menos, queda anotado). */
+  async function leerCajasTx(tx, F, D, cajas, opc) {
+    const o = opc || {}, rf = (fo) => F.doc(D, 'Contadores', 'bulto-' + fo), mapa = new Map();
+    const traer = async (fo) => { if (!fo || mapa.has(fo)) return mapa.get(fo); const sn = await tx.get(rf(fo)); const d = sn.exists() ? { ...sn.data() } : null; mapa.set(fo, d); return d; };
+    const plan = [];
+    for (const c of (cajas || [])) { const b = await traer(c.folio); if (!b) continue; const q = Math.max(0, Math.floor(num(c.qty))); if (!q) continue;
+      const entera = q >= num(b.contenido) && num(b.contenido) > 0;
+      if (b.nivel === 'interior' && b.padre) await traer(b.padre);
+      if (Array.isArray(b.hijos) && entera) for (const h of b.hijos) await traer(h);
+      plan.push({ b, q, entera }); }
+    /* una caja pequeña y su caja grande en el mismo movimiento contarían dos veces la misma mercadería */
+    if (!o.soloTraslado) { const fs2 = new Set(plan.map(x => x.b.folio)); if (plan.some(x => x.b.padre && fs2.has(x.b.padre))) throw new Error('Se eligió una caja grande y también una de sus cajas pequeñas: quita una de las dos.'); }
+    return () => {
+      const ahora = new Date().toISOString(), por = usuario(), cambios = new Map();
+      const mod = (b, campos, accion, det) => { const prev = cambios.get(b.folio) || { ...b }; Object.assign(prev, campos); prev.historial = (prev.historial || b.historial || []).concat([{ accion, por, en: ahora, ...det }]).slice(-40); prev.actualizado = ahora; cambios.set(b.folio, prev); return prev; };
+      const actual = (fo) => cambios.get(fo) || mapa.get(fo);
+      if (o.soloTraslado) { plan.forEach(({ b: b0 }) => { const b = actual(b0.folio); if (b.bodega === 'En tránsito') { mod(b, { bodega: o.destino }, 'TRASLADO', { ref: o.ref || '', a: o.destino, recibido: true }); (b.hijos || []).forEach(h => { const hb = actual(h); if (hb && hb.bodega === 'En tránsito') mod(hb, { bodega: o.destino }, 'TRASLADO', { ref: o.ref || '', a: o.destino, recibido: true }); }); } }); cambios.forEach((x, fo) => tx.set(rf(fo), x, { merge: true })); return; }   /* recepción de una reposición: la caja llega a su bodega */
+      plan.forEach(({ b: b0, q, entera }) => { const b = actual(b0.folio), tiene = num(b.contenido), sale = Math.min(q, tiene), det = { qty: sale, ref: o.ref || '', ...(q > tiene ? { pedido: q, nota: 'la caja tenía menos según el sistema' } : {}) };
+        if (o.destino && entera) mod(b, { bodega: 'En tránsito', ...(b.padre ? { padre: null, padreAntes: b.padre } : {}) }, 'TRASLADO', { ...det, a: o.destino, enCamino: true });   /* reposición: la caja completa viaja («En tránsito» hasta que se reciba); una caja pequeña que viaja sola deja de colgar de su caja grande */
+        else mod(b, { contenido: tiene - sale, estado: tiene - sale > 0 ? 'ABIERTA' : 'VACIA' }, 'SALIDA', det);
+        if (b.nivel === 'interior' && b.padre && actual(b.padre)) { const pa = actual(b.padre), r = Math.max(0, num(pa.contenido) - sale); mod(pa, o.destino && entera ? { contenido: r, estado: r > 0 ? 'ABIERTA' : 'VACIA' } : { contenido: r, estado: r > 0 ? 'ABIERTA' : 'VACIA' }, 'SALIDA', { qty: sale, ref: o.ref || '', porInterior: b.folio }); }
+        if (Array.isArray(b.hijos) && entera) b.hijos.forEach(h => { const hb = actual(h); if (hb && hb.estado !== 'VACIA') mod(hb, o.destino ? { bodega: 'En tránsito' } : { contenido: 0, estado: 'VACIA' }, o.destino ? 'TRASLADO' : 'SALIDA', { ref: o.ref || '', enCajaGrande: b.folio }); });
+      });
+      cambios.forEach((x, fo) => tx.set(rf(fo), x, { merge: true }));
+    };
+  }
+  /** v21.243: salida desde una caja pistoleada (p. ej. al despachar una solicitud): baja su contenido y lo deja en el historial.
+   *  Caja interior → baja también la caja grande (y la marca abierta). Caja grande con `cajasChicas` → esas interiores salen enteras (VACIA en la caja). */
+  async function sacar(folio, qty, ref, cajasChicas) {
+    const b = await leer(folio); if (!b) throw new Error(folio + ' no existe.'); const q = Math.max(0, Math.floor(num(qty))); if (!q) return b;
+    const baja = (x, n) => { const r = Math.max(0, num(x.contenido) - n); return { contenido: r, estado: r > 0 ? 'ABIERTA' : 'VACIA' }; };
+    await guardar(b, (x) => baja(x, q), 'SALIDA', { qty: q, ref: ref || '' });
+    if (b.nivel === 'interior' && b.padre) { const pa = await leer(b.padre); if (pa) await guardar(pa, (x) => baja(x, q), 'SALIDA', { qty: q, ref: ref || '', porInterior: folio }); }
+    else if (Array.isArray(b.hijos) && num(cajasChicas) > 0) { let k = 0; for (const h of b.hijos) { if (k >= num(cajasChicas)) break; const hb = await leer(h); if (hb && hb.estado !== 'VACIA') { await guardar(hb, { contenido: 0, estado: 'VACIA' }, 'SALIDA', { qty: num(hb.contenido), ref: ref || '', enCajaGrande: folio }); k++; } } }
+    return b;
+  }
   async function escanear(modo) {
     const conteo = modo === 'conteo', leidos = [], vistos = new Set(), cubiertos = new Set(), abiertosPadre = new Set(), grandesCerradas = new Set();
     const ov = ventana(conteo ? 'Contar por bultos (pistolear)' : 'Escanear bulto', `
@@ -428,7 +485,7 @@
     inp.onkeydown = (e) => { if (e.key === 'Enter' || (e.key === 'Tab' && inp.value.trim())) { e.preventDefault(); tomar(); } };
     inp.oninput = () => { clearTimeout(tmIn); if (folioDe(inp.value)) tmIn = setTimeout(tomar, 300); };
     ov.querySelector('#bu-ok').onclick = () => { const t = inp.value; inp.value = ''; procesar(t); };
-    pintarSuma(); camara(ov.querySelector('#bu-cam'), procesar); setTimeout(() => inp.focus(), 200);
+    pintarSuma(); const camE = camara(ov.querySelector('#bu-cam'), procesar); ov._fin = () => camE.then(l => { if (l) pararCamara(l); }); setTimeout(() => inp.focus(), 200);
     return ov;
   }
 
@@ -733,6 +790,6 @@
     inp.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => registrar('nada'), 250); });
     pintar(''); setTimeout(() => inp.focus(), 50); return ov;
   }
-  window.SAR_Bultos = { probarPistola, hojaPrueba, code39, i2de5, planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
+  window.SAR_Bultos = { leerCajasTx, leerConCamara, leer, sacar, probarPistola, hojaPrueba, code39, i2de5, planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_Bultos;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null, addEventListener() {} });

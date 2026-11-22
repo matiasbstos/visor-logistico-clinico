@@ -224,7 +224,7 @@
     }
     if (window.SAR_Cola && window.SAR_Cola.registrar) window.SAR_Cola.registrar('ingreso-rapido', async (d, op) => {
         /* al volver internet: el folio definitivo se toma ahora y queda junto al provisional */
-        let recId = d.recIdFinal; if (!recId) { recId = window.SAR_Folio ? await window.SAR_Folio.siguiente('INV') : d.recId; d.recIdFinal = recId; }
+        let recId = d.recIdFinal; if (!recId) { recId = window.SAR_Folio ? await window.SAR_Folio.siguiente('INV') : d.recId; d.recIdFinal = recId; if (window.SAR_Cola.actualizar) window.SAR_Cola.actualizar(op.id, { recIdFinal: recId }); }   /* el mismo folio si se reintenta */
         for (const [k, g] of (d.grupos || []).entries()) await aplicarGrupo(g, k, { bodega: d.bodega, recId: `${recId}${d.recId && d.recId !== recId ? ' (provisional ' + d.recId + ')' : ''}`, ocRef: d.ocRef || '', opId: op.id, desdeCola: true, en: d.en });
     });
 

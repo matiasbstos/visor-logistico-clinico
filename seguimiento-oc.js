@@ -1280,6 +1280,14 @@
     }
     /** Fila de una guía de despacho en «Recibir productos» (v21.226: se pueden agregar varias). */
     function filaGuiaR() { return `<div class="rc-doc"><div class="soc-fila"><label>N° guía de despacho<input type="text" class="r-gn" autocomplete="off"></label><label>Foto o PDF de la guía<input type="file" class="r-gf" accept="application/pdf,image/*"></label></div><div class="rc-doc-f"><button type="button" class="btn btn-outline btn-sm rc-dq" aria-label="Quitar esta guía"><i class="ph-bold ph-trash"></i> Quitar</button></div></div>`; }
+    /* v21.246: recepción hecha sin internet → se aplica al volver la conexión. Toma el folio REC definitivo una sola vez (queda en la op) y
+       recepcionConStock no la repite si la orden ya tiene ese REC. */
+    if (window.SAR_Cola && window.SAR_Cola.registrar) window.SAR_Cola.registrar('recepcion-oc', async (d, op) => {
+        let recId = d.recFinal; if (!recId) { recId = window.SAR_Folio ? await window.SAR_Folio.siguiente('REC') : d.recP; if (window.SAR_Cola.actualizar) window.SAR_Cola.actualizar(op.id, { recFinal: recId }); }
+        const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), 'Seguimiento_OC'), d.ocId)); if (!sn.exists()) throw new Error('La orden ya no existe.');
+        const oc = { id: d.ocId, ...sn.data() }, texto = String(d.textoBase || '').split('§REC§').join(recId) + (recId !== d.recP ? `\n(Hecha sin conexión el ${new Date(d.en || Date.now()).toLocaleString('es-CL')}; folio provisional ${d.recP}.)` : '');
+        await recepcionConStock(oc, { provDoc: d.provDoc, extras: d.extras || [], baseN: d.baseN, onPaso: null, recId, hora: d.hora, key: d.key, det: d.det, incidencias: d.incidencias || [], guia: d.guia, fecha: d.fecha, obs: d.obs, notificar: d.notificar, ingresaStock: d.ingresaStock, central: d.central, texto, titulo: d.titulo, textoCorreo: String(d.textoCorreo || '').split('§REC§').join(recId) });
+    });
     async function recepcionConStock(oc, { provDoc, extras, baseN, onPaso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar, ingresaStock, central, texto, titulo, textoCorreo }) {
         const f = fs(); const paso = (t) => { if (onPaso) onPaso(t); };
         const aplicadoLocal = aplicarRecepcion(oc, key, det, incidencias, null, ingresaStock);
@@ -1549,6 +1557,16 @@
                 const textoDe = (k, recId) => { const col = cols.find(c => c.key === k), g = porKey.get(k), det = g.det, incidencias = g.incidencias; return `${recId} · Recepción en ${col.centro}${col.memo ? ' (memo ' + col.memo + (col.cdp ? ', CDP ' + col.cdp : '') + ')' : ''} el ${fmtFecha(fecha)} a las ${hora}${guia ? ' · guía N° ' + guia : ''}:\n` +
                     (det.length ? det.map(d => `- ${oc.lineas[d.i].descripcion}${oc.lineas[d.i].agregada ? ' (agregado en la recepción)' : ''}: ${d.cantidad} un.${d.lote ? ' · lote ' + d.lote : ''}${d.vence ? ' · vence ' + fmtFecha(d.vence) : ''}`).join('\n') : '- (sin unidades recibidas)') +
                     (incidencias.length ? '\nINCIDENCIAS:\n' + incidencias.map(n => `- ${n.producto}: ${INCIDENCIAS[n.tipo]}${n.detalle ? ' — ' + n.detalle : ''}`).join('\n') : '') + (obs ? '\nObs.: ' + obs : '') + (ingresaStock ? `\nIngresado al stock de ${central}.` : ''); };
+                /* v21.246: sin internet la recepción queda en la cola del teléfono (una por memo) y se aplica sola al volver la conexión,
+                   con su folio REC definitivo y su correo; las guías (archivos) se adjuntan después desde la orden. */
+                const fGuiasN = filasG.filter(x => x.file).length, unidadesOff = allDet.reduce((t, d) => t + d.cantidad, 0);
+                const tituloOff = (activos.some(k => porKey.get(k).incidencias.length) ? 'Recepción con incidencias' : 'Recepción') + (activos.length > 1 ? ` de ${activos.length} memos` : ` en ${(cols.find(c => c.key === activos[0]) || {}).centro}`), textoOff = activos.map(k => textoDe(k, '§REC§')).join('\n\n');
+                if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) {
+                    activos.forEach((k, n) => { const g = porKey.get(k), recP = window.SAR_Folio ? window.SAR_Folio.provisional('REC') : 'REC-P-' + Date.now().toString(36);
+                        window.SAR_Cola.encolar({ tipo: 'recepcion-oc', titulo: `Recepción ${recP} · OC ${oc.numeroOC} · ${g.det.reduce((t, d) => t + d.cantidad, 0)} u.`, datos: { ocId: oc.id, recP, provDoc: (docLeido && docLeido.empresa) || '', extras: n === 0 ? extras : [], baseN, hora, key: k, det: g.det.map(d => ({ ...d })), incidencias: g.incidencias, guia, fecha, obs, notificar: n === activos.length - 1 && q('#r-correo').checked, ingresaStock, central, titulo: tituloOff, textoCorreo: textoOff, textoBase: textoDe(k, '§REC§'), en: new Date().toISOString() } }); });
+                    toast('Sin internet: recepción en cola', `OC ${oc.numeroOC}: ${unidadesOff} u.${ingresaStock ? ' entrarán a ' + central : ''} apenas vuelva la conexión (mantén el Visor abierto).${fGuiasN ? ' Las guías escaneadas adjúntalas después desde la orden.' : ''}`, 'info');
+                    return;
+                }
                 const firmaRec = activos.join('|'); if (!o._recIds || o._recFirma !== firmaRec) { o._recIds = window.SAR_Folio ? await window.SAR_Folio.varios('REC', activos.length) : activos.map((k, n) => idDe(n)); o._recFirma = firmaRec; }   /* v21.230: los mismos N° REC si se reintenta en la misma ventana */
                 const ids = o._recIds, /* REC-AAAA-NNNNN: la OC queda como dato aparte; el archivo RC_<orden> no cambia */ unidades = allDet.reduce((t, d) => t + d.cantidad, 0), hayInc = activos.some(k => porKey.get(k).incidencias.length);
                 const textoCorreo = activos.map((k, n) => textoDe(k, ids[n])).join('\n\n'), tituloCorreo = (hayInc ? 'Recepción con incidencias' : 'Recepción') + (activos.length > 1 ? ` de ${activos.length} memos` : ` en ${(cols.find(c => c.key === activos[0]) || {}).centro}`);

@@ -29,6 +29,8 @@
     guardar(l); return id;
   }
   function registrar(tipo, fn) { ejecutores[tipo] = fn; }
+  /** v21.246: guarda datos nuevos de una operación (p. ej. el folio definitivo tomado al volver internet) para que un reintento use el mismo. */
+  function actualizar(id, datos) { guardar(leer().map(x => x.id === id ? { ...x, datos: { ...x.datos, ...datos } } : x)); }
   const esDeRed = (e) => /unavailable|offline|network|failed to fetch|deadline|timeout|lento|sin conexi/i.test(String((e && (e.code || '')) + ' ' + (e && e.message || e)));
 
   /** Aplica lo pendiente, en el orden en que se hizo. Devuelve {ok, error, quedan}. */
@@ -109,5 +111,5 @@
   const alIniciar = () => { pintarChip(); let n = 0; const t = setInterval(() => { n++; if (usuario() || n > 60) { clearInterval(t); if (usuario()) procesar(); } }, 2000); };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', alIniciar); else alIniciar();
 
-  window.SAR_Cola = { encolar, registrar, procesar, pendientes, hayConexion, abrirPanel };
+  window.SAR_Cola = { encolar, registrar, actualizar, procesar, pendientes, hayConexion, abrirPanel };
 })(window, document);

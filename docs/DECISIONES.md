@@ -1641,3 +1641,13 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
 **Pedido.** Un segundo equipo de agentes, inspirado en The Big Bang Theory, dedicado solo a logística e inventario, con cada cargo basado en referencias europeas.
 
 **Decisión.** Ocho agentes de solo lectura en `.claude/agents/` (Leonard coordina, Fowler revisa al final): Leonard (jefe de bodega, BPD UE), Sheldon (normas y trazabilidad: GS1, UDI, 2016/161), Howard (pistolas, Zebra, simbologías ISO/IEC 15417/15416), Raj (planificación y reposición), Penny (operaria en terreno, ergonomía), Bernadette (farmacia: FEFO, frío, controlados), Stuart (catálogo y unidades: EMDN, EDQM, eCl@ss), Fowler (auditoría: ISO 19011, conteo cíclico, IRA). Investigación de Murdock con fuentes; norma chilena (ISP, Minsal) en paralelo cuando aplique. Detalle en `docs/EQUIPO_AGENTES.md`.
+
+## 4.297 Sin internet sin botones: copia local que se mantiene sola y cola automática (v21.244)
+
+**Pedido.** El sistema tiene que funcionar sin internet sin tener que apretar «Descargar para usar sin internet»: al entrar al Visor debe ir descargando siempre una copia y, sin conexión, guardar lo hecho a la espera de internet para enviarlo.
+
+**Decisión.**
+- Se quita el botón de Solicitudes. En su lugar, una línea de estado: «Copia para trabajar sin internet: se actualiza sola · última hh:mm · N cambios esperando internet».
+- `sync-local.js` (ya descargaba al abrir, al volver internet y cada 30 min) ahora además **escucha en vivo** Insumos, Bodegas, Solicitudes y todas las etiquetas de cajas: cada cambio baja apenas ocurre y queda en la copia del equipo (se paga solo lo que cambia). La descarga completa también trae las solicitudes de ajuste y **todas** las cajas (para pistolear sin internet). Al volver a la pestaña o al teléfono se sincroniza si pasaron 10 min. La insignia de arriba dice «En vivo · hh:mm» o «Sin conexión · datos de las hh:mm».
+- **Procesar** y **Marcar recibido** de una solicitud sin internet ya no se rechazan: quedan en la cola del teléfono («En cola: se hará solo al volver internet») y se aplican solos al volver la conexión, con su transacción y sus marcas (no se duplican). La cola se intenta cada minuto, al volver internet y al volver a la pantalla.
+- Lo que no usa transacción (confirmar productos, pistolear, notas) ya se guardaba en la copia local de Firestore y sube solo.

@@ -619,16 +619,18 @@
               : (ab(s) && !(s.conteo && s.conteo.estado !== 'aplicado') ? `<div class="si-lb"><small>${(l.seleccion || []).filter(x => x.qty > 0).map(x => `${esc(x.lote)} · ${esc(x.bodega)}: ${x.qty}`).join(' · ')}</small>${tocadaL(l) ? (movidaL(l) ? '' : `<button type="button" class="btn btn-secondary btn-sm" data-solomov="${i}" title="Un lote no se pudo mover: deja la línea solo con lo que sí salió">Quedarse con lo movido</button>`) : `<button type="button" class="btn btn-secondary btn-sm" data-ver="${i}">Cambiar</button>`}</div>` : '')}</div>`; }).join('')}</div>
         ${recorridoHTML(s.estado)}<footer>${(() => { const L = (s.lineas || []).filter(l => !l.soloConteo), faltan = L.filter(l => !l.estado || l.estado === 'pendiente').length, inv = s.conteo && s.conteo.estado !== 'aplicado', busy = ocupado.has(s.numero), repo = esRepo(s);
           const tocada = L.some(tocadaL), viejo = legado(s), todoMov = viejo || L.every(movidaL), todoRec = viejo || L.every(recibidaL); let h = '';
-          if (s.estado === 'NUEVA' || s.estado === 'PREPARACION') h += `<button class="btn btn-primary" data-procesar="1"${faltan || inv || busy ? ' disabled' : ''} title="${inv ? 'Primero acepta el inventario' : faltan ? 'Confirma o marca «No hay» en cada producto' : ''}">${busy ? 'Procesando…' : inv ? 'Procesar (acepta el inventario)' : faltan ? `Procesar (faltan ${faltan})` : repo ? `Procesar: enviar a ${esc(s.bodega)}` : 'Procesar: entregar'}</button>`;
-          if (s.estado === 'LISTA' && !todoMov) h += `<button class="btn btn-primary" data-procesar="1"${busy ? ' disabled' : ''}>Reintentar lo que no se movió</button>`;
-          if (s.estado === 'LISTA' && repo && todoMov && !todoRec) h += `<button class="btn btn-primary" data-recibir="1"${busy ? ' disabled' : ''}>${s.recibidoSolicitado ? 'Confirmar recibido (lo marcó ' + esc(s.recibidoSolicitado.por || 'la encargada') + ')' : `Marcar recibido en ${esc(s.bodega)}`}</button>`;
-          if (s.estado === 'LISTA' && (!repo || todoRec) && todoMov) h += '<button class="btn btn-primary" data-e="ENTREGADA">Cerrar solicitud (entregada)</button>';
+          const colaS = enColaSol('solicitud-procesar', s.numero) || enColaSol('solicitud-recibir', s.numero);
+          if (colaS) h += '<span class="si-cola"><i class="ph-bold ph-cloud-slash" aria-hidden="true"></i> En cola: se hará solo al volver internet</span>';
+          else if (s.estado === 'NUEVA' || s.estado === 'PREPARACION') h += `<button class="btn btn-primary" data-procesar="1"${faltan || inv || busy ? ' disabled' : ''} title="${inv ? 'Primero acepta el inventario' : faltan ? 'Confirma o marca «No hay» en cada producto' : ''}">${busy ? 'Procesando…' : inv ? 'Procesar (acepta el inventario)' : faltan ? `Procesar (faltan ${faltan})` : repo ? `Procesar: enviar a ${esc(s.bodega)}` : 'Procesar: entregar'}</button>`;
+          if (!colaS && s.estado === 'LISTA' && !todoMov) h += `<button class="btn btn-primary" data-procesar="1"${busy ? ' disabled' : ''}>Reintentar lo que no se movió</button>`;
+          if (!colaS && s.estado === 'LISTA' && repo && todoMov && !todoRec) h += `<button class="btn btn-primary" data-recibir="1"${busy ? ' disabled' : ''}>${s.recibidoSolicitado ? 'Confirmar recibido (lo marcó ' + esc(s.recibidoSolicitado.por || 'la encargada') + ')' : `Marcar recibido en ${esc(s.bodega)}`}</button>`;
+          if (!colaS && s.estado === 'LISTA' && (!repo || todoRec) && todoMov) h += '<button class="btn btn-primary" data-e="ENTREGADA">Cerrar solicitud (entregada)</button>';
           h += '<button class="btn btn-secondary" data-c="1">Copiar para WhatsApp</button>';
           if (ab(s) && !tocada) h += '<button class="btn btn-secondary si-peligro" data-e="ANULADA">Anular</button>';
           return h; })()}</footer></article>`; };
     r.innerHTML = `<div class="si-wrap si-ancho${costado ? ' si-wrap--costado' : ''}"><div class="si-cab"><div><h2 class="si-t">Solicitudes de insumos</h2><p class="si-s">Revisa cada producto: foto, dónde hay y de qué lote sacar. Confirma o marca «No hay»; quien pidió lo ve en su teléfono.</p></div>
       <div class="si-acc"><input id="si-bq" class="si-in si-bq" type="search" value="${esc(bq)}" placeholder="Buscar N° (SOL-…), nombre, correo o producto" autocomplete="off" aria-label="Buscar solicitud"><select id="si-fil" class="si-in">${[['ABIERTAS', 'Abiertas'], ['NUEVA', 'Enviadas'], ['PREPARACION', 'Procesando'], ['LISTA', 'Procesadas'], ['ENTREGADA', 'Cerradas'], ['TODAS', 'Todas']].map(([v, t]) => `<option value="${v}"${v === filtro ? ' selected' : ''}>${t}</option>`).join('')}</select>
-      <button type="button" class="btn btn-secondary" id="si-off" title="Guarda en el teléfono el inventario y las solicitudes para trabajar sin internet">Descargar para usar sin internet</button></div></div><p class="si-v" id="si-offm">${esc(localStorage.getItem('si-off') ? 'Última descarga: ' + new Date(localStorage.getItem('si-off')).toLocaleString('es-CL') : '')}</p>
+</div></div><p class="si-v" id="si-offm">${esc(estadoCopia())}</p>
       ${costado ? `<div class="si-costado"><div class="si-lsol" role="listbox" aria-label="Solicitudes">${vis.map(s => `<button type="button" role="option" class="si-fsol${s.numero === sel ? ' on' : ''}" data-sel="${esc(s.numero)}" aria-selected="${s.numero === sel}"><span><b>${esc(s.correlativo || s.numero)}</b><small>${esc(s.solicitante || '')}${s.servicio ? ' · ' + esc(s.servicio) : ''} · ${(s.lineas || []).length} prod.</small></span><span class="si-est si-e-${esc(s.estado)}">${esc(ESTADOS[s.estado] || s.estado)}</span></button>`).join('') || '<div class="home-empty">No hay solicitudes en este filtro.</div>'}</div>
         <section class="si-panel" aria-live="polite">${vis.find(s => s.numero === sel) ? `<div class="si-pcab"><small>↑ ↓ recorre · Esc cierra</small><button type="button" class="si-pnav" data-nav="-1" aria-label="Anterior">▲</button><button type="button" class="si-pnav" data-nav="1" aria-label="Siguiente">▼</button><button type="button" class="si-pnav" data-cerrar="1" aria-label="Cerrar">✕</button></div>` + cardHTML(vis.find(s => s.numero === sel)) : '<div class="si-pvacio">Elige una solicitud de la lista para ver el detalle.</div>'}</section></div>`
         : vis.map(cardHTML).join('') || '<div class="home-empty">No hay solicitudes en este filtro.</div>'}</div>`;
@@ -681,7 +683,7 @@
     const s = sDoc || solicitudes.find(x => x.numero === n); if (!s || ocupado.has(n)) return; const T = window.SAR_Traspaso, P = window.SAR_Progreso;
     if (!T || !T.moverUno || !T.salidaUno) { toast('Procesar', 'El módulo de traspasos aún no carga. Espera un momento.', 'warning'); return; }
     if (s.conteo && s.conteo.estado !== 'aplicado') { toast('Inventario', 'Primero acepta el inventario (o espera el reconteo).', 'warning'); return; }
-    if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) { toast('Sin internet', 'Procesar mueve stock y necesita conexión. Puedes ir confirmando productos; procesa cuando vuelva internet.', 'warning'); return; }
+    if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) { if (!sDoc) encolarSol('solicitud-procesar', n, `Procesar ${s.correlativo || n}`); return; }   /* v21.244: sin internet queda en cola y se procesa sola al volver */
     const repo = esRepo(s), tareas = [];
     if (legado(s)) { toast('Procesar', 'Esta solicitud se procesó con la versión anterior: ciérrala directamente.', 'info'); return; }
     (s.lineas || []).forEach((l, i) => { if (l.soloConteo || l.estado === 'no_hay' || l.movido === true) return; (l.seleccion || []).filter(x => num(x.qty) > 0 && !(l.movidos || []).includes(grupoDe(x))).forEach(x => tareas.push({ l, i, x })); });
@@ -707,7 +709,7 @@
   /** Recibido: lo que está «En tránsito» de esta solicitud entra a la bodega de uso; con todo recibido, se cierra. */
   async function recibir(n, sDoc) {
     const s = sDoc || solicitudes.find(x => x.numero === n); if (!s || ocupado.has(n)) return; const T = window.SAR_Traspaso, P = window.SAR_Progreso;
-    if (!T || !T.moverUno) return; if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) { if (!sDoc) toast('Sin internet', 'Marcar recibido mueve stock y necesita conexión.', 'warning'); return; }
+    if (!T || !T.moverUno) return; if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) { if (!sDoc) encolarSol('solicitud-recibir', n, `Recibir ${s.correlativo || n} en ${s.bodega}`); return; }
     const tareas = []; (s.lineas || []).forEach((l, i) => (l.movidos || []).filter(g => !(l.recibidos || []).includes(g)).forEach(g => { const x = (l.seleccion || []).find(y => grupoDe(y) === g), tid = (l.transito || {})[g]; if (x && tid) tareas.push({ l, i, g, x, tid }); }));
     if (!sDoc) { const si = P && P.confirmar ? await P.confirmar({ titulo: `¿Recibido en ${esc(s.bodega)}?`, texto: `${esc(s.correlativo || n)}: entra a ${esc(s.bodega)} lo que estaba en camino.`, lineas: tareas.map(t => `${esc(t.l.asociado || t.l.nombre)} · <b>${num(t.x.qty)}</b> u. · lote ${esc(t.x.lote)}`), si: 'Recibido' }) : confirm('¿Recibido?'); if (!si) return; }
     ocupado.add(n); pintarBandeja(); let mal = 0; const nota = `Solicitud ${s.correlativo || n} · recibido`, folioRec = tareas.length && window.SAR_Folio ? await window.SAR_Folio.siguiente('TRA') : '';
@@ -723,6 +725,20 @@
     const hist = (s.historial || []).concat([{ estado: e, por: usuario(), en: new Date().toISOString() }]);
     try { await Promise.race([f.updateDoc(f.doc(f.collection(db(), s._col || COL), n), { estado: e, historial: hist }), new Promise(res => setTimeout(res, 2500))]); if (e === 'ENTREGADA' || e === 'ANULADA') correoSolicitud({ ...s, estado: e }, e === 'ENTREGADA' ? 'cerrada' : 'anulada'); if (!callado) avisar({ titulo: `Solicitud ${s.correlativo || n} ${String(ESTADOS[e]).toLowerCase()}`, texto: esc(s.solicitante || ''), estado: AV_EST[e] }); } catch (err) { toast('No se pudo', err.message || String(err), 'error'); }
   }
+  // ---- v21.244: sin internet todo queda en cola (se aplica solo al volver la conexión); la copia local se mantiene sola (sync-local.js) ----
+  const enColaSol = (tipo, n) => !!(window.SAR_Cola && window.SAR_Cola.pendientes().some(op => op.tipo === tipo && op.datos && op.datos.numero === n));
+  function encolarSol(tipo, n, titulo) {
+    if (!window.SAR_Cola) { toast('Sin internet', 'Vuelve a intentar cuando haya conexión.', 'warning'); return; }
+    if (!enColaSol(tipo, n)) window.SAR_Cola.encolar({ tipo, titulo, datos: { numero: n } });
+    toast('Sin internet: quedó en cola', `${esc(titulo)} se hará solo apenas vuelva la conexión (no cierres sesión).`, 'info'); pintarBandeja();
+  }
+  async function leerSolDoc(n) { const f = fs(); for (const c of [COL, COL_ANT]) { const sn = await f.getDoc(f.doc(f.collection(db(), c), n)); if (sn.exists()) return { ...limpiarSol(sn.data(), n), _col: c }; } return null; }
+  if (window.SAR_Cola && window.SAR_Cola.registrar) {
+    window.SAR_Cola.registrar('solicitud-procesar', async (d) => { if (!cargado) await cargarBase(); const s = await leerSolDoc(d.numero); if (!s || s.estado === 'ANULADA' || s.estado === 'ENTREGADA') return; await procesar(d.numero, s); });
+    window.SAR_Cola.registrar('solicitud-recibir', async (d) => { const s = await leerSolDoc(d.numero); if (!s || s.estado === 'ANULADA' || s.estado === 'ENTREGADA') return; await recibir(d.numero, s); });
+  }
+  function estadoCopia() { let u = ''; try { u = localStorage.getItem('sar-sync-ult') || ''; } catch (e) { /* sin almacenamiento */ } const en = window.SAR_Cola ? window.SAR_Cola.pendientes().length : 0;
+    return `${navigator.onLine === false ? 'Sin internet: trabajas con la copia de este equipo' : 'Copia para trabajar sin internet: se actualiza sola'}${u ? ' · última ' + new Date(u).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}${en ? ` · ${en} cambio(s) esperando internet` : ''}`; }
   async function descargarOffline() {
     const f = fs(), btn = document.getElementById('si-off'), m = document.getElementById('si-offm'); if (btn) btn.disabled = true;
     const prog = window.SAR_Progreso ? window.SAR_Progreso.iniciar('Descargando para usar sin internet…', []) : null;
@@ -766,6 +782,9 @@
   }
   function enlazarBandeja() {
     const r = rootBandeja(); if (!r || r.dataset.ok) return; r.dataset.ok = '1';
+    /* v21.244: el estado de la copia local y de la cola se repinta solo */
+    const repintar = () => { const x = document.getElementById('si-offm'); if (x) x.textContent = estadoCopia(); if (rootBandeja() && rootBandeja().offsetParent !== null && !document.activeElement?.matches?.('.si-q-in, .si-pist-in, .si-pq-n, #si-bq, .si-asoc-in')) pintarBandeja(); };
+    window.addEventListener('sar-avisos', repintar); window.addEventListener('online', repintar); window.addEventListener('offline', repintar);
     r.addEventListener('change', (e) => { if (e.target.id === 'si-fil') { filtro = e.target.value; pintarBandeja(); return; } if (e.target.classList.contains('si-rc')) { const c = e.target.closest('.si-card'), rv = c && revs[c.dataset.n]; if (rv && rv.sel) { if (e.target.checked) rv.sel.add(e.target.dataset.k); else rv.sel.delete(e.target.dataset.k); pintarBandeja(); } } });
     /* v21.243: pistola en la línea (termina con Enter, Tab o nada) */
     let tmP = null; const tomarP = (x) => { clearTimeout(tmP); const c = x.closest('.si-card'), t = x.value; x.value = ''; if (c && t.trim()) leerCaja(c.dataset.n, +x.dataset.i, t); };
@@ -778,7 +797,6 @@
       if (e.target.classList.contains('si-q-in') && e.target.dataset.g) { escritas[e.target.dataset.g] = e.target.value; return; } if (e.target.id === 'si-bq') { bq = e.target.value; clearTimeout(window.__siBq); window.__siBq = setTimeout(pintarBandeja, 150); return; } if (!e.target.classList.contains('si-asoc-in') || !asoc) return; asoc.q = e.target.value; const res = e.target.parentElement.querySelector('.si-asoc-res'); if (res) res.innerHTML = resAsoc(asoc.q); });
     r.addEventListener('click', async (e) => {
       const b = e.target.closest('button'); if (!b) return; const card = b.closest('.si-card');
-      if (b.id === 'si-off') return descargarOffline();
       if (b.dataset.sel) { sel = b.dataset.sel; return pintarBandeja(); }
       if (b.dataset.cerrar) { sel = null; return pintarBandeja(); }
       if (b.dataset.nav) return moverSel(+b.dataset.nav);

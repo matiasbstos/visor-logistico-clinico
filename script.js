@@ -2283,6 +2283,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (hash === 'view-toma-inventario') {
                     console.log("[Router] Vista Toma de Inventario activa.");
                     if (typeof window.initTomaInventarioModule === 'function') window.initTomaInventarioModule();
+                    if (window.SAR_TomaUI) window.SAR_TomaUI.abrirVista();   /* v21.246: toma por lote que fija lo contado */
                 } else if (hash === 'view-inventario-semanal') {
                     console.log("[Router] Vista Inventario Semanal activa.");
                     if (typeof window.initInventarioSemanalModule === 'function') window.initInventarioSemanalModule();

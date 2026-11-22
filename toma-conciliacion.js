@@ -46,7 +46,7 @@
   /** ¿Exige recontar? > 5 % o > 10 u.; en controlados, cualquier diferencia. */
   function requiereReconteo(l, opc) {
     const d = Math.abs(num(l && l.delta)); if (!d) return false; if (opc && opc.controlado) return true;
-    return d > 10 || (num(l.sistema) > 0 ? d / num(l.sistema) > 0.05 : true);
+    return d > 10 || (num(l.sistema) > 0 && d / num(l.sistema) > 0.05);   /* un lote nuevo pequeño (≤ 10 u.) no exige recontar */
   }
   /**
    * Cierre: aplica las diferencias calculadas AL CONTAR sobre los lotes ACTUALES (lo que salió entre el conteo y el cierre no se pierde).
@@ -66,7 +66,14 @@
   function avance(sistema, contado) {
     return conciliar(sistema, contado, { completa: false }).lineas.map(l => ({ ...l, queda: l.contado == null ? l.sistema : Math.max(0, l.sistema - l.contado), sobran: l.contado != null && l.contado > l.sistema ? l.contado - l.sistema : 0 }));
   }
-  const api = { lote, mes, clave, agrupar, conciliar, requiereReconteo, aplicar, avance };
+  /** Lo reservado en actas sigue físicamente en la bodega: se descuenta de lo contado en orden de vencimiento (como se reservó), antes de comparar. */
+  function quitarReservado(contado, reservado) {
+    let r = Math.max(0, num(reservado)); if (!r) return (contado || []).slice();
+    const ord = (contado || []).map((x, i) => ({ ...x, _i: i })).sort((a, b) => String(mes(a.expirationDate)).localeCompare(String(mes(b.expirationDate))));
+    ord.forEach(x => { const q = Math.min(num(x.quantity), r); x.quantity = num(x.quantity) - q; r -= q; });
+    return ord.sort((a, b) => a._i - b._i).map(({ _i, ...x }) => x);
+  }
+  const api = { lote, mes, clave, agrupar, conciliar, requiereReconteo, aplicar, avance, quitarReservado };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   if (root) root.SAR_Toma = api;
 })(typeof window !== 'undefined' ? window : null);

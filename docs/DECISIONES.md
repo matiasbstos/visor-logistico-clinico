@@ -1629,9 +1629,10 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
 
 **Decisión.**
 - En cada producto de la solicitud: «Pistolear caja». Se lee el folio BUL (Enter, Tab o sin sufijo). Se valida que la caja sea de ese producto, que no esté vacía y que su lote tenga stock en el sistema (si no, se avisa; no se adivina otro lote).
-- Se pregunta qué sale de esa caja: **cajas pequeñas** (si la caja trae interiores, × unidades por caja pequeña), **la caja completa** o **unidades sueltas**. No deja sacar más de lo que tiene la caja ni del lote.
+- Se pregunta qué sale de esa caja: **la caja completa** o **unidades sueltas**. De una caja grande con cajas pequeñas sale la grande completa (cerrada) o se pistolea **cada caja pequeña** que sale (revisión de B.A.: así el sistema sabe cuáles salieron). No deja sacar más de lo que tiene la caja ni del lote, y una misma caja no puede quedar elegida en dos productos ni en dos solicitudes sin procesar.
 - Lo pistoleado manda en «Sacar»: ese lote queda con lo de las cajas (y los demás en 0, editable). Se pueden pistolear varias cajas; cada una se puede quitar.
-- Al **Procesar**, el stock sale del lote como siempre (transacción de traspasos) y, solo si se movió, cada caja baja su contenido con historial «SALIDA» y la referencia de la solicitud: caja interior → baja también su caja grande; cajas pequeñas sacadas de una grande → esas interiores quedan VACÍAS.
+- Al **Procesar**, las cajas se actualizan **dentro de la misma transacción** que mueve el stock del lote (Regla 7, `SAR_Bultos.leerCajasTx` en `salidaUno`/`moverUno`): o se hace todo o nada, y un reintento no descuenta dos veces. Cada caja baja su contenido con historial «SALIDA» y la referencia de la solicitud; caja pequeña → baja también su caja grande; caja grande completa → sus cajas pequeñas quedan vacías. En una **reposición** a una bodega de uso, la caja que sale completa no se vacía: cambia de bodega («TRASLADO»). Nunca baja más de lo que la caja tiene (si el sistema decía menos, queda anotado).
+- «Cambiar» vuelve a mostrar las cajas pistoleadas; si se escribe en «Sacar» menos de lo pistoleado, avisa en vez de guardar.
 - También se puede leer el QR (o el código de barras) de la etiqueta con la cámara del teléfono: «Cámara (QR)» abre la cámara en una ventana y toma la primera etiqueta BUL que lea.
 - Las cajas quedan guardadas en la línea (`seleccion[].bultos: [{folio, qty, sub}]`) para la trazabilidad.
 

@@ -373,6 +373,32 @@
   }
   /** v21.238: tocar una caja interior (abrirla, vaciarla o pistolearla) significa que su caja grande está abierta. */
   function abrirPadre(b) { if (!b || !b.padre) return; leer(b.padre).then(pa => { if (pa && pa.estado === 'CERRADA') guardar(pa, { estado: 'ABIERTA' }, 'ABIERTA', { porInterior: b.folio }).catch(() => {}); }).catch(() => {}); }
+  /** v21.243 (B.A.): cajas pistoleadas dentro de la MISMA transacción del movimiento de stock (Regla 7).
+   *  leerCajasTx lee todas las cajas involucradas (y su caja grande / sus interiores) ANTES de cualquier escritura y
+   *  devuelve una función que escribe. cajas = [{folio, qty}]; opc = {ref, destino} (destino: reposición → la caja entera cambia de bodega).
+   *  Nunca baja más de lo que la caja tiene (si el sistema decía menos, queda anotado). */
+  async function leerCajasTx(tx, F, D, cajas, opc) {
+    const o = opc || {}, rf = (fo) => F.doc(D, 'Contadores', 'bulto-' + fo), mapa = new Map();
+    const traer = async (fo) => { if (!fo || mapa.has(fo)) return mapa.get(fo); const sn = await tx.get(rf(fo)); const d = sn.exists() ? { ...sn.data() } : null; mapa.set(fo, d); return d; };
+    const plan = [];
+    for (const c of (cajas || [])) { const b = await traer(c.folio); if (!b) continue; const q = Math.max(0, Math.floor(num(c.qty))); if (!q) continue;
+      const entera = q >= num(b.contenido) && num(b.contenido) > 0;
+      if (b.nivel === 'interior' && b.padre) await traer(b.padre);
+      if (Array.isArray(b.hijos) && entera) for (const h of b.hijos) await traer(h);
+      plan.push({ b, q, entera }); }
+    return () => {
+      const ahora = new Date().toISOString(), por = usuario(), cambios = new Map();
+      const mod = (b, campos, accion, det) => { const prev = cambios.get(b.folio) || { ...b }; Object.assign(prev, campos); prev.historial = (prev.historial || b.historial || []).concat([{ accion, por, en: ahora, ...det }]).slice(-40); prev.actualizado = ahora; cambios.set(b.folio, prev); return prev; };
+      const actual = (fo) => cambios.get(fo) || mapa.get(fo);
+      plan.forEach(({ b: b0, q, entera }) => { const b = actual(b0.folio), tiene = num(b.contenido), sale = Math.min(q, tiene), det = { qty: sale, ref: o.ref || '', ...(q > tiene ? { pedido: q, nota: 'la caja tenía menos según el sistema' } : {}) };
+        if (o.destino && entera) mod(b, { bodega: o.destino, estado: b.estado === 'VACIA' ? 'CERRADA' : b.estado }, 'TRASLADO', { ...det, a: o.destino });   /* reposición: la caja completa viaja */
+        else mod(b, { contenido: tiene - sale, estado: tiene - sale > 0 ? 'ABIERTA' : 'VACIA' }, 'SALIDA', det);
+        if (b.nivel === 'interior' && b.padre && actual(b.padre)) { const pa = actual(b.padre), r = Math.max(0, num(pa.contenido) - sale); mod(pa, o.destino && entera ? { contenido: r, estado: r > 0 ? 'ABIERTA' : 'VACIA' } : { contenido: r, estado: r > 0 ? 'ABIERTA' : 'VACIA' }, 'SALIDA', { qty: sale, ref: o.ref || '', porInterior: b.folio }); }
+        if (Array.isArray(b.hijos) && entera) b.hijos.forEach(h => { const hb = actual(h); if (hb && hb.estado !== 'VACIA') mod(hb, o.destino ? { bodega: o.destino } : { contenido: 0, estado: 'VACIA' }, o.destino ? 'TRASLADO' : 'SALIDA', { ref: o.ref || '', enCajaGrande: b.folio }); });
+      });
+      cambios.forEach((x, fo) => tx.set(rf(fo), x, { merge: true }));
+    };
+  }
   /** v21.243: salida desde una caja pistoleada (p. ej. al despachar una solicitud): baja su contenido y lo deja en el historial.
    *  Caja interior → baja también la caja grande (y la marca abierta). Caja grande con `cajasChicas` → esas interiores salen enteras (VACIA en la caja). */
   async function sacar(folio, qty, ref, cajasChicas) {
@@ -761,6 +787,6 @@
     inp.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => registrar('nada'), 250); });
     pintar(''); setTimeout(() => inp.focus(), 50); return ov;
   }
-  window.SAR_Bultos = { leerConCamara, leer, sacar, probarPistola, hojaPrueba, code39, i2de5, planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
+  window.SAR_Bultos = { leerCajasTx, leerConCamara, leer, sacar, probarPistola, hojaPrueba, code39, i2de5, planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_Bultos;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null, addEventListener() {} });

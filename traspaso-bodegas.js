@@ -91,6 +91,7 @@
       // Folio TRA-AAAA-NNNNN (estándar de correlativos): uno por operación si viene dado; si no, se toma aquí, en la misma transacción
       const ctr = !(marca && marca.folio) && window.SAR_Folio ? await window.SAR_Folio.leer(tx, 'TRA') : null;
       { const h = await tx.get(refH); if (h.exists()) throw Object.assign(new Error('Ya estaba hecho.'), { ya: true }); }   /* v21.230: siempre (un reintento del SDK tras confirmar no vuelve a mover) */
+      const cajasW = marca && Array.isArray(marca.cajas) && marca.cajas.length && window.SAR_Bultos && window.SAR_Bultos.leerCajasTx ? await window.SAR_Bultos.leerCajasTx(tx, F, D, marca.cajas, { ref: marca.numero, destino: marca.destinoCaja || '' }) : null;   /* v21.243: cajas pistoleadas en la misma transacción */
       if (d.status === 'CUARENTENA') throw new Error('En CUARENTENA: no se puede mover.');
       if (qty > num(d.quantity)) throw new Error('Stock insuficiente.');
       const { lotes, movidos } = sacarLotes(d, sel);
@@ -104,7 +105,7 @@
         tx.set(refD, { ...base, location: hasta, bodegaNombre: hasta, quantity: qty, isCritical: qty <= lim, criticalLimit: lim, batches: nuevos, batch: prox ? prox.batch : (d.batch || ''), expirationDate: prox && prox.expirationDate ? prox.expirationDate : (d.expirationDate || ''), updatedAt: F.serverTimestamp() });
       }
       tx.set(refH, { insumoName: d.name, quantity: qty, type: 'traspaso', user: ((window.firebaseAuth || window.auth || {}).currentUser || {}).email || 'Usuario', date: F.serverTimestamp(), document: (marca && marca.folio) || (ctr ? window.SAR_Folio.escribir(tx, ctr) : `TRASP-${String(desde).substring(0, 3)}-${String(hasta).substring(0, 3)}`), batch: movidos.length === 1 ? movidos[0].batch : 'MULTI-LOTE', origin: desde, dest: hasta, lotes: movidos, idInsumoOrigen: id, idInsumoDestino: refD.id, ...(nota ? { nota } : {}), ...(marca && marca.numero ? { solicitud: marca.numero } : {}) });
-      escribirMarca(tx, F, m, marca, { transitoId: marca && marca.transito ? refD.id : '' });
+      escribirMarca(tx, F, m, marca, { transitoId: marca && marca.transito ? refD.id : '' }); if (cajasW) cajasW();
     }); } catch (e) {
       if (e && e.ya && !(marca && (marca.idMov || marca.numero))) return { destinoId: refD.id, yaHecho: true };   /* reintento automático tras confirmar: ya se hizo */
       /* v21.230: con mala señal la confirmación puede llegar al servidor aunque el teléfono reciba error: si el movimiento existe, ya se hizo */
@@ -120,12 +121,13 @@
     const F = fs(), D = db(), refO = F.doc(D, 'Insumos', id), refH = F.doc(F.collection(D, 'Historial_Movimientos'));
     await F.runTransaction(D, async (tx) => {
       const o = await tx.get(refO); if (!o.exists()) throw new Error('El producto ya no existe.'); const m = await leerMarca(tx, F, D, marca);
+      const cajasW = marca && Array.isArray(marca.cajas) && marca.cajas.length && window.SAR_Bultos && window.SAR_Bultos.leerCajasTx ? await window.SAR_Bultos.leerCajasTx(tx, F, D, marca.cajas, { ref: marca.numero }) : null;   /* v21.243: cajas pistoleadas en la misma transacción */
       const d = o.data(); if (d.status === 'CUARENTENA') throw new Error('En CUARENTENA: no se puede entregar.');
       if (qty > num(d.quantity)) throw new Error('Stock insuficiente.');
       const { lotes, movidos } = sacarLotes(d, sel);
       tx.update(refO, { quantity: num(d.quantity) - qty, batches: lotes, updatedAt: F.serverTimestamp() });
       tx.set(refH, { insumoName: d.name, quantity: qty, type: 'SALIDA_SOLICITUD', user: ((window.firebaseAuth || window.auth || {}).currentUser || {}).email || 'Usuario', date: F.serverTimestamp(), document: marca ? marca.numero : 'SALIDA', batch: movidos.length === 1 ? movidos[0].batch : 'MULTI-LOTE', origin: desde, lotes: movidos, idInsumoOrigen: id, ...(nota ? { nota, observacion: nota } : {}), ...(marca ? { solicitud: marca.numero } : {}) });
-      escribirMarca(tx, F, m, marca);
+      escribirMarca(tx, F, m, marca); if (cajasW) cajasW();
     });
   }
 

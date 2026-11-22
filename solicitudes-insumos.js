@@ -518,6 +518,10 @@
     const folio = B.folioDe(txt); pist = { n, i };
     if (!folio) { pist.msg = `«${String(txt).slice(0, 30)}» no es una etiqueta de caja (BUL).`; return pintarBandeja(); }
     const yaCs = cajasL[keyL(n, i)] || [];
+    /* B.A.: una caja física sale una sola vez: no puede estar en otra línea ni en otra solicitud sin procesar */
+    const otraL = Object.entries(cajasL).find(([k, a]) => k !== keyL(n, i) && a.some(x => x.folio === folio));
+    const enSol = solicitudes.find(x => x.estado !== 'ANULADA' && x.estado !== 'ENTREGADA' && (x.lineas || []).some((l2, i2) => !(x.numero === n && i2 === i) && (l2.seleccion || []).some(z => (z.bultos || []).some(bx => bx.folio === folio) && !(l2.movidos || []).includes(grupoDe(z)))));
+    if (otraL || enSol) { pist.msg = `${folio} ya está elegida en ${enSol ? 'la solicitud ' + (enSol.correlativo || enSol.numero) : 'otro producto'}: una caja sale una sola vez.`; return pintarBandeja(); }
     if (yaCs.some(x => x.folio === folio)) { pist.msg = `${folio} ya está pistoleada en este producto.`; return pintarBandeja(); }
     let b; try { b = await B.leer(folio); } catch (e) { pist.msg = 'No pude leer la caja: ' + (e.message || e); return pintarBandeja(); }
     if (!b) { pist.msg = `${folio} no existe en el sistema.`; return pintarBandeja(); }
@@ -527,7 +531,7 @@
     const cands = candDe(l, s), lote = String(b.lote || 'S/L');
     const delProd = cands.filter(c => (b.insumoId && c.insumoId === b.insumoId) || norm((insumos.find(x => x.id === c.insumoId) || {}).name) === norm(b.nombre));
     if (!delProd.length) { pist.msg = `Esa caja es de «${b.nombre}», no de lo que se pide aquí.`; return pintarBandeja(); }
-    if (b.estado === 'VACIA') { pist.msg = `${folio} figura vacía.`; return pintarBandeja(); }
+    if (b.estado === 'VACIA' || num(b.contenido) <= 0) { pist.msg = `${folio} figura vacía.`; return pintarBandeja(); }
     const mismos = delProd.filter(c => String(c.lote) === lote && (!b.vence || !c.vence || String(c.vence).slice(0, 7) === String(b.vence).slice(0, 7)));
     const c = mismos.find(x => !b.bodega || x.bodega === b.bodega);   /* no se adivina: la caja está en una bodega concreta */
     if (!c && mismos.length) { pist.msg = `La caja dice ${b.bodega}, pero el lote ${lote} tiene stock en ${[...new Set(mismos.map(x => x.bodega))].join(', ')}. Corrige la bodega de la caja (Escanear bulto) o mueve el stock.`; return pintarBandeja(); }
@@ -546,24 +550,26 @@
     const quedaLote = c.disp - cs.filter(x => x.insumoId === c.insumoId && x.clave === c.clave).reduce((t, x) => t + x.qty, 0);
     const def = chicas ? Math.max(1, Math.min(b.hijos.length, Math.ceil((falta || ps) / ps))) : Math.min(cont, falta || cont);
     /* lo elegido y lo escrito viven en `pist`: sobreviven a las actualizaciones en vivo de la bandeja */
-    const modo = pist.modo || (chicas ? 'chicas' : cont <= (falta || cont) ? 'entera' : 'unid'), val = modo === 'entera' ? cont : (pist.v != null ? pist.v : (chicas ? def : Math.min(cont, falta || cont)));
+    const grande = Array.isArray(b.hijos) && b.hijos.length > 0;
+    /* B.A.: de una caja grande sale ENTERA (con sus cajas pequeñas) o se pistolea cada caja pequeña que sale; así el sistema sabe cuáles salieron */
+    const modo = grande ? 'entera' : (pist.modo || (cont <= (falta || cont) ? 'entera' : 'unid')), val = modo === 'entera' ? cont : (pist.v != null ? pist.v : Math.min(cont, falta || cont));
     return h + `<div class="si-pist si-pist--q"><p><b>${esc(b.folio)}</b> · ${esc(b.nombre)} · lote <b>${esc(b.lote || 'S/L')}</b>${b.vence ? ' · vence ' + esc(fmtV(b.vence)) : ''}${b.bodega ? ' · ' + esc(b.bodega) : ''}<br><small>${b.nivel === 'interior' ? `Caja pequeña ${b.n} de ${b.de} (dentro de ${esc(b.padre)})` : 'Caja ' + (b.n || 1) + ' de ' + (b.de || 1)} · tiene <b>${cont}</b> u.${chicas ? ` en <b>${b.hijos.length}</b> cajas pequeñas de ${ps} u.` : ''} · ${esc(String(b.estado || '').toLowerCase())} · al lote le quedan ${quedaLote} u. · faltan ${falta} de lo pedido</small></p>
       <fieldset class="si-pq"><legend>¿Qué vas a sacar de esta caja?</legend>
-        ${chicas ? `<label><input type="radio" name="si-pq" value="chicas" checked> Cajas pequeñas (de ${ps} u.)</label><small class="si-pq-nota">Para sacar unidades sueltas, pistolea la caja pequeña.</small>` : `<label><input type="radio" name="si-pq" value="entera"${modo === 'entera' ? ' checked' : ''}> La caja completa (${cont} u.)</label><label><input type="radio" name="si-pq" value="unid"${modo === 'unid' ? ' checked' : ''}> Unidades sueltas</label>`}</fieldset>
-      <div class="bu-man"><input type="number" min="1" class="si-in si-pq-n" value="${esc(val)}"${modo === 'entera' ? ' disabled' : ''} inputmode="numeric" aria-label="Cantidad"><span class="si-pq-u">${modo === 'chicas' ? 'cajas pequeñas' : 'unidades'}</span><button type="button" class="btn btn-primary btn-sm" data-pusar="${i}">Sacar de esta caja</button><button type="button" class="btn btn-secondary btn-sm" data-pcan="1">Cancelar</button></div></div>`;
+        ${grande ? (b.estado === 'CERRADA' ? `<label><input type="radio" name="si-pq" value="entera" checked> La caja grande completa (${cont} u., con sus ${b.hijos.length} cajas pequeñas)</label>` : '') + `<small class="si-pq-nota">${b.estado === 'CERRADA' ? 'Si sacas solo algunas cajas pequeñas, pistolea cada caja pequeña en vez de la grande.' : 'Esta caja grande ya está abierta: pistolea cada caja pequeña que sacas.'}</small>` : `<label><input type="radio" name="si-pq" value="entera"${modo === 'entera' ? ' checked' : ''}> La caja completa (${cont} u.)</label><label><input type="radio" name="si-pq" value="unid"${modo === 'unid' ? ' checked' : ''}> Unidades sueltas</label>`}</fieldset>
+      <div class="bu-man"><input type="number" min="1" class="si-in si-pq-n" value="${esc(val)}"${modo === 'entera' ? ' disabled' : ''} inputmode="numeric" aria-label="Cantidad"><span class="si-pq-u">${modo === 'chicas' ? 'cajas pequeñas' : 'unidades'}</span>${grande && b.estado !== 'CERRADA' ? '' : `<button type="button" class="btn btn-primary btn-sm" data-pusar="${i}">Sacar de esta caja</button>`}<button type="button" class="btn btn-secondary btn-sm" data-pcan="1">Cancelar</button></div></div>`;
   }
   function usarCaja(n, i, card) {
     const s = solicitudes.find(x => x.numero === n), l = s && (s.lineas || [])[i]; if (!l || !pist || !pist.caja) return;
     const cands = candDe(l, s), c = cands.find(x => x.insumoId === pist.insumoId && x.clave === pist.clave), b = pist.caja; if (!c) { pist = { n, i, msg: 'El lote ya no está disponible.' }; return pintarBandeja(); }
-    const chicasB = Array.isArray(b.hijos) && b.hijos.length && num(b.porSubcaja) > 0;
-    const modo = chicasB ? 'chicas' : ((card.querySelector('input[name="si-pq"]:checked') || {}).value || 'unid'), v = Math.max(0, Math.floor(num((card.querySelector('.si-pq-n') || {}).value))), ps = num(b.porSubcaja), cont = num(b.contenido);
-    let qty = modo === 'chicas' ? v * ps : modo === 'entera' ? cont : v, sub = modo === 'chicas' ? v : 0;
-    if (modo === 'chicas' && v > (b.hijos || []).length) { toast('Cajas pequeñas', `Esta caja trae ${(b.hijos || []).length} cajas pequeñas.`, 'warning'); return; }
+    const grandeB = Array.isArray(b.hijos) && b.hijos.length > 0;
+    if (grandeB && b.estado !== 'CERRADA') { toast('Caja grande abierta', 'Pistolea cada caja pequeña que sacas.', 'warning'); return; }
+    const modo = grandeB ? 'entera' : ((card.querySelector('input[name="si-pq"]:checked') || {}).value || 'unid'), v = Math.max(0, Math.floor(num((card.querySelector('.si-pq-n') || {}).value))), ps = num(b.porSubcaja), cont = num(b.contenido);
+    const qty = modo === 'entera' ? cont : v, sub = 0;
     if (!qty) { toast('Cantidad', 'Indica cuánto sacas de la caja.', 'warning'); return; }
     if (qty > cont) { toast('Cantidad', `La caja ${b.folio} tiene ${cont} u. según el sistema: saca el resto de otra caja.`, 'warning'); return; }
     const k = keyL(n, i), cs = cajasL[k] || (cajasL[k] = []), usado = cs.filter(x => x.insumoId === c.insumoId && x.clave === c.clave).reduce((t, x) => t + x.qty, 0);
     if (usado + qty > c.disp) { toast('Cantidad', `Al lote ${c.lote} le quedan ${c.disp - usado} u. en el sistema.`, 'warning'); return; }
-    cs.push({ folio: b.folio, insumoId: c.insumoId, clave: c.clave, lote: c.lote, qty, sub, txt: modo === 'chicas' ? `${v} caja(s) pequeña(s) = ${qty} u.` : modo === 'entera' ? `caja completa = ${qty} u.` : `${qty} u. sueltas` });
+    cs.push({ folio: b.folio, insumoId: c.insumoId, clave: c.clave, lote: c.lote, qty, sub, txt: grandeB ? `caja grande completa = ${qty} u.` : modo === 'entera' ? `caja completa = ${qty} u.` : `${qty} u. sueltas` });
     aplicarCajas(n, i, cands); pist = { n, i }; pintarBandeja();
   }
   const revs = {};   // revisión de inventarios por solicitud
@@ -647,13 +653,14 @@
     const cands = candDe(l, s); if (tocadaL(l)) { toast('Ya movido', 'Este producto ya salió de su bodega: no se puede cambiar.', 'warning'); return; }
     const qs = cards ? [...cards.querySelectorAll('.si-q-in')].map(x => Math.max(0, Math.floor(num(x.value)))) : [];
     const mal = cands.find((c, j) => qs[j] > c.disp); if (mal) { toast('Cantidad', `El lote ${mal.lote} solo tiene ${mal.disp}.`, 'warning'); return; }
-    const cs = cajasL[keyL(n, i)] || [];
+    const prev = (l.seleccion || []), cs = cajasL[keyL(n, i)] || (prev.some(z => (z.bultos || []).length) ? prev.flatMap(z => (z.bultos || []).map(bx => ({ ...bx, insumoId: z.insumoId, clave: z.clave }))) : []);   /* «Cambiar» sin tocar las cajas: se conservan */
+    const corto = noHay ? null : cands.find((c, j) => { const sum = cs.filter(x => x.insumoId === c.insumoId && x.clave === c.clave).reduce((t, x) => t + num(x.qty), 0); return sum > 0 && (qs[j] || 0) < sum; });
+    if (corto) { toast('Cajas', `En el lote ${corto.lote} pistoleaste más de lo que pusiste en «Sacar». Quita la caja (✕) o corrige la cantidad.`, 'warning'); return; }
     const sel = noHay ? [] : cands.map((c, j) => { const bx = cs.filter(x => x.insumoId === c.insumoId && x.clave === c.clave).map(x => ({ folio: x.folio, qty: x.qty, sub: x.sub })); return { insumoId: c.insumoId, bodega: c.bodega, clave: c.clave, lote: c.lote, vence: c.vence, qty: qs[j] || 0, ...(bx.length ? { bultos: bx } : {}) }; }).filter(x => x.qty > 0);
     const entregar = sel.reduce((t, x) => t + x.qty, 0);
     if (!noHay && entregar <= 0) noHay = true;   // dejar todo en 0 = no tenemos: queda «No hay» en la solicitud
     const nueva = { ...l, estado: estadoLinea(l.cantidad, entregar, noHay), entregar, seleccion: sel, revisadoPor: usuario(), revisadoEn: new Date().toISOString() }; delete nueva.movido;
-    Object.keys(escritas).forEach(k => { if (k.startsWith(n + '|' + i + '|')) delete escritas[k]; }); delete abiertoL[n + '|' + i]; delete cajasL[keyL(n, i)]; if (pist && pist.n === n && pist.i === i) pist = null;
-    try { const c = await guardarLinea(s, i, nueva); Object.assign(s, c); pintarBandeja(); }
+    try { const c = await guardarLinea(s, i, nueva); Object.keys(escritas).forEach(k => { if (k.startsWith(n + '|' + i + '|')) delete escritas[k]; }); delete abiertoL[n + '|' + i]; delete cajasL[keyL(n, i)]; if (pist && pist.n === n && pist.i === i) pist = null; Object.assign(s, c); pintarBandeja(); }   /* B.A.: lo pistoleado se borra solo si se guardó */
     catch (e) { toast('No se pudo guardar', esc(e.message || String(e)), 'error'); }
   }
   /** Línea con un lote movido y otro que falló: queda solo con lo que sí salió (lo demás se informa como no entregado). */
@@ -681,12 +688,11 @@
     ocupado.add(n); pintarBandeja(); const folioTra = repo && tareas.length && window.SAR_Folio ? await window.SAR_Folio.siguiente('TRA') : ''; const nota = `Solicitud ${s.correlativo || n}`, prog = P && tareas.length ? P.iniciar('Procesando la solicitud…', []) : null; let mal = 0; const errs = [];
     for (const [k, t] of tareas.entries()) {
       if (prog) prog.paso(`${k + 1} de ${tareas.length}: ${t.l.asociado || t.l.nombre}`);
-      const marca = { numero: n, i: t.i, grupo: grupoDe(t.x), campo: 'movidos', nombre: t.l.nombre, transito: repo, ...(folioTra ? { folio: folioTra } : {}) };
+      const marca = { numero: n, i: t.i, grupo: grupoDe(t.x), campo: 'movidos', nombre: t.l.nombre, transito: repo, ...(folioTra ? { folio: folioTra } : {}), ...(Array.isArray(t.x.bultos) && t.x.bultos.length ? { cajas: t.x.bultos.map(bx => ({ folio: bx.folio, qty: num(bx.qty) })), ...(repo ? { destinoCaja: s.bodega } : {}) } : {}) };   /* v21.243: cajas en la misma transacción */
       let movido = false;
       try { if (repo) await T.moverUno(t.x.insumoId, t.x.bodega, TRANSITO, [{ clave: t.x.clave, qty: num(t.x.qty) }], nota + ' · en camino a ' + s.bodega, marca); else await T.salidaUno(t.x.insumoId, t.x.bodega, [{ clave: t.x.clave, qty: num(t.x.qty) }], nota + ' · entregado a ' + (s.solicitante || '') + (s.servicio ? ' (' + s.servicio + ')' : ''), marca); movido = true; }
       catch (e) { if (!e.ya) { mal++; errs.push(`${t.l.nombre}: ${e.message || e}`); } }
-      /* v21.243: las cajas pistoleadas bajan su contenido (sin pasar lo que de verdad salió del lote) */
-      if (movido && Array.isArray(t.x.bultos) && window.SAR_Bultos && window.SAR_Bultos.sacar) { let resto = num(t.x.qty); for (const bx of t.x.bultos) { const q = Math.min(num(bx.qty), resto); if (q <= 0) break; resto -= q; try { await window.SAR_Bultos.sacar(bx.folio, q, s.correlativo || n, q === num(bx.qty) ? bx.sub : 0); } catch (e) { console.warn('[Solicitudes] caja no actualizada', bx.folio, e); } } }
+      void movido;
     }
     try { const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), COL), n)), x = sn.exists() ? limpiarSol(sn.data(), n) : null;
       if (x && (x.lineas || []).filter(l => !l.soloConteo).every(movidaL) && x.estado !== 'LISTA' && x.estado !== 'ENTREGADA') { const ahora = new Date().toISOString(); await f.updateDoc(f.doc(f.collection(db(), COL), n), { estado: 'LISTA', historial: (x.historial || []).concat([{ estado: 'LISTA', por: usuario(), en: ahora }]) }); } } catch (e) { mal++; errs.push(e.message || String(e)); }
@@ -782,7 +788,9 @@
       if (b.dataset.pquita !== undefined) { const i = +b.dataset.pquita, s = solicitudes.find(x => x.numero === n), l = s && s.lineas[i], cs = cajasL[keyL(n, i)] || []; cs.splice(+b.dataset.q, 1); if (l) aplicarCajas(n, i, candDe(l, s)); return pintarBandeja(); }
       if (b.dataset.ok !== undefined) return decidirLinea(n, +b.dataset.ok, false, b.closest('.si-ln'));
       if (b.dataset.nh !== undefined) return decidirLinea(n, +b.dataset.nh, true, null);
-      if (b.dataset.ver !== undefined) { abiertoL[n + '|' + b.dataset.ver] = true; return pintarBandeja(); }
+      if (b.dataset.ver !== undefined) { const i = +b.dataset.ver, s = solicitudes.find(x => x.numero === n), l = s && s.lineas[i]; abiertoL[n + '|' + i] = true;
+        if (l && !cajasL[keyL(n, i)]) { const cs = (l.seleccion || []).flatMap(z => (z.bultos || []).map(bx => ({ folio: bx.folio, insumoId: z.insumoId, clave: z.clave, lote: z.lote, qty: num(bx.qty), sub: 0, txt: `${num(bx.qty)} u.` }))); if (cs.length) { cajasL[keyL(n, i)] = cs; (l.seleccion || []).forEach(z => { escritas[`${n}|${i}|${z.insumoId}|${z.clave}`] = String(z.qty); }); } }   /* «Cambiar» vuelve a mostrar las cajas */
+        return pintarBandeja(); }
       if (b.dataset.procesar) return procesar(n);
       if (b.dataset.solomov !== undefined) return soloMovido(n, +b.dataset.solomov);
       if (b.dataset.recibir) return recibir(n);

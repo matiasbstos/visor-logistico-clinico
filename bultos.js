@@ -345,6 +345,15 @@
     try { lector = new window.Html5Qrcode(el.id); await lector.start({ facingMode: 'environment' }, { fps: 10, qrbox: (w, h) => ({ width: Math.min(w, h) * 0.8, height: Math.min(w, h) * 0.55 }) }, (txt) => alLeer(txt), () => {}); }
     catch (e) { el.innerHTML = '<p class="si-v">No se pudo abrir la cámara (permiso o equipo sin cámara). Usa la pistola o escribe el folio.</p>'; lector = null; }
   }
+  /** v21.243: abre la cámara del teléfono en una ventana y devuelve lo primero que lea (QR o código de barras de la etiqueta); null si se cierra. */
+  function leerConCamara(titulo) {
+    return new Promise((ok) => {
+      let listo = false; const fin = (v) => { if (listo) return; listo = true; pararCamara().finally(() => { if (ov.parentNode) ov.cerrar(); ok(v); }); };
+      const ov = ventana(titulo || 'Leer la etiqueta con la cámara', '<div id="bu-cam2" class="bu-cam"></div><p class="si-s">Apunta al QR (o al código de barras) de la etiqueta de la caja.</p>', { encima: true });
+      ov._fin = () => { if (!listo) { listo = true; pararCamara(); ok(null); } };
+      camara(ov.querySelector('#bu-cam2'), (txt) => { if (folioDe(txt)) { try { if (navigator.vibrate) navigator.vibrate(60); } catch (e) { /* sin vibración */ } fin(txt); } });
+    });
+  }
   async function pararCamara() { if (lector) { try { await lector.stop(); } catch (e) { /* ya detenida */ } try { lector.clear(); } catch (e) { /* nada */ } lector = null; } }
 
   function fichaBulto(b) {
@@ -743,6 +752,6 @@
     inp.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => registrar('nada'), 250); });
     pintar(''); setTimeout(() => inp.focus(), 50); return ov;
   }
-  window.SAR_Bultos = { leer, sacar, probarPistola, hojaPrueba, code39, i2de5, planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
+  window.SAR_Bultos = { leerConCamara, leer, sacar, probarPistola, hojaPrueba, code39, i2de5, planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_Bultos;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null, addEventListener() {} });

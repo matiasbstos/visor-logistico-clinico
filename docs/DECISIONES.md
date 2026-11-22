@@ -1632,6 +1632,7 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
 - Se pregunta qué sale de esa caja: **cajas pequeñas** (si la caja trae interiores, × unidades por caja pequeña), **la caja completa** o **unidades sueltas**. No deja sacar más de lo que tiene la caja ni del lote.
 - Lo pistoleado manda en «Sacar»: ese lote queda con lo de las cajas (y los demás en 0, editable). Se pueden pistolear varias cajas; cada una se puede quitar.
 - Al **Procesar**, el stock sale del lote como siempre (transacción de traspasos) y, solo si se movió, cada caja baja su contenido con historial «SALIDA» y la referencia de la solicitud: caja interior → baja también su caja grande; cajas pequeñas sacadas de una grande → esas interiores quedan VACÍAS.
+- También se puede leer el QR (o el código de barras) de la etiqueta con la cámara del teléfono: «Cámara (QR)» abre la cámara en una ventana y toma la primera etiqueta BUL que lea.
 - Las cajas quedan guardadas en la línea (`seleccion[].bultos: [{folio, qty, sub}]`) para la trazabilidad.
 
 ## 4.296 Equipo logístico «La Teoría del Big Bang»

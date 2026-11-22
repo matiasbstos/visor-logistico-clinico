@@ -533,8 +533,8 @@
   function pistHTML(s, l, i, cands) {
     const k = keyL(s.numero, i), cs = cajasL[k] || [], activo = pist && pist.n === s.numero && pist.i === i, ya = cs.reduce((t, x) => t + x.qty, 0), falta = Math.max(0, num(l.cantidad) - ya);
     let h = cs.length ? `<ul class="si-cajas">${cs.map((x, q) => `<li><i class="ph-bold ph-package" aria-hidden="true"></i> <b>${esc(x.folio)}</b> · lote ${esc(x.lote)} · ${esc(x.txt)} <button type="button" class="si-pq-x" data-pquita="${i}" data-q="${q}" aria-label="Quitar ${esc(x.folio)}">✕</button></li>`).join('')}</ul>` : '';
-    if (!activo) return h + `<button type="button" class="btn btn-secondary btn-sm si-pbtn" data-pist="${i}"><i class="ph-bold ph-barcode" aria-hidden="true"></i> ${cs.length ? 'Pistolear otra caja' : 'Pistolear caja'}</button>`;
-    if (!pist.caja) return h + `<div class="si-pist"><input class="si-in si-pist-in" data-i="${i}" placeholder="Pistolea la etiqueta de la caja (BUL)" autocomplete="off" aria-label="Pistolear caja">${pist.msg ? `<p class="si-pmsg">${esc(pist.msg)}</p>` : '<small>Pistolea la caja que vas a sacar: se descuenta de su lote.</small>'}<button type="button" class="btn btn-secondary btn-sm" data-pcan="1">Listo</button></div>`;
+    if (!activo) return h + `<button type="button" class="btn btn-secondary btn-sm si-pbtn" data-pist="${i}"><i class="ph-bold ph-barcode" aria-hidden="true"></i> ${cs.length ? 'Otra caja (pistola o QR)' : 'Pistolear o leer QR de la caja'}</button>`;
+    if (!pist.caja) return h + `<div class="si-pist"><input class="si-in si-pist-in" data-i="${i}" placeholder="Pistolea la etiqueta de la caja (BUL)" autocomplete="off" aria-label="Pistolear caja">${window.SAR_Bultos.leerConCamara ? `<button type="button" class="btn btn-secondary btn-sm" data-pcam="${i}"><i class="ph-bold ph-camera" aria-hidden="true"></i> Cámara (QR)</button>` : ''}${pist.msg ? `<p class="si-pmsg">${esc(pist.msg)}</p>` : '<small>Pistolea la caja, o lee su QR con la cámara del teléfono: se descuenta de su lote.</small>'}<button type="button" class="btn btn-secondary btn-sm" data-pcan="1">Listo</button></div>`;
     const b = pist.caja, c = cands[pist.j], chicas = Array.isArray(b.hijos) && b.hijos.length && num(b.porSubcaja) > 0, cont = num(b.contenido), ps = num(b.porSubcaja);
     const quedaLote = c.disp - cs.filter(x => x.insumoId === c.insumoId && x.clave === c.clave).reduce((t, x) => t + x.qty, 0);
     const def = chicas ? Math.max(1, Math.min(b.hijos.length, Math.ceil((falta || ps) / ps))) : Math.min(cont, falta || cont);
@@ -767,6 +767,7 @@
       if (!card) return; const n = card.dataset.n;
       if (b.dataset.pist !== undefined) { pist = { n, i: +b.dataset.pist }; return pintarBandeja(); }
       if (b.dataset.pcan) { pist = null; return pintarBandeja(); }
+      if (b.dataset.pcam !== undefined) { const i = +b.dataset.pcam, t = await window.SAR_Bultos.leerConCamara('Leer la caja con la cámara'); if (t) return leerCaja(n, i, t); return; }
       if (b.dataset.pusar !== undefined) return usarCaja(n, +b.dataset.pusar, b.closest('.si-ln'));
       if (b.dataset.pquita !== undefined) { const i = +b.dataset.pquita, s = solicitudes.find(x => x.numero === n), l = s && s.lineas[i], cs = cajasL[keyL(n, i)] || []; cs.splice(+b.dataset.q, 1); if (l) aplicarCajas(n, i, candDe(l, s)); return pintarBandeja(); }
       if (b.dataset.ok !== undefined) return decidirLinea(n, +b.dataset.ok, false, b.closest('.si-ln'));

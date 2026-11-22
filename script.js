@@ -4805,7 +4805,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /* v21.245: núcleo del ingreso de proveedor, separado del formulario para poder aplicarlo desde la cola sin internet.
        p = {data, nombreInput, insumoNormalizado, quantity, cleanBatch, formattedDate, porCajaIng, destinoNombre, destinoId, categoriaSel, codigoMP, docNombre, sinConexion?, en?} */
-    async function aplicarIngresoProveedor(p, opId) {
+    async function aplicarIngresoProveedor(p, opId, alCodigo) {
         const { data, nombreInput, insumoNormalizado, quantity, cleanBatch, formattedDate, porCajaIng } = p;
         const auditRef = doc(db, 'Historial_Movimientos', 'ing-' + opId);   /* id fijo por operación: un reintento no suma dos veces */
         let repetido = false;
@@ -4823,9 +4823,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (match) {
             insumoId = match.id;
         } else {
-            // Documento nuevo
-            const nuevoDocRef = doc(collection(db, 'Insumos'));
-            insumoId = nuevoDocRef.id;
+            /* v21.245 (B.A.): la lista en memoria puede no estar al día (cola al volver internet): se busca en Firestore antes de crear uno nuevo,
+               y si no existe se usa un id fijo por nombre y bodega, así dos ingresos en cola del mismo producto nuevo no crean dos fichas */
+            try { const qs = await getDocs(query(collection(db, 'Insumos'), where('name_lowercase', '==', nombreInput.trim().toLowerCase()), limit(10))); qs.forEach(x => { if (!insumoId && _nb(x.data().location || x.data().ubicacion || 'Bodega Central') === _nb(destinoNombre)) insumoId = x.id; }); } catch (eQ) { /* sin red: id fijo */ }
+            const sl = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+            if (!insumoId) insumoId = `ing_${sl(nombreInput)}__${sl(destinoNombre)}`;
         }
 
         // v21.128: código SAR del producto (y ID de Mercado Público opcional para la foto del catálogo)
@@ -4835,7 +4837,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // EJECUCIÓN ATÓMICA DE INGRESO (Transaction Recovery)
         const codigoLote = window.SAR_CodigoSAR ? await window.SAR_CodigoSAR.asignarLote(nombreInput.trim(), cleanBatch, formattedDate === 'N/A' ? '' : formattedDate) : '';
-        const codigoIngreso = window.SAR_Gobernanza ? await window.SAR_Gobernanza.codigo('ING').catch(() => '') : '';
+        /* el código ING se toma una sola vez por operación (alCodigo lo guarda en la cola): un reintento no gasta otro número */
+        let codigoIngreso = p.codigoIngreso || ''; if (!codigoIngreso) { codigoIngreso = window.SAR_Gobernanza ? await window.SAR_Gobernanza.codigo('ING').catch(() => '') : ''; if (codigoIngreso && alCodigo) alCodigo(codigoIngreso); }
         await runTransaction(db, async (transaction) => {
             const insumoRef = doc(db, 'Insumos', insumoId);
             const yaHecho = await transaction.get(auditRef); if (yaHecho.exists()) { repetido = true; return; }
@@ -4941,7 +4944,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 origenCentro: /pr[eé]stamo|traspaso/i.test(data.purchaseType || '') ? (data.providerId || '') : '',
                 user: auth.currentUser ? auth.currentUser.email : 'Admin Local',
                 date: serverTimestamp(),
-                document: String(data.ordenDocumento || '').trim().toUpperCase() || p.docNombre || 'S/N', ...(p.sinConexion ? { sinConexion: true, hechoEn: p.en || '' } : {})
+                document: (String(data.ordenDocumento || '').trim().toUpperCase() || p.docNombre || 'S/N') + (p.folioProvisional ? ` (hecho sin conexión: ${p.folioProvisional})` : ''), ...(p.sinConexion ? { sinConexion: true, hechoEn: p.en || '', ...(p.folioProvisional ? { folioProvisional: p.folioProvisional } : {}) } : {})
             });
             // Préstamo / traspaso desde otro centro: queda pendiente de devolver (v21.82)
             if (/pr[eé]stamo|traspaso/i.test(data.purchaseType || '')) {
@@ -4964,7 +4967,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return { insumoId, repetido };
     }
     window.__aplicarIngresoProveedor = aplicarIngresoProveedor;
-    { const reg = () => { if (window.SAR_Cola && window.SAR_Cola.registrar) { window.SAR_Cola.registrar('ingreso', async (d, op) => { await aplicarIngresoProveedor(d, op.id); }); return true; } return false; };
+    { const reg = () => { if (window.SAR_Cola && window.SAR_Cola.registrar) { window.SAR_Cola.registrar('ingreso', async (d, op) => { const r = await aplicarIngresoProveedor(d, op.id, (c) => { if (window.SAR_Cola.actualizar) window.SAR_Cola.actualizar(op.id, { codigoIngreso: c }); }); if (r && r.insumoId && Array.isArray(window.insumosDataCache) && !window.insumosDataCache.some(x => x.id === r.insumoId)) window.insumosDataCache.push({ id: r.insumoId, name: d.nombreInput.trim(), location: d.destinoNombre }); }); return true; } return false; };
       if (!reg()) { let n = 0; const t = setInterval(() => { if (reg() || ++n > 40) clearInterval(t); }, 500); } }
 
         // C. GUARDADO DE INGRESO (LOGICA DE NÚCLEO)

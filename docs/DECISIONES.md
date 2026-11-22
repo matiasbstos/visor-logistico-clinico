@@ -1660,7 +1660,7 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
 
 **Decisión.**
 - **Ingreso de existencias** (formulario normal) e **Ingreso rápido de inventario**: sin conexión quedan en la cola del teléfono con folio provisional (`ING-P-…` / `INV-P-…`) y se aplican solos al volver internet, con su transacción y el folio definitivo (que guarda el provisional entre paréntesis).
-- **Sin duplicar al reintentar:** el movimiento del historial se escribe con id fijo por operación (`ing-<op>` en el ingreso normal; `ing-<op>-<producto>-<lote>` en el rápido) y se lee primero dentro de la transacción; si ya existe, no se vuelve a sumar. Esto también protege los ingresos con internet ante un reintento automático.
+- **Sin duplicar al reintentar:** el movimiento del historial se escribe con id fijo por operación (`ing-<op>` en el ingreso normal; `ing-<op>-<producto>-<lote>` en el rápido) y se lee primero dentro de la transacción; si ya existe, no se vuelve a sumar (con internet protege el reintento interno de Firestore; reenviar el formulario a mano sigue siendo otro ingreso). El código ING y el folio INV/REC definitivos se toman una sola vez por operación. Un producto nuevo se busca en Firestore antes de crearlo y, si no existe, usa un id fijo por nombre y bodega (dos ingresos en cola del mismo producto nuevo no crean dos fichas).
 - El núcleo del ingreso de proveedor quedó en `aplicarIngresoProveedor(p, opId)` (script.js), separado del formulario. El documento de respaldo (archivo) no viaja en la cola: se adjunta después; queda su nombre.
 
 ## 4.299 Recepción de OC sin internet (v21.245)

@@ -1295,7 +1295,12 @@
             await recepcionConStock(oc, { provDoc: d.provDoc, extras: n === 0 ? (d.extras || []) : [], baseN: d.baseN, onPaso: null, recId: ids[n], hora: d.hora, key: m.key, det: m.det, incidencias: m.incidencias || [], guia: d.guia, fecha: d.fecha, obs: d.obs, notificar: false, ingresaStock: d.ingresaStock, central: d.central, texto: poner(m.textoBase) + nota, titulo: d.titulo, textoCorreo: '' });
             oc.lineas = aplicarRecepcion(oc, m.key, m.det, [], null, d.ingresaStock).lineas;
         }
-        if (d.notificar && !d.correoEnviado) { await enviarCorreo(DESTINO_RECEPCION, armarCorreo(oc, d.titulo, poner(d.textoCorreo) + nota, usuario())); if (window.SAR_Cola.actualizar) window.SAR_Cola.actualizar(op.id, { correoEnviado: true }); }
+        if (d.notificar && !d.correoEnviado) {
+            try { await cargarConfig(); } catch (e) { /* sin configuración: se intenta igual */ }
+            const r = await enviarCorreo(DESTINO_RECEPCION, armarCorreo(oc, d.titulo, poner(d.textoCorreo) + nota, usuario()), { respaldo: true });
+            if (!r || !['enviado', 'programado'].includes(r.estado)) throw new Error('sin conexión: el correo de la recepción no salió; se reintenta (la recepción ya quedó guardada)');
+            if (window.SAR_Cola.actualizar) window.SAR_Cola.actualizar(op.id, { correoEnviado: true });
+        }
     });
     async function recepcionConStock(oc, { provDoc, extras, baseN, onPaso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar, ingresaStock, central, texto, titulo, textoCorreo }) {
         const f = fs(); const paso = (t) => { if (onPaso) onPaso(t); };

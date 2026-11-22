@@ -1725,3 +1725,18 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
 - **Pendiente (decisión del usuario):** un acta «por confirmar» cuyo material ya salió físicamente se ve como faltante, porque lo reservado se da por presente en la bodega.
 - **Pendiente:** dos pestañas del mismo equipo comparten el borrador. Hoy gana la última que guarda.
 - **Pendiente (reglas, las publica el usuario):** cualquier rol puede editar una `Solicitudes_Ajuste` pendiente (cantidad, loteSistema). Conviene limitar `update` a superadmin o a quien la creó, y solo mientras esté pendiente.
+
+### 4.303 Toma: acta ya entregada · regla de solicitudes de ajuste (v21.247)
+1. **Lo reservado en actas por confirmar** (decisión del usuario). Al cerrar, si lo contado de un producto no cubre lo reservado, se pregunta «¿Esas actas ya se entregaron?» y se nombran los folios.
+   - **Sí, ya se entregaron:** lo reservado ya no está en la bodega y no se descuenta del conteo. Cuando se confirme el acta, se descontará de lo reservado.
+   - **No, siguen aquí:** se descuenta y lo que no aparece es faltante.
+   - Sin respuesta no se puede cerrar. La respuesta y quién la dio quedan en `avisos` del registro de la toma.
+   - Reemplaza el «Revisado» de 4.302-c.
+2. **`Solicitudes_Ajuste`** (decisión del usuario).
+   - **Crear:** solo con `requester` igual a quien la crea, y con estado pendiente.
+   - **Editar:** quien la creó mientras siga pendiente, o el superadministrador (aprobar o rechazar).
+   - **Borrar:** solo el superadministrador.
+   - Las solicitudes de insumos antiguas (tipo `SOLICITUD_INSUMOS`) guardadas en esa colección siguen con la regla anterior.
+   - El cierre de una toma desde la cola usa como `requester` a quien está conectado y guarda `contadoPor`.
+   - **Las reglas las publica el usuario.**
+

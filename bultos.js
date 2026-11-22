@@ -159,7 +159,7 @@
   const lotesDe = (d) => (Array.isArray(d.batches) && d.batches.length ? d.batches : [{ batch: d.batch || 'S/L', quantity: d.quantity, expirationDate: d.expirationDate || '' }]).filter(b => num(b.quantity) > 0);
 
   function ventana(titulo, html, opc) {
-    if (!(opc && opc.encima)) document.querySelectorAll('.bu-ov').forEach(x => x.remove());
+    if (!(opc && opc.encima)) document.querySelectorAll('.bu-ov').forEach(x => (x.cerrar ? x.cerrar() : x.remove()));   /* cerrar: también apaga su cámara */
     const ov = document.createElement('div'); ov.className = 'bu-ov'; ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true');
     ov.innerHTML = `<div class="bu-c"><div class="bu-cab"><h3>${esc(titulo)}</h3><button type="button" class="fp-x bu-x" aria-label="Cerrar">×</button></div><div class="bu-b">${html}</div></div>`;
     const cerrar = () => { ov.remove(); document.removeEventListener('keydown', tecla, true); if (ov._fin) ov._fin(); };
@@ -342,19 +342,28 @@
   let lector = null;
   async function camara(el, alLeer) {
     if (!window.Html5Qrcode) { el.innerHTML = '<p class="si-v">La cámara no está disponible: usa la pistola o escribe el folio.</p>'; return; }
-    try { lector = new window.Html5Qrcode(el.id); await lector.start({ facingMode: 'environment' }, { fps: 10, qrbox: (w, h) => ({ width: Math.min(w, h) * 0.8, height: Math.min(w, h) * 0.55 }) }, (txt) => alLeer(txt), () => {}); }
-    catch (e) { el.innerHTML = '<p class="si-v">No se pudo abrir la cámara (permiso o equipo sin cámara). Usa la pistola o escribe el folio.</p>'; lector = null; }
+    const mio = new window.Html5Qrcode(el.id); lector = mio;
+    try { await mio.start({ facingMode: 'environment' }, { fps: 10, qrbox: (w, h) => ({ width: Math.min(w, h) * 0.8, height: Math.min(w, h) * 0.55 }) }, (txt) => alLeer(txt), () => {});
+      /* v21.243: si la ventana se cerró mientras la cámara arrancaba (p. ej. aviso de permiso), se apaga aquí */
+      if (!el.isConnected) { await pararCamara(mio); return null; } }
+    catch (e) { el.innerHTML = '<p class="si-v">No se pudo abrir la cámara (permiso o equipo sin cámara). Usa la pistola o escribe el folio.</p>'; if (lector === mio) lector = null; return null; }
+    return mio;
   }
   /** v21.243: abre la cámara del teléfono en una ventana y devuelve lo primero que lea (QR o código de barras de la etiqueta); null si se cierra. */
+  let camAbierta = null;   /* una sola lectura a la vez: un doble toque devuelve la misma */
   function leerConCamara(titulo) {
-    return new Promise((ok) => {
-      let listo = false; const fin = (v) => { if (listo) return; listo = true; pararCamara().finally(() => { if (ov.parentNode) ov.cerrar(); ok(v); }); };
-      const ov = ventana(titulo || 'Leer la etiqueta con la cámara', '<div id="bu-cam2" class="bu-cam"></div><p class="si-s">Apunta al QR (o al código de barras) de la etiqueta de la caja.</p>', { encima: true });
-      ov._fin = () => { if (!listo) { listo = true; pararCamara(); ok(null); } };
-      camara(ov.querySelector('#bu-cam2'), (txt) => { if (folioDe(txt)) { try { if (navigator.vibrate) navigator.vibrate(60); } catch (e) { /* sin vibración */ } fin(txt); } });
+    if (camAbierta) return camAbierta;
+    camAbierta = new Promise((ok) => {
+      let listo = false, mio = null; const id = 'bu-cam-' + Date.now();
+      const fin = (v) => { if (listo) return; listo = true; Promise.resolve(arranque).then(() => pararCamara(mio)).finally(() => { if (ov.parentNode) ov.remove(); camAbierta = null; ok(v); }); };
+      const ov = ventana(titulo || 'Leer la etiqueta con la cámara', `<div id="${id}" class="bu-cam"></div><p class="si-s">Apunta al QR (o al código de barras) de la etiqueta de la caja.</p>`, { encima: true });
+      ov._fin = () => fin(null);
+      const arranque = camara(ov.querySelector('#' + id), (txt) => { if (folioDe(txt)) { try { if (navigator.vibrate) navigator.vibrate(60); } catch (e) { /* sin vibración */ } fin(txt); } }).then(l => { mio = l; if (listo) pararCamara(l); });
     });
+    return camAbierta;
   }
-  async function pararCamara() { if (lector) { try { await lector.stop(); } catch (e) { /* ya detenida */ } try { lector.clear(); } catch (e) { /* nada */ } lector = null; } }
+  /** Detiene un lector (el indicado, o el último abierto). */
+  async function pararCamara(cual) { const l = cual && cual.stop ? cual : lector; if (!l) return; try { await l.stop(); } catch (e) { /* ya detenida */ } try { l.clear(); } catch (e) { /* nada */ } if (lector === l) lector = null; }
 
   function fichaBulto(b) {
     return `<div class="bu-card"><div class="bu-card-h"><b>${esc(b.folio)}</b><span class="bu-est bu-est-${esc(b.estado)}">${esc(b.estado === 'CERRADA' ? 'Cerrada' : b.estado === 'ABIERTA' ? 'Abierta' : 'Vacía')}</span></div>
@@ -447,7 +456,7 @@
     inp.onkeydown = (e) => { if (e.key === 'Enter' || (e.key === 'Tab' && inp.value.trim())) { e.preventDefault(); tomar(); } };
     inp.oninput = () => { clearTimeout(tmIn); if (folioDe(inp.value)) tmIn = setTimeout(tomar, 300); };
     ov.querySelector('#bu-ok').onclick = () => { const t = inp.value; inp.value = ''; procesar(t); };
-    pintarSuma(); camara(ov.querySelector('#bu-cam'), procesar); setTimeout(() => inp.focus(), 200);
+    pintarSuma(); const camE = camara(ov.querySelector('#bu-cam'), procesar); ov._fin = () => camE.then(l => { if (l) pararCamara(l); }); setTimeout(() => inp.focus(), 200);
     return ov;
   }
 

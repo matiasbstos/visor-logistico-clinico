@@ -510,24 +510,29 @@
   const cajasL = {}; let pist = null;
   const keyL = (n, i) => n + '|' + i;
   /** Reparte lo pistoleado en los «Sacar» de la línea: lo pistoleado manda; los demás lotes quedan en 0. */
-  function aplicarCajas(n, i, cands) { const cs = cajasL[keyL(n, i)] || []; cands.forEach(c => { escritas[`${n}|${i}|${c.insumoId}|${c.clave}`] = String(cs.filter(x => x.insumoId === c.insumoId && x.clave === c.clave).reduce((t, x) => t + x.qty, 0)); }); }
+  function aplicarCajas(n, i, cands) { const cs = cajasL[keyL(n, i)] || [];
+    if (!cs.length) { Object.keys(escritas).forEach(k => { if (k.startsWith(n + '|' + i + '|')) delete escritas[k]; }); return; }   /* sin cajas: vuelve el reparto por vencimiento */ cands.forEach(c => { escritas[`${n}|${i}|${c.insumoId}|${c.clave}`] = String(cs.filter(x => x.insumoId === c.insumoId && x.clave === c.clave).reduce((t, x) => t + x.qty, 0)); }); }
   /** Lo leído por la pistola → la caja y el lote de la línea que le corresponde (o un aviso). */
   async function leerCaja(n, i, txt) {
     const s = solicitudes.find(x => x.numero === n), l = s && (s.lineas || [])[i], B = window.SAR_Bultos; if (!l || !B || !B.leer) return;
     const folio = B.folioDe(txt); pist = { n, i };
     if (!folio) { pist.msg = `«${String(txt).slice(0, 30)}» no es una etiqueta de caja (BUL).`; return pintarBandeja(); }
-    if ((cajasL[keyL(n, i)] || []).some(x => x.folio === folio)) { pist.msg = `${folio} ya está pistoleada en este producto.`; return pintarBandeja(); }
+    const yaCs = cajasL[keyL(n, i)] || [];
+    if (yaCs.some(x => x.folio === folio)) { pist.msg = `${folio} ya está pistoleada en este producto.`; return pintarBandeja(); }
     let b; try { b = await B.leer(folio); } catch (e) { pist.msg = 'No pude leer la caja: ' + (e.message || e); return pintarBandeja(); }
     if (!b) { pist.msg = `${folio} no existe en el sistema.`; return pintarBandeja(); }
+    if (b.padre && yaCs.some(x => x.folio === b.padre)) { pist.msg = `${folio} va dentro de ${b.padre}, que ya pistoleaste: no se cuenta dos veces.`; return pintarBandeja(); }
+    if (Array.isArray(b.hijos) && yaCs.some(x => b.hijos.includes(x.folio))) { pist.msg = `Ya pistoleaste una caja pequeña de ${folio}: sigue con sus cajas pequeñas.`; return pintarBandeja(); }
     try { if (window.SAR_Sonidos) window.SAR_Sonidos.tocar('ok'); } catch (e) { /* sin sonido */ }
     const cands = candDe(l, s), lote = String(b.lote || 'S/L');
     const delProd = cands.filter(c => (b.insumoId && c.insumoId === b.insumoId) || norm((insumos.find(x => x.id === c.insumoId) || {}).name) === norm(b.nombre));
     if (!delProd.length) { pist.msg = `Esa caja es de «${b.nombre}», no de lo que se pide aquí.`; return pintarBandeja(); }
     if (b.estado === 'VACIA') { pist.msg = `${folio} figura vacía.`; return pintarBandeja(); }
     const mismos = delProd.filter(c => String(c.lote) === lote && (!b.vence || !c.vence || String(c.vence).slice(0, 7) === String(b.vence).slice(0, 7)));
-    const c = mismos.find(x => !b.bodega || x.bodega === b.bodega) || mismos[0];
+    const c = mismos.find(x => !b.bodega || x.bodega === b.bodega);   /* no se adivina: la caja está en una bodega concreta */
+    if (!c && mismos.length) { pist.msg = `La caja dice ${b.bodega}, pero el lote ${lote} tiene stock en ${[...new Set(mismos.map(x => x.bodega))].join(', ')}. Corrige la bodega de la caja (Escanear bulto) o mueve el stock.`; return pintarBandeja(); }
     if (!c) { pist.msg = `El lote ${lote} de esta caja no tiene stock en el sistema${b.bodega ? ' en ' + b.bodega : ''}. Revisa el lote o haz un ajuste.`; return pintarBandeja(); }
-    pist = { n, i, caja: b, j: cands.indexOf(c) }; pintarBandeja();
+    pist = { n, i, caja: b, insumoId: c.insumoId, clave: c.clave }; pintarBandeja();
   }
   /** Lo que se pregunta al pistolear: cajas pequeñas, la caja completa o unidades. */
   function pistHTML(s, l, i, cands) {
@@ -535,19 +540,23 @@
     let h = cs.length ? `<ul class="si-cajas">${cs.map((x, q) => `<li><i class="ph-bold ph-package" aria-hidden="true"></i> <b>${esc(x.folio)}</b> · lote ${esc(x.lote)} · ${esc(x.txt)} <button type="button" class="si-pq-x" data-pquita="${i}" data-q="${q}" aria-label="Quitar ${esc(x.folio)}">✕</button></li>`).join('')}</ul>` : '';
     if (!activo) return h + `<button type="button" class="btn btn-secondary btn-sm si-pbtn" data-pist="${i}"><i class="ph-bold ph-barcode" aria-hidden="true"></i> ${cs.length ? 'Otra caja (pistola o QR)' : 'Pistolear o leer QR de la caja'}</button>`;
     if (!pist.caja) return h + `<div class="si-pist"><input class="si-in si-pist-in" data-i="${i}" placeholder="Pistolea la etiqueta de la caja (BUL)" autocomplete="off" aria-label="Pistolear caja">${window.SAR_Bultos.leerConCamara ? `<button type="button" class="btn btn-secondary btn-sm" data-pcam="${i}"><i class="ph-bold ph-camera" aria-hidden="true"></i> Cámara (QR)</button>` : ''}${pist.msg ? `<p class="si-pmsg">${esc(pist.msg)}</p>` : '<small>Pistolea la caja, o lee su QR con la cámara del teléfono: se descuenta de su lote.</small>'}<button type="button" class="btn btn-secondary btn-sm" data-pcan="1">Listo</button></div>`;
-    const b = pist.caja, c = cands[pist.j], chicas = Array.isArray(b.hijos) && b.hijos.length && num(b.porSubcaja) > 0, cont = num(b.contenido), ps = num(b.porSubcaja);
+    const b = pist.caja, c = cands.find(x => x.insumoId === pist.insumoId && x.clave === pist.clave);
+    if (!c) return h + `<div class="si-pist"><p class="si-pmsg">El lote de ${esc(b.folio)} ya no tiene stock disponible (se movió mientras tanto). Pistolea otra caja.</p><button type="button" class="btn btn-secondary btn-sm" data-pcan="1">Listo</button></div>`;
+    const chicas = Array.isArray(b.hijos) && b.hijos.length && num(b.porSubcaja) > 0, cont = num(b.contenido), ps = num(b.porSubcaja);
     const quedaLote = c.disp - cs.filter(x => x.insumoId === c.insumoId && x.clave === c.clave).reduce((t, x) => t + x.qty, 0);
     const def = chicas ? Math.max(1, Math.min(b.hijos.length, Math.ceil((falta || ps) / ps))) : Math.min(cont, falta || cont);
+    /* lo elegido y lo escrito viven en `pist`: sobreviven a las actualizaciones en vivo de la bandeja */
+    const modo = pist.modo || (chicas ? 'chicas' : cont <= (falta || cont) ? 'entera' : 'unid'), val = modo === 'entera' ? cont : (pist.v != null ? pist.v : (chicas ? def : Math.min(cont, falta || cont)));
     return h + `<div class="si-pist si-pist--q"><p><b>${esc(b.folio)}</b> · ${esc(b.nombre)} · lote <b>${esc(b.lote || 'S/L')}</b>${b.vence ? ' · vence ' + esc(fmtV(b.vence)) : ''}${b.bodega ? ' · ' + esc(b.bodega) : ''}<br><small>${b.nivel === 'interior' ? `Caja pequeña ${b.n} de ${b.de} (dentro de ${esc(b.padre)})` : 'Caja ' + (b.n || 1) + ' de ' + (b.de || 1)} · tiene <b>${cont}</b> u.${chicas ? ` en <b>${b.hijos.length}</b> cajas pequeñas de ${ps} u.` : ''} · ${esc(String(b.estado || '').toLowerCase())} · al lote le quedan ${quedaLote} u. · faltan ${falta} de lo pedido</small></p>
       <fieldset class="si-pq"><legend>¿Qué vas a sacar de esta caja?</legend>
-        ${chicas ? `<label><input type="radio" name="si-pq" value="chicas" checked> Cajas pequeñas (de ${ps} u.)</label>` : `<label><input type="radio" name="si-pq" value="entera"${cont <= (falta || cont) ? ' checked' : ''}> La caja completa (${cont} u.)</label>`}
-        <label><input type="radio" name="si-pq" value="unid"${!chicas && cont > (falta || cont) ? ' checked' : ''}> Unidades sueltas</label></fieldset>
-      <div class="bu-man"><input type="number" min="1" class="si-in si-pq-n" value="${chicas ? def : Math.min(cont, falta || cont)}" inputmode="numeric" aria-label="Cantidad"><span class="si-pq-u">${chicas ? 'cajas pequeñas' : 'unidades'}</span><button type="button" class="btn btn-primary btn-sm" data-pusar="${i}">Sacar de esta caja</button><button type="button" class="btn btn-secondary btn-sm" data-pcan="1">Cancelar</button></div></div>`;
+        ${chicas ? `<label><input type="radio" name="si-pq" value="chicas" checked> Cajas pequeñas (de ${ps} u.)</label><small class="si-pq-nota">Para sacar unidades sueltas, pistolea la caja pequeña.</small>` : `<label><input type="radio" name="si-pq" value="entera"${modo === 'entera' ? ' checked' : ''}> La caja completa (${cont} u.)</label><label><input type="radio" name="si-pq" value="unid"${modo === 'unid' ? ' checked' : ''}> Unidades sueltas</label>`}</fieldset>
+      <div class="bu-man"><input type="number" min="1" class="si-in si-pq-n" value="${esc(val)}"${modo === 'entera' ? ' disabled' : ''} inputmode="numeric" aria-label="Cantidad"><span class="si-pq-u">${modo === 'chicas' ? 'cajas pequeñas' : 'unidades'}</span><button type="button" class="btn btn-primary btn-sm" data-pusar="${i}">Sacar de esta caja</button><button type="button" class="btn btn-secondary btn-sm" data-pcan="1">Cancelar</button></div></div>`;
   }
   function usarCaja(n, i, card) {
     const s = solicitudes.find(x => x.numero === n), l = s && (s.lineas || [])[i]; if (!l || !pist || !pist.caja) return;
-    const cands = candDe(l, s), c = cands[pist.j], b = pist.caja; if (!c) { pist = { n, i, msg: 'El lote ya no está disponible.' }; return pintarBandeja(); }
-    const modo = (card.querySelector('input[name="si-pq"]:checked') || {}).value || 'unid', v = Math.max(0, Math.floor(num((card.querySelector('.si-pq-n') || {}).value))), ps = num(b.porSubcaja), cont = num(b.contenido);
+    const cands = candDe(l, s), c = cands.find(x => x.insumoId === pist.insumoId && x.clave === pist.clave), b = pist.caja; if (!c) { pist = { n, i, msg: 'El lote ya no está disponible.' }; return pintarBandeja(); }
+    const chicasB = Array.isArray(b.hijos) && b.hijos.length && num(b.porSubcaja) > 0;
+    const modo = chicasB ? 'chicas' : ((card.querySelector('input[name="si-pq"]:checked') || {}).value || 'unid'), v = Math.max(0, Math.floor(num((card.querySelector('.si-pq-n') || {}).value))), ps = num(b.porSubcaja), cont = num(b.contenido);
     let qty = modo === 'chicas' ? v * ps : modo === 'entera' ? cont : v, sub = modo === 'chicas' ? v : 0;
     if (modo === 'chicas' && v > (b.hijos || []).length) { toast('Cajas pequeñas', `Esta caja trae ${(b.hijos || []).length} cajas pequeñas.`, 'warning'); return; }
     if (!qty) { toast('Cantidad', 'Indica cuánto sacas de la caja.', 'warning'); return; }
@@ -564,7 +573,7 @@
   function pintarBandeja() {
     const r = rootBandeja(); if (!r) return;
     if (pist && !pist.caja) queueMicrotask(() => { const x = r.querySelector('.si-pist-in'); if (x && document.activeElement !== x) x.focus(); });
-    if (pist && pist.caja) queueMicrotask(() => { const x = r.querySelector('.si-pq-n'); if (x && document.activeElement !== x) { x.focus(); x.select(); } });
+    if (pist && pist.caja && !pist.enfocado) { pist.enfocado = true; queueMicrotask(() => { const x = r.querySelector('.si-pq-n'); if (x && !x.disabled) { x.focus(); x.select(); } }); }
     if (asoc) queueMicrotask(() => { const x = r.querySelector('.si-asoc-in'); if (x && document.activeElement !== x) { x.focus(); x.setSelectionRange(x.value.length, x.value.length); } });
     const ab = (s) => s.estado !== 'ENTREGADA' && s.estado !== 'ANULADA', vis = solicitudes.filter(s => (bq.trim() ? true : filtro === 'TODAS' ? true : filtro === 'ABIERTAS' ? ab(s) : s.estado === filtro) && coincideSol(s, bq));
     const enfocado = document.activeElement && document.activeElement.id === 'si-bq';
@@ -597,7 +606,7 @@
           const pre = (l.seleccion && l.seleccion.length) ? cands.map(c => { const x = l.seleccion.find(y => y.insumoId === c.insumoId && y.clave === c.clave); return x ? x.qty : 0; }) : repartir(cands, l.cantidad), hay = cands.reduce((t, c) => t + c.disp, 0);
           return `<div class="si-ln${decid ? ' si-ln--ok' : ''}" data-i="${i}"><div class="si-lh">${l.foto ? `<span class="prod-img"><img src="${l.foto}" alt="${esc(l.nombre)}"></span>` : IM ? IM.thumb(l.nombre, { codigo: (insumos.find(x => x.id === l.insumoId) || {}).codigoMP || '' }) : ''}<div class="si-ln-t"><b>${esc(l.nombre)}</b>${l.manual ? ' <em>escrito a mano</em>' : ''}${num(l.reiterado) > 1 ? ` <em class="si-reit">Sigue faltando · ${num(l.reiterado)}.º día</em>` : ''}<small>Pide <b>${l.cantidad}</b> · hay ${hay} en otras bodegas${tocadaL(l) ? (esRepo(s) ? (recibidaL(l) ? ' · <b>recibido en ' + esc(s.bodega) + '</b>' : ' · <b>en camino</b>') : ' · <b>entregado</b>') : ''}</small></div>${chipL(l)}</div>
             ${ab(s) && ver ? (cands.length ? `<table class="si-tb si-lt"><thead><tr><th>Dónde</th><th>Lote</th><th>Vence</th><th>Hay</th><th>Sacar</th></tr></thead><tbody>${cands.map((c, j) => `<tr${(cajasL[keyL(s.numero, i)] || []).some(x => x.insumoId === c.insumoId && x.clave === c.clave) ? ' class="si-tr-caja" title="Lote de la caja pistoleada"' : ''}><td>${esc(c.bodega)}${c.estante ? ' · ' + esc(c.estante) : ''}</td><td>${esc(c.lote)}<small class="si-vm"> · vence ${esc(fmtV(c.vence))}</small></td><td>${esc(fmtV(c.vence))}</td><td>${c.disp}</td><td><input type="number" min="0" max="${c.disp}" value="${escritas[s.numero + '|' + i + '|' + c.insumoId + '|' + c.clave] !== undefined ? esc(escritas[s.numero + '|' + i + '|' + c.insumoId + '|' + c.clave]) : pre[j]}" class="si-q-in" data-j="${j}" data-g="${esc(s.numero + '|' + i + '|' + c.insumoId + '|' + c.clave)}" inputmode="numeric" aria-label="Cantidad a sacar del lote ${esc(c.lote)}"></td></tr>`).join('')}</tbody></table>` : '<p class="si-v">No está en el inventario con ese nombre: asócialo al producto que corresponde.</p>') + asocHTML(s, l, i)
-              + (window.SAR_Bultos && cands.length ? pistHTML(s, l, i, cands) : '')
+              + (window.SAR_Bultos && window.SAR_Bultos.leer && window.SAR_Bultos.sacar && cands.length ? pistHTML(s, l, i, cands) : '')
               + `<div class="si-lb"><button type="button" class="btn btn-primary btn-sm" data-ok="${i}"${cands.length ? '' : ' disabled'}>Confirmar</button><button type="button" class="btn btn-secondary btn-sm" data-nh="${i}">No hay</button></div>`
               : (ab(s) && !(s.conteo && s.conteo.estado !== 'aplicado') ? `<div class="si-lb"><small>${(l.seleccion || []).filter(x => x.qty > 0).map(x => `${esc(x.lote)} · ${esc(x.bodega)}: ${x.qty}`).join(' · ')}</small>${tocadaL(l) ? (movidaL(l) ? '' : `<button type="button" class="btn btn-secondary btn-sm" data-solomov="${i}" title="Un lote no se pudo mover: deja la línea solo con lo que sí salió">Quedarse con lo movido</button>`) : `<button type="button" class="btn btn-secondary btn-sm" data-ver="${i}">Cambiar</button>`}</div>` : '')}</div>`; }).join('')}</div>
         ${recorridoHTML(s.estado)}<footer>${(() => { const L = (s.lineas || []).filter(l => !l.soloConteo), faltan = L.filter(l => !l.estado || l.estado === 'pendiente').length, inv = s.conteo && s.conteo.estado !== 'aplicado', busy = ocupado.has(s.numero), repo = esRepo(s);
@@ -755,8 +764,9 @@
     r.addEventListener('keydown', (e) => { const x = e.target; if (x.classList && x.classList.contains('si-pist-in') && (e.key === 'Enter' || (e.key === 'Tab' && x.value.trim()))) { e.preventDefault(); tomarP(x); }
       else if (x.classList && x.classList.contains('si-pq-n') && e.key === 'Enter') { e.preventDefault(); const c = x.closest('.si-card'), ln = x.closest('.si-ln'); if (c && ln && pist) usarCaja(c.dataset.n, pist.i, ln); }
       else if (e.key === 'Escape' && pist) { pist = null; pintarBandeja(); } });
-    r.addEventListener('change', (e) => { if (e.target.name === 'si-pq') { const ln = e.target.closest('.si-ln'), u = ln && ln.querySelector('.si-pq-u'), q = ln && ln.querySelector('.si-pq-n'); if (u) u.textContent = e.target.value === 'chicas' ? 'cajas pequeñas' : 'unidades'; if (q) { q.disabled = e.target.value === 'entera'; if (e.target.value === 'entera' && pist && pist.caja) q.value = num(pist.caja.contenido); } } });
-    r.addEventListener('input', (e) => { if (e.target.classList.contains('si-pist-in')) { clearTimeout(tmP); const x = e.target; if (window.SAR_Bultos && window.SAR_Bultos.folioDe(x.value)) tmP = setTimeout(() => tomarP(x), 300); return; }
+    r.addEventListener('change', (e) => { if (e.target.name === 'si-pq') { if (pist) { pist.modo = e.target.value; pist.v = null; }  const ln = e.target.closest('.si-ln'), u = ln && ln.querySelector('.si-pq-u'), q = ln && ln.querySelector('.si-pq-n'); if (u) u.textContent = e.target.value === 'chicas' ? 'cajas pequeñas' : 'unidades'; if (q) { q.disabled = e.target.value === 'entera'; if (e.target.value === 'entera' && pist && pist.caja) q.value = num(pist.caja.contenido); } } });
+    r.addEventListener('input', (e) => { if (e.target.classList.contains('si-pq-n')) { if (pist) pist.v = e.target.value; return; }
+      if (e.target.classList.contains('si-pist-in')) { clearTimeout(tmP); const x = e.target; if (window.SAR_Bultos && window.SAR_Bultos.folioDe(x.value)) tmP = setTimeout(() => tomarP(x), 300); return; }
       if (e.target.classList.contains('si-q-in') && e.target.dataset.g) { escritas[e.target.dataset.g] = e.target.value; return; } if (e.target.id === 'si-bq') { bq = e.target.value; clearTimeout(window.__siBq); window.__siBq = setTimeout(pintarBandeja, 150); return; } if (!e.target.classList.contains('si-asoc-in') || !asoc) return; asoc.q = e.target.value; const res = e.target.parentElement.querySelector('.si-asoc-res'); if (res) res.innerHTML = resAsoc(asoc.q); });
     r.addEventListener('click', async (e) => {
       const b = e.target.closest('button'); if (!b) return; const card = b.closest('.si-card');
@@ -767,7 +777,7 @@
       if (!card) return; const n = card.dataset.n;
       if (b.dataset.pist !== undefined) { pist = { n, i: +b.dataset.pist }; return pintarBandeja(); }
       if (b.dataset.pcan) { pist = null; return pintarBandeja(); }
-      if (b.dataset.pcam !== undefined) { const i = +b.dataset.pcam, t = await window.SAR_Bultos.leerConCamara('Leer la caja con la cámara'); if (t) return leerCaja(n, i, t); return; }
+      if (b.dataset.pcam !== undefined) { const i = +b.dataset.pcam, t = await window.SAR_Bultos.leerConCamara('Leer la caja con la cámara'); if (t) return leerCaja(n, i, t); const x = r.querySelector('.si-pist-in'); if (x) x.focus(); return; }
       if (b.dataset.pusar !== undefined) return usarCaja(n, +b.dataset.pusar, b.closest('.si-ln'));
       if (b.dataset.pquita !== undefined) { const i = +b.dataset.pquita, s = solicitudes.find(x => x.numero === n), l = s && s.lineas[i], cs = cajasL[keyL(n, i)] || []; cs.splice(+b.dataset.q, 1); if (l) aplicarCajas(n, i, candDe(l, s)); return pintarBandeja(); }
       if (b.dataset.ok !== undefined) return decidirLinea(n, +b.dataset.ok, false, b.closest('.si-ln'));

@@ -313,7 +313,14 @@ t('levantamiento v21.249: validación, folio del tag, vencido, huella y base del
   assert.strictEqual(d.huella, L.huella({ ...d, contadoPor: 'otro' })); assert.notStrictEqual(d.huella, L.huella({ ...d, total: 81 }));
   assert.ok(L.validar({ ...d, total: 81 }).some(x => /no calza/.test(x))); assert.ok(L.validar({ ...d, vence: '2027-13' }).length); assert.ok(L.validar({ ...d, folio: 'BUL-26-1' }).length);
   assert.ok(L.validar({ ...d, estructura: { ...e, interiores: [{ q: -1, abierta: false }] }, total: -1 }).length); assert.ok(L.validar({ ...d, nuevo: true, tipo: '' }).length);
-  const s = L.armarDoc({ ...dr, sinLote: true }, { correo: 'c@x.cl' }, {}); assert.strictEqual(s.lote, 'S/L'); assert.strictEqual(s.vence, 'N/A'); assert.strictEqual(s.baseSistema, null);
+  const s = L.armarDoc({ ...dr, sinLote: true, vence: 'N/A' }, { correo: 'c@x.cl' }, {}); assert.strictEqual(s.lote, 'S/L'); assert.strictEqual(s.vence, 'N/A'); assert.strictEqual(s.baseSistema, null);
+  const sv = L.armarDoc({ ...dr, sinLote: true }, { correo: 'c@x.cl' }, {}); assert.strictEqual(sv.lote, 'S/L'); assert.strictEqual(sv.vence, '2027-05');   /* «Sin lote» con vencimiento */
+  const ctl = L.armarDoc({ ...dr, prod: { ...dr.prod, controlado: 'estupefaciente' } }, { correo: 'c@x.cl' }, { base: 40, deuda: 3 }); assert.ok(!('baseSistema' in ctl) && !('deudaSistema' in ctl), 'controlado sin base');
+  assert.ok(L.validar({ ...d, nombre: 'x'.repeat(121) }).length); assert.ok(L.validar({ ...d, estructura: { estado: 'CERRADA', interiores: Array(201).fill({ q: 1, abierta: false }), sueltas: 0 }, total: 201 }).length);
+  assert.strictEqual(L.folioTag('https://sarinventario.web.app/solicitar.html#t=2026000845'), 'BUL-2026-000845'); assert.strictEqual(L.folioTag('https://sarinventario.web.app/#bulto=BUL-2026-000845'), '');
+  const u = 'c@x.cl', ahora = Date.parse('2026-11-22T20:00:00Z'), cj = [{ folio: 'a', estado: 'ok', doc: { ...d, en: '2026-11-22T10:00:00Z' } }, { folio: 'b', estado: 'pend', doc: { ...d, lote: 'L8', en: '2026-11-22T19:00:00Z' } }, { folio: 'c', estado: 'ok', doc: { ...d, en: '2026-11-21T10:00:00Z' } }, { folio: 'd', estado: 'pend', doc: { ...d, contadoPor: 'otro@x.cl', en: '2026-11-22T19:00:00Z' } }];
+  const tu = L.delTurno(cj, u, ahora); assert.deepStrictEqual(tu.map(x => x.folio), ['a', 'b']); const rs = L.resumen(tu);
+  assert.strictEqual(rs.porEnviar, 1); assert.strictEqual(rs.lotes, 2); assert.deepStrictEqual(rs.subtotales.map(x => [x.lote, x.cajas, x.unidades]), [['L7', 1, 80], ['L8', 1, 80]]);
   assert.strictEqual(L.folioTag('https://sarinventario.web.app/solicitar.html#tag=BUL-2026-000845'), 'BUL-2026-000845'); assert.strictEqual(L.folioTag('2026000845'), 'BUL-2026-000845'); assert.strictEqual(L.folioTag('845', 2026), 'BUL-2026-000845'); assert.strictEqual(L.folioTag('hola'), '');
   assert.strictEqual(L.vencido('2026-10', new Date(2026, 10, 22)), true); assert.strictEqual(L.vencido('2026-11', new Date(2026, 10, 22)), false); assert.strictEqual(L.vencido('N/A'), false);
   const reg = { batches: [{ batch: 'L7', expirationDate: '2027-05-31', quantity: 30 }, { batch: 'l7 ', expirationDate: '05/2027', quantity: 10 }, { batch: 'L8', expirationDate: '2028-01', quantity: 5 }] };
@@ -326,5 +333,7 @@ t('tags de conteo v21.249: unir, estados y filtros', () => { const T = require('
   const f = T.unir([{ folio: 'BUL-2026-000845', tipo: 'tag-conteo' }, { folio: 'BUL-2026-000846', tipo: 'tag-conteo' }], [{ folio: 'BUL-2026-000845', bodega: 'Medicamentos', estado: 'REGISTRADO' }, { folio: 'BUL-2026-000900', bodega: 'CAM', estado: 'ACEPTADO' }]);
   assert.deepStrictEqual(f.map(x => [T.numero(x.folio), x.estado]), [['000900', 'incorporado'], ['000846', 'sin'], ['000845', 'contado']]);
   assert.strictEqual(T.filtrar(f, { bodega: 'Medicamentos' }).length, 1); assert.strictEqual(T.filtrar(f, { estado: 'sin' }).length, 1); assert.strictEqual(T.filtrar(f, { q: '846' })[0].folio, 'BUL-2026-000846');
+  assert.strictEqual(T.urlTag('BUL-2026-000845'), 'https://sarinventario.web.app/solicitar.html#t=2026000845');
   assert.strictEqual(T.estadoDe(null, { estado: 'RECONTEO' }), 'reconteo'); assert.strictEqual(T.estadoDe(null, { estado: 'ETIQUETADO' }), 'etiquetado');
 });
+t('bultos v21.249: un tag CONTADO no es una caja', () => { const B = require('../bultos.js'); assert.strictEqual(B.esTag({ tipo: 'tag-conteo', estado: 'TAG' }), true); assert.strictEqual(B.esTag({ tipo: 'bulto' }), false); assert.strictEqual(B.esTag(null), false); assert.ok(/000845 es un tag CONTADO/.test(B.avisoTag('BUL-2026-000845'))); });

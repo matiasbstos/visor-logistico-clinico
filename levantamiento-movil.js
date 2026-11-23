@@ -14,7 +14,7 @@
   const VERSION = '21.249', COL = 'Conteos_Cajas', TOPE = 1000000;
   const ROLES = ['contador', 'operador', 'admin', 'superadmin', 'administrador', 'global'];
   const TIPOS = [['medico', 'Médico'], ['aseo', 'Aseo'], ['oficina', 'Oficina'], ['medicamento', 'Medicamento']];
-  const K_BOD = 'lev-bodega', K_BOR = 'lev-borrador-v1', K_CAJ = 'lev-cajas-v1', K_ULT = 'lev-ultimo', K_INS = 'lev-insumos-v1', K_BODS = 'lev-bodegas-v1';
+  const K_BOD = 'lev-bodega', K_BOR = 'lev-borrador-v1', K_CAJ = 'lev-cajas-v1', K_ULT = 'lev-ultimo', K_INS = 'lev-insumos-v1', K_BODS = 'lev-bodegas-v1', K_TAGS = 'lev-tags-v1';
   const URL_QR = 'https://unpkg.com/html5-qrcode@2.3.8';   /* misma versión que index.html (DECISIONES 4.305: copia local pendiente) */
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const num = (v) => { const n = Number(v); return isFinite(n) ? n : 0; };
@@ -51,9 +51,10 @@
     if (sue) p.push(`${sue} sueltas`);
     return p.join(' + ');
   }
-  /** Lo que se lee o escribe → folio BUL: URL con #tag=, «BUL-2026-000845», 10 dígitos de la pistola o el N° corto (año en curso). */
+  /** Lo que se lee o escribe → folio BUL: URL con #t=<10 dígitos> (o #tag= antiguo), «BUL-2026-000845», 10 dígitos de la pistola o el N° corto (año en curso).
+   *  Una etiqueta de caja (#bulto=) no es un tag. */
   function folioTag(leido, anio) {
-    const t = String(leido || '').trim(); let m = /BUL-?(\d{4})-?(\d{6})/i.exec(t); if (m) return `BUL-${m[1]}-${m[2]}`;
+    const t = String(leido || '').trim(); if (/#bulto=/i.test(t)) return ''; let m = /BUL-?(\d{4})-?(\d{6})/i.exec(t); if (m) return `BUL-${m[1]}-${m[2]}`;
     const d = t.replace(/\D/g, ''); if (/^\d{10}$/.test(d)) return `BUL-${d.slice(0, 4)}-${d.slice(4)}`;
     if (/^\d{1,6}$/.test(d) && Number(d) > 0 && d === t.replace(/^N°?\s*/i, '')) return `BUL-${anio || new Date().getFullYear()}-${d.padStart(6, '0')}`;
     return '';
@@ -65,13 +66,13 @@
     const e = [], x = d || {}, s = x.estructura || {};
     if (!/^BUL-\d{4}-\d{6}$/.test(x.folio || '')) e.push('El número del tag no es válido.');
     if (!x.bodega || String(x.bodega).length > 120) e.push('Falta la bodega.');
-    if (!String(x.nombre || '').trim() || String(x.nombre).length > 200) e.push('Falta el producto.');
+    if (!String(x.nombre || '').trim() || String(x.nombre).length > 120) e.push('Falta el producto (máximo 120 letras).');
     if (x.nuevo && !TIPOS.some(t => t[0] === x.tipo)) e.push('Elige el tipo del producto nuevo.');
     if (typeof x.lote !== 'string' || !x.lote.trim() || x.lote.length > 60) e.push('Falta el lote (o «No trae lote»).');
     if (!(x.vence === 'N/A' || (/^\d{4}-(0[1-9]|1[0-2])$/.test(x.vence || '')))) e.push('El vencimiento debe ser mes y año.');
     if (!['CERRADA', 'ABIERTA'].includes(s.estado)) e.push('Falta decir si la caja está cerrada o abierta.');
     const ints = Array.isArray(s.interiores) ? s.interiores : null;
-    if (!ints || ints.length > 500) e.push('Las cajas interiores no son válidas (máximo 500).');
+    if (!ints || ints.length > 200) e.push('Las cajas interiores no son válidas (máximo 200).');
     else if (ints.some(i => !i || !Number.isInteger(i.q) || i.q < 0 || i.q > TOPE || typeof i.abierta !== 'boolean')) e.push('Una caja interior tiene una cantidad no válida.');
     if (!Number.isInteger(s.sueltas) || s.sueltas < 0 || s.sueltas > TOPE) e.push('Las unidades sueltas no son válidas.');
     if (!Number.isInteger(x.total) || x.total < 1 || x.total > TOPE) e.push('El total debe ser entre 1 y 1.000.000 unidades.');
@@ -134,19 +135,25 @@
   function armarDoc(dr, u, sis) {
     const est = dr.estructura || { estado: 'CERRADA', interiores: [], sueltas: 0 }, s = sis || {};
     const d = { folio: dr.folio, bodega: dr.bodega && dr.bodega.name || '', bodegaId: dr.bodega && dr.bodega.id || '', insumoId: dr.prod && dr.prod.insumoId || null, nombre: String(dr.prod && dr.prod.nombre || '').trim(), nuevo: !!(dr.prod && dr.prod.nuevo), tipo: dr.prod && dr.prod.nuevo ? dr.prod.tipo || '' : null,
-      controlado: dr.prod && dr.prod.controlado || null, lote: dr.sinLote ? 'S/L' : String(dr.lote || '').trim().toUpperCase(), vence: dr.sinLote ? 'N/A' : (dr.vence || 'N/A'), sinLote: !!dr.sinLote,
+      controlado: dr.prod && dr.prod.controlado || null, lote: dr.sinLote ? 'S/L' : String(dr.lote || '').trim().toUpperCase(), vence: /^\d{4}-(0[1-9]|1[0-2])$/.test(dr.vence || '') ? dr.vence : 'N/A', sinLote: !!dr.sinLote,
       estructura: { estado: est.estado, interiores: (est.interiores || []).map(x => ({ q: ent(x.q), abierta: !!x.abierta })), sueltas: ent(est.sueltas) }, total: totalEstructura(est),
       contadoPor: u.correo || '', contadoNombre: u.nombre || '', en: new Date().toISOString(), estado: 'REGISTRADO', app: VERSION,
       baseSistema: s.base == null ? null : ent(s.base), baseSistemaEn: s.en || new Date().toISOString(), deudaSistema: ent(s.deuda) };
-    d.nombreNorm = norm(d.nombre); d.huella = huella(d); return d;
+    if (d.controlado) { delete d.baseSistema; delete d.deudaSistema; }   /* Decker: en controlados no se guarda lo que marca el sistema */
+    d.nombreNorm = norm(d.nombre).slice(0, 120); d.huella = huella(d); return d;
   }
   /** Al corregir: solo los campos que cambian (updateDoc). Nunca estado de bodega, autor ni folio. */
   const EDITABLES = ['bodega', 'bodegaId', 'insumoId', 'nombre', 'nombreNorm', 'nuevo', 'tipo', 'controlado', 'lote', 'vence', 'sinLote', 'estructura', 'total', 'contadoNombre', 'baseSistema', 'baseSistemaEn', 'deudaSistema', 'huella', 'app'];
-  function cambiosDe(antes, d) { const c = {}; EDITABLES.forEach(k => { if (JSON.stringify(antes ? antes[k] : undefined) !== JSON.stringify(d[k])) c[k] = d[k]; }); c.estado = 'REGISTRADO'; c.editadoEn = new Date().toISOString(); return c; }
-  /** Resumen del turno a partir de la lista de cajas del teléfono. */
+  function cambiosDe(antes, d) { const c = {}; EDITABLES.forEach(k => { if (d[k] === undefined) return; if (JSON.stringify(antes ? antes[k] : undefined) !== JSON.stringify(d[k])) c[k] = d[k]; }); c.estado = 'REGISTRADO'; c.editadoEn = new Date().toISOString(); return c; }
+  /** Cajas del turno: las de este usuario en las últimas 12 horas (un turno de noche cruza la medianoche). */
+  const TURNO_MS = 12 * 3600 * 1000;
+  function delTurno(cajas, u, ahora) { const t0 = (ahora || Date.now()) - TURNO_MS; return (cajas || []).filter(c => c && c.doc && c.doc.contadoPor === u && new Date(c.doc.en).getTime() >= t0); }
+  /** Resumen del turno: cajas, productos, lotes, nuevos, por enviar, enviadas y unidades por producto y lote. */
   function resumen(cajas) {
-    const l = cajas || [], s = (f) => new Set(l.map(f)).size;
-    return { cajas: l.length, productos: s(c => norm(c.doc.nombre)), lotes: s(c => norm(c.doc.nombre) + '|' + c.doc.lote + '|' + c.doc.vence), nuevos: s(c => c.doc.nuevo ? norm(c.doc.nombre) : null) - (l.some(c => !c.doc.nuevo) ? 1 : 0), porEnviar: l.filter(c => c.estado === 'pend').length, enviadas: l.filter(c => c.estado === 'ok').length, revisar: l.filter(c => c.estado === 'revisar').length, reconteo: l.filter(c => c.srv === 'RECONTEO').length };
+    const l = cajas || [], s = (f) => new Set(l.map(f).filter(Boolean)).size, sub = new Map();
+    l.forEach(c => { const k = norm(c.doc.nombre) + '|' + c.doc.lote + '|' + c.doc.vence, e = sub.get(k) || { nombre: c.doc.nombre, lote: c.doc.lote, vence: c.doc.vence, cajas: 0, unidades: 0 }; e.cajas++; e.unidades += ent(c.doc.total); sub.set(k, e); });
+    return { cajas: l.length, productos: s(c => norm(c.doc.nombre)), lotes: sub.size, nuevos: s(c => c.doc.nuevo ? norm(c.doc.nombre) : ''), porEnviar: l.filter(c => c.estado === 'pend').length, enviadas: l.filter(c => c.estado === 'ok').length, revisar: l.filter(c => c.estado === 'revisar').length, reconteo: l.filter(c => c.srv === 'RECONTEO').length,
+      subtotales: [...sub.values()].sort((a, b) => a.nombre.localeCompare(b.nombre, 'es') || String(a.vence).localeCompare(String(b.vence))) };
   }
 
   // ---------------- estado ----------------
@@ -186,6 +193,17 @@
     if (!b) return; const f = fsx();
     try { const sn = await conTiempo(f.getDocs(f.query(f.collection(dbx(), COL), f.where('bodega', '==', b.name), f.limit(3000))), 8000), m = new Map(); sn.forEach(x => m.set(x.id, x.data())); srv = m; srvBod = b.name; } catch (e) { /* sin internet ni copia: solo lo del teléfono */ }
   }
+  /** Folios de tags «CONTADO» reservados (para validar un tag sin internet). */
+  async function cargarTags() {
+    const f = fsx(), sn = await conTiempo(f.getDocs(f.query(f.collection(dbx(), 'Contadores'), f.where('tipo', '==', 'tag-conteo'), f.limit(5000))), 15000), l = [];
+    sn.forEach(x => { const d = x.data() || {}; if (d.folio) l.push(d.folio); }); ls.set(K_TAGS, { al: new Date().toISOString(), l }); return l;
+  }
+  /** ¿Qué es este folio? 'tag' | 'caja' | 'otro' | 'no' (no existe) | '?' (sin internet y sin lista guardada). */
+  async function tipoFolio(fo) {
+    const f = fsx();
+    try { const sn = await conTiempo(f.getDoc(f.doc(f.collection(dbx(), 'Contadores'), 'bulto-' + fo)), 2500); if (!sn.exists()) return 'no'; const t = (sn.data() || {}).tipo; return t === 'tag-conteo' ? 'tag' : t === 'bulto' ? 'caja' : 'otro'; }
+    catch (e) { const c = ls.get(K_TAGS); if (c && Array.isArray(c.l)) return c.l.includes(fo) ? 'tag' : 'no'; return '?'; }
+  }
   const esDeBodega = (i, b) => !!b && ((i.bodegaId && i.bodegaId === b.id) || norm(i.location) === norm(b.name));
   /** Productos sin repetir (por nombre); el registro de esta bodega primero. */
   function catalogo(b) {
@@ -221,9 +239,18 @@
   }
 
   // ---------------- abrir un tag ----------------
-  async function abrirTag(fo) {
+  async function abrirTag(fo, alternativas) {
     const b = bodega(); if (!b) { pendTag = fo; toast('Elige la bodega', 'Primero elige en qué bodega estás contando.', 'warning'); ir('p0'); return; }
-    pendTag = ''; const loc = cajas().find(c => c.folio === fo), f = fsx(); let d = null;
+    pendTag = ''; const loc0 = cajas().find(c => c.folio === fo);
+    if (!loc0) {
+      let tf = await tipoFolio(fo);
+      /* N° corto: si no existe en el año en curso, se prueba con el año anterior */
+      for (const alt of (alternativas || [])) { if (tf !== 'no') break; const t2 = await tipoFolio(alt); if (t2 !== 'no') { fo = alt; tf = t2; } }
+      if (tf === 'caja') { vib(200); toast('No es un tag', `N° ${esc(numTag(fo))}: esta es la etiqueta de una caja, no un tag «CONTADO».`, 'warning'); return; }
+      if (tf === 'no' || tf === 'otro') { vib(200); toast('Tag no reconocido', `N° ${esc(numTag(fo))} no es un tag «CONTADO» reservado. Revisa el número.`, 'warning'); return; }
+      if (tf === '?') toast('Sin verificar', 'Sin internet no pude confirmar que sea un tag reservado: bodega lo revisará al enviar.', 'info');
+    }
+    const loc = cajas().find(c => c.folio === fo), f = fsx(); let d = null;
     try { const sn = await conTiempo(f.getDoc(f.doc(f.collection(dbx(), COL), fo)), 2500); if (sn.exists()) d = sn.data(); } catch (e) { /* sin internet: se sigue; al guardar, la regla impide pisar una caja de otro */ }
     if (loc && (!d || loc.estado === 'pend')) d = { ...loc.doc, estado: loc.srv || loc.doc.estado };   /* lo del teléfono manda si aún no se envía */
     if (d) { vib(40); ir('usado', { folio: fo, usado: d }); return; }
@@ -235,14 +262,14 @@
   function franja(dr, conEsta) {
     const p = dr.prod; if (!p || p.controlado) return '';
     const b = dr.bodega, reg = (insumos || []).find(i => i.id === p.insumoId && esDeBodega(i, b)) || (insumos || []).find(i => esDeBodega(i, b) && norm(i.name) === norm(p.nombre));
-    const extra = conEsta ? { folio: dr.folio, bodega: b.name, insumoId: p.insumoId, nombre: p.nombre, lote: dr.sinLote ? 'S/L' : dr.lote, vence: dr.sinLote ? 'N/A' : dr.vence, total: totalEstructura(dr.estructura) } : null;
+    const extra = conEsta ? { folio: dr.folio, bodega: b.name, insumoId: p.insumoId, nombre: p.nombre, lote: dr.sinLote ? 'S/L' : dr.lote, vence: dr.vence || 'N/A', total: totalEstructura(dr.estructura) } : null;
     const cont = contadosDe(p.nombre, p.insumoId, b, extra);
     if (!reg || !lotesDe(reg).length) { const t = cont.reduce((s, x) => s + x.quantity, 0); return `<div class="lv-franja"><b>Sin stock en el sistema: partes de 0.</b>${t ? `<span>Contado en esta bodega: <b>${t}</b> u.${conEsta ? ' (con esta caja)' : ''}</span>` : ''}</div>`; }
     const l = avanceLotes(lotesDe(reg), cont);
-    return `<div class="lv-franja"><small>Avance en ${esc(b.name)}${conEsta ? ' (con esta caja)' : ''}</small>${l.map(x => `<div class="lv-fr ${x.delta === 0 ? 'ok' : x.delta < 0 ? 'falta' : 'sobra'}"><b>${esc(x.batch)}</b><span>${esc(mesCL(x.vence))}</span><span>Sistema ${x.sistema} · contado ${x.contado} · ${x.delta === 0 ? 'cuadra' : x.delta < 0 ? 'faltan ' + -x.delta : 'sobran ' + x.delta}</span></div>`).join('')}</div>`;
+    return `<div class="lv-franja"><small>Avance en ${esc(b.name)}${conEsta ? ' (con esta caja)' : ''}</small>${l.map(x => `<div class="lv-fr ${x.delta === 0 ? 'ok' : x.delta < 0 ? 'falta' : 'sobra'}"><b>${esc(x.batch)}</b><span>${esc(mesCL(x.vence))}</span><span>Sistema ${x.sistema} u. · contado ${x.contado} u. · ${x.delta === 0 ? 'cuadra' : x.delta < 0 ? 'faltan ' + -x.delta + ' u.' : 'sobran ' + x.delta + ' u.'}</span></div>`).join('')}</div>`;
   }
-  const venceTxt = (dr) => dr.sinLote ? 'S/L · sin vencimiento' : `Lote ${esc(dr.lote)} · vence ${esc(mesCL(dr.vence))}`;
-  const avisoVencido = (dr) => !dr.sinLote && vencido(dr.vence) ? '<p class="lv-vencido">VENCIDO: sepáralo</p>' : '';
+  const venceTxt = (dr) => `${dr.sinLote ? 'S/L' : 'Lote ' + esc(dr.lote)} · ${/^\d{4}-\d{2}$/.test(dr.vence || '') ? 'vence ' + esc(mesCL(dr.vence)) : 'sin vencimiento'}`;
+  const avisoVencido = (dr) => vencido(dr.vence) ? '<p class="lv-vencido">VENCIDO: sepáralo</p>' : '';
 
   function pintarLogin(r, err) {
     r.innerHTML = `<div class="si-wrap lv"><div class="lv-cab"><span class="lv-cab-t"><small>Levantamiento de inventario</small><b>Ingresa con tu usuario</b></span><button type="button" class="lv-btn lv-btn--sec lv-btn--chico" data-lv-salir>Volver</button></div>
@@ -251,14 +278,14 @@
       <p class="sp-err" id="lv-err">${esc(err || '')}</p><button type="submit" class="lv-btn">Ingresar</button></form></div>`;
   }
   function pintarP0(r, dr) {
-    const b = bodega(), u = usuario(), hoy = new Date().toDateString(), l = cajas().filter(c => c.doc.contadoPor === u && new Date(c.doc.en).toDateString() === hoy), pend = cajas().filter(c => c.estado !== 'ok').length;
+    const b = bodega(), u = usuario(), l = delTurno(cajas(), u), pend = cajas().filter(c => c.estado === 'pend' && c.doc.contadoPor === u).length;
     const enCursoTag = dr.folio && ['p1', 'nuevo', 'p2', 'p3', 'p4'].includes(dr.vistaAntes);
     r.innerHTML = `<div class="si-wrap lv"><div class="lv-cab"><span class="lv-cab-t"><small>Levantamiento · ${esc(nombreUsuario || u)}</small><b>Inicio del turno</b></span><button type="button" class="lv-btn lv-btn--sec lv-btn--chico" data-lv-salir>Salir</button></div>
       <label class="si-l">Bodega donde cuentas<select id="lv-bod" class="si-in lv-in"><option value="">Elige la bodega…</option>${(bodegas || []).map(x => `<option value="${esc(x.id)}"${b && b.id === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
       ${enCursoTag ? `<button type="button" class="lv-btn lv-btn--sec" data-lv-seguir>Seguir con el tag N° ${esc(numTag(dr.folio))}</button>` : ''}
       <button type="button" class="lv-btn lv-btn--grande" data-lv-cam${b ? '' : ' disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>ESCANEAR TAG</button>
       <form class="lv-fila" data-lv-num><input id="lv-num" class="si-in lv-in" inputmode="numeric" placeholder="o escribe el N° del tag" value="${esc(pendTag ? numTag(pendTag) : '')}" autocomplete="off" aria-label="Número del tag"><button type="submit" class="lv-btn"${b ? '' : ' disabled'}>Abrir</button></form>
-      <div class="lv-hoy"><span>Contadas hoy: <b>${l.length}</b>${pend ? ` · <b class="lv-pend">${pend}</b> por enviar` : ''}</span><button type="button" class="lv-lnk" data-lv-ir="resumen">Ver resumen</button></div>
+      <div class="lv-hoy"><span>Contadas en el turno: <b>${l.length}</b>${pend ? ` · <b class="lv-pend">${pend}</b> por enviar` : ''}</span><button type="button" class="lv-lnk" data-lv-ir="resumen">Ver resumen</button></div>
       <button type="button" class="lv-btn lv-btn--sec" data-lv-prep>Preparar sin internet</button><p class="lv-s">${(() => { const c = ls.get(K_INS); return c && c.al ? `Productos guardados en el teléfono: ${(c.l || []).length} (al ${esc(hora(c.al))}).` : 'Antes de ir a una bodega sin señal, toca «Preparar sin internet» con conexión.'; })()}</p></div>`;
   }
   function pintarUsado(r, dr) {
@@ -271,7 +298,7 @@
   function pintarP1(r, dr) {
     const ult = ls.get(K_ULT), lista = buscar(catalogo(dr.bodega), busca), IM = window.SAR_Imagenes;
     r.innerHTML = `<div class="si-wrap lv">${cab(dr)}<h2 class="lv-t">¿Qué producto es?</h2>
-      ${ult && ult.prod ? `<button type="button" class="lv-btn lv-btn--ult" data-lv-mismo><span>MISMO PRODUCTO Y LOTE</span><small>${esc(ult.prod.nombre)} · ${ult.sinLote ? 'S/L' : 'lote ' + esc(ult.lote) + ' · ' + esc(mesCL(ult.vence))}</small></button>` : ''}
+      ${ult && ult.prod ? `<button type="button" class="lv-btn lv-btn--ult" data-lv-mismo><span>MISMO PRODUCTO Y LOTE</span><small>${esc(ult.prod.nombre)} · ${ult.sinLote ? 'S/L' : 'lote ' + esc(ult.lote)} · ${esc(mesCL(ult.vence))}</small></button><button type="button" class="lv-btn lv-btn--sec" data-lv-mismo-otro>Mismo producto, otro lote</button>` : ''}
       <label class="si-l">Buscar<input id="lv-bus" class="si-in lv-in" type="search" value="${esc(busca)}" placeholder="Escribe parte del nombre de la caja…" autocomplete="off" enterkeyhint="search"></label>
       <div class="lv-res" id="lv-res">${resHTML(lista, IM)}</div>
       <button type="button" class="lv-btn lv-btn--sec" data-lv-nuevo>No está: producto nuevo</button></div>`;
@@ -283,6 +310,7 @@
     r.innerHTML = `<div class="si-wrap lv">${cab(dr)}<h2 class="lv-t">Producto nuevo</h2><p class="lv-s">Escribe el nombre <b>tal como dice la caja</b> (qué es, marca, medida).</p>
       <label class="si-l">Nombre<input id="lv-nn" class="si-in lv-in" value="${esc(n.nombre)}" autocomplete="off"></label>
       <p class="lv-q">¿De qué tipo es?</p><div class="lv-g2">${TIPOS.map(([k, t]) => `<button type="button" class="lv-btn lv-btn--op${n.tipo === k ? ' on' : ''}" data-lv-tipo="${k}" aria-pressed="${n.tipo === k}">${t}</button>`).join('')}</div>
+      ${n.tipo === 'medicamento' ? `<p class="lv-q">¿Es controlado?</p><div class="lv-g3">${[['si', 'Sí'], ['no', 'No'], ['revisar', 'No sé']].map(([k, t]) => `<button type="button" class="lv-btn lv-btn--op${n.ctl === k ? ' on' : ''}" data-lv-ctl="${k}" aria-pressed="${n.ctl === k}">${t}</button>`).join('')}</div>` : ''}
       <div class="lv-g2"><button type="button" class="lv-btn lv-btn--sec" data-lv-ir="p1">Volver</button><button type="button" class="lv-btn" data-lv-nuevo-ok>Seguir</button></div></div>`;
   }
   function pintarP2(r, dr) {
@@ -293,11 +321,12 @@
       <h2 class="lv-t">¿Qué lote es?</h2>
       ${lotes.length ? `<div class="lv-lotes">${lotes.map((x, i) => `<button type="button" class="lv-btn lv-btn--lote" data-lv-lote="${i}"><b>${esc(x.lote)}</b><span>${esc(mesCL(x.mes))}${vencido(x.mes) ? ' · <em class="lv-rojo">VENCIDO</em>' : ''}</span>${p.controlado ? '' : `<small>${x.quantity} u. en el sistema</small>`}</button>`).join('')}</div>` : ''}
       ${lotes.length && !abierto ? '<button type="button" class="lv-btn lv-btn--sec" data-lv-otrolote>+ Otro lote</button>' : ''}
-      ${abierto ? `<div class="lv-card"><b>${lotes.length ? 'Otro lote' : 'Lote y vencimiento'}</b><label class="si-l">Lote (como dice la caja)<input id="lv-lote" class="si-in lv-in" value="${esc(ol.lote || '')}" autocomplete="off" autocapitalize="characters"></label>
+      ${abierto ? `<div class="lv-card"><b>${lotes.length ? 'Otro lote' : 'Lote y vencimiento'}</b>${ol.sl ? '<p class="lv-q">Lote: <b>S/L</b> (sin lote) · elige el vencimiento</p><button type="button" class="lv-lnk" data-lv-conlote>Sí trae lote</button>' : `<label class="si-l">Lote (como dice la caja)<input id="lv-lote" class="si-in lv-in" value="${esc(ol.lote || '')}" autocomplete="off" autocapitalize="characters"></label>`}
         <p class="lv-s">Mes de vencimiento</p><div class="lv-meses">${Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0')).map(m => `<button type="button" class="lv-k${ol.mes === m ? ' on' : ''}" data-lv-mes="${m}">${m}</button>`).join('')}</div>
-        <p class="lv-s">Año</p><div class="lv-anios">${Array.from({ length: 8 }, (_, i) => String(anio + i)).map(a => `<button type="button" class="lv-k${ol.anio === a ? ' on' : ''}" data-lv-anio="${a}">${a}</button>`).join('')}<button type="button" class="lv-k${ol.anio && Number(ol.anio) < anio ? ' on' : ''}" data-lv-anio="${anio - 1}">${anio - 1}</button></div>
+        <p class="lv-s">Año</p><div class="lv-anios">${Array.from({ length: 9 }, (_, i) => String(anio - 1 + i)).map(a => `<button type="button" class="lv-k${ol.anio === a ? ' on' : ''}" data-lv-anio="${a}">${a}</button>`).join('')}</div>
         ${venceOl && vencido(venceOl) ? '<p class="lv-vencido">VENCIDO: sepáralo</p>' : ''}
-        <button type="button" class="lv-btn" data-lv-ol-ok>Seguir con este lote</button><button type="button" class="lv-btn lv-btn--sec" data-lv-sinlote>No trae lote / vencimiento</button></div>` : ''}
+        <button type="button" class="lv-btn" data-lv-ol-ok>Seguir con este lote</button>
+        <div class="lv-g2">${ol.sl ? '' : '<button type="button" class="lv-btn lv-btn--sec" data-lv-sl>Sin lote</button>'}<button type="button" class="lv-btn lv-btn--sec" data-lv-sinlote>Sin lote ni vencimiento</button></div></div>` : ''}
       <button type="button" class="lv-lnk" data-lv-ir="p1">Cambiar producto</button></div>`;
     if (IM) IM.rellenar(r);
   }
@@ -316,14 +345,15 @@
     'ch-sue': ['¿Cuántas unidades sueltas hay fuera de las cajas chicas?', 'sue'],
     'su-n': ['¿Cuántas unidades sueltas hay?', 'suN']
   };
+  const esCajas = (paso) => ['cerr-n', 'ch-n', 'ch-nab'].includes(paso);
   const valorDe = (p) => { const c = PREG[p.paso][1]; return c === 'abq' ? (p.abq || [])[ent(p.i)] : p[c]; };
   function pintarP3(r, dr) {
     const p = dr.p3 || { paso: 'estado' }, pr = PREG[p.paso] || PREG.estado, botones = Array.isArray(pr[1]);
     const preg = p.paso === 'ch-abq' ? `Caja chica abierta ${ent(p.i) + 1} de ${ent(p.nab)}: ¿cuántas unidades quedan?` : pr[0];
     if (!botones && p.tmp == null) { const v = valorDe(p); p.tmp = v != null && v !== '' ? String(v) : (p.paso === 'ch-sue' ? '0' : ''); p.pre = !!p.tmp; dr.p3 = p; setBor(dr); }   /* lo de antes (o el 0): la primera tecla lo reemplaza */
     r.innerHTML = `<div class="si-wrap lv">${cab(dr, venceTxt(dr))}${avisoVencido(dr)}<div class="lv-paso"><p class="lv-q lv-q--g">${esc(preg)}</p>
-      ${botones ? `<div class="lv-g2">${pr[1].map(([t, k, v]) => `<button type="button" class="lv-btn lv-btn--op${p[k] === v && p.paso !== 'estado' ? '' : ''}" data-lv-resp="${esc(String(v))}">${esc(t)}</button>`).join('')}</div>`
-      : `<output class="lv-disp" id="lv-disp">${esc(p.tmp || '0')}</output><small class="lv-s">${p.paso === 'cerr-n' || p.paso === 'ch-n' || p.paso === 'ch-nab' ? 'cajas' : 'unidades'}</small>
+      ${botones ? `<div class="lv-g2">${pr[1].map(([t, k, v]) => `<button type="button" class="lv-btn lv-btn--op${p[k] === v ? ' on' : ''}" data-lv-resp="${esc(String(v))}" aria-pressed="${p[k] === v}">${esc(t)}</button>`).join('')}</div>`
+      : `<output class="lv-disp${esCajas(p.paso) ? ' lv-disp--cajas' : ''}"><b id="lv-disp">${esc(p.tmp || '0')}</b> <span>${esCajas(p.paso) ? 'CAJAS' : 'UNIDADES'}</span></output>
         ${p.paso === 'su-n' ? '<div class="lv-g2"><button type="button" class="lv-btn lv-btn--sec" data-lv-mas="10">+10</button><button type="button" class="lv-btn lv-btn--sec" data-lv-mas="50">+50</button></div>' : ''}
         <div class="lv-tec" role="group" aria-label="Teclado numérico">${['1', '2', '3', '4', '5', '6', '7', '8', '9', '⌫', '0', 'OK'].map(k => `<button type="button" class="lv-tk${k === 'OK' ? ' lv-tk--ok' : ''}" data-lv-tk="${k}" aria-label="${k === '⌫' ? 'Borrar' : k}">${k}</button>`).join('')}</div>`}
       </div><button type="button" class="lv-btn lv-btn--sec" data-lv-atras>Atrás</button></div>`;
@@ -339,18 +369,25 @@
   function pintarP5(r, dr) {
     const g = dr.guardado || {}, d = g.doc || {}, e = d.estructura || {}, ab = e.estado === 'ABIERTA' || (e.interiores || []).some(x => x.abierta);
     const ini = String(d.contadoNombre || d.contadoPor || '').split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(x => x[0].toUpperCase()).join('');
-    r.innerHTML = `<div class="si-wrap lv"><div class="lv-ok"><span aria-hidden="true">✓</span><p>Tag <b>N° ${esc(numTag(d.folio))}</b> queda a nombre de <b>${esc(d.contadoNombre || d.contadoPor)}</b></p><small>${g.estado === 'ok' ? 'Enviado a bodega.' : g.estado === 'revisar' ? 'Bodega no lo aceptó: queda «para revisar» en el resumen.' : 'Guardado en el teléfono: se enviará solo al volver la señal.'}</small></div>
-      <div class="lv-card"><b>Escribe a mano en el tag:</b><ul class="lv-lista"><li>Total: <b>${num(d.total)} u.</b></li><li>${esc(estructuraCorta(e))}</li><li>Contó: <b>${esc(ini)}</b> · ${esc(new Date(d.en || Date.now()).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' }))}</li>${ab ? '<li>Marca <b>☐ ABIERTA</b></li>' : ''}</ul>
-      <p class="lv-s">Pega el tag en <b>2 caras</b> de la caja.</p></div>
+    /* Penny: si el envío no está confirmado, no se manda a escribir el tag (otro pudo contarlo, o bodega puede rechazarlo) */
+    const anotar = g.estado === 'ok' ? `<div class="lv-card"><b>Escribe a mano en el tag:</b><ul class="lv-lista"><li>Insumo: <b>${esc(d.nombre)}</b></li><li>Lote: <b>${esc(d.lote)}</b> · Vence: <b>${esc(mesCL(d.vence))}</b></li><li>Total: <b>${num(d.total)} u.</b></li><li>${esc(estructuraCorta(e))}</li><li>Contó: <b>${esc(ini)}</b> · ${esc(new Date(d.en || Date.now()).toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit' }))}</li>${ab ? '<li>Marca <b>☐ ABIERTA</b></li>' : ''}</ul>
+      <p class="lv-s">Pega el tag en <b>2 caras</b> de la caja.</p></div>`
+      : g.estado === 'revisar' ? '<p class="lv-alto">NO escribas el tag: bodega no aceptó esta caja. Sepárala y avisa a bodega.</p>'
+      : '<p class="lv-alto">NO escribas todavía: pega el tag sin anotar · pendiente de confirmar</p><p class="lv-s">Cuando llegue a bodega te avisaré aquí y en el resumen.</p>';
+    r.innerHTML = `<div class="si-wrap lv"><div class="lv-ok${g.estado === 'ok' ? '' : ' lv-ok--pend'}"><span aria-hidden="true">${g.estado === 'ok' ? '✓' : '…'}</span><p>Tag <b>N° ${esc(numTag(d.folio))}</b> queda a nombre de <b>${esc(d.contadoNombre || d.contadoPor)}</b></p><small>${g.estado === 'ok' ? 'Enviado a bodega.' : g.estado === 'revisar' ? 'Bodega no lo aceptó: queda «para revisar» en el resumen.' : 'Guardado en el teléfono: se enviará solo al volver la señal.'}</small></div>
+      ${anotar}
       <button type="button" class="lv-btn lv-btn--grande" data-lv-sig>SIGUIENTE CAJA</button></div>`;
   }
   function pintarResumen(r) {
-    const u = usuario(), l = cajas().filter(c => c.doc.contadoPor === u).slice().reverse(), s = resumen(l);
-    r.innerHTML = `<div class="si-wrap lv"><div class="lv-cab"><span class="lv-cab-t"><small>Levantamiento</small><b>Resumen del turno</b></span><button type="button" class="lv-btn lv-btn--sec lv-btn--chico" data-lv-ir="p0">Volver</button></div>
-      <div class="lv-res-g">${[['Cajas', s.cajas], ['Productos', s.productos], ['Lotes', s.lotes], ['Productos nuevos', Math.max(0, s.nuevos)], ['Por enviar', s.porEnviar], ['Enviadas', s.enviadas]].map(([t, v]) => `<div><b>${v}</b><small>${t}</small></div>`).join('')}</div>
-      ${s.reconteo ? `<p class="lv-vencido">Bodega pidió recontar ${s.reconteo} caja(s).</p>` : ''}${s.revisar ? `<p class="lv-vencido">${s.revisar} caja(s) para revisar: bodega no las aceptó.</p>` : ''}
+    const u = usuario(), l = delTurno(cajas(), u).reverse(), s = resumen(l), enTurno = new Set(l.map(c => c.folio)), viejas = cajas().filter(c => c.doc.contadoPor === u && c.estado !== 'ok' && !enTurno.has(c.folio));
+    const fila = (c) => `<div class="lv-caja lv-caja--${esc(c.estado)}"><b>N° ${esc(numTag(c.folio))}</b><span>${esc(c.doc.nombre)}<small>${c.doc.sinLote ? 'S/L' : 'Lote ' + esc(c.doc.lote)} · ${esc(mesCL(c.doc.vence))} · ${esc(estructuraCorta(c.doc.estructura))}</small>${c.estado === 'revisar' ? `<small class="lv-rojo">${esc(c.err || 'Bodega no la aceptó')} · Separa la caja y avisa a bodega.</small>` : ''}</span><span class="lv-caja-t">${num(c.doc.total)} u.<small>${c.srv === 'RECONTEO' ? 'Bodega pidió recontar' : c.estado === 'ok' ? (c.srv && c.srv !== 'REGISTRADO' ? esc(c.srv.toLowerCase()) : 'Enviada') : c.estado === 'revisar' ? 'Para revisar' : 'Por enviar'}</small>${c.srv === 'RECONTEO' && c.estado !== 'pend' ? `<button type="button" class="lv-btn lv-btn--chico" data-lv-recontar="${esc(c.folio)}">Recontar</button>` : ''}</span></div>`;
+    r.innerHTML = `<div class="si-wrap lv"><div class="lv-cab"><span class="lv-cab-t"><small>Levantamiento · últimas 12 horas</small><b>Resumen del turno</b></span><button type="button" class="lv-btn lv-btn--sec lv-btn--chico" data-lv-ir="p0">Volver</button></div>
+      <div class="lv-res-g">${[['Cajas', s.cajas], ['Productos', s.productos], ['Lotes', s.lotes], ['Productos nuevos', s.nuevos], ['Por enviar', s.porEnviar], ['Enviadas', s.enviadas]].map(([t, v]) => `<div><b>${v}</b><small>${t}</small></div>`).join('')}</div>
+      ${s.reconteo ? `<p class="lv-vencido">Bodega pidió recontar ${s.reconteo} caja(s).</p>` : ''}${s.revisar ? `<p class="lv-vencido">${s.revisar} caja(s) para revisar: sepáralas y avisa a bodega.</p>` : ''}
       ${s.porEnviar ? '<button type="button" class="lv-btn lv-btn--sec" data-lv-reint>Reintentar envío ahora</button>' : ''}
-      <div class="lv-cajas">${l.map(c => `<div class="lv-caja lv-caja--${esc(c.estado)}"><b>N° ${esc(numTag(c.folio))}</b><span>${esc(c.doc.nombre)}<small>${c.doc.sinLote ? 'S/L' : 'Lote ' + esc(c.doc.lote) + ' · ' + esc(mesCL(c.doc.vence))} · ${esc(estructuraCorta(c.doc.estructura))}</small></span><span class="lv-caja-t">${num(c.doc.total)} u.<small>${c.srv === 'RECONTEO' ? 'Bodega pidió recontar' : c.estado === 'ok' ? (c.srv && c.srv !== 'REGISTRADO' ? esc(c.srv.toLowerCase()) : 'Enviada') : c.estado === 'revisar' ? 'Para revisar' : 'Por enviar'}</small>${c.srv === 'RECONTEO' && c.estado !== 'pend' ? `<button type="button" class="lv-btn lv-btn--chico" data-lv-recontar="${esc(c.folio)}">Recontar</button>` : ''}</span></div>`).join('') || '<p class="lv-s">Aún no cuentas cajas en este teléfono.</p>'}</div></div>`;
+      ${s.subtotales.length ? `<div class="lv-card"><b>Unidades por producto y lote</b><div class="lv-subt">${s.subtotales.map(x => `<div><span>${esc(x.nombre)}<small>${esc(x.lote)} · ${esc(mesCL(x.vence))} · ${x.cajas} caja${x.cajas === 1 ? '' : 's'}</small></span><b>${x.unidades} u.</b></div>`).join('')}</div></div>` : ''}
+      <div class="lv-cajas">${l.map(fila).join('') || '<p class="lv-s">No hay cajas tuyas en las últimas 12 horas.</p>'}</div>
+      ${viejas.length ? `<p class="lv-s">De turnos anteriores, sin cerrar:</p><div class="lv-cajas">${viejas.map(fila).join('')}</div>` : ''}</div>`;
   }
   async function pintar(r) {
     if (!r) return; r.classList.add('lv-root');
@@ -376,7 +413,7 @@
       const v = ent(p.tmp), c = pr[1];
       if (v > TOPE) { toast('Número muy grande', 'Revisa la cantidad (máximo 1.000.000).', 'warning'); return; }
       if (!v && !['ch-n', 'ch-sue'].includes(p.paso)) { toast('Falta el número', 'Escribe una cantidad mayor que 0.', 'warning'); return; }
-      if ((p.paso === 'cerr-n' || p.paso === 'ch-nab' || p.paso === 'ch-n') && v > 500) { toast('Demasiadas cajas', 'Máximo 500 cajas chicas por caja grande.', 'warning'); return; }
+      if ((p.paso === 'cerr-n' || p.paso === 'ch-nab' || p.paso === 'ch-n') && v > 200) { toast('Demasiadas cajas', 'Máximo 200 cajas chicas por caja grande.', 'warning'); return; }
       if (c === 'abq') { const a = (p.abq || []).slice(); a[ent(p.i)] = v; p.abq = a; } else p[c] = v;
     }
     const hist = (dr.hist || []).concat([{ ...dr.p3, tmp: undefined }]), sig = siguientePaso(p);
@@ -388,7 +425,7 @@
   /** Lo que marcaba el sistema para el lote de la caja (también en controlados): base, cuándo se leyó y la deuda del producto. */
   function sistemaDe(dr) {
     const p = dr.prod || {}, b = dr.bodega, reg = (insumos || []).find(i => p.insumoId && i.id === p.insumoId && esDeBodega(i, b)) || (p.nuevo ? null : (insumos || []).find(i => esDeBodega(i, b) && norm(i.name) === norm(p.nombre)));
-    return { base: baseDe(reg, dr.sinLote ? 'S/L' : dr.lote, dr.sinLote ? 'N/A' : dr.vence), en: insumosAl || new Date().toISOString(), deuda: reg ? num(reg.sobregiro) : 0 };
+    return { base: baseDe(reg, dr.sinLote ? 'S/L' : dr.lote, dr.vence || 'N/A'), en: insumosAl || new Date().toISOString(), deuda: reg ? num(reg.sobregiro) : 0 };
   }
   /** Escribe una caja: crear = setDoc (solo si no existe en el servidor); corregir = updateDoc con lo que cambia (la regla rechaza si ya fue aceptada). */
   function escribir(c) {
@@ -410,11 +447,13 @@
     const res = await Promise.race([pr.then(() => 'ok'), new Promise(x => setTimeout(() => x('cola'), 4000))]).catch(e => (esPermiso(e) ? 'revisar' : 'cola'));
     pr.then(() => marcar(d.folio, 'ok', null, 'REGISTRADO')).catch(e => { if (esPermiso(e)) { marcar(d.folio, 'revisar', String(e.code || e.message || e)); toast('Caja para revisar', `Bodega no aceptó el tag N° ${esc(numTag(d.folio))}. Queda en el resumen.`, 'error'); } });
     if (res === 'revisar') marcar(d.folio, 'revisar');
+    if (res === 'cola') { const l2 = cajas(), c2 = l2.find(x => x.folio === d.folio); if (c2 && c2.estado === 'pend') { c2.avisar = true; setCajas(l2); } }   /* P5 dijo «no escribas todavía»: avisar cuando llegue */
     ls.set(K_ULT, { prod: dr.prod, lote: dr.lote, vence: dr.vence, sinLote: dr.sinLote }); vib([60, 40, 60]);
     guardando = false; busca = ''; otroLote = false;
     ir('p5', { guardado: { doc: entrada.doc, estado: res }, p3: null, p3prev: null, estructura: null, editando: false, orig: null, hist: [] });
   }
-  function marcar(fo, estado, err, srvEstado) { const l = cajas(), c = l.find(x => x.folio === fo); if (!c) return; c.estado = estado; if (err) c.err = err; else delete c.err; if (srvEstado) c.srv = srvEstado; if (estado === 'ok') delete c.campos; setCajas(l); const dr = bor(); if (dr.vista === 'p5' && dr.guardado && dr.guardado.doc && dr.guardado.doc.folio === fo) { dr.guardado.estado = estado; setBor(dr); } if (mostrar && ['p0', 'resumen', 'p5'].includes(dr.vista)) repintar(); }
+  function marcar(fo, estado, err, srvEstado) { const l = cajas(), c = l.find(x => x.folio === fo); if (!c) return; const antes = c.estado; c.estado = estado;
+    if (antes === 'pend' && estado === 'ok' && c.avisar) { delete c.avisar; vib([40, 40, 40]); toast('Tag confirmado', `N° ${esc(numTag(fo))} llegó a bodega: ya puedes anotarlo en el tag.`, 'success'); } if (err) c.err = err; else delete c.err; if (srvEstado) c.srv = srvEstado; if (estado === 'ok') delete c.campos; setCajas(l); const dr = bor(); if (dr.vista === 'p5' && dr.guardado && dr.guardado.doc && dr.guardado.doc.folio === fo) { dr.guardado.estado = estado; setBor(dr); } if (mostrar && ['p0', 'resumen', 'p5'].includes(dr.vista)) repintar(); }
   /** Reenvía lo que quedó en el teléfono. Crear: si ya existe en el servidor y es mía, llegó (no se pisa: bodega pudo cambiar su estado).
    *  Corregir: updateDoc; si la regla lo rechaza (ya aceptada), queda «para revisar» y no se reintenta. */
   let reintentando = false;
@@ -438,7 +477,7 @@
   function corregir(d) { const p3 = respuestasDe(d.estructura); ir('p4', { folio: d.folio, bodega: (bodegas || []).find(b => b.name === d.bodega || b.id === d.bodegaId) || bodega(), prod: { insumoId: d.insumoId || null, nombre: d.nombre, nuevo: !!d.nuevo, tipo: d.tipo || null, controlado: d.controlado || null, codigoMP: '' }, lote: d.lote, vence: d.vence, sinLote: !!d.sinLote, estructura: d.estructura, p3, p3prev: p3, editando: true, orig: d, usado: null, hist: [] }); }
   async function preparar(btn) {
     btn.disabled = true; btn.textContent = 'Descargando…';
-    try { bodegas = null; await cargarBodegas(); const l = await cargarInsumos(true); await cargarConteos(bodega()); cargarLibQR().catch(() => {}); if (window.SAR_Imagenes && window.SAR_Imagenes.cargar) window.SAR_Imagenes.cargar().catch(() => {});
+    try { bodegas = null; await cargarBodegas(); const l = await cargarInsumos(true); await cargarConteos(bodega()); await cargarTags().catch(() => {}); cargarLibQR().catch(() => {}); if (window.SAR_Imagenes && window.SAR_Imagenes.cargar) window.SAR_Imagenes.cargar().catch(() => {});
       toast('Listo sin internet', `${l.length} productos y sus lotes quedaron en el teléfono.`, 'success'); }
     catch (e) { toast('Sin conexión', 'Para preparar el teléfono necesitas internet.', 'warning'); }
     repintar();
@@ -457,18 +496,24 @@
       else if (t.hasAttribute('data-lv-otro')) { ir('p0', { folio: '', usado: null }); escanear(); }
       else if (t.hasAttribute('data-lv-corregir')) { if (dr.usado) corregir({ ...dr.usado, folio: dr.folio }); }
       else if (ds.lvRecontar) { const c = cajas().find(x => x.folio === ds.lvRecontar); if (c) corregir(c.doc); }
+      else if (t.hasAttribute('data-lv-mismo-otro')) { const u = ls.get(K_ULT); if (u && u.prod) { otroLote = true; ir('p2', { prod: u.prod, ol: {} }); } }
       else if (t.hasAttribute('data-lv-mismo')) { const u = ls.get(K_ULT); if (u && u.prod) aP3({ prod: u.prod, lote: u.lote, vence: u.vence, sinLote: !!u.sinLote, prodDesdeUlt: true }); }
       else if (ds.lvProd) elegirProducto(ds.lvProd);
       else if (t.hasAttribute('data-lv-nuevo')) ir('nuevo', { nuevoForm: { nombre: busca, tipo: '' } });
-      else if (ds.lvTipo) { const n = { ...(dr.nuevoForm || {}), nombre: (document.getElementById('lv-nn') || {}).value || '', tipo: ds.lvTipo }; ir('nuevo', { nuevoForm: n }); }
+      else if (ds.lvTipo) { const n = { ...(dr.nuevoForm || {}), nombre: (document.getElementById('lv-nn') || {}).value || '', tipo: ds.lvTipo }; if (n.tipo !== 'medicamento') delete n.ctl; ir('nuevo', { nuevoForm: n }); }
+      else if (ds.lvCtl) { const n = { ...(dr.nuevoForm || {}), nombre: (document.getElementById('lv-nn') || {}).value || '', ctl: ds.lvCtl }; ir('nuevo', { nuevoForm: n }); }
       else if (t.hasAttribute('data-lv-nuevo-ok')) { const n = { ...(dr.nuevoForm || {}), nombre: String((document.getElementById('lv-nn') || {}).value || '').trim().toUpperCase() };
         if (n.nombre.length < 4) { toast('Nombre', 'Escribe el nombre como dice la caja.', 'warning'); return; } if (!n.tipo) { toast('Tipo', 'Elige el tipo del producto.', 'warning'); return; }
-        otroLote = true; ir('p2', { prod: { insumoId: null, nombre: n.nombre, nuevo: true, tipo: n.tipo, controlado: n.tipo === 'medicamento' ? null : null, codigoMP: '' }, ol: {}, nuevoForm: n }); }
+        if (n.tipo === 'medicamento' && !n.ctl) { toast('Controlado', 'Indica si es controlado (o «No sé»).', 'warning'); return; }
+        /* Sí = controlado (bodega define si es estupefaciente o psicotrópico); No sé = 'revisar' */
+        otroLote = true; ir('p2', { prod: { insumoId: null, nombre: n.nombre.slice(0, 120), nuevo: true, tipo: n.tipo, controlado: n.tipo === 'medicamento' ? ({ si: 'controlado', revisar: 'revisar' }[n.ctl] || null) : null, codigoMP: '' }, ol: {}, nuevoForm: n }); }
       else if (ds.lvLote !== undefined) { const p = dr.prod, reg = (insumos || []).find(i => i.id === p.insumoId && esDeBodega(i, dr.bodega)); const x = lotesDe(reg).map(z => ({ lote: window.SAR_Toma.lote(z.batch), mes: window.SAR_Toma.mes(z.expirationDate) })).sort((a, z) => String(a.mes).localeCompare(String(z.mes)))[+ds.lvLote]; if (!x) return; aP3({ lote: x.lote, vence: /^\d{4}-\d{2}$/.test(x.mes) ? x.mes : 'N/A', sinLote: x.lote === 'S/L' && x.mes === 'N/A', prodDesdeUlt: false }); }
       else if (t.hasAttribute('data-lv-otrolote')) { otroLote = true; repintar(); }
       else if (ds.lvMes || ds.lvAnio) { const ol = { ...(dr.ol || {}), lote: (document.getElementById('lv-lote') || {}).value || (dr.ol || {}).lote || '' }; if (ds.lvMes) ol.mes = ds.lvMes; if (ds.lvAnio) ol.anio = ds.lvAnio; dr.ol = ol; setBor(dr); repintar(); }
+      else if (t.hasAttribute('data-lv-sl') || t.hasAttribute('data-lv-conlote')) { dr.ol = { ...(dr.ol || {}), sl: t.hasAttribute('data-lv-sl') }; setBor(dr); repintar(); }
       else if (t.hasAttribute('data-lv-ol-ok')) { const ol = { ...(dr.ol || {}), lote: String((document.getElementById('lv-lote') || {}).value || '').trim().toUpperCase() };
-        if (!ol.lote) { toast('Lote', 'Escribe el lote, o toca «No trae lote / vencimiento».', 'warning'); return; } if (!ol.mes || !ol.anio) { toast('Vencimiento', 'Elige el mes y el año de vencimiento.', 'warning'); return; }
+        if (ol.sl) { if (!ol.mes || !ol.anio) { toast('Vencimiento', 'Elige el mes y el año de vencimiento (o «Sin lote ni vencimiento»).', 'warning'); return; } aP3({ lote: 'S/L', vence: `${ol.anio}-${ol.mes}`, sinLote: true, ol, prodDesdeUlt: false }); return; }
+        if (!ol.lote) { toast('Lote', 'Escribe el lote, o toca «Sin lote».', 'warning'); return; } if (!ol.mes || !ol.anio) { toast('Vencimiento', 'Elige el mes y el año de vencimiento.', 'warning'); return; }
         aP3({ lote: ol.lote, vence: `${ol.anio}-${ol.mes}`, sinLote: false, ol, prodDesdeUlt: false }); }
       else if (t.hasAttribute('data-lv-sinlote')) aP3({ lote: 'S/L', vence: 'N/A', sinLote: true, prodDesdeUlt: false });
       else if (ds.lvResp !== undefined) responder(ds.lvResp);
@@ -477,14 +522,15 @@
       else if (t.hasAttribute('data-lv-atras')) atras();
       else if (t.hasAttribute('data-lv-corr')) ir('p3', { p3: { ...(dr.p3prev || {}), paso: 'estado', tmp: null }, hist: [] });
       else if (t.hasAttribute('data-lv-guardar')) guardar();
-      else if (t.hasAttribute('data-lv-sig')) { ir('p0', { folio: '', guardado: null, prod: null, vistaAntes: '' }); }
+      else if (t.hasAttribute('data-lv-sig')) { ir('p0', { folio: '', guardado: null, prod: null, vistaAntes: '' }); escanear(); }   /* Penny: directo a la cámara */
       else if (t.hasAttribute('data-lv-reint')) reintentar(false).then(repintar);
     });
     r.addEventListener('submit', async (e) => {
       if (!mostrar) return; const fm = e.target;
       if (fm.hasAttribute('data-lv-login')) { e.preventDefault(); const c = document.getElementById('lv-c').value, p = document.getElementById('lv-p').value, er = document.getElementById('lv-err'), bt = fm.querySelector('button'); bt.disabled = true; bt.textContent = 'Ingresando…';
         try { await window.SAR_Sesion.entrar(c, p); } catch (x) { const k = String(x.code || ''); if (er) er.textContent = k === 'network' || /network/.test(k) ? 'Sin internet: la primera vez necesitas conexión.' : k === 'pendientes' ? x.message : 'Correo o contraseña incorrectos.'; bt.disabled = false; bt.textContent = 'Ingresar'; } }
-      else if (fm.hasAttribute('data-lv-num')) { e.preventDefault(); const fo = folioTag(document.getElementById('lv-num').value); if (!fo) { toast('Número del tag', 'Escribe el número que está impreso en el tag.', 'warning'); return; } abrirTag(fo); }
+      else if (fm.hasAttribute('data-lv-num')) { e.preventDefault(); const v = document.getElementById('lv-num').value, fo = folioTag(v); if (!fo) { toast('Número del tag', 'Escribe el número que está impreso en el tag.', 'warning'); return; }
+        const corto = /^\s*(N°?\s*)?\d{1,6}\s*$/i.test(v), anio = new Date().getFullYear(); abrirTag(fo, corto ? [folioTag(v, anio - 1)] : []); }
     });
     r.addEventListener('input', (e) => {
       if (!mostrar) return;
@@ -496,7 +542,7 @@
       if (b) ls.set(K_BOD, b); else ls.del(K_BOD); cargarConteos(b).catch(() => {}); repintar(); if (b && pendTag) abrirTag(pendTag);
     });
   }
-  function leerHash() { const m = /[#&]tag=([^&]+)/.exec(location.hash || ''); if (!m) return; const fo = folioTag(decodeURIComponent(m[1])); if (fo) { pendTag = fo; mostrar = true; try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* nada */ } } }
+  function leerHash() { const m = /[#&](?:tag|t)=([^&]+)/.exec(location.hash || ''); if (!m) return; let v = ''; try { v = decodeURIComponent(m[1]); } catch (e) { v = m[1]; } const fo = folioTag(v); if (fo) { pendTag = fo; mostrar = true; try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* nada */ } } }
 
   if (typeof document.addEventListener === 'function' && typeof window.addEventListener === 'function' && typeof location !== 'undefined') {
     leerHash();
@@ -504,6 +550,7 @@
     let n = 0; const tm = setInterval(() => { n++; const r = document.getElementById('si-pide'); if (r && window.SAR_SOLICITUD_PUBLICA === true) { enlazar(r); clearInterval(tm); } else if (n > 480) clearInterval(tm); }, 250);
     window.addEventListener('sar-rol', async () => {
       bodegas = null; const u = usuario(); nombreUsuario = '';
+      if (!u) { ls.del(K_INS); ls.del(K_TAGS); insumos = null; insumosAl = ''; }   /* sesión cerrada: se borra la copia de productos del teléfono (no la caché de Firestore) */
       if (rol() === 'contador') mostrar = true;
       if (u) { try { const f = fsx(), s = await conTiempo(f.getDoc(f.doc(f.collection(dbx(), 'Usuarios'), u)), 4000); if (s.exists()) nombreUsuario = String(s.data().nombre || s.data().name || ''); } catch (e) { /* sin nombre: se usa el correo */ } }
       if (mostrar) repintar();
@@ -511,7 +558,7 @@
     window.addEventListener('online', () => { if (usuario()) reintentar(true).then(() => sincronizarMias()).catch(() => {}); });
   }
 
-  const api = { abrir, pintar, enCurso, totalEstructura, formula, estructuraCorta, folioTag, vencido, validar, avanceLotes, siguientePaso, estructuraDe, respuestasDe, armarDoc, resumen, lotesDe, huella, baseDe, cambiosDe };
+  const api = { abrir, pintar, enCurso, totalEstructura, formula, estructuraCorta, folioTag, vencido, validar, avanceLotes, siguientePaso, estructuraDe, respuestasDe, armarDoc, resumen, delTurno, lotesDe, huella, baseDe, cambiosDe };
   window.SAR_Lev = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

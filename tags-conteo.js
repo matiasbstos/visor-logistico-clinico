@@ -14,7 +14,9 @@
   const fs = () => window.firebaseFirestore, db = () => window.firebaseDb;
   const usuario = () => { const a = window.firebaseAuth; return (a && a.currentUser && a.currentUser.email) || ''; };
   const toast = (t, m, k) => { if (typeof window.showToast === 'function') window.showToast(t, m, k || 'info'); };
-  const URL_TAG = 'https://sarinventario.web.app/solicitar.html#tag=';
+  /* v21.249 (Howard): URL corta con los 10 dígitos para que el QR quepa en 33 módulos con corrección M; el teléfono acepta también #tag= */
+  const URL_TAG = 'https://sarinventario.web.app/solicitar.html#t=';
+  const urlTag = (folio) => URL_TAG + String(folio || '').replace(/\D/g, '');
   const hora = (iso) => { try { return iso ? new Date(iso).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''; } catch (e) { return ''; } };
   const mesCL = (v) => { const m = /^(\d{4})-(\d{2})$/.exec(v || ''); return m ? `${m[2]}/${m[1]}` : (v === 'N/A' ? 's/v' : (v || '')); };
 
@@ -95,12 +97,12 @@
       d.setFont('helvetica', 'bold'); d.setFontSize(9.5); d.text('Total', 3, 27.5); linea(13, 38, 27.5); d.text('u.', 39, 27.5);
       d.setFont('helvetica', 'normal'); d.setFontSize(8); caja(50, 27.5); d.text('Sin subdivisión', 54, 27.5);
       caja(3, 33); d.text('___ cajas  ×  ___ u.', 7, 33); caja(45, 33); d.text('Granel', 49, 33); d.setFont('helvetica', 'bold'); caja(66, 33); d.text('ABIERTA', 70, 33); d.setFont('helvetica', 'normal');
-      d.text('Contó', 3, 38.8); linea(13, 58, 38.8); d.text('Fecha', 61, 38.8); d.text('__ / __', 72, 38.8);
+      d.text('Contó', 3, 38.8); linea(13, 53, 38.8); d.text('Fecha', 56, 38.8); d.text('__ / __', 66, 38.8);
       /* 42–57 mm: Code 128 C a la izquierda, QR de 16,5 mm a la derecha y el folio legible */
       let cx = 38;
       if (P && P.barras) { const a = P.barras(String(t.folio).replace(/\D/g, '')), tot = a.reduce((s, w) => s + w, 0), mod = Math.min(MOD, Math.max(1, Math.floor(66 / tot / PUNTO)) * PUNTO), x0 = g(3 + 10 * mod); let xx = x0; a.forEach((w, i) => { if (i % 2 === 0) d.rect(xx, 42, w * mod, 10.5, 'F'); xx += w * mod; }); cx = (x0 + xx) / 2; }
       if (B && B.matrizQR && window.qrcode) {
-        const q = window.qrcode(0, 'L'); q.addData(URL_TAG + t.folio); q.make(); const n = q.getModuleCount(), cel = 4 * PUNTO, lado = n * cel, x0 = g(97 - lado), y0 = g(41);   /* módulo entero: lado = m.length*4*PUNTO (33 módulos = 16,5 mm) */
+        const q = window.qrcode(0, 'M'); q.addData(urlTag(t.folio)); q.make(); const n = q.getModuleCount(), cel = 4 * PUNTO, lado = n * cel, x0 = g(97 - lado), y0 = g(41);   /* módulo entero: lado = m.length*4*PUNTO (33 módulos = 16,5 mm) */
         for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) d.rect(x0 + c * cel, y0 + r * cel, cel + 0.02, cel + 0.02, 'F');
       }
       d.setFont('helvetica', 'bold'); d.setFontSize(8); d.text(t.folio, cx, 56.8, { align: 'center' });
@@ -152,7 +154,7 @@
     cargar(root);
   }
 
-  const api = { abrir, reservar, listar, pdf, imprimir, unir, filtrar, estadoDe, estructuraCorta, numero, ESTADOS };
+  const api = { urlTag, abrir, reservar, listar, pdf, imprimir, unir, filtrar, estadoDe, estructuraCorta, numero, ESTADOS };
   window.SAR_TagsConteo = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

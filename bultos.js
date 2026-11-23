@@ -117,6 +117,9 @@
   // ---------------- datos ----------------
   const ref = (folio) => fs().doc(fs().collection(db(), 'Contadores'), 'bulto-' + folio);
   async function leer(folio) { const s = await fs().getDoc(ref(folio)); return s.exists() ? s.data() : null; }
+  /** v21.249 (Howard): un tag «CONTADO» (estado TAG) usa un folio BUL pero aún no es una caja: no se cuenta ni se despacha. */
+  const esTag = (b) => !!b && b.tipo === 'tag-conteo';
+  const avisoTag = (folio) => `N° ${String(folio || '').slice(-6)} es un tag CONTADO: todavía no es una caja.`;
   async function guardar(b, cambios, accion, det) {
     /* v21.223: relee la caja antes de escribir (otro equipo pudo abrirla, contarla o imprimirla) para no pisar su historial */
     try { const fr = await Promise.race([leer(b.folio), new Promise(r => setTimeout(() => r(null), 2500))]); if (fr) Object.assign(b, fr); } catch (e) { /* sin conexión: sigue con lo local */ }
@@ -145,14 +148,16 @@
     if (!forzar && quedanReservados() >= 20) return quedanReservados();
     const f = fs(), anio = new Date().getFullYear(), rc = f.doc(f.collection(db(), 'Contadores'), 'correlativo-bultos-' + anio);
     const ini = await f.runTransaction(db(), async (tx) => { const s = await tx.get(rc), v = s.exists() ? num(s.data().valor) : 0; tx.set(rc, { valor: v + TRAMO, actualizado: new Date().toISOString() }); return v + 1; });
-    const r = rangos(); r.push({ anio, ini, fin: ini + TRAMO - 1, sig: ini }); guardarRangos(r);
+    /* v21.249 (Howard): leer y guardar los tramos dentro del mismo candado que tomarReservados (dos pestañas no se pisan) */
+    const anotar = () => { const r = rangos(); r.push({ anio, ini, fin: ini + TRAMO - 1, sig: ini }); guardarRangos(r); };
+    if (navigator.locks && navigator.locks.request) await navigator.locks.request('sar-bul', anotar); else anotar();
     try { await f.setDoc(f.doc(f.collection(db(), 'Contadores'), `reserva-bul-${equipo()}-${anio}-${ini}`), { tipo: 'reserva-bul', equipo: equipo(), anio, desde: ini, hasta: ini + TRAMO - 1, por: usuario(), en: new Date().toISOString() }); } catch (e) { /* el tramo ya quedó reservado en el contador */ }
     return quedanReservados();
   }
   /** Sin internet: toma n folios seguidos de un tramo reservado (o lanza error si no alcanzan). */
   function tomarReservados(n) {
     const r = rangos(), t = r.find(x => x.fin - x.sig + 1 >= n);
-    if (!t) throw new Error(`Sin internet solo puedes crear ${Math.max(0, ...r.map(x => x.fin - x.sig + 1), 0)} etiqueta(s) seguidas con los folios reservados en este equipo (necesitas ${n}). Crea menos cajas o espera la conexión.`);
+    if (!t) throw new Error(`Sin internet solo quedan ${Math.max(0, ...r.map(x => x.fin - x.sig + 1), 0)} folio(s) seguidos reservados en este equipo (necesitas ${n}). Pide menos folios o espera la conexión.`);
     const ini = t.sig; t.sig += n; guardarRangos(r); return ini;
   }
   /** v21.249: reserva n folios BUL seguidos (con internet: transacción sobre el contador; sin internet: del tramo del equipo,
@@ -414,7 +419,7 @@
     const o = opc || {}, rf = (fo) => F.doc(D, 'Contadores', 'bulto-' + fo), mapa = new Map();
     const traer = async (fo) => { if (!fo || mapa.has(fo)) return mapa.get(fo); const sn = await tx.get(rf(fo)); const d = sn.exists() ? { ...sn.data() } : null; mapa.set(fo, d); return d; };
     const plan = [];
-    for (const c of (cajas || [])) { const b = await traer(c.folio); if (!b) continue; const q = Math.max(0, Math.floor(num(c.qty))); if (!q) continue;
+    for (const c of (cajas || [])) { const b = await traer(c.folio); if (!b || esTag(b)) continue; const q = Math.max(0, Math.floor(num(c.qty))); if (!q) continue;
       const entera = q >= num(b.contenido) && num(b.contenido) > 0;
       if (b.nivel === 'interior' && b.padre) await traer(b.padre);
       if (Array.isArray(b.hijos) && entera) for (const h of b.hijos) await traer(h);
@@ -438,7 +443,7 @@
   /** v21.243: salida desde una caja pistoleada (p. ej. al despachar una solicitud): baja su contenido y lo deja en el historial.
    *  Caja interior → baja también la caja grande (y la marca abierta). Caja grande con `cajasChicas` → esas interiores salen enteras (VACIA en la caja). */
   async function sacar(folio, qty, ref, cajasChicas) {
-    const b = await leer(folio); if (!b) throw new Error(folio + ' no existe.'); const q = Math.max(0, Math.floor(num(qty))); if (!q) return b;
+    const b = await leer(folio); if (!b) throw new Error(folio + ' no existe.'); if (esTag(b)) throw new Error(avisoTag(folio)); const q = Math.max(0, Math.floor(num(qty))); if (!q) return b;
     const baja = (x, n) => { const r = Math.max(0, num(x.contenido) - n); return { contenido: r, estado: r > 0 ? 'ABIERTA' : 'VACIA' }; };
     await guardar(b, (x) => baja(x, q), 'SALIDA', { qty: q, ref: ref || '' });
     if (b.nivel === 'interior' && b.padre) { const pa = await leer(b.padre); if (pa) await guardar(pa, (x) => baja(x, q), 'SALIDA', { qty: q, ref: ref || '', porInterior: folio }); }
@@ -474,6 +479,7 @@
       if (ocupado || (folio === ultimo && Date.now() - tUlt < 2500)) return; ultimo = folio; tUlt = Date.now(); ocupado = true;
       try {
         const b = await leer(folio); if (!b) { res.innerHTML = `<p class="cfg-mal">${esc(folio)} no existe en el sistema.</p>`; return; }
+        if (esTag(b)) { res.innerHTML = `<p class="cfg-mal">${esc(avisoTag(folio))}</p>`; return; }   /* escanear y contar por bultos */
         try { if (window.SAR_Sonidos) window.SAR_Sonidos.tocar('ok'); } catch (e) { /* sin sonido */ }
         if (navigator.vibrate) navigator.vibrate(60);
         if (!conteo) {
@@ -823,6 +829,6 @@
     inp.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => registrar('nada'), 250); });
     pintar(''); setTimeout(() => inp.focus(), 50); return ov;
   }
-  window.SAR_Bultos = { reservarFolios, reservarTramo, quedanReservados, leerCajasTx, leerConCamara, leer, sacar, probarPistola, hojaPrueba, code39, i2de5, planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
+  window.SAR_Bultos = { esTag, avisoTag, reservarFolios, reservarTramo, quedanReservados, leerCajasTx, leerConCamara, leer, sacar, probarPistola, hojaPrueba, code39, i2de5, planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_Bultos;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null, addEventListener() {} });

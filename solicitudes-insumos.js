@@ -526,6 +526,7 @@
     if (yaCs.some(x => x.folio === folio)) { pist.msg = `${folio} ya está pistoleada en este producto.`; return pintarBandeja(); }
     let b; try { b = await B.leer(folio); } catch (e) { pist.msg = 'No pude leer la caja: ' + (e.message || e); return pintarBandeja(); }
     if (!b) { pist.msg = `${folio} no existe en el sistema.`; return pintarBandeja(); }
+    if (B.esTag && B.esTag(b)) { pist.msg = B.avisoTag(folio); return pintarBandeja(); }   /* v21.249: un tag CONTADO aún no es una caja */
     /* B.A.: la caja, su caja grande y sus cajas pequeñas son la misma mercadería: ninguna puede estar elegida en otra línea u otra solicitud sin procesar */
     const familia = new Set([folio, b.padre, ...(Array.isArray(b.hijos) ? b.hijos : [])].filter(Boolean));
     const otraL = Object.entries(cajasL).find(([k, a]) => k !== keyL(n, i) && a.some(x => familia.has(x.folio)));

@@ -5551,7 +5551,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 card.innerHTML = `
                 <div class="card-title" style="color:${b.type === 'principal' ? 'var(--primary)' : 'var(--purple)'}">${window.escapeHTML((b.type || 'S/I').toUpperCase())}</div>
                 <div class="card-value" style="font-size:20px; margin: 8px 0;">${window.escapeHTML(b.name || 'Sin nombre (ábrela y ponle nombre)')}</div>
-                <div class="flex-bet text-sm text-muted"><span>Cap: ${window.escapeHTML(b.capacityMetrics || 'S/I')}</span><span class="badge-green">${b.isActive ? 'Activa' : 'Inactiva'}</span></div>
+                <div class="flex-bet text-sm text-muted"><span>Capacidad: ${window.escapeHTML(b.capacityMetrics || 'sin definir')}</span><span class="badge-green">${b.isActive ? 'Activa' : 'Inactiva'}</span></div>
+                ${b.usaEstantes ? '<div class="text-sm text-muted bod-estantes" data-bod="' + window.escapeHTML(b.id) + '">Estantes: …</div>' : ''}
             `;
 
                 card.addEventListener('click', () => openBodegaDetail(b));
@@ -5559,6 +5560,14 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             container.insertAdjacentHTML('beforeend', addCardHtml);
+            /* 4.306: «n estantes» (estantes activos de la subcolección Ubicaciones) en las bodegas que usan estantes */
+            container.querySelectorAll('.bod-estantes[data-bod]').forEach(async (el) => {
+                try {
+                    const sn = await getDocs(collection(db, 'Bodegas', el.dataset.bod, 'Ubicaciones')), est = new Set();
+                    sn.forEach(d => { const u = d.data(); if (u.activo !== false && u.estante != null) est.add(String(u.estante)); });
+                    el.textContent = est.size ? `${est.size} estante${est.size === 1 ? '' : 's'}` : 'Sin estantes creados';
+                } catch (e) { el.textContent = ''; }
+            });
         }
 
         async function renderBodegaComparisonTable(bodegas) {

@@ -362,8 +362,8 @@
                     <a href="#" class="menu-item normal erp-sidebar__item" data-erp-panel="erp-panel-recepcion" data-erp-title="Recepción Dinámica y Auditoría" data-target="view-erp-adquisiciones" data-title="Recepción Dinámica">
                         <i class="ph-bold ph-package"></i><span class="menu-label">Recepción Dinámica</span>
                     </a>
-                    <a href="#" class="menu-item normal erp-sidebar__item" data-erp-panel="erp-panel-catalogo" data-erp-title="Catálogo Maestro de Insumos" data-target="view-erp-adquisiciones" data-title="Catálogo de Insumos">
-                        <i class="ph-bold ph-pill"></i><span class="menu-label">Catálogo de Insumos</span>
+                    <a href="#" class="menu-item normal erp-sidebar__item" data-erp-panel="erp-panel-catalogo" data-erp-title="Catálogo de insumos" data-target="view-erp-adquisiciones" data-title="Catálogo de insumos">
+                        <i class="ph-bold ph-pill"></i><span class="menu-label">Catálogo de insumos</span>
                     </a>
                     <a href="#" class="menu-item normal erp-sidebar__item" data-erp-panel="erp-panel-despachos" data-erp-title="Despachos a Red (Cross-Docking)" data-target="view-erp-adquisiciones" data-title="Despachos a Red">
                         <i class="ph-bold ph-truck"></i><span class="menu-label">Despachos a Red</span>
@@ -2769,20 +2769,16 @@
                 <div class="dashboard-container">
                     <div class="page-header mb-24">
                     <div class="page-title">
-                        <h1>Gestión de Bodegas</h1>
-                        <p>Administración de red de almacenes, farmacias y distribución de stock.</p>
+                        <h1>Bodegas</h1>
+                        <p>Gestión de bodegas: almacenes, farmacias, bodegas transitorias y satélite, con sus estantes y su stock.</p>
+                    </div>
+                    <div class="page-actions">
+                        <button type="button" class="btn btn-primary" id="btn-nueva-bodega" onclick="var f=document.getElementById('form-bodegas');if(f){f.scrollIntoView({behavior:'smooth',block:'start'});setTimeout(function(){var n=document.getElementById('bodega-nombre');if(n)n.focus({preventScroll:true});},300);}"><i class="ph-bold ph-plus"></i> Nueva bodega</button>
                     </div>
                 </div>
 
                 <div class="cards-grid mb-32" id="bodegas-cards-container">
                     <!-- Dinámico: Colección Bodegas -->
-                    <div class="card"
-                        style="border: 2px dashed var(--border-color); background:transparent; display:flex; align-items:center; justify-content:center; cursor:pointer;"
-                        onclick="document.querySelector('#bodega-nombre').focus()">
-                        <div
-                            style="color:var(--text-muted); font-weight:600; display:flex; gap:8px; align-items:center;">
-                            <i class="ph ph-plus-circle" style="font-size:24px;"></i> Nuevo Anexo</div>
-                    </div>
                 </div>
 
                 <div class="grid-2-col-users">
@@ -3898,40 +3894,43 @@
                     <!-- VISTA 4: CATÁLOGO MAESTRO DE INSUMOS                              -->
                     <!-- ================================================================= -->
                     <div id="erp-panel-catalogo" class="erp-main-view-panel" style="display:none;">
-                        <!-- 4 KPIs del Catálogo -->
+                        <div class="page-header mb-16">
+                            <div class="page-title">
+                                <h1>Catálogo de insumos</h1>
+                                <p>Catálogo maestro: cada producto con su foto, su stock por bodega y su estado (óptimo, reposición o quiebre).</p>
+                            </div>
+                        </div>
+                        <!-- 4 KPIs del Catálogo (4.306: esqueleto mientras carga, sin cifras de ejemplo ni insignias repetidas) -->
                         <div class="erp-kpi-grid-4">
                             <div class="erp-kpi-card erp-kpi-card--blue">
                                 <div class="erp-kpi-card__top">
                                     <span class="erp-kpi-card__label">Stock maestro</span>
                                 </div>
-                                <div class="erp-kpi-card__value" id="erp-cat-kpi-total">8</div>
+                                <div class="erp-kpi-card__value" id="erp-cat-kpi-total"><span class="skeleton skeleton-box cat-sk" aria-label="Cargando"></span></div>
                                 <div class="erp-kpi-card__meta">Estandarizados con código SAR</div>
                             </div>
 
                             <div class="erp-kpi-card erp-kpi-card--green">
                                 <div class="erp-kpi-card__top">
                                     <span class="erp-kpi-card__label">Stock Saludable</span>
-                                    <span class="badge badge-sar-green">Óptimo</span>
                                 </div>
-                                <div class="erp-kpi-card__value" id="erp-cat-kpi-optimo">5</div>
+                                <div class="erp-kpi-card__value" id="erp-cat-kpi-optimo"><span class="skeleton skeleton-box cat-sk" aria-label="Cargando"></span></div>
                                 <div class="erp-kpi-card__meta">Sobre el punto de reorden mínimo</div>
                             </div>
 
                             <div class="erp-kpi-card erp-kpi-card--orange">
                                 <div class="erp-kpi-card__top">
                                     <span class="erp-kpi-card__label">Stock Bajo / Reorden</span>
-                                    <span class="badge badge-sar-orange">Reposición</span>
                                 </div>
-                                <div class="erp-kpi-card__value" id="erp-cat-kpi-bajo">2</div>
+                                <div class="erp-kpi-card__value" id="erp-cat-kpi-bajo"><span class="skeleton skeleton-box cat-sk" aria-label="Cargando"></span></div>
                                 <div class="erp-kpi-card__meta">Sugeridos para próxima SDC</div>
                             </div>
 
                             <div class="erp-kpi-card erp-kpi-card--red">
                                 <div class="erp-kpi-card__top">
                                     <span class="erp-kpi-card__label" style="color:var(--sar-red);">Quiebre Crítico</span>
-                                    <span class="badge badge-sar-red">Urgente</span>
                                 </div>
-                                <div class="erp-kpi-card__value" style="color:var(--sar-red);" id="erp-cat-kpi-critico">1</div>
+                                <div class="erp-kpi-card__value" style="color:var(--sar-red);" id="erp-cat-kpi-critico"><span class="skeleton skeleton-box cat-sk" aria-label="Cargando"></span></div>
                                 <div class="erp-kpi-card__meta">Requiere compra o traslado inmediato</div>
                             </div>
                         </div>

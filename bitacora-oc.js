@@ -74,7 +74,7 @@
     // ---------------------------------------------------------------
     // Datos
     // ---------------------------------------------------------------
-    let verMas = false, cfg = { url: '', token: '' }, ordenes = [], correos = null, casos = [], filtro = 'TODOS', texto = '', abierto = null, cargando = false, error = '';
+    let verMas = false, cfg = { url: '', token: '' }, ordenes = [], correos = null, casos = [], filtro = 'TODOS', texto = '', abierto = null, cargando = false, revisando = false, error = '';
     const refCfg = () => fs().doc(fs().collection(db(), 'Contadores'), 'config-bitacora');
     async function cargarCfg() { try { const s = await fs().getDoc(refCfg()); cfg = s.exists() ? { url: s.data().url || '', token: s.data().token || '' } : { url: '', token: '' }; } catch (e) { /* sin config */ } }
     async function cargarOrdenes() { const sn = await fs().getDocs(fs().query(fs().collection(db(), 'Seguimiento_OC'), fs().limit(500))); ordenes = []; sn.forEach(d => ordenes.push({ id: d.id, ...d.data() })); }
@@ -117,12 +117,13 @@
         const lista = casos.filter(c => (filtro === 'TODOS' || (FILTROS[filtro] ? FILTROS[filtro](c) : c.estado === filtro)) && (!q || c.clave.toLowerCase().includes(q) || String((c.oc && c.oc.proveedor) || '').toLowerCase().includes(q)));
         const chips = [['TODOS', 'Todas', casos.length], ['DISCREPANCIA', 'Discrepancia', conteo('DISCREPANCIA')], ['SIN_GESTION', 'Sin gestión', conteo('SIN_GESTION')], ['PARCIAL', 'Parciales', conteo('PARCIAL')], ['GESTION', 'En gestión', conteo('GESTION')], ['OTROS', 'Para otros centros', casos.filter(FILTROS.OTROS).length], ['COMPARTIDA', 'Compra compartida', casos.filter(FILTROS.COMPARTIDA).length], ['CONFORME', 'Con conforme', casos.filter(FILTROS.CONFORME).length], ['SINCONF', 'Falta conforme', casos.filter(FILTROS.SINCONF).length], ['COMPLETA', 'Completas', conteo('COMPLETA')], ['SOLO_CORREO', 'Solo en correo', conteo('SOLO_CORREO')]];
         r.innerHTML = `
-        <div class="page-header mb-24"><div class="page-title"><h2>Bitácora de órdenes</h2>
+        <div class="page-header mb-24"><div class="page-title"><h1>Bitácora de órdenes</h1>
             <p>Cada orden como un caso: qué falta, qué se ha gestionado por correo y desde cuándo. ${correos && correos.ultima ? 'Última revisión del correo: <b>' + esc(fechaHora(correos.ultima)) + '</b> (07:00, 12:00 y 17:00).' : ''}</p></div>
-            <div class="page-actions"><button type="button" class="btn btn-outline" id="bit-cfg"><i class="ph-bold ph-gear"></i> Configurar</button><button type="button" class="btn btn-primary" id="bit-act"${cargando ? ' disabled' : ''}><i class="ph-bold ph-arrows-clockwise"></i> ${cargando ? 'Revisando…' : 'Revisar el correo ahora'}</button></div></div>
+            <div class="page-actions"><button type="button" class="btn btn-outline" id="bit-cfg"><i class="ph-bold ph-gear"></i> Configurar</button><button type="button" class="btn btn-primary" id="bit-act"${cargando || revisando ? ' disabled' : ''}><i class="ph-bold ph-arrows-clockwise"></i> ${cargando || revisando ? 'Revisando…' : 'Revisar el correo ahora'}</button></div></div>
+        ${revisando ? '<div class="bit-aviso bit-revisando" role="status"><span class="bit-punto" aria-hidden="true"></span> Revisando correo…' + (correos ? ' Mientras, se muestra la última revisión guardada.' : '') + '</div>' : ''}
         ${error ? `<div class="bit-aviso" role="alert">${esc(error)}</div>` : ''}
         ${correos && correos.completo === false ? '<div class="bit-aviso">La primera revisión del correo todavía está en curso (es larga): se completa sola en las próximas revisiones de las 07:00, 12:00 y 17:00, o aprieta "Revisar el correo ahora" otra vez.</div>' : ''}
-        ${!correos && !error ? '<div class="bit-aviso">Aún no hay datos del correo. Configura el script (botón "Configurar") para empezar. Mientras tanto se muestran las órdenes del Visor.</div>' : ''}
+        ${!correos && !error && !revisando ? '<div class="bit-aviso">Aún no hay datos del correo. Configura el script (botón "Configurar") para empezar. Mientras tanto se muestran las órdenes del Visor.</div>' : ''}
         <div class="bit-barra bit-barra-q"><input type="search" id="bit-q" class="form-control" placeholder="Buscar por N° de orden o proveedor" value="${esc(texto)}" aria-label="Buscar orden"></div>
         <div class="bit-chips" role="group" aria-label="Filtrar por estado">${chips.map(c => `<button type="button" class="bit-chip${filtro === c[0] ? ' on' : ''}" data-f="${c[0]}">${c[1]} <em>${c[2]}</em></button>`).join('')}</div>
         <p class="bit-ley">Sin gestión = sin correos o más de ${DIAS_SIN_GESTION} días sin movimiento. Discrepancia = la recepción conforme enviada no coincide con lo que el Visor tiene recibido.</p>
@@ -412,21 +413,34 @@ function doPost(e) {
         o.querySelector('#bit-url').focus();
     }
 
+    /* 4.306: la última respuesta del correo queda en este equipo para mostrarla al entrar, y la lectura tiene un límite de 8 s */
+    const CLAVE_CORREO = 'sar_bitacora_correo_v1', LIMITE_CORREO = 8000;
+    function correoGuardado() { try { const j = JSON.parse(localStorage.getItem(CLAVE_CORREO) || 'null'); return j && j.ok ? j : null; } catch (e) { return null; } }
+    function guardarCorreo(j) { try { localStorage.setItem(CLAVE_CORREO, JSON.stringify(j)); } catch (e) { /* sin espacio: solo no se guarda */ } }
+    const conLimite = (p, ms) => Promise.race([p, new Promise((_, mal) => setTimeout(() => mal(new Error(`el correo no respondió en ${Math.round(ms / 1000)} s; se muestra la última revisión guardada`)), ms))]);
+    async function leerCorreo(accion, ms) {
+        if (!(cfg.url && cfg.token)) return;
+        revisando = true; pintar();
+        try { const j = await (ms ? conLimite(llamar(accion), ms) : llamar(accion)); correos = j; guardarCorreo(j); error = ''; }
+        catch (e) { error = 'No se pudo leer el correo: ' + (e.message || e); }
+        revisando = false; armarCasos(); pintar();
+    }
     async function actualizar(forzar) {
         if (cargando) return;
         cargando = true; error = ''; pintar();
-        try {
-            await cargarOrdenes();
-            if (cfg.url && cfg.token) correos = await llamar(forzar ? 'revisar' : 'leer');
-        } catch (e) { error = 'No se pudo leer el correo: ' + (e.message || e); }
+        try { await cargarOrdenes(); } catch (e) { error = 'No se pudieron leer las órdenes: ' + (e.message || e); }
         cargando = false; armarCasos(); pintar();
+        await leerCorreo(forzar ? 'revisar' : 'leer', forzar ? 0 : LIMITE_CORREO);
     }
     async function abrir() {
         const r = root(); if (!r) return;
         r.innerHTML = window.SAR_Progreso ? window.SAR_Progreso.cargando('Cargando la bitácora…') : 'Cargando…';
-        await cargarCfg(); cargando = false; error = '';
-        try { await cargarOrdenes(); if (cfg.url && cfg.token) correos = await llamar('leer'); } catch (e) { error = 'No se pudo leer el correo: ' + (e.message || e); }
+        cargando = false; error = ''; if (!correos) correos = correoGuardado();
+        /* configuración y órdenes en paralelo; se pinta enseguida y el correo llega después */
+        const [, ro] = await Promise.allSettled([cargarCfg(), cargarOrdenes()]);
+        if (ro && ro.status === 'rejected') error = 'No se pudieron leer las órdenes: ' + ((ro.reason && ro.reason.message) || ro.reason);
         armarCasos(); pintar();
+        await leerCorreo('leer', LIMITE_CORREO);
     }
     window.SAR_Bitacora = { abrir, calcularCaso, analizar, claveOC, SCRIPT_BITACORA };
     if (typeof module !== 'undefined') module.exports = window.SAR_Bitacora;

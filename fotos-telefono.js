@@ -76,10 +76,14 @@
         const fila = (nombre, codigo, stock, bodegas, fs) => {
             const ca = fs.map(normal), cj = ca.find(x => x.caja), au = ca.find(x => x.cajaAuto), pr = ca.find(x => x.producto);
             const destino = (cj && cj.c) || (pr && pr.c) || (codigo && fs.find(c => String(c.codigoMP || '') === String(codigo))) || fs[0];   /* se guarda en la ficha que ya tiene fotos */
-            const tieneProd = !!pr || fs.some(c => c.fotoProdDescartada), pedida = fs.some(c => c.fotoPedida);
+            /* 4.306: misma definición que imagenes-producto.js y el Catálogo (caja = imagen o foto automática confirmada; producto = fotosExtra tipo «producto»),
+               también para fichas que solo están en el índice de fotos (p. ej. foto de Convenio Marco por código) */
+            const ui = typeof window !== 'undefined' && window.SAR_Imagenes && window.SAR_Imagenes.fotos ? window.SAR_Imagenes.fotos(nombre, codigo) : null;
+            const cajaUI = !cj && !au && ui && ui.caja ? { web: ui.caja } : null;
+            const tieneProd = !!pr || fs.some(c => c.fotoProdDescartada) || !!(ui && ui.producto), pedida = fs.some(c => c.fotoPedida);
             const otras = [].concat(...ca.map(x => x.otras));
             const hist = [].concat(...fs.map(c => Array.isArray(c.fotosHist) ? c.fotosHist : [])).sort((a, b) => String(b.en).localeCompare(String(a.en)));
-            return { nombre, codigo: codigo ? String(codigo) : '', stock, bodegas, id: destino ? destino.__id : idCatalogo(nombre, codigo), ids: fs.map(c => c.__id), faltaProd: !tieneProd, faltaCaja: !(cj || au), pedida, imagen: pr ? pr.producto : '', caja: cj ? cj.caja : '', cajaAuto: au && !cj ? au.cajaAuto : '', extra: otras, comun: (fs.find(c => c.nombreComun) || {}).nombreComun || '', fabricante: (fs.find(c => c.fabricante) || {}).fabricante || '', hist, nivel: (tieneProd ? 1 : 0) + (cj || au ? 1 : 0) };
+            return { nombre, codigo: codigo ? String(codigo) : '', stock, bodegas, id: destino ? destino.__id : idCatalogo(nombre, codigo), ids: fs.map(c => c.__id), faltaProd: !tieneProd, faltaCaja: !(cj || au || cajaUI), pedida, imagen: pr ? pr.producto : ((ui && ui.producto) || ''), caja: cj ? cj.caja : '', cajaAuto: au && !cj ? au.cajaAuto : (cajaUI || ''), extra: otras, comun: (fs.find(c => c.nombreComun) || {}).nombreComun || '', fabricante: (fs.find(c => c.fabricante) || {}).fabricante || '', hist, nivel: (tieneProd ? 1 : 0) + (cj || au || cajaUI ? 1 : 0) };
         };
         const prods = new Map();
         (insumos || []).forEach(i => { if (!i.name || i.status === 'ELIMINADO') return; const k = i.codigoMP ? 'c' + i.codigoMP : 'n' + norm(i.name); const p = prods.get(k) || { nombre: i.name, codigo: i.codigoMP ? String(i.codigoMP) : '', stock: 0, bodegas: new Set() }; p.stock += Number(i.quantity) || 0; if (i.location) p.bodegas.add(i.location); prods.set(k, p); });
@@ -99,6 +103,7 @@
         const f = fs(), ins = [], cat = [];
         (await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(10000)))).forEach(d => ins.push(d.data()));
         (await f.getDocs(f.query(f.collection(db(), 'Catalogo_Productos'), f.limit(5000)))).forEach(d => cat.push({ __id: d.id, ...d.data() }));
+        if (window.SAR_Imagenes && window.SAR_Imagenes.cargar) await window.SAR_Imagenes.cargar().catch(() => {});   /* 4.306: mismo índice de fotos que el Catálogo */
         return { ins, cat };
     }
     /** Guarda una foto en el catálogo. tipo: 'producto' | 'caja' | 'extra'. */
@@ -191,7 +196,7 @@
         root.innerHTML = `<div class="fv">
           <div class="fv-cab"><div><h2>Fotos de productos</h2><p class="act-hint">Cada producto debe tener la foto del producto y la de la caja. Aquí ves todo el catálogo, pides fotos al teléfono y revisas quién cambió qué.</p></div></div>
           <h3 class="fv-h">Accesos directos para el teléfono</h3>
-          <div class="fv-links" id="fv-links">${ENLACES().map((x, i) => `<article class="fv-link"><img src="${esc(x.ico)}" alt="" width="48" height="48"><div class="fv-link-t"><b>${esc(x.t)}</b><small>${esc(x.d)}</small><input class="form-control" readonly value="${esc(x.url)}" aria-label="Enlace de ${esc(x.t)}" onclick="this.select()"></div><div class="fv-link-b"><button type="button" class="btn btn-outline btn-sm" data-qr="${i}"><i class="ph-bold ph-qr-code" aria-hidden="true"></i> QR</button><button type="button" class="btn btn-outline btn-sm" data-copiar="${i}"><i class="ph-bold ph-copy" aria-hidden="true"></i> Copiar</button></div></article>`).join('')}</div>
+          <div class="fv-links" id="fv-links">${ENLACES().map((x, i) => `<article class="fv-link"><img src="${esc(x.ico)}" alt="" width="48" height="48"><div class="fv-link-t"><b>${esc(x.t)}</b><small>${esc(x.d)}</small></div><div class="fv-link-b"><button type="button" class="btn btn-outline btn-sm" data-qr="${i}"><i class="ph-bold ph-qr-code" aria-hidden="true"></i> QR</button><button type="button" class="btn btn-outline btn-sm" data-copiar="${i}"><i class="ph-bold ph-copy" aria-hidden="true"></i> Copiar</button></div></article>`).join('')}</div>
           <div class="fv-tabs" role="tablist"><button type="button" role="tab" class="on" aria-selected="true" data-tab="cat">Catálogo</button><button type="button" role="tab" aria-selected="false" data-tab="seg">Seguimiento de cambios</button><button type="button" class="btn btn-outline btn-sm fv-rec" data-recargar="1"><i class="ph-bold ph-arrows-clockwise" aria-hidden="true"></i> Actualizar</button></div>
           <div id="fv-cuerpo">${cargandoHTML('Cargando el catálogo y sus fotos…')}</div></div>`;
         const cuerpo = root.querySelector('#fv-cuerpo');

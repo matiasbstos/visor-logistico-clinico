@@ -122,49 +122,87 @@
     // de la izquierda (FINANCIAMIENTO, CDP, NETO, IVA, TOTAL, DIRECCIÓN, CONTRAPARTE, CONTACTO, CORREO, HORARIO).
     // ------------------------------------------------------------------
     const entero = (s) => Number(String(s || '').replace(/[^\d]/g, '')) || 0;
+    /** Normaliza el nombre del centro leído del encabezado del cuadro de distribución. */
+    function normalizarCentro(raw) {
+        let c = limpiar(String(raw || '').replace(/^[\s\-–:]+|[\s\-–:]+$/g, '').replace(/^CENTRO\s+/i, '')).toUpperCase();
+        if (/(^|[^A-Z])SAR([^A-Z]|$)/.test(c) && !/CESFAM|POSTA|COSAM|CECOSF/i.test(c)) c = 'SAR';
+        return c;
+    }
+    /** Calibra centros y límites de columnas usando el ancho real (i.w de pdf.js) o una estimación proporcional al paso entre columnas. */
+    function geometriaColumnas(fila, xTotalOpt) {
+        const ord = [...fila].sort((a, b) => a.x - b.x);
+        const pasoRaw = ord.length > 1 ? (ord[ord.length - 1].x - ord[0].x) / (ord.length - 1) : 90;
+        const conW = ord.filter(i => Number(i.w) > 0);
+        const anchoCant = conW.length ? conW.reduce((s, i) => s + Number(i.w), 0) / conW.length : Math.min(38, pasoRaw * 0.72);
+        const charW = anchoCant / 8;
+        const centros = ord.map(i => i.x + (Number(i.w) > 0 ? Number(i.w) / 2 : anchoCant / 2));
+        const paso = centros.length > 1 ? (centros[centros.length - 1] - centros[0]) / (centros.length - 1) : 90;
+        const xTotal = xTotalOpt != null ? xTotalOpt : centros[centros.length - 1] + paso / 2;
+        const lim = centros.map((c, k) => k === 0 ? c - paso / 2 : (centros[k - 1] + c) / 2);
+        lim.push(xTotal);
+        const anchoItem = (i) => Number(i.w) > 0 ? Number(i.w) : limpiar(i.str).length * charW;
+        const xRef = (i) => {
+            const w = anchoItem(i);
+            return w > paso * 1.15 ? i.x + Math.min(anchoCant / 2, paso * 0.25) : i.x + w / 2;
+        };
+        const banda = (x) => { for (let k = 0; k < centros.length; k++) if (x >= lim[k] && x < lim[k + 1]) return k; return -1; };
+        const bandaItem = (i) => banda(xRef(i));
+        return { centros, paso, lim, xTotal, banda, bandaItem, xRef };
+    }
     function reconoceDistribucion(texto) { return /MEMO\s*N\s*[°º]?\s*\d+/i.test(texto) && /\bCDP\b/.test(texto) && /CANTIDAD/i.test(texto) && (/FINANCIAMIENTO/i.test(texto) || (/PRESUPUESTO/i.test(texto) && /SALDO/i.test(texto))); }
     function extraerDistribucion(items) {
         const r = { tipo: 'DIST_OC', avisos: [], columnas: [], lineas: [] };
         const its = items.filter(i => limpiar(i.str));
         // 1) columnas de cantidades: los "CANTIDAD" de una misma fila; el que va solo (con "TOTAL" debajo) es el total
         // v21.176: las posiciones se calibran con el encabezado «VALOR NETO» (el cuadro puede venir corrido a la izquierda según el emisor)
-        const vn = its.find(i => /^VALOR\s*NETO$/i.test(limpiar(i.str))), xMinCant = vn ? Math.min(330, vn.x + 40) : 330, xPrecio = vn ? Math.min(330, vn.x - 20) : 330;
+        const vn = its.find(i => /^VALOR\s*NETO$/i.test(limpiar(i.str))), xMinCant = vn ? Math.min(330, vn.x + 30) : 330, xPrecio = vn ? Math.min(330, vn.x - 20) : 330;
+        const xIzqMin = vn ? Math.min(230, vn.x - 25) : 230;
         const cants = its.filter(i => /^CANTIDAD$/i.test(limpiar(i.str)) && i.x > xMinCant);
         const porY = []; cants.forEach(i => { const g = porY.find(o => Math.abs(o.y - i.y) <= TOL); if (g) g.items.push(i); else porY.push({ y: i.y, items: [i] }); });
         const gCols = porY.sort((a, b) => b.items.length - a.items.length)[0];
         if (!gCols || gCols.items.length < 1) { r.avisos.push('No encontré las columnas de cantidades (encabezado "CANTIDAD").'); return r; }
-        const xs = gCols.items.map(i => i.x).sort((a, b) => a - b), CH = 19;                 // ≈ mitad del ancho del texto "CANTIDAD"
         const total = cants.filter(i => !gCols.items.includes(i)).sort((a, b) => b.x - a.x)[0];
-        const xTotal = total ? total.x - 8 : xs[xs.length - 1] + 70;
-        const centros = xs.map(x => x + CH), paso = xs.length > 1 ? centros[1] - centros[0] : 90;
-        const lim = centros.map((c, k) => k === 0 ? c - paso / 2 : (centros[k - 1] + c) / 2); lim.push(xTotal);
-        const banda = (x) => { for (let k = 0; k < centros.length; k++) if (x >= lim[k] && x < lim[k + 1]) return k; return -1; };
+        const xTotalOpt = total ? total.x - 6 : null;
+        const { centros, lim, xTotal, bandaItem, xRef } = geometriaColumnas(gCols.items, xTotalOpt);
         const yEnc = gCols.y;
         // 2) etiquetas de la izquierda
         const ETQ = [['financiamiento', /^FINANCIAMIENTO$/i], ['cdp', /^CDP$/], ['neto', /^NETO$/], ['iva', /^IVA$/], ['total', /^TOTAL$/], ['direccion', /^DIRECCI[OÓ]N/i], ['contraparte', /^CONTRAPARTE/i], ['contacto', /^CONTACTO$/i], ['correo', /^(CORREO|EMAIL|E-MAIL)/i], ['horario', /^HORARIO/i]];
-        const etiquetas = []; ETQ.forEach(([k, re]) => { const it = its.filter(i => i.x < lim[0] - 20 && i.x > 230 && re.test(limpiar(i.str)) && (k === 'cdp' ? i.y < yEnc : k === 'financiamiento' ? true : i.y > yEnc)).sort((a, b) => a.y - b.y)[0]; if (it) etiquetas.push({ k, y0: it.y, y1: it.y }); });
+        const etiquetas = []; ETQ.forEach(([k, re]) => { const it = its.filter(i => i.x < lim[0] - 12 && i.x > xIzqMin && re.test(limpiar(i.str)) && (k === 'cdp' ? i.y < yEnc : k === 'financiamiento' ? true : i.y > yEnc)).sort((a, b) => a.y - b.y)[0]; if (it) etiquetas.push({ k, y0: it.y, y1: it.y }); });
         etiquetas.sort((a, b) => a.y0 - b.y0);
         // etiquetas de dos líneas ("DIRECCION DE / DESPACHO"): su extensión llega hasta la última palabra de esa columna antes de la siguiente
-        const izq = its.filter(i => i.x > 230 && i.x < lim[0] - 20 && i.y > yEnc);
+        const izq = its.filter(i => i.x > xIzqMin && i.x < lim[0] - 12 && i.y > yEnc);
         etiquetas.forEach((e, n) => { const sig = etiquetas[n + 1]; izq.forEach(i => { if (i.y > e.y1 && (!sig || i.y < sig.y0 - 3) && i.y - e.y1 < 20) e.y1 = i.y; }); });
         const sec = {};
         etiquetas.forEach((e, n) => {
             const ant = etiquetas[n - 1], sig = etiquetas[n + 1];
-            const desde = ant && e.y0 - ant.y1 < 45 ? (ant.y1 + e.y0) / 2 : e.y0 - (e.k === 'neto' ? 9 : 18), hasta = sig ? (e.y1 + sig.y0) / 2 : e.y1 + 25;
-            sec[e.k] = [e.k === 'cdp' ? Math.max(desde, (ant ? ant.y1 + e.y0 : 0) / 2) : desde, e.k === 'cdp' ? Math.min(hasta, yEnc - 8) : hasta];
+            let desde;
+            if (ant && e.y0 - ant.y1 < 45) {
+                desde = (ant.y1 + e.y0) / 2;
+            } else if (e.k === 'financiamiento' && e.y0 < yEnc) {
+                const sigSup = sig && sig.y0 < yEnc ? sig : null;
+                const refH = sigSup ? (sigSup.y0 - e.y1) / 2 : (yEnc - e.y1) / 2;
+                desde = e.y0 - Math.min(16, Math.max(6.5, refH * 1.05));
+            } else if (e.k === 'cdp' && e.y0 < yEnc) {
+                const refH = (yEnc - e.y1) * 0.78;
+                desde = e.y0 - Math.min(18, Math.max(8, refH));
+            } else {
+                desde = e.y0 - (e.k === 'neto' ? 9 : 18);
+            }
+            const hasta = sig ? (e.y1 + sig.y0) / 2 : e.y1 + 25;
+            const cdpHasta = Math.min(hasta, yEnc - Math.min(8, Math.max(3, (yEnc - e.y1) * 0.4)));
+            sec[e.k] = [e.k === 'cdp' ? Math.max(desde, (ant ? ant.y1 + e.y0 : 0) / 2) : desde, e.k === 'cdp' ? cdpHasta : hasta];
         });
         const hastaEnc = [sec.financiamiento, sec.cdp].filter(Boolean).map(x => x[0]).filter(y => y < yEnc), encabezadoHasta = hastaEnc.length ? Math.min(...hastaEnc) : yEnc - 60;   // financiamiento puede ir arriba o al pie
-        const ysEnc = its.filter(i => i.y < encabezadoHasta && banda(i.x) >= 0);
-        const texto = (k, y0, y1, junta) => { const v = its.filter(i => i.y >= y0 && i.y < y1 && banda(i.x) === k).sort((a, b) => a.y - b.y || a.x - b.x).map(i => limpiar(i.str)); return limpiar(junta === '' ? v.join('').replace(/-\s+/g, '-') : v.join(' ')); };
+        const texto = (k, y0, y1, junta) => { const v = its.filter(i => i.y >= y0 && i.y < y1 && bandaItem(i) === k).sort((a, b) => a.y - b.y || a.x - b.x).map(i => limpiar(i.str)); return limpiar(junta === '' ? v.join('').replace(/-\s+/g, '-') : v.join(' ')); };
         // 3) columnas
         const cols = centros.map((c, k) => {
             const cab = texto(k, 0, encabezadoHasta); // "MEMO N°68 CESFAM BORIS SOLER"
             const m = /MEMO\s*N\s*[°º]?\s*(\d+)\s*(.*)$/i.exec(cab);
-            const col = { memo: m ? m[1] : '', centro: m ? limpiar(m[2]).toUpperCase() : '', _k: k };
+            const col = { memo: m ? m[1] : '', centro: m ? normalizarCentro(m[2]) : '', _k: k };
             col.financiamiento = sec.financiamiento ? texto(k, sec.financiamiento[0], sec.financiamiento[1]) : '';
             const cdpTxt = sec.cdp ? texto(k, sec.cdp[0], sec.cdp[1], '') : '';
             col.cdps = (cdpTxt.match(/\d+/g) || []); col.cdp = col.cdps.join('-');
-            ['neto', 'iva', 'total'].forEach(n => { col[n] = sec[n] ? entero(its.filter(i => i.y >= sec[n][0] && i.y < sec[n][1] && banda(i.x) === k && /\d/.test(i.str)).map(i => i.str).join('')) : 0; });
+            ['neto', 'iva', 'total'].forEach(n => { col[n] = sec[n] ? entero(its.filter(i => i.y >= sec[n][0] && i.y < sec[n][1] && bandaItem(i) === k && /\d/.test(i.str)).map(i => i.str).join('')) : 0; });
             col.direccion = sec.direccion ? texto(k, sec.direccion[0], sec.direccion[1]) : '';
             col.contraparte = sec.contraparte ? texto(k, sec.contraparte[0], sec.contraparte[1]) : '';
             col.contacto = sec.contacto ? texto(k, sec.contacto[0], sec.contacto[1]) : '';
@@ -185,9 +223,9 @@
         const xDesc = (ids.length ? Math.max(...ids.map(x => x.x)) : 75) + 25;
         zona.filter(i => i.x >= Math.min(100, xDesc) && i.x < xPrecio).sort((a, b) => a.y - b.y).forEach(i => { if (ids.length) r.lineas[cercana(i.y)].descripcion.push(limpiar(i.str)); });
         zona.filter(i => i.x >= xPrecio && i.x < lim[0] - 4 && /\d/.test(i.str)).forEach(i => { if (ids.length && !r.lineas[cercana(i.y)].valorNeto) r.lineas[cercana(i.y)].valorNeto = entero(i.str); });
-        zona.filter(i => /^\d+$/.test(limpiar(i.str)) && i.x >= lim[0] - 4).forEach(i => {
-            if (!ids.length) return; const l = r.lineas[cercana(i.y)], q = Number(limpiar(i.str)), k = banda(i.x);
-            if (k >= 0) l.dist[cols[k].key] = (l.dist[cols[k].key] || 0) + q; else if (i.x >= xTotal) l.totalDeclarado = q;
+        zona.filter(i => /^\d+$/.test(limpiar(i.str)) && xRef(i) >= lim[0] - 4).forEach(i => {
+            if (!ids.length) return; const l = r.lineas[cercana(i.y)], q = Number(limpiar(i.str)), k = bandaItem(i);
+            if (k >= 0) l.dist[cols[k].key] = (l.dist[cols[k].key] || 0) + q; else if (xRef(i) >= xTotal) l.totalDeclarado = q;
         });
         r.lineas.forEach(l => { l.descripcion = limpiar(l.descripcion.join(' ')); });
         r.columnas = cols.map(({ _k, ...c }) => c);
@@ -215,11 +253,8 @@
         if (!cants.length) { r.avisos.push('No encontré las columnas de cantidades (encabezado "CANTIDAD").'); return r; }
         const yEnc = cants.sort((a, b) => b.y - a.y).filter(i => Math.abs(i.y - cants[0].y) <= TOL).length ? cants[0].y : cants[0].y;
         const fila = cants.filter(i => Math.abs(i.y - yEnc) <= TOL).sort((a, b) => a.x - b.x);
-        const CH = 19, centros = fila.map(i => i.x + CH), paso = centros.length > 1 ? centros[1] - centros[0] : 90;
         const hTotal = its.find(i => /^TOTAL$/i.test(limpiar(i.str)) && Math.abs(i.y - yEnc) <= TOL && i.x > fila[fila.length - 1].x);
-        const xTotal = hTotal ? hTotal.x - 8 : centros[centros.length - 1] + paso / 2;
-        const lim = centros.map((c, k) => k === 0 ? c - paso / 2 : (centros[k - 1] + c) / 2); lim.push(xTotal);
-        const banda = (x) => { for (let k = 0; k < centros.length; k++) if (x >= lim[k] && x < lim[k + 1]) return k; return -1; };
+        const { centros, lim, xTotal, bandaItem, xRef } = geometriaColumnas(fila, hTotal ? hTotal.x - 6 : null);
         const unir = (arr, junta) => limpiar(arr.sort((a, b) => a.y - b.y || a.x - b.x).map(i => limpiar(i.str)).join(junta === '' ? '' : ' '));
         // pie: etiquetas de la izquierda (x < primera columna)
         const xIzq = lim[0] - 15;
@@ -229,14 +264,14 @@
         const yNeto = (etq.find(e => e.k === 'neto') || { y: Infinity }).y;
         // columnas: encabezado = texto sobre la fila "CANTIDAD"
         const cols = centros.map((c, k) => {
-            const cab = unir(its.filter(i => i.y < yEnc - 2 && banda(i.x) === k));
+            const cab = unir(its.filter(i => i.y < yEnc - 2 && bandaItem(i) === k));
             const m = /MEMO\s*N\s*[°º]?\s*(\d+)\s*(.*?)\s*CDP\s*N?\s*[°º]?\s*([\d\s\-–y,]+)/i.exec(cab) || /MEMO\s*N\s*[°º]?\s*(\d+)\s*(.*)$/i.exec(cab);
-            const col = { memo: m ? m[1] : '', centro: m ? limpiar(String(m[2]).replace(/^CENTRO\s+/i, '')).toUpperCase() : '', financiamiento: '', _k: k };
+            const col = { memo: m ? m[1] : '', centro: m ? normalizarCentro(m[2]) : '', financiamiento: '', _k: k };
             col.cdps = m && m[3] ? (String(m[3]).match(/\d+/g) || []) : []; col.cdp = col.cdps.join('-');
             etq.forEach((e, n) => {
                 const sig = etq[n + 1], ant = etq[n - 1];
                 const y0 = ant ? (ant.y + e.y) / 2 : e.y - 8, y1 = sig ? (e.y + sig.y) / 2 : e.y + 25;
-                const zona = its.filter(i => i.y >= y0 && i.y < y1 && banda(i.x) === k);
+                const zona = its.filter(i => i.y >= y0 && i.y < y1 && bandaItem(i) === k);
                 if (['neto', 'iva', 'total', 'presupuesto', 'saldo'].includes(e.k)) col[e.k] = entero(zona.filter(i => /\d/.test(i.str)).map(i => i.str).join(''));
                 else col[e.k] = unir(zona, e.k === 'correo' ? '' : ' ');
             });
@@ -253,7 +288,7 @@
             const desc = zona.filter(i => i.x < 300).sort((x, y) => x.y - y.y || x.x - y.x).map(i => limpiar(i.str)).join(' ').replace(/^\(\d+\)\s*/, '');
             const pr = zona.filter(i => i.x >= 290 && i.x < lim[0] - 4 && /\d/.test(i.str)).map(i => entero(i.str))[0] || 0;
             const l = { id, descripcion: limpiar(desc), valorNeto: pr, dist: {}, totalDeclarado: null };
-            zona.filter(i => /^\d+$/.test(limpiar(i.str)) && i.x >= lim[0] - 4).forEach(i => { const k = banda(i.x), q = Number(limpiar(i.str)); if (k >= 0) l.dist[cols[k].key] = (l.dist[cols[k].key] || 0) + q; else if (i.x >= xTotal) l.totalDeclarado = q; });
+            zona.filter(i => /^\d+$/.test(limpiar(i.str)) && xRef(i) >= lim[0] - 4).forEach(i => { const k = bandaItem(i), q = Number(limpiar(i.str)); if (k >= 0) l.dist[cols[k].key] = (l.dist[cols[k].key] || 0) + q; else if (xRef(i) >= xTotal) l.totalDeclarado = q; });
             return l;
         });
         r.columnas = cols.map(({ _k, ...c }) => c);
@@ -444,7 +479,7 @@
         const out = []; let offset = 0;
         for (let p = 1; p <= Math.min(pdf.numPages, 6); p++) {
             const page = await pdf.getPage(p), vp = page.getViewport({ scale: 1 }), tc = await page.getTextContent();
-            tc.items.forEach(i => { if (i.str && i.str.trim()) out.push({ str: i.str, x: i.transform[4], y: offset + (vp.height - i.transform[5]) }); });
+            tc.items.forEach(i => { if (i.str && i.str.trim()) out.push({ str: i.str, x: i.transform[4], y: offset + (vp.height - i.transform[5]), w: Number(i.width) || 0, h: Math.abs(i.transform[3] || i.height || 0) }); });
             offset += vp.height + 20;
         }
         return out;

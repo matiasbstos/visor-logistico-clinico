@@ -27,6 +27,15 @@
     const slug = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
     const peso = (n) => '$' + Math.round(num(n)).toLocaleString('es-CL');
     const CENTRO_PROPIO = 'SAR';
+    const esCentroPropio = (c) => {
+        const t = String((c && c.centro) || '').toUpperCase().trim();
+        return t === CENTRO_PROPIO || (/(^|[^A-Z])SAR([^A-Z]|$)/.test(t) && !/CESFAM|POSTA|COSAM|CECOSF/i.test(t));
+    };
+    const columnasPropias = (oc) => {
+        const all = oc && Array.isArray(oc.columnas) ? oc.columnas : [];
+        const propias = all.filter(esCentroPropio);
+        return propias.length ? propias : all;
+    };
 
     // ---------------------------------------------------------------
     // Días hábiles (lunes a viernes sin feriados). Feriados de Chile 2026 verificados;
@@ -323,7 +332,7 @@
         const out = [];
         (ordenes || []).filter(o => !o.cerrada).forEach(oc => {
             const pl = estadoPlazo(oc);
-            (oc.columnas || []).filter(c => c.centro === CENTRO_PROPIO).forEach(c => (oc.lineas || []).forEach(l => {
+            columnasPropias(oc).forEach(c => (oc.lineas || []).forEach(l => {
                 const p = num(l.dist && l.dist[c.key]), r = num(l.recibido && l.recibido[c.key]);
                 if (p > r) out.push({ ocId: oc.id, numeroOC: oc.numeroOC, proveedor: oc.proveedor, producto: l.descripcion, pendiente: p - r, pedido: p, codigo: pl.codigo, limite: pl.limite, aceptada: !!oc.aceptada });
             }));
@@ -645,7 +654,7 @@
     function pintarDetalle() {
         const oc = ocActual; if (!oc) return;
         const pl = estadoPlazo(oc), tot = totalesPorCentro(oc), disc = discrepancias(oc);
-        const cols = (oc.columnas || []).filter(c => verTodos || c.centro === CENTRO_PROPIO);
+        const cols = verTodos ? (oc.columnas || []) : columnasPropias(oc);
         const colsVis = cols.length ? cols : (oc.columnas || []);
         root().innerHTML = `
             <div class="page-header mb-24"><div class="page-title"><button type="button" class="btn btn-outline btn-sm" id="soc-volver">← Órdenes</button>
@@ -792,13 +801,18 @@
     const hayRecibido = (oc) => (oc.lineas || []).some(l => Object.values(l.recibido || {}).some(v => num(v) > 0));
     function bannerSiguiente(oc, pl) {
         if (oc.cerrada) return '';
-        const pend = pendientesDe(oc).filter(x => x.pendiente > 0).length > 0, hayStock = (oc.lineas || []).some(l => Object.keys(l.ingresado || {}).some(k => num(l.ingresado[k]) > num(l.entregado && l.entregado[k])));
+        const pend = pendientesDe(oc).filter(x => x.pendiente > 0).length > 0;
+        const pendOtros = !pend && totalesPorCentro(oc).some(t => t.pendiente > 0);
+        const hayStock = (oc.lineas || []).some(l => Object.keys(l.ingresado || {}).some(k => num(l.ingresado[k]) > num(l.entregado && l.entregado[k])));
         const B = (id, t, pri, go) => `<button type="button" class="btn ${pri ? 'btn-primary' : 'btn-outline'} btn-sm" id="${id}"${go ? ` data-go="${go}"` : ''}>${esc(t)}</button>`;
         let txt, btns;
         if (pend) {
             txt = hayRecibido(oc) ? 'Falta mercadería por recibir. Regístrala cuando llegue, o envía la recepción conforme parcial.' : 'Siguiente paso: cuando llegue la mercadería, regístrala (puedes hacerlo por partes). La aceptación del proveedor es opcional.';
             btns = B('soc-recep', hayRecibido(oc) ? 'Recibir lo que falta' : 'Recibir mercadería', true) + (hayRecibido(oc) && !oc.recepcionConforme ? B('soc-conforme', 'Recepción conforme con correo (parcial)', false) : '');
-        } else if (!oc.recepcionConforme) { txt = 'Todo recibido. Siguiente paso: la recepción conforme con la guía o factura.'; btns = B('soc-conforme', 'Recepción conforme', true); }
+        } else if (!oc.recepcionConforme) {
+            txt = pendOtros ? 'Lo del SAR ya está recibido; aún hay mercadería pendiente de otros centros cargados. Puedes recibirla o emitir la recepción conforme.' : 'Todo recibido. Siguiente paso: la recepción conforme con la guía o factura.';
+            btns = (pendOtros ? B('soc-recep', 'Recibir mercadería', false) : '') + B('soc-conforme', 'Recepción conforme', true);
+        }
         else { txt = 'Recepción conforme lista. Ya puedes entregar a los centros desde las actas.'; btns = B('soc-sig', 'Ir a Actas de entrega', true, '#view-actas-entrega'); }
         const extra = hayStock && pend ? ' Lo ya recibido está en Bodega Central y se entrega desde Actas de entrega.' : '';
         if ((oc.recepciones || []).some(r => !r.anulada)) btns = B('soc-rc-desc', 'Descargar recepción conforme (PDF / Word)', false) + btns;
@@ -1083,7 +1097,7 @@
             && lineas.every((l, i) => Object.values(cuadro0.dist[i] || {}).reduce((t, x) => t + num(x), 0) === num(l.cantidad))) ? cuadro0 : null;
         if (v.distrib && !cuadro) throw new Error('El cuadro de distribución no calza con los productos de la orden (revisa los avisos). Corrige las cantidades o quita el cuadro.');
         // v21.177: SAR puede tener VARIOS memos/CDP en el mismo cuadro (ej. memos 55, 37, 36 y 9): se conservan todos; solo se omiten los de otros centros.
-        const propias = cuadro && cuadro.columnas ? cuadro.columnas.filter(c => Array.isArray(v.memosSel) ? v.memosSel.includes(c.key) : c.centro === CENTRO_PROPIO) : [], propia = propias.find(c => c.centro === CENTRO_PROPIO) || propias[0] || null;
+        const propias = cuadro && cuadro.columnas ? cuadro.columnas.filter(c => Array.isArray(v.memosSel) ? v.memosSel.includes(c.key) : esCentroPropio(c)) : [], propia = propias.find(esCentroPropio) || propias[0] || null;
         if (cuadro && Array.isArray(v.memosSel) && !propias.length) throw new Error('Elige al menos un memo para cargar en la orden.');
         // v20.65: del cuadro solo importa lo que dice SAR; lo de otros centros se omite (queda anotado cuáles).
         let cuadroF = cuadro; const otrosCentros = [];
@@ -1215,7 +1229,7 @@
                 const lineasOk = rev.lineas.filter(l => String(l.descripcion || '').trim() && num(l.cantidad) > 0);
                 const u = lineasOk.length ? window.SAR_Lector.unirDistribucion({ lineas: lineasOk, memos: memosDe(rev) }, d) : { avisos: ['Sube primero el PDF de la orden para cruzar los productos.'] };
                 const av = [...d.avisos, ...u.avisos];
-                const keys = d.columnas.map(c => c.key); if (!Array.isArray(rev.memosSel) || rev.memosSel.some(k => !keys.includes(k))) { const sar = d.columnas.filter(c => c.centro === CENTRO_PROPIO).map(c => c.key); rev.memosSel = sar.length ? sar : keys; }
+                const keys = d.columnas.map(c => c.key); if (!Array.isArray(rev.memosSel) || rev.memosSel.some(k => !keys.includes(k))) { const sar = d.columnas.filter(esCentroPropio).map(c => c.key); rev.memosSel = sar.length ? sar : keys; }
                 const sel = rev.memosSel;
                 est.innerHTML = `<strong>Cuadro leído:</strong> ${d.columnas.length} columna(s) · ${d.lineas.length} producto(s)
                     <div class="soc-tabla"><table><thead><tr><th><label title="Seleccionar todos"><input type="checkbox" id="p-mc-todos"${sel.length === d.columnas.length ? ' checked' : ''}> Cargar</label></th><th>Memo</th><th>Centro</th><th>Financiamiento</th><th>CDP</th><th>Neto</th><th>Total</th></tr></thead><tbody>${d.columnas.map(c => `<tr><td><input type="checkbox" class="p-mc" data-key="${esc(c.key)}"${sel.includes(c.key) ? ' checked' : ''} aria-label="Cargar memo ${esc(c.memo)}"></td><td>${esc(c.memo)}</td><td>${esc(c.centro)}</td><td>${esc(c.financiamiento)}</td><td>${esc(c.cdp)}</td><td>${peso(c.neto)}</td><td>${peso(c.total)}</td></tr>`).join('')}</tbody></table></div>
@@ -1447,7 +1461,7 @@
     /** Unidades pendientes de recibir por producto (solo columnas de SAR). Puro. */
     function pendientesDe(oc) {
         const out = [];
-        (oc.columnas || []).filter(c => c.centro === CENTRO_PROPIO).forEach(c => (oc.lineas || []).forEach(l => {
+        columnasPropias(oc).forEach(c => (oc.lineas || []).forEach(l => {
             const p = num(l.dist && l.dist[c.key]), r = num(l.recibido && l.recibido[c.key]);
             if (p) out.push({ producto: l.descripcion, codigoMP: l.codigoMP || '', memo: c.memo, pedido: p, recibido: r, pendiente: Math.max(0, p - r), valorNeto: num(l.valorNeto) });
         }));
@@ -1497,7 +1511,7 @@
         cargarCatalogo().then(m => { catalogo = m; const lv = ov && ov.querySelector('#r-lineas'); if (lv) lv.querySelectorAll('tr[data-i] .r-n').forEach(inp => { const c = catalogo.get(catId(oc.lineas[+inp.closest('tr').dataset.i] || {})); if (c && c.insumoName && inp.value === (oc.lineas[+inp.closest('tr').dataset.i] || {}).descripcion) inp.value = c.insumoName; }); const dl = ov && ov.querySelector('#r-inv'); if (dl) dl.innerHTML = nombresAuto().map(n => `<option value="${esc(n)}">`).join(''); }).catch(() => {});
         const nombresAuto = () => [...new Set([...nombresInv, ...[...catalogo.values()].map(c => c.insumoName).filter(Boolean)])];
         const cargaNombres = async () => { try { const ins = await fs().getDocs(fs().query(fs().collection(db(), 'Insumos'), fs().where('location', '==', central), fs().limit(1500))); const set = new Set(); ins.forEach(d => { if (d.data().name) set.add(d.data().name); }); nombresInv = [...set].sort((a, b) => a.localeCompare(b, 'es')); } catch (e) { nombresInv = []; } };
-        const propia = (key) => { const c = cols.find(x => x.key === key); return !!c && c.centro === CENTRO_PROPIO; };
+        const propia = (key) => { const c = cols.find(x => x.key === key); return !!c && esCentroPropio(c); };
         const cargaInv = (async () => {
             try {
                 const bs = await fs().getDocs(fs().collection(db(), 'Bodegas')); bs.forEach(d => { const b = d.data(); if (b.name && b.isActive !== false) bodegasLista.push(b.name); if (/central/i.test(String(b.name || '')) && b.isActive !== false) central = b.name; });
@@ -1682,7 +1696,7 @@
             const w = ov.querySelector('#r-stock-w'); if (w && w.lastChild) w.lastChild.textContent = ` Ingresar lo recibido al stock de ${central} (así se descuenta al entregarlo por acta)`;
         });
         ov.querySelectorAll('.r-mc').forEach(c => c.addEventListener('change', () => { sincronizarMemo(); pintar(); resumen(); })); { const t = ov.querySelector('#r-mc-todos'); if (t) t.addEventListener('change', () => { ov.querySelectorAll('.r-mc').forEach(c => { c.checked = t.checked; }); sincronizarMemo(); pintar(); resumen(); }); } ov.querySelector('#r-stock').addEventListener('change', () => { pintar(); resumen(); }); ov.querySelector('#r-lv').addEventListener('change', () => { pintar(); resumen(); });
-        const sel = ov.querySelector('#r-col'); const iPropia = cols.findIndex(c => c.centro === CENTRO_PROPIO); if (iPropia > 0) { sel.selectedIndex = iPropia; ov.querySelectorAll('.r-mc').forEach((c, n) => { c.checked = n === iPropia; }); }
+        const sel = ov.querySelector('#r-col'); const iPropia = cols.findIndex(esCentroPropio); if (iPropia > 0) { sel.selectedIndex = iPropia; ov.querySelectorAll('.r-mc').forEach((c, n) => { c.checked = n === iPropia; }); }
         sincronizarMemo(); pintar(); resumen();
         cargaInv.then(() => {
             const dl = ov.querySelector('#r-inv'); if (dl) dl.innerHTML = nombresAuto().map(n => `<option value="${esc(n)}">`).join('');

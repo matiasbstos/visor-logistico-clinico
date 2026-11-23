@@ -976,9 +976,15 @@
             <!-- VIEW: Toma de Inventario (Google Sheets por Categorías) -->
             <section id="view-toma-inventario" class="view-section" style="display:none;">
                 <div class="dashboard-container">
+                    <div class="page-header tm-encabezado">
+                        <div class="page-title">
+                            <h1>Toma de inventario</h1>
+                            <p>Cuenta lo que hay en una bodega, lote por lote; al cerrar, el sistema queda con lo contado. Funciona sin internet.</p>
+                        </div>
+                    </div>
                     <div class="page-tabs" role="tablist" aria-label="Conteos de inventario">
                         <button type="button" class="page-tab" data-go="view-toma-inventario" role="tab"><i class="ph-bold ph-clipboard-text"></i> Toma de inventario</button>
-                        <button type="button" class="page-tab" data-go="view-inventario-semanal" role="tab"><i class="ph-bold ph-calendar-check"></i> Inventario semanal</button>
+                        <button type="button" class="page-tab" data-go="view-inventario-semanal" role="tab" title="Para los departamentos que todavía cuentan con la planilla Excel"><i class="ph-bold ph-microsoft-excel-logo"></i> Inventario semanal (planilla Excel)</button>
                         <span class="page-tabs__spacer"></span>
                         <button type="button" class="btn btn-outline" data-go="view-inventario"><i class="ph-bold ph-archive-box"></i> Ver existencias</button>
                         <button type="button" class="btn btn-outline" data-go="view-historial"><i class="ph-bold ph-clock-counter-clockwise"></i> Historial</button>
@@ -1325,23 +1331,16 @@
             <!-- VIEW: Inventario Semanal por Racks y Control de Semanas -->
             <section id="view-inventario-semanal" class="view-section" style="display:none;">
                 <div class="dashboard-container">
-                    <div class="page-tabs" role="tablist" aria-label="Conteos de inventario">
-                        <button type="button" class="page-tab" data-go="view-toma-inventario" role="tab"><i class="ph-bold ph-clipboard-text"></i> Toma de inventario</button>
-                        <button type="button" class="page-tab" data-go="view-inventario-semanal" role="tab"><i class="ph-bold ph-calendar-check"></i> Inventario semanal</button>
-                        <span class="page-tabs__spacer"></span>
-                        <button type="button" class="btn btn-outline" data-go="view-inventario"><i class="ph-bold ph-archive-box"></i> Ver existencias</button>
-                        <button type="button" class="btn btn-outline" data-go="view-historial"><i class="ph-bold ph-clock-counter-clockwise"></i> Historial</button>
-                    </div>
                     <!-- Cabecera Principal -->
                     <div class="page-header mb-16">
                         <div class="page-title">
-                            <h1><i class="ph ph-calendar-check" style="color:var(--primary); margin-right:8px;"></i>Inventario Semanal por Racks</h1>
-                            <p>Auditoría cíclica organizada por estanterías físicas, con control de semanas auto-detectadas y sincronización independiente en Google Sheets.</p>
+                            <h1>Inventario semanal (planilla Excel)</h1>
+                            <p>Conteo semanal por estante para los departamentos que todavía usan la plantilla Excel. La toma de inventario por lote está en la pestaña «Toma de inventario».</p>
                         </div>
                         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
                             <div id="semanal-sheets-badge" class="badge-sheets-status status-offline" title="Estado del conector Google Sheets para Inventario Semanal">
                                 <span class="status-indicator-dot"></span>
-                                <span id="semanal-sheets-status-text">Sheets Semanal: No configurado</span>
+                                <span id="semanal-sheets-status-text">Sheets Semanal: falta vincular</span>
                             </div>
                             <button type="button" class="btn btn-outline" id="btn-pull-from-sheets-semanal" style="border-color:#8b5cf6; color:#7c3aed; font-weight:600;" title="Sincronizar cambios editados en el Google Sheets Semanal">
                                 <i class="ph ph-arrows-clockwise"></i> Sincronizar desde Sheets
@@ -1358,6 +1357,17 @@
                         </div>
                     </div>
 
+                    <div id="semanal-config-aviso" class="erp-card semanal-aviso" role="note" hidden>
+                        <b>Falta vincular la planilla de Google Sheets de este equipo.</b>
+                        <p>Para enviar y traer los conteos semanales hace falta la dirección (URL) del script de Google Sheets de la planilla semanal. La configura el encargado de bodega o el superadministrador con «Configurar Sheets Semanal», una vez en cada equipo. Mientras tanto puedes contar aquí y descargar la planilla con «Exportar resguardo».</p>
+                    </div>
+                    <div class="page-tabs" role="tablist" aria-label="Conteos de inventario">
+                        <button type="button" class="page-tab" data-go="view-toma-inventario" role="tab"><i class="ph-bold ph-clipboard-text"></i> Toma de inventario</button>
+                        <button type="button" class="page-tab" data-go="view-inventario-semanal" role="tab" title="Para los departamentos que todavía cuentan con la planilla Excel"><i class="ph-bold ph-microsoft-excel-logo"></i> Inventario semanal (planilla Excel)</button>
+                        <span class="page-tabs__spacer"></span>
+                        <button type="button" class="btn btn-outline" data-go="view-inventario"><i class="ph-bold ph-archive-box"></i> Ver existencias</button>
+                        <button type="button" class="btn btn-outline" data-go="view-historial"><i class="ph-bold ph-clock-counter-clockwise"></i> Historial</button>
+                    </div>
                     <!-- Barra de Navegación y Auto-Detección de Semanas (Mes / Año / Semana 1 a 5) -->
                     <div class="card mb-20" style="padding:16px 20px; background:linear-gradient(135deg, #0f172a, #1e293b); color:white; border-radius:14px;">
                         <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">

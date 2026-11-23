@@ -76,14 +76,14 @@
   // ---------------- pantalla ----------------
   function pintar() {
     const r = root(); if (!r) return;
-    if (!toma) { r.innerHTML = `<div class="tm-cab"><h1><i class="ph-bold ph-clipboard-text" aria-hidden="true"></i> Toma de inventario</h1><p class="act-hint">Cuenta lo que hay en una bodega, lote por lote, y al cerrar el sistema queda con lo contado. Funciona sin internet.</p></div>
-      <div class="card tm-abrir"><label class="form-label">Bodega<select id="tm-bod" class="form-control">${bodegas.map(b => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('')}</select></label>
+    /* 4.306: el título de la pantalla va en el encabezado (index.html), antes de las pestañas; la bodega parte sin elegir */
+    if (!toma) { r.innerHTML = `<div class="card tm-abrir"><label class="form-label">Bodega<select id="tm-bod" class="form-control"><option value="">— Elige bodega —</option>${bodegas.map(b => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('')}</select></label>
         <fieldset class="tm-tipo"><legend class="form-label">Tipo de toma</legend>
           <label><input type="radio" name="tm-tipo" value="parcial" checked> <b>Parcial</b> <small>lo que no cuentes queda igual</small></label>
           <label><input type="radio" name="tm-tipo" value="completa"> <b>Completa</b> <small>lo que no cuentes queda en 0 (faltante)</small></label></fieldset>
         <button type="button" class="btn btn-primary btn-large" data-a="abrir"><i class="ph-bold ph-play" aria-hidden="true"></i> Abrir toma</button></div>`; return; }
     const prods = Object.entries(toma.productos), nCont = prods.filter(([, p]) => p.conteos.length).length;
-    r.innerHTML = `<div class="tm-cab"><div><h1><i class="ph-bold ph-clipboard-text" aria-hidden="true"></i> Toma ${esc(toma.folio)}</h1><p class="act-hint">${esc(toma.bodega)} · ${toma.tipo === 'completa' ? 'Completa (lo no contado queda en 0)' : 'Parcial (lo no contado no cambia)'} · ${nCont} producto(s) contados · abierta ${esc(new Date(toma.abiertaEn).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }))}</p></div>
+    r.innerHTML = `<div class="tm-cab"><div><h2 class="tm-folio">Toma ${esc(toma.folio)}</h2><p class="act-hint">${esc(toma.bodega)} · ${toma.tipo === 'completa' ? 'Completa (lo no contado queda en 0)' : 'Parcial (lo no contado no cambia)'} · ${nCont} producto(s) contados · abierta ${esc(new Date(toma.abiertaEn).toLocaleString('es-CL', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }))}</p></div>
         <div class="tm-acc"><button type="button" class="btn ${vista === 'contar' ? 'btn-primary' : 'btn-outline'}" data-a="v-contar">Contar</button><button type="button" class="btn ${vista === 'cerrar' ? 'btn-primary' : 'btn-outline'}" data-a="v-cerrar"${nCont || toma.tipo === 'completa' ? '' : ' disabled'}>Revisar y cerrar</button></div></div>
       ${vista === 'cerrar' ? pintarCierre() : pintarConteo()}`;
     rellenar(r);
@@ -144,7 +144,13 @@
 
   // ---------------- acciones ----------------
   async function abrir() {
-    const r = root(), bod = (r.querySelector('#tm-bod') || {}).value, tipo = (r.querySelector('input[name="tm-tipo"]:checked') || {}).value || 'parcial'; if (!bod) return;
+    const r = root(), bod = (r.querySelector('#tm-bod') || {}).value, tipo = (r.querySelector('input[name="tm-tipo"]:checked') || {}).value || 'parcial';
+    if (!bod) { toast('Bodega', 'Elige la bodega que vas a contar.', 'warning'); const s = r.querySelector('#tm-bod'); if (s) s.focus(); return; }
+    /* 4.306: la completa deja en 0 lo que no se cuente: se confirma escribiendo el nombre de la bodega */
+    if (tipo === 'completa' && window.SAR_Progreso && window.SAR_Progreso.pedir) {
+      const v = await window.SAR_Progreso.pedir({ titulo: 'Toma completa', texto: `Lo que no cuentes en <b>${esc(bod)}</b> quedará en 0 (faltante). Para confirmar, escribe el nombre de la bodega: <b>${esc(bod)}</b>`, placeholder: bod, exacto: bod, si: 'Abrir toma completa', no: 'Volver', peligro: true });
+      if (v !== bod) return;
+    }
     let folio = '';
     try { folio = window.SAR_Cola && !(await window.SAR_Cola.hayConexion()) ? window.SAR_Folio.provisional('INV') : await window.SAR_Folio.siguiente('INV'); } catch (e) { folio = window.SAR_Folio ? window.SAR_Folio.provisional('INV') : 'INV-P-' + Date.now().toString(36); }
     const f = fs();

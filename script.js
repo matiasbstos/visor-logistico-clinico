@@ -16021,8 +16021,9 @@ function doGet(e) {
             text.textContent = 'Sheets Semanal: Vinculado';
         } else {
             badge.className = 'badge-sheets-status status-offline';
-            text.textContent = 'Sheets Semanal: No configurado';
+            text.textContent = 'Sheets Semanal: falta vincular';   /* 4.306: el aviso de abajo explica qué falta y quién lo configura */
         }
+        { const av = document.getElementById('semanal-config-aviso'); if (av) av.hidden = !!url; }
     }
 
     async function testSheetsConnection() {

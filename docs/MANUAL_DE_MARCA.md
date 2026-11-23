@@ -55,22 +55,22 @@ Estados con color siempre llevan además texto o ícono (no solo color).
 Las cifras importantes (KPI) van en 24–28 px · 800.
 
 ## 5. Forma, sombra y movimiento
-- **Forma firma**: `--shape-card` = `8px 8px 8px 0` (la esquina inferior izquierda recta repite los cuadrados del logo). Se usa en botones, campos y tarjetas; no la reemplace por un radio uniforme.
-- **Radios**: `--r-sm 8 px` · `--r-md 12 px` · `--r-lg 16 px` (modales) · `--r-xl 24 px` (el contenedor del login) · `--r-pill` (botones fantasma y chips de estado).
+- **Forma firma** (vale lo del CSS vigente, `style.css`; corregido en 4.306): `--shape-card` = `14px 14px 14px 0` (la esquina inferior izquierda recta repite los cuadrados del logo) en **tarjetas**; no la reemplace por un radio uniforme.
+- **Radios**: botones y campos `--id-r-sm` 10 px · tarjetas `--shape-card` · ventanas (modales) 20 px · chips y estados `--r-pill`. Los tokens `--r-sm 8` · `--r-md 12` · `--r-lg 16` · `--r-xl 24` (contenedor del login) siguen definidos para módulos antiguos; lo nuevo usa los de arriba.
 - **Sombras** (siempre teñidas de azul, nunca negro puro): `--sh-1` reposo · `--sh-2` elevada (hover, menús) · `--sh-3` modal/login.
 - **Movimiento**: curva `cubic-bezier(.2,.7,.2,1)`; 150–250 ms en controles, 600–800 ms solo en transiciones de marca (login). Se respeta `prefers-reduced-motion`.
 - **Foco**: anillo verde `0 0 0 3px rgba(140,198,63,.35)` + borde verde en campos; `outline` verde de 3 px en botones/enlaces.
 
 ## 6. Componentes
-- **Botón primario**: fondo azul, texto blanco, radio 8, sombra azul suave; hover = azul profundo + sube 1 px. Una sola acción primaria por zona.
+- **Botón primario**: fondo azul, texto blanco, radio 10 (`--id-r-sm`), alto mínimo 40 px; hover = azul profundo. Una sola acción primaria por zona.
 - **Botón secundario (`btn-outline`)**: blanco con borde gris; hover gris muy claro.
 - **Botón fantasma de marca** (sobre azul): borde blanco, píldora; hover invierte.
 - **Peligro**: borde/texto rojo; el relleno rojo solo en confirmaciones irreversibles.
-- **Campos**: fondo `#F8FAFC`, borde `#E2E8F0`, radio 8, etiqueta en mayúsculas pequeñas arriba; foco verde.
+- **Campos**: fondo `#F8FAFC`, borde `#E2E8F0`, radio 10 (`--id-r-sm`), etiqueta en mayúsculas pequeñas arriba; foco verde.
 - **Tarjetas** (`.card`, `.erp-card`): blancas, borde `#E2E8F0`, forma firma, sombra `--sh-1`.
 - **Tablas**: encabezado en mayúsculas pequeñas azules sobre `#F8FAFC`; filas con separador fino; hover `#F8FAFC`.
 - **Chips/estado**: píldora con fondo claro del color semántico + texto "text"; p. ej. Entregado completo (verde), Entrega parcial (naranja), Atrasada (rojo), En análisis (amarillo).
-- **Modales**: blanco, radio 16, sombra `--sh-3`, título azul, acciones a la derecha (Cancelar · Guardar).
+- **Modales**: blanco, radio 20, sombra `--id-sombra-alta`, título azul, acciones a la derecha (Cancelar · Guardar).
 - **Avisos (toasts)**: título en negrita + mensaje + "Ref. CÓDIGO" (ver `errores.js`).
 - **Íconos**: Phosphor (regular para menú, bold para acciones). Un ícono por acción, nunca solo ícono sin etiqueta salvo en barras compactas.
 

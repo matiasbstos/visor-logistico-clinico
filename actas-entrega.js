@@ -745,7 +745,7 @@
               <div class="act-fila act-docs"><input id="act-rn" value="${esc(borrador.recibe.nombre)}" placeholder="Recibe: nombre (opcional)"><input id="act-rc" value="${esc(borrador.recibe.cargo)}" placeholder="Recibe: cargo (opcional)"></div></details>
             ${errores.length && (borrador.items.length || borrador.centro) ? `<ul class="act-err">${errores.map(e => `<li>${esc(e)}</li>`).join('')}</ul>` : ''}
             <div class="act-acc"><button type="button" class="btn btn-outline" id="act-limpiar">Vaciar borrador</button>
-              <button type="button" class="btn btn-primary" id="act-emitir"${errores.length ? ' disabled' : ''}>${borrador.historica && borrador.historica.on ? 'Registrar acta histórica y descontar stock' : 'Emitir acta y descontar stock'}</button></div>
+              <button type="button" class="btn btn-primary" id="act-emitir"${errores.length ? ' disabled' : ''}>${borrador.historica && borrador.historica.on ? 'Registrar acta histórica y descontar stock' : 'Emitir acta y reservar stock'}</button></div>
             <div class="act-prueba"><b>Probar el formato</b><span>Genera el acta con los productos elegidos para comparar con el modelo. <u>No descuenta stock</u> ni se numera; queda registrada como "ACTA_PRUEBA" en el historial (informes contable y disponible).</span>
               <div class="act-acc"><button type="button" class="btn btn-outline" id="act-prueba-pdf"${borrador.items.length ? '' : ' disabled'}>Acta de prueba · PDF</button><button type="button" class="btn btn-outline" id="act-prueba-docx"${borrador.items.length ? '' : ' disabled'}>Acta de prueba · Word</button></div></div>
           </div>

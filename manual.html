@@ -1,0 +1,1476 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual de uso · Visor SAR</title>
+<meta name="description" content="Manual de uso y reglas del Visor Logístico SAR Elsa Romo Aravena">
+<link rel="icon" href="assets/favicon-32.png">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--azul:#1A3668;--azul-o:#122650;--verde:#8CC63F;--verde-t:#4D7C0F;--rojo:#CC1B23;--naranja-t:#C2410C;--tx:#0F172A;--tx2:#64748B;--borde:#E2E8F0;--fondo:#F8F9FA;--card:#fff}
+*{box-sizing:border-box} html{scroll-behavior:smooth;scroll-padding-top:72px}
+body{margin:0;font:15px/1.6 Inter,system-ui,sans-serif;color:var(--tx);background:var(--fondo)}
+header.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--azul);color:#fff}
+header.top img{height:30px} header.top h1{font-size:16px;margin:0;font-weight:700;flex:1}
+header.top a,header.top button{color:#fff;text-decoration:none;font:600 13px Inter,sans-serif;border:1px solid rgba(255,255,255,.4);background:transparent;border-radius:8px;padding:7px 12px;cursor:pointer;white-space:nowrap}
+header.top .pdf{background:var(--verde);border-color:var(--verde);color:var(--azul-o)}
+.wrap{display:grid;grid-template-columns:290px 1fr;max-width:1240px;margin:0 auto}
+nav.toc{position:sticky;top:52px;height:calc(100vh - 52px);overflow:auto;padding:16px;border-right:1px solid var(--borde);background:#fff}
+nav.toc input{width:100%;padding:9px 11px;border:1px solid var(--borde);border-radius:8px;font:14px Inter,sans-serif;margin-bottom:10px}
+nav.toc input:focus{outline:2px solid var(--verde);border-color:var(--verde)}
+nav.toc ul{list-style:none;margin:0;padding:0} nav.toc li{margin:2px 0} nav.toc ul ul{padding-left:12px;margin:2px 0 10px}
+nav.toc a{color:var(--tx);text-decoration:none;font-size:13.5px;display:block;padding:3px 6px;border-radius:6px} nav.toc a:hover{background:#EEF2F8;color:var(--azul)}
+nav.toc b{color:var(--azul)}
+main{padding:24px 32px 80px;min-width:0}
+.portada{background:linear-gradient(135deg,var(--azul-o),var(--azul) 60%,#2C5AA8);color:#fff;border-radius:16px;padding:28px;margin-bottom:24px}
+.portada h1{margin:0 0 6px;font-size:28px;font-weight:800;letter-spacing:-.01em} .portada p{margin:0;opacity:.9}
+.portada .meta{margin-top:14px;font-size:13px;opacity:.85}
+.cap{margin-bottom:36px} .cap>h2{font-size:24px;font-weight:800;color:var(--azul);border-bottom:3px solid var(--verde);padding-bottom:6px;margin:28px 0 14px}
+.n{display:inline-block;min-width:1.6em;color:var(--verde-t)}
+.mod{background:var(--card);border:1px solid var(--borde);border-radius:12px;padding:18px 22px;margin:16px 0}
+.mod h3{margin:0 0 10px;font-size:19px;color:var(--azul)} h4{color:var(--azul);margin:18px 0 6px}
+p strong:only-child{color:var(--azul)}
+table{border-collapse:collapse;width:100%;margin:10px 0;font-size:14px;display:block;overflow-x:auto}
+th{background:#EEF2F8;color:var(--azul);text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+th,td{border:1px solid var(--borde);padding:7px 9px;vertical-align:top}
+code{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em;background:#F1F5F9;padding:1px 5px;border-radius:4px}
+blockquote{margin:10px 0;padding:8px 14px;border-left:4px solid var(--verde);background:#F4FAEA;border-radius:0 8px 8px 0}
+ol li,ul li{margin:3px 0}
+.oculto{display:none!important} .sinres{color:var(--tx2);font-size:13px;padding:4px 6px}
+.menu-btn{display:none}
+@media (max-width:860px){
+  .wrap{grid-template-columns:1fr} nav.toc{position:fixed;inset:52px 0 0 0;height:auto;z-index:4;display:none} nav.toc.abierto{display:block}
+  .menu-btn{display:inline-block} main{padding:16px} .mod{padding:14px 16px} header.top h1{font-size:14px}
+  header.top .volver{display:none}
+}
+@media print{
+  header.top,nav.toc{display:none} .wrap{display:block} main{padding:0} body{background:#fff;font-size:11pt}
+  .portada{-webkit-print-color-adjust:exact;print-color-adjust:exact;break-after:page} .cap{break-before:page} .cap#intro{break-before:auto}
+  .mod{break-inside:auto;border:none;padding:0;margin:14px 0} .mod h3{break-after:avoid} th{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  a{color:inherit;text-decoration:none}
+}
+</style></head>
+<body>
+<header class="top"><button type="button" class="menu-btn" id="mb" aria-expanded="false" aria-controls="toc">Índice</button><img src="assets/logo/marca-sobre-oscuro.svg" alt=""><h1>Manual de uso · Visor SAR</h1>
+<a class="pdf" href="manual/Manual-Visor-SAR.pdf" download>Descargar PDF</a><a class="volver" href="./">Volver al Visor</a></header>
+<div class="wrap">
+<nav class="toc" id="toc" aria-label="Índice"><input type="search" id="q" placeholder="Buscar en el manual…" aria-label="Buscar en el manual"><p class="sinres oculto" id="sr">No hay resultados.</p><ul><li><a href="#intro"><b>Introducción</b></a></li><li><a href="#reglas"><b>1. Reglas del sitio</b></a><ul><li><a href="#reglas-tu-cuenta-es-personal">1.1 Tu cuenta es personal</a></li><li><a href="#reglas-no-hay-datos-de-pacientes">1.2 No hay datos de pacientes</a></li><li><a href="#reglas-quien-aprueba-que">1.3 Quién aprueba qué</a></li><li><a href="#reglas-fefo-sale-primero-lo-que-vence-primero">1.4 FEFO: sale primero lo que vence primero</a></li><li><a href="#reglas-lote-obligatorio-al-despachar">1.5 Lote obligatorio al despachar</a></li><li><a href="#reglas-sin-internet-deja-el-visor-abierto">1.6 Sin internet: deja el Visor abierto</a></li><li><a href="#reglas-no-borres-los-datos-del-navegador">1.7 No borres los datos del navegador</a></li><li><a href="#reglas-correlativos-y-folios">1.8 Correlativos y folios</a></li><li><a href="#reglas-cada-firma-tiene-una-responsabilidad">1.9 Cada firma tiene una responsabilidad</a></li><li><a href="#reglas-que-hacer-ante-un-error">1.10 Qué hacer ante un error</a></li></ul></li><li><a href="#inventario"><b>2. Inventario</b></a><ul><li><a href="#inventario-existencias">2.1 Existencias</a></li><li><a href="#inventario-donde-esta">2.2 ¿Dónde está?</a></li><li><a href="#inventario-toma-de-inventario">2.3 Toma de inventario</a></li><li><a href="#inventario-bultos-y-etiquetas">2.4 Bultos y etiquetas</a></li><li><a href="#inventario-impresion-de-etiquetas">2.5 Impresión de etiquetas</a></li><li><a href="#inventario-probar-la-pistola">2.6 Probar la pistola</a></li><li><a href="#inventario-pedir-insumos-desde-el-telefono">2.7 Pedir insumos desde el teléfono</a></li></ul></li><li><a href="#movimientos"><b>3. Movimientos y bodegas</b></a><ul><li><a href="#movimientos-ingresos">3.1 Ingresos</a></li><li><a href="#movimientos-ingreso-rapido">3.2 Ingreso rápido</a></li><li><a href="#movimientos-transferencias-entre-bodegas">3.3 Transferencias entre bodegas</a></li><li><a href="#movimientos-actas-de-entrega">3.4 Actas de entrega</a></li><li><a href="#movimientos-solicitudes-recibidas">3.5 Solicitudes recibidas</a></li><li><a href="#movimientos-distribucion-a-centros">3.6 Distribución a centros</a></li><li><a href="#movimientos-pendientes-por-entregar">3.7 Pendientes por entregar</a></li><li><a href="#movimientos-oxigeno-portatil">3.8 Oxígeno portátil</a></li><li><a href="#movimientos-bodegas-administracion">3.9 Bodegas (administración)</a></li></ul></li><li><a href="#catalogo"><b>4. Catálogo, órdenes de compra y ajustes</b></a><ul><li><a href="#catalogo-catalogo-de-productos">4.1 Catálogo de productos</a></li><li><a href="#catalogo-ordenes-de-compra-seguimiento-de-oc">4.2 Órdenes de compra: Seguimiento de OC</a></li><li><a href="#catalogo-bitacora-de-ordenes">4.3 Bitácora de órdenes</a></li><li><a href="#catalogo-ajustes-de-stock">4.4 Ajustes de stock</a></li><li><a href="#catalogo-historial">4.5 Historial</a></li><li><a href="#catalogo-auditoria">4.6 Auditoría</a></li><li><a href="#catalogo-fotos-de-productos-solo-superadministrador">4.7 Fotos de productos (solo superadministrador)</a></li></ul></li></ul></nav>
+<main>
+<div class="portada"><h1>Manual de uso y reglas del sitio</h1><p>Visor Logístico · SAR Arpillerista Elsa Romo Aravena</p><p class="meta">Versión del sistema 21.247 · actualizado el 22/11/2026</p></div>
+<section class="cap" id="intro"><h2>Introducción</h2><p>El <strong>Visor Logístico SAR</strong> es el sistema donde se registra todo lo que entra, se mueve y sale de las bodegas del SAR Elsa Romo Aravena:
+existencias por lote y vencimiento, ingresos, transferencias, actas de entrega, solicitudes de insumos, órdenes de compra, tomas de inventario y etiquetas.</p>
+<p><strong>Cómo entrar.</strong> Abre <strong>sarinventario.web.app</strong> en el computador o en el teléfono y entra con tu correo y tu clave personal.
+En el teléfono conviene <strong>instalarlo</strong> («Agregar a pantalla de inicio») para que funcione mejor sin internet.</p>
+<p><strong>Cómo usar este manual.</strong>
+- Empieza por <strong>Reglas del sitio</strong>: son obligatorias para todo el personal.
+- Después busca el módulo que vas a usar. Cada uno explica <strong>para qué sirve</strong>, <strong>quién lo usa</strong>, el <strong>paso a paso</strong>, <strong>qué hacer si pasa algo</strong> y sus <strong>reglas</strong>.
+- Los nombres de botones van en <strong>negrita</strong>, tal como aparecen en pantalla.
+- Este manual describe solo lo que está en uso hoy (versión 21.247). Si ves en el Visor algo que no está aquí, no lo uses sin preguntar al encargado de insumos.</p>
+<p>Esta parte explica cómo entra, se mueve y sale la mercadería en el Visor: ingresos, transferencias, actas de entrega, solicitudes, distribución a centros, oxígeno portátil y bodegas. Al final está el capítulo <strong>«Reglas del sitio»</strong>, que aplica a todo el personal.</p>
+<p><strong>Nombres de los roles.</strong> Así aparecen en <strong>Usuarios</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>Rol en el Visor</th>
+<th>En este manual</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Super Admin (Control Total)</td>
+<td>Superadministrador</td>
+</tr>
+<tr>
+<td>Administrador (Inventario)</td>
+<td>Administrador</td>
+</tr>
+<tr>
+<td>Administrador de Bodega</td>
+<td>Encargado de bodega</td>
+</tr>
+<tr>
+<td>Enfermero (Gestión de Bandejas)</td>
+<td>Enfermería</td>
+</tr>
+<tr>
+<td>Solo Bodega transitoria (conteo)</td>
+<td>Encargada de transitoria</td>
+</tr>
+<tr>
+<td>Solicitante (solo pide insumos)</td>
+<td>Solicitante</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cómo saber si tienes internet.</strong> Arriba se ve <strong>«En vivo · hh:mm»</strong> cuando hay conexión, o <strong>«Sin conexión · datos de las hh:mm»</strong> cuando no la hay. Si algo quedó guardado en el equipo esperando internet, abajo a la derecha aparece <strong>«N sin sincronizar»</strong>.</p></section><section class="cap" id="reglas"><h2><span class=n>1</span> Reglas del sitio</h2><p>Estas reglas valen para <strong>todo el personal</strong> que usa el Visor: bodega, enfermería, TENS y administrativos. Vienen de las decisiones del proyecto y de cómo funciona hoy el sistema.</p><section class="mod" id="reglas-tu-cuenta-es-personal"><h3><span class="n">1.1</span> Tu cuenta es personal</h3><ul>
+<li>Entra siempre con <strong>tu propio correo y tu clave</strong>. <strong>No prestes tu clave</strong> ni uses la sesión abierta de otra persona.</li>
+<li>Todo lo que haces queda registrado <strong>a tu nombre</strong> (tu correo): ingresos, traspasos, actas, ajustes, solicitudes procesadas. Si otra persona usa tu cuenta, lo que ella haga queda como tuyo.</li>
+<li>Al terminar el turno en un equipo compartido, pulsa <strong>Salir</strong>. Si quedan operaciones sin internet, el Visor te avisa: espera a que se envíen (o pulsa <strong>Sincronizar ahora</strong>) antes de salir.</li>
+<li>Las cuentas las crea el administrador en <strong>Usuarios</strong>. Cada persona tiene un rol y solo ve lo que su rol permite.</li>
+<li>Excepción: la página <strong>«Pedir insumos»</strong> (la de los servicios, en el teléfono) no usa cuenta: quien pide escribe su <strong>nombre y correo</strong>. El <strong>inventario de la bodega de uso</strong> sí se hace con usuario y clave personal.</li>
+</ul></section><section class="mod" id="reglas-no-hay-datos-de-pacientes"><h3><span class="n">1.2</span> No hay datos de pacientes</h3><p>El Visor es un sistema <strong>logístico</strong>: registra dónde está cada insumo y quién lo movió, <strong>no a quién se le administró</strong>.</p>
+<ul>
+<li><strong>Nunca</strong> escribas nombre, RUT, domicilio, número de cama ni ningún otro dato de un paciente: ni en observaciones, ni en notas, ni en el nombre de un producto, ni en el texto «Copiar para WhatsApp».</li>
+<li>No subas fotos ni escaneos donde aparezca un paciente (por ejemplo, una receta o una etiqueta con nombre).</li>
+<li><strong>Única excepción:</strong> el <strong>folio DAU</strong> de los <strong>medicamentos controlados</strong> (estupefacientes y psicotrópicos), que se pide al registrar su consumo en bandeja o carro de paro. Se guarda en un registro aparte, de acceso restringido. Los traspasos entre bodegas no lo piden.</li>
+<li>El Libro de Control de estupefacientes y psicotrópicos (DS 404 y DS 405) sigue siendo obligación del establecimiento y del Director Técnico, en su propio libro. <strong>El Visor no lo reemplaza.</strong></li>
+</ul></section><section class="mod" id="reglas-quien-aprueba-que"><h3><span class="n">1.3</span> Quién aprueba qué</h3><table>
+<thead>
+<tr>
+<th>Acción</th>
+<th>Quién la hace</th>
+<th>Quién la aprueba</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Ajuste de stock (sumar o restar)</td>
+<td>Cualquier rol de bodega</td>
+<td><strong>Superadministrador</strong>. Si lo hace el Superadministrador, se aplica directo; si lo hace otro rol, queda como solicitud con código AJU hasta que el Superadministrador lo apruebe.</td>
+</tr>
+<tr>
+<td><strong>Faltantes</strong> de una toma de inventario</td>
+<td>Quien cierra la toma</td>
+<td><strong>Superadministrador</strong>. Si no eres administrador, también los sobrantes quedan como solicitud.</td>
+</tr>
+<tr>
+<td>Corregir cantidad, lote o vencimiento de un ingreso</td>
+<td>Quien ingresó</td>
+<td>Directo, dentro de las <strong>12 h</strong> y si no salió nada del producto. Después, solo con Ajuste.</td>
+</tr>
+<tr>
+<td>Emitir acta de entrega</td>
+<td>Encargado de bodega, Administrador, Superadministrador</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Confirmar entrega, editar o eliminar un acta</td>
+<td><strong>Administrador o Superadministrador</strong></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Procesar y recibir solicitudes</td>
+<td>Encargado de bodega, Administrador, Superadministrador</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Inventario de una bodega de uso</td>
+<td>Encargada de transitoria (cuenta)</td>
+<td>Bodega: <strong>Aceptar y descontar</strong> o <strong>Pedir reconteo</strong></td>
+</tr>
+<tr>
+<td>Crear, renombrar, cerrar o eliminar bodegas</td>
+<td><strong>Administrador o Superadministrador</strong></td>
+<td>—</td>
+</tr>
+</tbody>
+</table></section><section class="mod" id="reglas-fefo-sale-primero-lo-que-vence-primero"><h3><span class="n">1.4</span> FEFO: sale primero lo que vence primero</h3><ul>
+<li>En toda salida (acta, transferencia, solicitud) se usa primero el <strong>lote que vence antes</strong> (FEFO: <em>First Expired, First Out</em>). Es la práctica que piden las Buenas Prácticas de Distribución de la UE para la rotación de existencias.</li>
+<li>El Visor ya lo propone:</li>
+<li>Las <strong>actas</strong> reservan por el lote que vence primero.</li>
+<li>Las <strong>solicitudes</strong> prellenan ese lote.</li>
+<li>En <strong>Transferencias</strong>, los lotes aparecen ordenados por vencimiento, pero <strong>tú eliges</strong> cuánto sacar de cada uno.</li>
+<li>Si sacas físicamente otro lote (por ejemplo, porque la caja pistoleada es de otro), <strong>registra ese lote</strong>: lo que dice el Visor debe ser lo que salió de verdad.</li>
+<li>Lo <strong>vencido</strong> no se entrega. Lo que está en <strong>CUARENTENA</strong> no se puede mover ni entregar.</li>
+</ul></section><section class="mod" id="reglas-lote-obligatorio-al-despachar"><h3><span class="n">1.5</span> Lote obligatorio al despachar</h3><ul>
+<li>Regla decidida: un producto que entró <strong>sin lote (S/L)</strong> debe tener su lote <strong>antes de despacharlo</strong> (acta, transferencia o solicitud). Sin lote no hay trazabilidad si se retira un producto del mercado.</li>
+<li><strong>El Visor todavía no lo exige solo.</strong> Mientras tanto, es una norma de trabajo:</li>
+<li>Si vas a despachar algo que figura <strong>S/L</strong> y la caja sí trae lote, <strong>avisa al encargado</strong> para corregirlo antes (Editar ingreso dentro de 12 h, o Ajuste).</li>
+<li>No despaches un controlado sin lote.</li>
+<li>Al ingresar, marca «Este producto no trae lote ni fecha de vencimiento» <strong>solo</strong> si de verdad no los trae.</li>
+</ul></section><section class="mod" id="reglas-sin-internet-deja-el-visor-abierto"><h3><span class="n">1.6</span> Sin internet: deja el Visor abierto</h3><p>El Visor guarda una copia de los datos en el equipo y la mantiene al día sola. Sin conexión:</p>
+<ul>
+<li><strong>Funcionan sin internet:</strong></li>
+<li>Ingresos e Ingreso rápido.</li>
+<li>Transferencias.</li>
+<li>Ajustes.</li>
+<li>Emitir actas (salvo las de una orden de compra).</li>
+<li>Confirmar productos, Procesar y Marcar recibido en Solicitudes.</li>
+<li>Toma de inventario.</li>
+<li>Etiquetas de cajas.
+  Todo eso queda guardado en el equipo con un <strong>folio provisional</strong> (por ejemplo, ING-P-…, AE-P-…) y se envía solo.</li>
+<li><strong>Necesitan internet:</strong></li>
+<li>Confirmar entrega de un acta, subir actas firmadas, eliminar actas.</li>
+<li>Actas de una orden de compra.</li>
+<li>Leer fotos en Ingreso rápido.</li>
+<li>Oxígeno portátil.</li>
+<li>Crear o cerrar bodegas.</li>
+<li><strong>Qué hacer:</strong>
+  1. <strong>Mantén el Visor abierto</strong> y con <strong>tu misma sesión</strong>. La cola se envía sola al volver internet, cada minuto y al volver a la pantalla.
+  2. Mira abajo a la derecha: <strong>«N sin sincronizar»</strong>. Al tocarlo se abre «Hecho sin conexión», con <strong>Sincronizar ahora</strong>.
+  3. Si algo quedó <strong>«para revisar»</strong>, el stock cambió entre medio (otra persona movió el producto). Avisa al encargado: se reintenta o se <strong>Descarta</strong>. El Visor <strong>nunca descuenta a ciegas</strong>.
+  4. <strong>No cierres sesión</strong> con operaciones pendientes. Cada persona aplica solo las suyas: lo que hiciste tú se envía cuando <strong>tú</strong> vuelves a entrar en ese equipo.</li>
+<li>Mientras no haya internet, lo que ves en pantalla es lo último descargado. Lo que hiciste sin conexión todavía no se resta de la vista.</li>
+<li>En <strong>iPhone</strong> la cola avanza solo con el Visor abierto. <strong>Instala el Visor en la pantalla de inicio</strong>: si lo usas solo en Safari y pasan unos 7 días sin abrirlo, el teléfono puede borrar los datos guardados.</li>
+</ul></section><section class="mod" id="reglas-no-borres-los-datos-del-navegador"><h3><span class="n">1.7</span> No borres los datos del navegador</h3><p>En el navegador del equipo quedan:
+- las <strong>operaciones hechas sin internet</strong> que aún no se envían;
+- el <strong>borrador del acta</strong> que estás armando y la firma de quien entrega;
+- el <strong>conteo de la toma de inventario</strong> en curso;
+- la copia de los datos para trabajar sin internet.</p>
+<p>Por eso:
+- <strong>No uses</strong> «Borrar datos de navegación», «Borrar caché» ni limpiadores del teléfono en los equipos del SAR.
+- <strong>No uses ventanas de incógnito</strong> para trabajar en el Visor: al cerrarlas se pierde lo guardado.
+- Si el Visor dice <strong>«Hay una versión nueva del visor»</strong>, pulsa <strong>Actualizar</strong>: no se pierde lo pendiente. Si el Visor va mal, <strong>pregunta antes</strong> de borrar nada.</p></section><section class="mod" id="reglas-correlativos-y-folios"><h3><span class="n">1.8</span> Correlativos y folios</h3><p>Cada documento tiene un número que <strong>no se repite ni se reutiliza</strong>. Si un documento se anula, su número queda registrado como <strong>ANULADO</strong>. Puede haber saltos en la numeración (un número que se tomó y la operación falló): es normal y queda a la vista de la auditoría. En el menú <strong>Directorio → Nomenclaturas</strong> (administradores) está la lista completa.</p>
+<table>
+<thead>
+<tr>
+<th>Código</th>
+<th>Formato (2026)</th>
+<th>Qué es</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>AE</strong></td>
+<td>AE-2026-0021</td>
+<td>Acta de entrega (también de oxígeno)</td>
+</tr>
+<tr>
+<td><strong>HIS</strong></td>
+<td>HIS-45</td>
+<td>Acta histórica (de antes del sistema)</td>
+</tr>
+<tr>
+<td><strong>SOL</strong></td>
+<td>SOL-2026-0001</td>
+<td>Solicitud de insumos. Mientras llega el número oficial, se ve uno provisional <strong>SI-AAAAMMDD-HHMM-…</strong></td>
+</tr>
+<tr>
+<td><strong>DIST</strong></td>
+<td>DIST-2026-0003</td>
+<td>Distribución a centros</td>
+</tr>
+<tr>
+<td><strong>ING</strong></td>
+<td>ING-2026-000045</td>
+<td>Ingreso</td>
+</tr>
+<tr>
+<td><strong>INV</strong></td>
+<td>INV-2026-00012</td>
+<td>Ingreso rápido y toma de inventario</td>
+</tr>
+<tr>
+<td><strong>AJU</strong></td>
+<td>AJU-2026-000047</td>
+<td>Ajuste de stock</td>
+</tr>
+<tr>
+<td><strong>CAM</strong></td>
+<td>CAM-2026-000046</td>
+<td>Corrección de datos con código de seguimiento</td>
+</tr>
+<tr>
+<td><strong>TRA</strong></td>
+<td>TRA-2026-00031</td>
+<td>Traspaso entre bodegas (también en solicitudes)</td>
+</tr>
+<tr>
+<td><strong>REP</strong></td>
+<td>REP-2026-00004</td>
+<td>Reposición de bodega de uso</td>
+</tr>
+<tr>
+<td><strong>CIE</strong></td>
+<td>CIE-2026-00002</td>
+<td>Cierre de bodega</td>
+</tr>
+<tr>
+<td><strong>REC</strong></td>
+<td>REC-2026-00015</td>
+<td>Recepción de mercadería de una orden</td>
+</tr>
+<tr>
+<td><strong>BAN</strong></td>
+<td>BAN-2026-00118</td>
+<td>Bandeja de turno</td>
+</tr>
+<tr>
+<td><strong>SUG</strong></td>
+<td>SUG-2026-00009</td>
+<td>Sugerencia de compra</td>
+</tr>
+<tr>
+<td><strong>BUL</strong></td>
+<td>BUL-2026-000123</td>
+<td>Caja etiquetada (la que se pistolea)</td>
+</tr>
+<tr>
+<td><strong>PI</strong> / <strong>PO</strong></td>
+<td>PI-2026-0007 / PO-2026-0003</td>
+<td>Precinto de inventario / precinto de oxígeno</td>
+</tr>
+<tr>
+<td><strong>SAR</strong></td>
+<td>SAR-000013 (lote: SAR-000013-L02)</td>
+<td>Código del producto y de su lote</td>
+</tr>
+<tr>
+<td><strong>ERR</strong></td>
+<td>ERR-AUT-001</td>
+<td>Código de un aviso de error</td>
+</tr>
+<tr>
+<td><strong>…-P-…</strong></td>
+<td>AJU-P-20261115-7KQ2</td>
+<td>Folio <strong>provisional</strong>, hecho sin internet. Se reemplaza por el definitivo al sincronizar.</td>
+</tr>
+</tbody>
+</table>
+<p>Desde el <strong>1 de enero de 2027</strong>, AE, SOL, DIST, PI y PO pasan a 5 dígitos, e ING, CAM y AJU tienen cada uno su propio contador. Los números antiguos no cambian.</p>
+<p><strong>Reglas:</strong>
+- Anota el folio en los papeles físicos (guía, acta, caja). Con él se encuentra todo en el Visor.
+- Nunca escribas un folio «a mano» inventado. Si es provisional (con <strong>-P-</strong>), espera el definitivo antes de enviarlo a otra persona.</p></section><section class="mod" id="reglas-cada-firma-tiene-una-responsabilidad"><h3><span class="n">1.9</span> Cada firma tiene una responsabilidad</h3><table>
+<thead>
+<tr>
+<th>Quién</th>
+<th>Qué declara</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Quien registra en el Visor</strong> (cualquier acción)</td>
+<td>Que lo registrado es lo que pasó físicamente. Tu correo queda en el historial, que <strong>no se puede modificar</strong>.</td>
+</tr>
+<tr>
+<td><strong>Quien entrega</strong> (firma del acta)</td>
+<td>Que entregó esos productos, en esas cantidades, a ese centro. Su nombre y cargo salen impresos.</td>
+</tr>
+<tr>
+<td><strong>Quien recibe</strong> (firma del acta)</td>
+<td>Que recibió conforme lo que dice el acta. Si falta algo, debe anotarlo en el acta <strong>antes</strong> de firmar.</td>
+</tr>
+<tr>
+<td><strong>Quien confirma la entrega</strong> (sube el acta firmada)</td>
+<td>Que el documento está firmado y corresponde a esa acta. Con eso el stock se descuenta. <strong>No confirmes un acta sin la firma de quien recibe.</strong></td>
+</tr>
+<tr>
+<td><strong>Quien marca «Recibido»</strong> en una solicitud</td>
+<td>Que la mercadería llegó a la bodega de destino.</td>
+</tr>
+<tr>
+<td><strong>Quien aprueba un ajuste</strong> (Superadministrador)</td>
+<td>Que la diferencia está justificada con el motivo indicado.</td>
+</tr>
+</tbody>
+</table></section><section class="mod" id="reglas-que-hacer-ante-un-error"><h3><span class="n">1.10</span> Qué hacer ante un error</h3><ol>
+<li><strong>Lee el aviso completo.</strong> Los avisos de error traen una referencia <strong>«Ref. ERR-XXX-NNN»</strong>. El aviso desaparece a los pocos segundos: <strong>sácale una foto o una captura de pantalla</strong>.</li>
+<li><strong>No repitas la operación a ciegas.</strong> Primero revisa si quedó hecha:
+   - en <strong>Historial</strong>;
+   - en la bitácora del acta;
+   - en el indicador <strong>«N sin sincronizar»</strong>.
+   Repetir un ingreso crea un segundo ingreso.</li>
+<li><strong>No intentes «arreglarlo» con otro movimiento</strong> (por ejemplo, un traspaso de vuelta o un ingreso inventado). Las diferencias se corrigen con <strong>Ajustes de Stock</strong> (motivo y código AJU), que aprueba el Superadministrador.</li>
+<li><strong>Avisa al encargado o al administrador</strong> con:
+   - la foto del aviso (con su Ref.);
+   - qué estabas haciendo;
+   - la pantalla y la hora;
+   - el folio (AE, SOL, ING…).</li>
+<li>Si la página se congela («La página no responde»), cierra la pestaña y vuelve a abrir el Visor. <strong>No borres los datos del navegador</strong> (8.7).</li>
+</ol></section></section><section class="cap" id="inventario"><h2><span class=n>2</span> Inventario</h2><p><strong>Antes de empezar: el Visor sin internet</strong>
+- Arriba a la derecha hay un aviso que dice <strong>«En vivo · hh:mm»</strong> cuando hay conexión, o <strong>«Sin conexión · datos de las hh:mm»</strong> cuando no hay. Sin conexión, lo que ves es la última copia que bajó el equipo.
+- Lo que hagas sin internet queda guardado en el equipo. Abajo a la derecha aparece <strong>«N sin sincronizar»</strong> y se envía solo cuando vuelve la conexión. Si lo tocas, ves el detalle y el botón <strong>Sincronizar ahora</strong>.
+- Para que funcione sin internet, el equipo tiene que haber abierto el Visor al menos una vez con conexión. En iPhone, instala el Visor en la pantalla de inicio y déjalo abierto hasta que se sincronice.</p><section class="mod" id="inventario-existencias"><h3><span class="n">2.1</span> Existencias</h3><p><strong>Para qué sirve:</strong> ver cuánto hay de cada producto, en qué bodega, con qué lotes y cuándo vencen.</p>
+<p><strong>Quién lo usa:</strong> operador, administrador y superadministrador. No aparece para los roles «Solo Bodega transitoria» ni «Solicitante». En el teléfono también está en la barra de abajo (<strong>Existencias</strong>).</p>
+<p><strong>Paso a paso</strong>
+1. En el menú lateral, entra a <strong>INVENTARIO → Existencias</strong>.
+2. Escribe en el buscador <strong>«Buscar medicamento por nombre o código...»</strong> (desde 2 letras). También puedes buscar por el ID de Mercado Público.
+3. Si quieres, filtra con las tres listas de arriba:
+   - Ubicación: <strong>Todas las Ubicaciones</strong>, <strong>Bodega Central</strong>, <strong>Bodegas Transitorias</strong>, <strong>Bandejas en Turno</strong>.
+   - Categoría: <strong>Todas las Categorías</strong>, <strong>Insumo Médico</strong>, <strong>Medicamento</strong>.
+   - Estado: <strong>Con stock</strong> (es el que viene marcado), <strong>Todos (incluye agotados)</strong>, <strong>Agotados</strong>, <strong>Stock Crítico</strong>, <strong>Stock Normal</strong>.
+4. Lee la fila de cada producto:
+   - <strong>CANT. (FÍSICO):</strong> verde = normal; naranjo = bajo el mínimo; rojo con <strong>STOCK CRÍTICO</strong> o <strong>AGOTADO</strong> = queda poco o nada. Si dice <strong>«+N reservado»</strong>, esas unidades están apartadas para actas de entrega por confirmar y no están disponibles.
+   - <strong>VTO.:</strong> los lotes con su cantidad y vencimiento. Un lote vencido o por vencer sale en color y con aviso ⚠.
+5. Para ver el detalle por lote, toca <strong>Ver desglose</strong> (para cerrarlo, <strong>Ocultar desglose</strong>).
+6. Botones de la fila:
+   - Flechas (<strong>Mover a otra bodega</strong>): abre la transferencia con el producto ya elegido.
+   - Gráfico (<strong>Ver Kardex y Trazabilidad</strong>): abre el <strong>Historial Clínico de Insumo</strong>, con los movimientos del producto.
+   - Lápiz: editar los datos del producto.
+7. Al pie de la tabla cambias de página con los números o las flechas (20 productos por página). Lo último que entró o se movió aparece primero.</p>
+<p><strong>Si pasa esto…</strong>
+- <strong>No aparece un producto que sé que existe:</strong> probablemente tiene stock 0 y el filtro está en «Con stock». Escribe su nombre (así aparece igual) o cambia el filtro a <strong>Todos (incluye agotados)</strong>.
+- <strong>«Mover» dice «No hay otra bodega a la que mover. Crea una en Bodegas.»:</strong> solo existe una bodega activa. Pídele al administrador que cree la otra.
+- <strong>La tabla se queda en «Cargando inventario...»:</strong> revisa la conexión y vuelve a entrar a Existencias.</p>
+<p><strong>Reglas</strong>
+- Lo «reservado» no se entrega a otro servicio: ya está comprometido en un acta.
+- No corrijas cantidades con el lápiz para «cuadrar»: para eso están la <strong>Toma de inventario</strong> o los <strong>Ajustes de Stock</strong>, que dejan registro y código.</p>
+<p><strong>Sin internet:</strong> muestra la última copia guardada en el equipo. <strong>Mover a otra bodega</strong> queda en cola y se aplica sola al volver la conexión.</p></section><section class="mod" id="inventario-donde-esta"><h3><span class="n">2.2</span> ¿Dónde está?</h3><p><strong>Para qué sirve:</strong> saber rápido en qué bodega y en qué estante está un producto.</p>
+<p><strong>Quién lo usa:</strong> todo el personal con acceso al Visor (también lo ve enfermería). No aparece para «Solo Bodega transitoria» ni «Solicitante».</p>
+<p><strong>Paso a paso</strong>
+1. Menú lateral → <strong>INVENTARIO → ¿Dónde está?</strong>
+2. Antes de escribir ves atajos:
+   - <strong>Búsquedas recientes:</strong> tócalas para repetirlas.
+   - <strong>Bodegas:</strong> cada una con su total. Si la tocas, se abre la ficha de esa bodega.
+   - <strong>Críticos ahora:</strong> los productos más bajos de stock.
+3. Escribe al menos <strong>3 letras</strong> del nombre en <strong>«Escribe el nombre del producto…»</strong>. También sirve el ID de Mercado Público (3 números o más).
+4. En cada producto ves las bodegas donde hay y cuántas unidades tiene cada una:
+   - En una bodega con estantes salen los códigos de estante con su cantidad (por ejemplo «A-01 · 30»). Toca uno para abrir ese estante.
+   - <strong>«N sin ubicar»</strong> = unidades que están en la bodega pero no tienen un estante asignado.
+   - <strong>«Bodega sin estantes»</strong> = esa bodega no usa estantes.
+5. En la ficha de una bodega o de un estante están los botones <strong>Ver stock</strong> e <strong>Inventario</strong>. Con rol de bodega (operador o administrador) aparecen además <strong>Ingresar</strong>, <strong>Sacar</strong>, <strong>Ajuste</strong> y <strong>Ubicar</strong>.</p>
+<p><strong>Si pasa esto…</strong>
+- <strong>«No encontré productos con ese nombre.»:</strong> prueba con otra palabra del nombre o con menos letras (aquí la búsqueda es exacta; no corrige errores de escritura).
+- <strong>«No se pudo buscar. Intenta de nuevo (ref. DE-01).»:</strong> falló la lectura. Sal y vuelve a entrar a la pantalla.
+- <strong>Toqué «Inventario» en la ficha de la bodega y la toma no viene con la bodega elegida:</strong> elígela tú en <strong>Bodega</strong> antes de <strong>Abrir toma</strong>.</p>
+<p><strong>Reglas</strong>
+- Si mueves producto de un estante a otro, actualízalo con <strong>Ubicar</strong> en la ficha de la bodega. Si no, la próxima persona lo va a buscar donde ya no está.</p>
+<p><strong>Sin internet:</strong> busca en la última copia guardada en el equipo. No confirmado en terreno (ver notas).</p></section><section class="mod" id="inventario-toma-de-inventario"><h3><span class="n">2.3</span> Toma de inventario</h3><p><strong>Para qué sirve:</strong> contar una bodega lote por lote. Al cerrar la toma, el sistema queda con lo contado y cada diferencia queda registrada con su código. Esta toma <strong>no suma</strong> lo contado al stock: lo <strong>reemplaza</strong>.</p>
+<p><strong>Quién lo usa:</strong> operador, administrador y superadministrador. Cualquiera de los tres puede contar y cerrar, pero cada rol aplica cosas distintas:</p>
+<table>
+<thead>
+<tr>
+<th>Rol</th>
+<th>Sobrantes y lotes nuevos</th>
+<th>Faltantes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Superadministrador</td>
+<td>Entran al cerrar</td>
+<td>Se descuentan al cerrar</td>
+</tr>
+<tr>
+<td>Administrador</td>
+<td>Entran al cerrar</td>
+<td>Quedan esperando al superadministrador</td>
+</tr>
+<tr>
+<td>Operador</td>
+<td>Quedan esperando al superadministrador</td>
+<td>Quedan esperando al superadministrador</td>
+</tr>
+</tbody>
+</table>
+<p>Lo que queda esperando aparece en <strong>Ajustes de Stock → Aprobaciones Pendientes</strong> (solo lo ve el superadministrador). Cada uno ve lo suyo en <strong>Mis Solicitudes</strong>.</p>
+<h3>Abrir la toma</h3>
+<ol>
+<li>Menú lateral → <strong>INVENTARIO → Toma de inventario</strong> (o <strong>Accesos → Conteos de inventario</strong>).</li>
+<li>Elige la <strong>Bodega</strong>.</li>
+<li>Elige el <strong>Tipo de toma</strong>:
+   - <strong>Parcial</strong> (es la que viene marcada): lo que no cuentes queda igual.
+   - <strong>Completa</strong>: lo que no cuentes queda en 0 y sale como faltante. Úsala solo si vas a contar <strong>toda</strong> la bodega.</li>
+<li>Toca <strong>Abrir toma</strong>. Arriba aparece <strong>«Toma INV-…»</strong> con la bodega, el tipo y cuántos productos llevas contados.</li>
+<li>Si aparece <strong>«Ya hay una toma abierta»</strong>, alguien ya está contando esa bodega. Toca <strong>Volver</strong> y ponte de acuerdo con esa persona. Usa <strong>Abrir igual</strong> solo si de verdad corresponde.</li>
+</ol>
+<h3>Contar</h3>
+<ol start="6">
+<li>En el recuadro <strong>«Pistolea la etiqueta o escribe el producto…»</strong>:
+   - <strong>Con pistola:</strong> pistolea la etiqueta de la caja (BUL). Una caja <strong>cerrada</strong> suma sola todo su contenido al lote que corresponde y aparece <strong>«Caja contada»</strong>. Si la caja está <strong>abierta</strong>, aparece <strong>«Caja abierta»</strong>: cuenta las unidades y anótalas a mano (paso 8).
+   - <strong>Con la cámara del teléfono:</strong> toca <strong>QR</strong> y apunta a la etiqueta.
+   - <strong>Sin etiqueta:</strong> escribe parte del nombre o del código (desde 2 letras) y toca el producto en la lista, que muestra su foto.</li>
+<li>Se abre la ficha del producto con la tabla <strong>Lote · Vence · Sistema · Contado · Estado</strong>. El estado cambia a medida que cuentas:
+   - <strong>«Quedan N»</strong>: todavía faltan N unidades para llegar a lo que dice el sistema.
+   - <strong>«Coincide»</strong>: está cuadrado.
+   - <strong>«Sobran N»</strong> o <strong>«Lote nuevo N»</strong>: contaste más de lo que hay en el sistema, o un lote que el sistema no tiene.</li>
+<li>Para anotar a mano:</li>
+<li>En <strong>«¿De qué lote es lo que cuentas?»</strong>, toca el lote (si el producto tiene un solo lote, ya viene marcado). También puedes tocar la fila del lote en la tabla.</li>
+<li>Si el lote no aparece, toca <strong>+ Lote que no está</strong> y escribe el <strong>Lote</strong> y el <strong>Vencimiento</strong>. Si el producto no trae ninguno de los dos, toca <strong>No trae lote ni vencimiento</strong>.</li>
+<li>Escribe la cantidad en <strong>«Cantidad (0 si no hay)»</strong> y toca <strong>Sumar al conteo</strong> (Enter también funciona).</li>
+<li>Puedes contar el mismo lote por partes (un estante, después otro): las cantidades se van sumando. Cada parte queda en una lista con una ✕ para quitarla si te equivocaste.</li>
+<li>Para seguir con otro producto, toca <strong>Otro producto</strong> o pistolea la siguiente caja. Lo que ya contaste queda abajo, en <strong>Contados (N)</strong>. Si tocas una tarjeta de esa lista, vuelves a ese producto.</li>
+</ol>
+<h3>Revisar y cerrar</h3>
+<ol start="11">
+<li>Toca <strong>Revisar y cerrar</strong> (se activa cuando llevas al menos un producto contado, o desde el inicio si la toma es completa).</li>
+<li>
+<p>Revisa la tabla de diferencias (<strong>Producto · Lote · Sistema · Contado · Diferencia</strong>). Las filas marcadas <strong>«por recontar»</strong> aparecen cuando:</p>
+<ul>
+<li>la diferencia es mayor a 5 % o a 10 unidades, o</li>
+<li>el producto es un medicamento controlado (en ese caso, cualquier diferencia).</li>
+</ul>
+<p>Vuelve a contar ese lote. Si el número está bien, toca <strong>Volví a contar: está bien</strong>. Si no, vuelve a <strong>Contar</strong> y corrígelo.
+13. Si un producto tiene unidades reservadas en actas por confirmar y lo contado no las cubre, el sistema pregunta <strong>«¿Esas actas ya se entregaron?»</strong> y muestra los folios de las actas. Responde:
+- <strong>Sí, ya se entregaron</strong>: el material ya salió de la bodega y no se descuenta del conteo.
+- <strong>No, siguen aquí</strong>: lo que no encontraste cuenta como faltante.
+Sin esta respuesta no se puede cerrar.
+14. Si un producto dice <strong>«cuenta todos sus lotes (pon 0 en los que no estén)»</strong>, toca <strong>Contar</strong> y anota 0 en los lotes que no encontraste.
+15. Si hay faltantes, elige el <strong>Motivo de los faltantes</strong> y, si quieres, escribe una <strong>Observación</strong>.
+16. Toca <strong>Cerrar toma INV-…</strong> y confirma con <strong>Cerrar toma</strong>. Al terminar aparece <strong>«Toma cerrada»</strong> con cuántos ajustes se aplicaron y cuántos quedaron esperando al superadministrador.</p>
+</li>
+</ol>
+<p><strong>Si pasa esto…</strong>
+- <strong>«No hay un producto así en esta bodega. Si llegó nuevo, regístralo en Ingresos.»:</strong> el producto no está registrado en esa bodega. No lo cuentes aquí: ingrésalo por <strong>Ingresos</strong>.
+- <strong>«… no existe en el sistema.»</strong> al pistolear: esa etiqueta no está registrada. Busca el producto por su nombre.
+- <strong>«La caja es de «…», que no está en (bodega).»:</strong> esa caja figura en otra bodega. Avisa a bodega para hacer la transferencia y no la cuentes en esta toma.
+- <strong>«Ya contada»:</strong> esa caja ya está en el conteo y no se suma dos veces.
+- <strong>«Elige de qué lote es lo que contaste.»</strong> o <strong>«Escribe cuántas unidades contaste (0 si no hay).»:</strong> falta marcar el lote o escribir la cantidad.
+- <strong>El botón Cerrar está gris:</strong> quedan filas por recontar o preguntas sin responder.
+- <strong>«No se cerró la toma» … «tuvieron movimientos mientras contabas»:</strong> alguien movió esos productos mientras contabas. El sistema borró su conteo y actualizó lo que dice el sistema: vuelve a contarlos y cierra de nuevo. Lo que ya se aplicó no se repite.
+- <strong>«Sin internet: cierre en cola»:</strong> la toma se aplica sola cuando vuelva la conexión. Deja el Visor abierto con tu mismo usuario.
+- <strong>«Toma … con errores»:</strong> algunos lotes no se pudieron ajustar. Cuéntalos en una toma nueva.</p>
+<p><strong>Reglas</strong>
+- <strong>No descartes una toma que ya tiene conteo.</strong> <strong>Descartar esta toma</strong> (abajo de todo, pide confirmar con <strong>Descartar</strong>) borra todo lo contado en ese equipo. El stock no cambia, pero el conteo se pierde.
+- <strong>No cuentes en dos pestañas ni en dos ventanas del mismo equipo.</strong> Comparten el mismo borrador y queda guardado lo último que se grabó, así que puedes perder conteos.
+- <strong>Termina la toma en el mismo equipo y navegador donde la abriste.</strong> El conteo queda guardado solo en ese equipo hasta que la cierres.
+- <strong>No abras dos tomas de la misma bodega</strong> en equipos distintos. Si lo haces, el segundo cierre se rechaza lote por lote.
+- Usa la <strong>Completa</strong> solo si vas a contar todo: lo que no cuentes queda en 0.
+- Lo que está en cuarentena no entra en la toma.</p>
+<p><strong>Sin internet:</strong>
+- Se puede abrir la toma (el folio sale provisional, «INV-P-…»), contar con la pistola o a mano, y cerrar. El cierre queda en cola y se aplica solo al volver la conexión.
+- Para que esto funcione, el equipo tiene que haber cargado esa bodega antes con conexión.
+- La cámara (<strong>QR</strong>) puede no funcionar sin internet; usa la pistola o escribe el producto (ver notas).</p></section><section class="mod" id="inventario-bultos-y-etiquetas"><h3><span class="n">2.4</span> Bultos y etiquetas</h3><p><strong>Para qué sirve:</strong> cada caja física lleva una etiqueta con producto, lote, vencimiento, unidades y «bulto 3 de 10», un QR (para la cámara del teléfono) y un código de barras (para la pistola). Desde aquí se crean las etiquetas, se consulta qué tiene una caja y se cuenta pistoleando cajas.</p>
+<p><strong>Quién lo usa:</strong> operador, administrador y superadministrador. No aparece para enfermería, «Solo Bodega transitoria» ni «Solicitante».</p>
+<p>Menú lateral → <strong>INVENTARIO → Bultos y etiquetas</strong>. Tiene cinco botones grandes y, abajo, la tabla <strong>Bultos registrados</strong> (Folio, Producto, Lote, Bulto, Contenido, Estado, Etiqueta, Bodega).</p>
+<h3>Crear etiquetas (producto nuevo o caja sin etiqueta)</h3>
+<ol>
+<li>Toca <strong>Crear etiquetas</strong>. Se abre <strong>Etiquetas de bulto</strong>, en la pestaña <strong>Nuevas etiquetas</strong>.</li>
+<li>En <strong>Producto</strong>, escribe el nombre y elige el producto y el lote de la lista.</li>
+<li>Revisa <strong>Lote</strong>, <strong>Vence</strong> y <strong>Bodega</strong>.</li>
+<li>En <strong>¿Cómo viene?</strong>, completa <strong>Total de unidades</strong>, <strong>Unidades por caja grande</strong> y <strong>Cajas grandes</strong>. Si cambias las cajas, se recalculan las unidades por caja. La última caja lleva lo que sobra.</li>
+<li>Si la caja grande trae cajas más chicas, marca <strong>La caja grande trae cajas interiores</strong> y escribe las <strong>Unidades por caja interior</strong>.</li>
+<li>Si quieres, completa <strong>Proveedor</strong>, <strong>Orden de compra</strong> y <strong>Fecha de recepción</strong>.</li>
+<li>Revisa el resumen (por ejemplo «10 etiquetas: 10 cajas grandes de 220 u.») y toca <strong>Crear etiquetas</strong>.</li>
+<li>Toca <strong>Imprimir ahora</strong> (se abre el PDF para la Zebra) o <strong>Después</strong> (las etiquetas quedan «Sin imprimir» en <strong>Impresión de etiquetas</strong>).</li>
+</ol>
+<h3>Etiquetar stock existente (lo que ya estaba en el sistema sin etiqueta)</h3>
+<ol>
+<li>Toca <strong>Etiquetar stock existente</strong>. Se abre en la pestaña <strong>Contar y etiquetar</strong>.</li>
+<li>Busca el producto y toca <strong>el lote que estás contando</strong>. Si el lote no está, toca la opción que dice <strong>otro lote</strong> y escríbelo.</li>
+<li>Anota las <strong>Cajas grandes</strong> (solo las completas), las <strong>Unidades por caja grande</strong> y las <strong>Unidades sueltas (sin caja)</strong>. El <strong>Total contado</strong> se calcula solo. Si una caja está incompleta, corrige el total a mano (<strong>Volver a calcular</strong> deshace el cambio).</li>
+<li>Compara con <strong>En el sistema (este lote)</strong> y mira la <strong>Diferencia</strong>.</li>
+<li>Toca <strong>Registrar conteo y crear etiquetas</strong>. Si solo hay unidades sueltas, el botón dice <strong>Registrar conteo</strong>.</li>
+<li>Si hay diferencia, el sistema pide confirmar:
+   - El superadministrador ve <strong>Sumar y seguir</strong> o <strong>Descontar y seguir</strong>.
+   - Los demás ven <strong>Enviar solicitud y seguir</strong>: la diferencia queda como solicitud para el superadministrador.
+   - <strong>Revisar</strong> vuelve atrás sin guardar.</li>
+<li>Al final ofrece <strong>Imprimir ahora</strong> o <strong>Después</strong>.</li>
+</ol>
+<h3>Escanear bulto (ver qué tiene una caja)</h3>
+<ol>
+<li>Toca <strong>Escanear bulto</strong>. Se abre la cámara y el recuadro <strong>«Pistola: escanea aquí · o escribe el folio y Enter»</strong>.</li>
+<li>Pistolea la etiqueta, apunta la cámara o escribe el folio y toca <strong>Buscar</strong>.</li>
+<li>Aparece la ficha de la caja: producto, lote, vencimiento, unidades que tiene y estado (<strong>Cerrada</strong>, <strong>Abierta</strong> o <strong>Vacía</strong>).</li>
+<li>Según lo que pase con la caja:
+   - <strong>Abrir caja</strong> (si estaba cerrada) o <strong>¿Cuánto queda?</strong> (si estaba abierta): ajusta con − / + y toca <strong>Listo</strong>, o toca <strong>Está vacía</strong>.
+   - <strong>Marcar vacía</strong>: la caja ya no tiene nada.
+   - <strong>Volver a cerrada (llena)</strong>: si se marcó vacía por error y está completa.
+   - <strong>Reimprimir etiqueta</strong>: pide el motivo.</li>
+<li>Si lees el QR de la etiqueta con la cámara normal del teléfono, se abre el Visor directo en esa caja (tienes que tener la sesión iniciada).</li>
+</ol>
+<h3>Contar por bultos (pistolear cajas)</h3>
+<ol>
+<li>Toca <strong>Contar por bultos</strong>.</li>
+<li>Pistolea cada caja:
+   - <strong>Cerrada:</strong> suma sola su contenido. Si es una caja grande, sus cajas interiores ya quedan contadas.
+   - <strong>Abierta:</strong> pregunta <strong>«¿cuántas unidades quedan?»</strong>. Responde con − / + y <strong>Listo</strong>, o toca <strong>Está vacía</strong>.
+   - <strong>Caja grande abierta:</strong> pregunta cuántas unidades <strong>sueltas</strong> hay dentro (<strong>Listo</strong>). Después pistolea sus cajas interiores una por una.
+   - <strong>Vacía:</strong> no suma.</li>
+<li>Abajo se arma la tabla <strong>Producto · Lote · Cajas · Contado · Sistema</strong>. Lo que no cuadra sale en rojo. «Sistema» incluye todo el lote de esa bodega, también lo que no tiene etiqueta.</li>
+<li>Toca <strong>Guardar conteo</strong>. <strong>Ojo:</strong> este conteo <strong>no cambia el stock</strong>. Para dejar el stock igual a lo contado, usa <strong>Toma de inventario</strong>.</li>
+</ol>
+<p><strong>Si pasa esto…</strong>
+- <strong>«… no es una etiqueta de bulto.»:</strong> pistoleaste otro código (por ejemplo, el del fabricante). Busca la etiqueta del Visor, la que tiene el logo y dice «BULTO n / N».
+- <strong>«… ya estaba contado … no se suma dos veces.»:</strong> está bien, esa caja ya se contó.
+- <strong>«Eso parece una etiqueta: primero indica cuánto queda en esta caja.»:</strong> la pistola escribió un folio en el campo de cantidad. Escribe la cantidad a mano y después pistolea la caja siguiente.
+- <strong>«No se pudo abrir la cámara…» / «La cámara no está disponible…»:</strong> da permiso de cámara al navegador, o usa la pistola o escribe el folio.
+- <strong>«Sin internet solo puedes crear N etiqueta(s)…»:</strong> sin internet hay un número limitado de folios guardados en el equipo. Crea menos cajas o espera la conexión.
+- <strong>«Este producto tiene … reservadas para actas por confirmar y varios lotes…»:</strong> no se sabe de qué lote salen esas unidades. Confirma o elimina esas actas antes de contar.
+- <strong>«Ya hay una solicitud de ajuste pendiente para este lote…»:</strong> pídele al superadministrador que la rechace y vuelve a contar.</p>
+<p><strong>Reglas</strong>
+- <strong>Una etiqueta por caja física.</strong> No pegues la misma etiqueta en dos cajas ni reimprimas «por si acaso».
+- Si el lote ya tiene cajas etiquetadas (aparece el aviso <strong>«cuéntalas igual, pero no les crees etiqueta otra vez»</strong>), no crees etiquetas nuevas para esas cajas.
+- Cuando saques unidades de una caja, márcala como abierta o vacía. Si no, en el próximo conteo va a sumar como llena.
+- No uses «Etiquetar stock existente» para mercadería que recién llegó: eso se ingresa por <strong>Ingresos</strong> o por la recepción de la orden de compra.</p>
+<p><strong>Sin internet:</strong>
+- Se pueden crear etiquetas (con los folios reservados en ese equipo), imprimirlas, escanear cajas, abrirlas o vaciarlas y contar por bultos. Todo se sube solo al volver la conexión.
+- Para que esto funcione, el equipo tiene que haber abierto el Visor antes con conexión.
+- La cámara puede no funcionar sin internet: usa la pistola (ver notas).</p></section><section class="mod" id="inventario-impresion-de-etiquetas"><h3><span class="n">2.5</span> Impresión de etiquetas</h3><p><strong>Para qué sirve:</strong> ver todas las etiquetas por orden de compra o por producto, imprimir las que quedaron pendientes al recibir, reimprimir y corregir datos.</p>
+<p><strong>Quién lo usa:</strong> operador, administrador y superadministrador. No aparece para enfermería, «Solo Bodega transitoria» ni «Solicitante». El número rojo junto al menú indica cuántas órdenes tienen etiquetas pendientes.</p>
+<p><strong>Paso a paso</strong>
+1. Menú lateral → <strong>INVENTARIO → Impresión de etiquetas</strong>.
+2. Elige la vista <strong>Por orden de compra</strong> o <strong>Por producto</strong>.
+3. Busca por N° de orden, proveedor, producto, lote o folio. Sirven varias palabras, sin tildes ni mayúsculas.
+4. Filtra con <strong>Todas</strong>, <strong>Pendientes</strong>, <strong>Impresas</strong> o <strong>Reimpresas</strong>.
+5. Toca una orden (o un producto) para abrir el detalle:
+   - Arriba ves las cifras: unidades recibidas, etiquetas creadas, etiquetas por imprimir y unidades sin etiqueta.
+   - Si dice <strong>«Falta etiquetar N u.»</strong>, toca <strong>Crear las que faltan</strong>, indica las cajas y créalas.
+   - <strong>Imprimir pendientes (N)</strong>: imprime las que nunca se imprimieron y las editadas.
+   - Para reimprimir, marca las etiquetas (o <strong>Seleccionar todas</strong>) y toca <strong>Reimprimir seleccionadas (N)</strong>. Te pide el motivo (<strong>¿Por qué se reimprime?</strong>) y lo confirmas con <strong>Reimprimir</strong>.
+   - <strong>Editar datos</strong> (por grupo) o el lápiz de una etiqueta: cambia el producto, lote, vencimiento, bodega, proveedor o fecha. Las unidades solo se pueden cambiar si la caja está cerrada. <strong>Guardar cambios</strong> no toca el stock: la etiqueta queda <strong>«Editada · reimprimir»</strong>.
+   - <strong>Órdenes</strong> te devuelve a la lista.
+6. Abajo de los botones grandes hay tres enlaces: <strong>Diferencias de conteo</strong> (lo registrado al etiquetar stock existente), <strong>Contar por bultos (pistola)</strong> y <strong>Probar la pistola</strong>.</p>
+<p>Qué significa cada estado:</p>
+<table>
+<thead>
+<tr>
+<th>Estado</th>
+<th>Qué significa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Faltan etiquetas / Sin etiquetas</td>
+<td>Llegó mercadería que todavía no tiene etiqueta</td>
+</tr>
+<tr>
+<td>Sin imprimir</td>
+<td>Las etiquetas existen, pero nunca se imprimieron</td>
+</tr>
+<tr>
+<td>Impresión parcial</td>
+<td>Algunas se imprimieron y otras no</td>
+</tr>
+<tr>
+<td>Cambios por reimprimir / Editada · reimprimir</td>
+<td>Se corrigieron datos después de imprimir</td>
+</tr>
+<tr>
+<td>Impresa / Reimpresa</td>
+<td>Ya se imprimieron una vez / más de una vez</td>
+</tr>
+<tr>
+<td>Sin registro (anterior)</td>
+<td>Etiqueta de antes de que el sistema anotara las impresiones</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Cómo imprimir en la Zebra</strong>
+- El PDF se abre en una pestaña nueva. Si el teléfono bloquea las ventanas emergentes, se descarga.
+- Imprime en papel de <strong>100 × 60 mm</strong>, a <strong>tamaño real</strong>, sin «ajustar a la página». Si la hoja sale escalada, la pistola no lee el código.</p>
+<p><strong>Si pasa esto…</strong>
+- <strong>«Impresión no registrada»:</strong> el PDF salió, pero no se pudo anotar la impresión (falló la conexión o la sesión). Revisa la conexión; la etiqueta seguirá apareciendo como pendiente.
+- <strong>La etiqueta dice «Impresa» pero el papel no salió:</strong> el sistema la marca como impresa cuando abre el PDF, no cuando sale el papel. Reimprímela y en el motivo pon «no salió de la impresora».
+- <strong>«No pude leer las etiquetas.»:</strong> falta conexión o la sesión expiró. Vuelve a entrar.</p>
+<p><strong>Reglas</strong>
+- Siempre anota un motivo real al reimprimir (etiqueta dañada, se cayó, se corrigieron datos).
+- Si corriges datos de una etiqueta ya pegada, reimprímela y reemplaza la etiqueta de la caja.</p>
+<p><strong>Sin internet:</strong> se puede imprimir lo que ya estaba cargado en el equipo y la impresión se anota al volver la conexión. La lista de órdenes puede no estar al día (ver notas).</p></section><section class="mod" id="inventario-probar-la-pistola"><h3><span class="n">2.6</span> Probar la pistola</h3><p><strong>Para qué sirve:</strong> ver si la pistola lee el código de barras de las etiquetas y si la impresora está imprimiendo a tamaño real.</p>
+<p><strong>Quién lo usa:</strong> el mismo personal de Impresión de etiquetas. Conviene hacerlo al recibir una pistola nueva o cuando una no lee.</p>
+<p><strong>Paso a paso</strong>
+1. Entra a <strong>Impresión de etiquetas</strong> y toca el enlace <strong>Probar la pistola</strong>.
+2. Toca <strong>Hoja de prueba (PDF)</strong> e imprímela en la Zebra a <strong>tamaño real</strong> (100 × 60 mm, sin «ajustar a la página»).
+3. Con una regla, mide la línea de abajo de la hoja: <strong>debe medir 50 mm</strong>. Si mide otra cosa, la impresora está escalando la hoja y hay que corregir el tamaño de papel en la impresora.
+4. Haz clic en <strong>«Pistolea aquí cada código de la hoja»</strong> y pistolea los códigos <strong>A</strong> a <strong>F</strong>, uno por uno.
+5. La tabla marca cada código:
+   - <strong>Sí</strong> (en verde): lo leyó bien.
+   - <strong>«Sí, pero escribió «…» (revisar idioma del teclado de la pistola)»</strong>: lo leyó, pero escribe otros caracteres.
+   - <strong>—</strong>: no lo leyó.
+6. Anota cuáles leyó y avísale al encargado del sistema. Con ese resultado se define el formato definitivo de la etiqueta.</p>
+<p><strong>Si pasa esto…</strong>
+- <strong>«La pistola termina con Tab / nada en vez de Enter»:</strong> el Visor la acepta igual, pero conviene configurarla con Enter (sufijo CR) usando el manual de la pistola.
+- <strong>No lee ninguno:</strong> revisa la medida de la línea de 50 mm. Si está bien, puede que la pistola tenga desactivado Code 128: hay que activarlo con los códigos de su manual.
+- <strong>«La librería de PDF aún no carga; intenta de nuevo en unos segundos.»:</strong> espera un momento y vuelve a tocar el botón.</p>
+<p><strong>Reglas</strong>
+- No uses la hoja de prueba para contar: sus números no son cajas.</p>
+<p><strong>Sin internet:</strong> la hoja de prueba se genera en el equipo y la prueba de lectura no necesita conexión. No confirmado en terreno.</p></section><section class="mod" id="inventario-pedir-insumos-desde-el-telefono"><h3><span class="n">2.7</span> Pedir insumos desde el teléfono</h3><p><strong>Para qué sirve:</strong> que cualquier funcionario (enfermería, TENS, administrativos) pida insumos médicos, de aseo o de oficina desde su teléfono, sin usuario ni clave, y vea cómo avanza su pedido.</p>
+<p><strong>Quién lo usa:</strong> cualquier persona del SAR, con solo su nombre y su correo. El botón <strong>Inventario de bodega</strong> de esa misma página es para las encargadas de bodegas de uso y pide usuario (se explica en el módulo Bodega transitoria).</p>
+<p><strong>El link</strong>
+- La página es <strong>https://sarinventario.web.app/solicitar.html</strong>. Es una página aparte, que solo sirve para pedir: no muestra el resto del Visor.
+- El superadministrador tiene el link y su QR en <strong>INVENTARIO → Fotos de productos → Accesos directos para el teléfono → Pedir insumos</strong> (botón <strong>QR</strong> para mostrarlo o compartirlo).
+- <strong>Para dejarlo como app en el teléfono</strong>, abre el link y despliega:
+  - <strong>Cómo instalar en Android:</strong> en Chrome, toca ⋮ → <strong>Agregar a pantalla de inicio</strong> (o <strong>Instalar app</strong>) → <strong>Agregar</strong>. Si aparece el botón <strong>Instalar «Pedir insumos» ahora</strong>, basta con tocarlo.
+  - <strong>Cómo instalar en iPhone:</strong> si lo abriste desde WhatsApp, toca ⋯ → <strong>Abrir en Safari</strong>. Después toca <strong>Compartir</strong> → <strong>Agregar a inicio</strong> → <strong>Agregar</strong>.
+  - Queda el ícono verde <strong>«Pedir insumos»</strong> en la pantalla de inicio.</p>
+<p><strong>Paso a paso (pedir)</strong>
+1. Abre <strong>Pedir insumos</strong>. En <strong>¿Qué necesitas hacer?</strong>, toca <strong>Pedir insumos</strong>.
+2. Elige el tipo: <strong>Insumos médicos</strong>, <strong>Aseo</strong> u <strong>Oficina</strong>.
+3. En <strong>¿Quién pide?</strong>, escribe <strong>Tu nombre</strong> (nombre y apellido) y <strong>Tu correo</strong>, y toca <strong>Continuar</strong>. El teléfono los recuerda para la próxima vez. Si otra persona usa el mismo teléfono, toca <strong>Cambiar</strong> al lado de «Pidiendo como…».
+4. En <strong>Agregar producto</strong>, escribe las primeras palabras (desde 2 letras). La búsqueda tolera tildes y errores chicos («dimer» encuentra «D-DIMMER»), pero los números tienen que ser exactos (suero 250 no encuentra suero 500).
+5. Toca el producto. Ajusta la <strong>Cantidad</strong> con − / + y toca <strong>Agregar</strong>.
+6. Si no lo encuentras, toca <strong>No está en la lista</strong>:
+   - Escribe el <strong>Nombre del producto</strong> completo: qué es, marca, medida o tamaño.
+   - Ajusta la <strong>Cantidad</strong>.
+   - Si puedes, toca <strong>Foto (opcional)</strong> y saca una foto de la caja o la etiqueta.
+   - Toca <strong>Agregar</strong>. Si aparece <strong>«¿Es alguno de estos?»</strong>, revisa si tu producto ya estaba en la lista y tócalo.
+7. Revisa <strong>Tu solicitud (N)</strong>: cambia las cantidades con − / + o quita productos con ✕.
+8. Si quieres, escribe una <strong>Nota (opcional)</strong> (por ejemplo, «urgente para hoy»).
+9. Toca <strong>Enviar solicitud</strong>. Aparece <strong>«Solicitud enviada»</strong> con tu número <strong>SOL-AAAA-NNNN</strong>. Si el número todavía no llega, dice <strong>«N° oficial en camino»</strong>.</p>
+<p><strong>La vista del que pide: «Tus solicitudes»</strong>
+- Debajo del formulario aparecen tus solicitudes hechas desde ese teléfono. Puedes buscarlas por N° (SOL-…) o por producto.
+- Cada solicitud muestra su recorrido:</p>
+<table>
+<thead>
+<tr>
+<th>Estado</th>
+<th>Qué significa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Enviada</td>
+<td>Llegó a bodega</td>
+</tr>
+<tr>
+<td>Procesando</td>
+<td>Bodega la está revisando</td>
+</tr>
+<tr>
+<td>Procesada</td>
+<td>Bodega ya preparó y movió lo que había</td>
+</tr>
+<tr>
+<td>Cerrada</td>
+<td>Entregada</td>
+</tr>
+<tr>
+<td>Anulada</td>
+<td>Bodega la anuló</td>
+</tr>
+<tr>
+<td>Por enviar (sin internet)</td>
+<td>Todavía está solo en tu teléfono</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Si bodega no tenía algo, aparece <strong>«No disponible: …»</strong> con el producto y la cantidad que faltó.</li>
+<li>Cuando tu solicitud cambia de estado aparece un aviso en pantalla. Toca <strong>Ver</strong> para ir a ella.</li>
+<li><strong>Modificar:</strong> mientras la solicitud siga en <strong>Enviada</strong>, puedes cambiarla desde el mismo teléfono. Toca <strong>Modificar</strong>, haz los cambios y toca <strong>Guardar cambios</strong> (o <strong>Cancelar</strong>). Cuando bodega empieza a prepararla, ya no se puede cambiar.</li>
+<li>Si tu correo es institucional (cormumel.cl o vivirsalud.cl), también te llegan avisos por correo en horario hábil.</li>
+</ul>
+<p><strong>Si pasa esto…</strong>
+- <strong>«Escribe tu nombre y apellido.» / «Escribe un correo válido…»:</strong> completa los dos datos.
+- <strong>«Nombre completo» / «Más detalle»</strong> al agregar a mano: el nombre es muy corto. Sin foto hay que describir más (qué es, marca, medida o para qué se usa).
+- <strong>«No está en (tipo), pero sí en otro tipo»:</strong> el producto está clasificado en otro tipo. Puedes agregarlo igual.
+- <strong>«Sin internet: se guardará en este teléfono y se enviará sola al volver la conexión.»:</strong> está bien. La solicitud queda <strong>«Guardada en el teléfono»</strong> y se envía sola.
+- <strong>«No pude cargar la lista. Si no tienes internet, ábrela una vez con conexión para dejarla guardada.»:</strong> la primera vez se necesita internet.
+- <strong>«Aún no disponible»:</strong> bodega todavía no activa el acceso sin cuenta. Avisa a bodega.
+- <strong>«Bodega ya empezó a prepararla: no se puede cambiar.»:</strong> si necesitas algo más, haz una solicitud nueva.
+- <strong>No me aparecen mis solicitudes anteriores:</strong> solo se ven las hechas desde ese mismo teléfono y navegador.</p>
+<p><strong>Reglas</strong>
+- Una solicitud por pedido. No mandes la misma dos veces «por si no llegó»: revisa <strong>Tus solicitudes</strong>.
+- Usa tu nombre y tu correo reales. No pidas a nombre de otra persona.
+- No escribas datos de pacientes (nombre, RUT, cama) en la nota ni en los productos.
+- Usa <strong>No está en la lista</strong> solo si de verdad no aparece. Antes prueba con otra palabra.</p>
+<p><strong>Sin internet:</strong>
+- La primera vez necesita conexión.
+- Después, la página abre sin internet y puedes armar y <strong>enviar</strong> la solicitud: queda <strong>«Por enviar (sin internet)»</strong> y se envía sola cuando vuelve la conexión.
+- El N° SOL se asigna cuando llega a bodega.</p></section></section><section class="cap" id="movimientos"><h2><span class=n>3</span> Movimientos y bodegas</h2><section class="mod" id="movimientos-ingresos"><h3><span class="n">3.1</span> Ingresos</h3><p><strong>Para qué sirve</strong>
+Para registrar la mercadería que llega: de un proveedor, de una compra sin orden o en préstamo desde otro centro. Al confirmar, el producto queda <strong>disponible de inmediato</strong> en la bodega que elijas y el movimiento queda en el Historial con su código <strong>ING</strong>.</p>
+<p><strong>Quién lo usa</strong>
+Encargado de bodega, Administrador y Superadministrador. Enfermería no tiene acceso.</p>
+<p><strong>Paso a paso</strong>
+1. En el menú, entra a <strong>MOVIMIENTOS → Ingresos</strong>. La pantalla se titula «Registro de Ingresos».
+2. En <strong>TIPO DE INSUMO</strong>, elige primero <strong>Insumos médicos</strong>, <strong>Insumos de aseo</strong> o <strong>Insumos de oficina</strong>. Esto define si el lote y el vencimiento son obligatorios.
+3. En <strong>INSUMO SELECCIONADO</strong>, escribe el nombre. El Visor te sugiere los nombres que ya existen: si el producto ya está, <strong>elige el nombre sugerido</strong> en vez de escribir otro parecido. El botón con el código de barras, al lado, abre la cámara para leer el código de la caja (se cierra con <strong>Cancelar Escáner</strong>).
+4. Escribe el <strong>LOTE</strong> y la <strong>FECHA VENCIMIENTO</strong> tal como vienen en la caja.
+   - En insumos médicos son obligatorios. Si el producto de verdad no los trae, marca <strong>«Este producto no trae lote ni fecha de vencimiento»</strong>. Quedará como <strong>S/L</strong> (sin lote).
+   - En aseo y oficina son opcionales.
+5. <strong>TALLA</strong> (opcional): úsala en guantes, ropa o sondas. Si eliges <strong>«Otra (escribir número u otra medida)…»</strong>, escribe la medida. Cada talla queda como un producto aparte.
+6. <strong>ID MERCADO PÚBLICO</strong> (opcional): sirve para encontrar la foto del producto.
+7. Indica la cantidad:
+   - <strong>Por unidades</strong>: escribe la <strong>CANTIDAD</strong>.
+   - <strong>Por cajas</strong>: escribe <strong>N° DE CAJAS</strong> y <strong>UNIDADES POR CAJA</strong>; el total se calcula solo.
+8. <strong>CATEGORÍA</strong>: elige una de la lista o crea una nueva.
+9. <strong>PROVEEDOR</strong>: escribe o elige el proveedor. Si en <strong>TIPO DE COMPRA</strong> eliges <strong>«Préstamo / traspaso desde otro centro»</strong>, el campo pasa a llamarse <strong>CENTRO DE ORIGEN</strong>: escribe ahí el centro que lo envía.
+10. <strong>DESTINO</strong>: elige la bodega donde queda guardado. Revísalo siempre: el stock queda en esa bodega.
+11. <strong>N° DE OC O DOCUMENTO</strong> (opcional, se puede asociar después), <strong>DOC. RESPALDO</strong> (PDF o foto, opcional) y <strong>OBSERVACIONES</strong>.
+12. Pulsa <strong>CONFIRMAR INGRESO</strong>. Debe aparecer el aviso <strong>«Éxito — Movimiento registrado y auditado correctamente.»</strong> y el formulario queda en blanco.
+13. Abajo, en <strong>ÚLTIMOS REGISTRADOS</strong>, verás los tres últimos ingresos.</p>
+<p><strong>Préstamos que debemos devolver.</strong> Si ingresaste algo como préstamo de otro centro, aparece el recuadro <strong>«PRÉSTAMOS DE OTROS CENTROS POR DEVOLVER»</strong>. Al devolverlo, escribe la cantidad y pulsa <strong>Devolver</strong>.</p>
+<p><strong>Sin internet:</strong> el ingreso <strong>sí funciona</strong>. Queda guardado en el equipo con un folio provisional <strong>ING-P-…</strong> y aparece el aviso <strong>«Sin internet: ingreso en cola»</strong>. Se aplica solo cuando vuelve la conexión. El archivo de respaldo no viaja en la cola: adjúntalo después.</p>
+<p><strong>Si pasa esto…</strong>
+- <strong>«Falta la talla»</strong>: elegiste «Otra» y no escribiste la medida. Escríbela o elige «Sin talla».
+- <strong>«Revisar ingreso»</strong> (el movimiento quedó en el historial pero el producto no aparece en Existencias): <strong>no sigas ingresando</strong>. Avisa al administrador.
+- <strong>«Error Crítico — Fallo en la sincronización»</strong>: revisa en <strong>Historial</strong> si el ingreso quedó antes de repetirlo. <strong>Si envías el formulario dos veces, quedan dos ingresos.</strong>
+- <strong>Entró menos de lo que escribiste</strong>: ese producto tenía una <strong>deuda</strong> (se entregó con acta antes de que existiera stock en el sistema). El ingreso salda primero esa deuda. Es correcto; queda registrado.
+- <strong>Me equivoqué en la cantidad, el lote o el vencimiento</strong>: puedes corregirlo desde el <strong>Historial</strong> durante las <strong>12 horas</strong> siguientes, siempre que no haya salido nada de ese producto. Después, solo con <strong>Ajustes de Stock</strong> (con motivo y código AJU).</p>
+<p><strong>Reglas</strong>
+- El lote y el vencimiento se copian <strong>tal cual</strong> de la caja. No inventes un lote.
+- Un producto que ya existe se ingresa con <strong>su mismo nombre</strong>: no crees variantes («GUANTE M», «GUANTES TALLA M»…).
+- El ingreso no tiene paso de cuarentena: lo que confirmas queda disponible para entregar. Revisa el estado y el vencimiento <strong>antes</strong> de confirmar.</p></section><section class="mod" id="movimientos-ingreso-rapido"><h3><span class="n">3.2</span> Ingreso rápido</h3><p><strong>Para qué sirve</strong>
+Para cargar de una sola vez el inventario de una bodega completa (por ejemplo, el camión): pegas una lista o lees fotos de las cajas, la revisas en una tabla y la ingresas toda junta. Queda con un folio <strong>INV</strong>.</p>
+<p><strong>Quién lo usa</strong>
+Administrador y Superadministrador. Para el Encargado de bodega la pantalla dice «Esta sección es para administradores y encargados de bodega» y no deja usarla.</p>
+<p><strong>Paso a paso</strong>
+1. Entra a <strong>COMPRAS · ADQUISICIONES SAR → Ingreso rápido</strong>.
+2. En <strong>«— Elige la bodega de destino —»</strong> elige la bodega. Si no existe, pulsa <strong>+ Nueva bodega</strong> y escribe el nombre en la ventana del navegador.
+3. Si los productos llegaron con una orden de compra, escribe su número en el campo de la orden (es opcional). <strong>Ojo:</strong> en esa orden registra la recepción <strong>sin marcar «Ingresar al stock»</strong>, para no contar el stock dos veces.
+4. Carga la lista de una de estas tres formas:
+   - <strong>Leer desde fotos</strong>: saca o elige fotos de las cajas (la cara con el nombre, el lote y el vencimiento), hasta unas 20 por vez. Los productos aparecen en la tabla para revisar.
+   - <strong>Pegar una lista</strong>: abre el desplegable, pega una línea por producto (<em>producto ; ID ; cantidad ; lote ; vencimiento</em>) y pulsa <strong>Agregar a la tabla</strong>.
+   - <strong>+ Agregar fila</strong>: escribe cada producto a mano.
+5. Revisa la tabla, fila por fila. Las filas en rojo necesitan <strong>producto y cantidad</strong>. Si una fila trae un aviso amarillo (una duda de la lectura de la foto), revísalo con la caja en la mano.
+6. Pulsa <strong>Ingresar a «bodega»</strong>. El navegador pregunta «Se ingresarán N unidades de M productos a "…". ¿Confirmas?»: acepta.
+7. Al terminar aparece «N unidades de M productos ingresadas a … (INV-…)».</p>
+<p><strong>Sin internet:</strong> el ingreso <strong>sí funciona</strong> (folio provisional <strong>INV-P-…</strong>) y se aplica solo al volver la conexión. <strong>Leer desde fotos</strong> y <strong>+ Nueva bodega</strong> necesitan internet.</p>
+<p><strong>Si pasa esto…</strong>
+- <strong>«Falta conectar el script»</strong> o <strong>«Falta la clave de lectura»</strong>: la lectura de fotos no está configurada. Avisa al administrador; mientras tanto, pega la lista o escribe las filas.
+- <strong>«No se terminó el ingreso»</strong>: lo que alcanzó a guardarse ya está en la bodega. <strong>Revisa la bodega antes de repetir</strong>, para no ingresar dos veces.</p>
+<p><strong>Reglas</strong>
+- Úsalo para lo que <strong>contaste físicamente</strong>. A diferencia del ingreso normal, no salda deudas de actas anteriores.
+- Vacía la tabla (<strong>Vaciar tabla</strong>) si cambias de bodega a mitad de la carga.</p></section><section class="mod" id="movimientos-transferencias-entre-bodegas"><h3><span class="n">3.3</span> Transferencias entre bodegas</h3><p><strong>Para qué sirve</strong>
+Para mover productos de una bodega a otra (por ejemplo, del camión a la transitoria). Se conservan el lote y el vencimiento, y queda registro en el Historial con folio <strong>TRA</strong>. El stock <strong>sale del origen y entra al destino en el mismo momento</strong>.</p>
+<p><strong>Quién lo usa</strong>
+Encargado de bodega, Administrador y Superadministrador. Enfermería no tiene acceso.</p>
+<p><strong>Paso a paso</strong>
+1. Entra a <strong>MOVIMIENTOS → Transferencias</strong>.
+2. Elige la <strong>Bodega de origen</strong> y la <strong>Bodega de destino</strong>.
+3. Aparecen los productos con stock del origen. Usa <strong>«Buscar producto o ID Mercado Público…»</strong> para filtrar.
+4. Marca la casilla de cada producto que vas a mover (<strong>Marcar todo lo visible</strong> los marca todos).
+5. En <strong>Cantidad a mover</strong>:
+   - Si el producto tiene <strong>un solo lote</strong>, viene escrita la cantidad total; corrígela si mueves menos.
+   - Si tiene <strong>varios lotes</strong>, aparece un casillero por lote, en <strong>0</strong>. Escribe cuánto sacas de cada lote. Los lotes vienen ordenados por vencimiento: <strong>saca primero el que vence antes</strong>.
+6. Si quieres, escribe una <strong>Nota (opcional)</strong> (por ejemplo, «reposición de la bodega de turno»).
+7. Pulsa <strong>Mover seleccionados</strong>. Revisa el resumen de la ventana «¿Mover N productos?» y pulsa <strong>Mover</strong>.
+8. Abajo verás <strong>«N movido(s)»</strong> y, si alguno falló, <strong>«No se movieron N»</strong> con el motivo. Si todo salió bien, la pantalla queda en blanco para otra transferencia.</p>
+<p><strong>Otra forma:</strong> desde <strong>Bodegas</strong> (detalle de una bodega) el botón <strong>Transferir / Traspaso</strong> abre la ventana «Transferencia de Stock» para mover un solo producto. Para varios productos, usa siempre el menú <strong>Transferencias</strong>.</p>
+<p><strong>Sin internet:</strong> <strong>sí funciona</strong>. Sale el mensaje <strong>«Sin conexión: N movimiento(s) guardado(s) en este teléfono»</strong>. Se aplica solo cuando vuelve internet, con el stock que haya en ese momento. Si ya no alcanza (porque alguien movió el producto entre medio), queda <strong>«para revisar»</strong> y nunca se descuenta a ciegas.</p>
+<p><strong>Si pasa esto…</strong>
+- <strong>«El destino debe ser distinto del origen.»</strong> / <strong>«Marca al menos un producto.»</strong>: corrige y vuelve a pulsar.
+- <strong>«…: indica cuánto mover (en productos con varios lotes, de qué lote).»</strong>: dejaste todos los lotes en 0 o escribiste más de lo que hay.
+- <strong>El producto dice «Cuarentena» y no se puede marcar</strong>: no se mueve hasta que se resuelva la cuarentena.
+- <strong>«No pude leer el stock»</strong>: la lista puede salir vacía aunque haya productos. Vuelve a elegir la bodega o recarga la página.</p>
+<p><strong>Reglas</strong>
+- Mueve físicamente lo mismo que registras: <strong>mismo producto, mismo lote y misma cantidad</strong>.
+- Saca primero el lote que vence antes (FEFO).
+- Lo reservado en actas por confirmar no aparece como disponible y no se puede mover.</p></section><section class="mod" id="movimientos-actas-de-entrega"><h3><span class="n">3.4</span> Actas de entrega</h3><p><strong>Para qué sirve</strong>
+Para entregar productos a otro centro con un acta oficial numerada (<strong>AE-AAAA-NNNN</strong>), en PDF y Word. El stock pasa por tres momentos:</p>
+<table>
+<thead>
+<tr>
+<th>Momento</th>
+<th>Qué pasa con el stock</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Borrador</strong> (mientras armas el acta)</td>
+<td>No cambia. El borrador queda guardado en este equipo.</td>
+</tr>
+<tr>
+<td><strong>Emitir acta</strong></td>
+<td>El stock queda <strong>reservado</strong>: sigue en la bodega, pero nadie más lo puede usar.</td>
+</tr>
+<tr>
+<td><strong>Confirmar entrega</strong> (subir el acta firmada)</td>
+<td>Recién ahí <strong>se descuenta</strong> del stock.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Quién lo usa</strong>
+- <strong>Armar y emitir actas:</strong> Encargado de bodega, Administrador y Superadministrador.
+- <strong>Confirmar entrega, Subir firmada, Editar y Eliminar acta:</strong> solo Administrador y Superadministrador.
+- Enfermería no tiene acceso.</p>
+<p><strong>Paso a paso — Emitir un acta (pestaña «Emitir acta»)</strong>
+1. Entra a <strong>MOVIMIENTOS → Actas de entrega</strong>, pestaña <strong>Emitir acta</strong>.
+2. En <strong>1 · Stock disponible</strong>, elige la <strong>Bodega de origen</strong>.
+3. Busca el producto en <strong>«Buscar por nombre o ID del producto…»</strong>. En cada producto verás lo <strong>Disponible</strong> y lo que está reservado en otras actas.
+4. En la fila del producto escribe:
+   - <strong>Pedido</strong> (opcional): lo que el centro pidió en total.
+   - <strong>Cantidad a entregar</strong>: lo que entregas ahora.
+   Luego pulsa <strong>Agregar</strong>.
+   - Si lo que entregas es menos que lo pedido, la diferencia queda como <strong>pendiente</strong> del centro.
+   - Si no tienes nada, pon <strong>0</strong> y el pedido: queda todo como pendiente.
+   - Si el producto no tiene stock aquí pero sí en otra bodega, el origen <strong>cambia solo</strong> a esa bodega y aparece un aviso con <strong>Correcto</strong> o <strong>Volver a …</strong>.
+5. <strong>¿No está en el sistema? Ingreso manual</strong>: úsalo solo si tienes el producto físicamente y no está registrado. Queda como <strong>provisional</strong> y como <strong>sobregiro</strong> (deuda) hasta que ingrese su orden de compra. Si es un medicamento controlado, marca <strong>«Es medicamento controlado (no se permite sin stock)»</strong>.
+6. En <strong>2 · Acta</strong>, escribe el <strong>Centro al que se entrega</strong> (con <strong>+ Guardar este centro en la lista</strong> queda en la lista para la próxima vez).
+7. Revisa <strong>Productos entregados</strong>. Si corresponde, abre los desplegables:
+   - <strong>Productos pendientes de entrega</strong>.
+   - <strong>Documentos asociados: SDC, OC, factura… (opcional)</strong>.
+   - <strong>Firmas</strong>: nombre y cargo de quien <strong>entrega</strong> (queda guardado en el equipo) y de quien <strong>recibe</strong> (opcional).
+8. Si no estás seguro del formato, pulsa <strong>Acta de prueba · PDF</strong> o <strong>Acta de prueba · Word</strong>. No descuenta stock ni gasta número.
+9. Pulsa <strong>Emitir acta y reservar stock</strong>. La ventana <strong>«¿Emitir el acta?»</strong> te recuerda que el stock <strong>no se descuenta ahora</strong>: queda reservado hasta que subas el acta firmada. Si hay productos <strong>sin respaldo en sistema</strong>, los lista. Pulsa <strong>Emitir acta</strong> (o <strong>Revisar</strong> para volver).
+10. Aparece <strong>«Acta emitida — AE-… · el stock sale al subir el acta firmada.»</strong> y se descarga el PDF. Imprímelo y hazlo firmar al entregar.</p>
+<p><strong>Paso a paso — Preparar la mercadería (picking)</strong>
+1. En la pestaña <strong>Actas emitidas</strong>, pulsa <strong>Picking</strong> en la fila del acta, o <strong>Hoja de picking</strong> dentro del acta.
+2. Imprime la hoja y retira de la bodega lo que indica.</p>
+<p><strong>Paso a paso — Confirmar la entrega (Administrador o Superadministrador)</strong>
+1. Escanea o fotografía el acta <strong>firmada</strong> (PDF o foto, máximo 6 MB).
+2. En <strong>Actas emitidas</strong>, abre el acta con <strong>Ver acta</strong>. Su estado dice <strong>«Por confirmar · stock reservado»</strong>.
+3. Pulsa <strong>Confirmar entrega</strong>. En la ventana «Confirmar la entrega AE-…» pulsa <strong>Subir acta firmada</strong> y elige el archivo.
+4. Aparece <strong>«Entrega AE-… confirmada · stock descontado»</strong>. El acta pasa a <strong>Firmada</strong>.</p>
+<p><strong>Otras acciones en «Actas emitidas»</strong>
+- <strong>Filtros:</strong> <strong>Pendientes por firmar</strong>, <strong>Firmadas</strong>, <strong>Con productos pendientes</strong>, <strong>Todas</strong>, y el buscador por número, centro, producto, fecha o estado.
+- <strong>Pendientes (N):</strong> lista lo que le falta entregar a ese centro según esa acta.
+- Dentro de <strong>Ver acta</strong>:
+  - <strong>Descargar ▾</strong> (PDF o Word).
+  - <strong>Ver acta firmada</strong> y <strong>Descargar firmada</strong>.
+  - <strong>Bitácora del acta</strong>: quién la emitió, si se envió el correo y cuándo se confirmó.
+- <strong>Subir firmada:</strong> solo aparece en actas ya confirmadas que no tienen archivo (por ejemplo, las históricas) y en actas de oxígeno. <strong>No cambia el stock.</strong>
+- <strong>⋯ → Editar</strong> (Administrador): corrige un acta emitida.
+- <strong>⋯ → Eliminar acta</strong> (Administrador): pide un <strong>motivo</strong>. El stock reservado o entregado vuelve a la bodega, el acta queda <strong>ANULADA</strong> y su número no se vuelve a usar.
+- <strong>Reservar su stock ahora</strong> (Administrador): aparece si hay actas antiguas, emitidas antes de que existiera la reserva, cuyo stock todavía se puede usar en otros movimientos.
+- <strong>Acta anterior al sistema (histórica)</strong>: sirve para registrar un acta en papel ya entregada. Queda como <strong>HIS-N°</strong> con su fecha original y <strong>descuenta el stock de inmediato</strong>.</p>
+<p><strong>Distribución a centros dentro de Actas.</strong> Si llegas desde <strong>Distribución a centros</strong>, arriba del stock aparece el panel de esa distribución, con <strong>Agregar los que tienen stock</strong> y <strong>Armar acta con lo agregado</strong> (ver capítulo 5).</p>
+<p><strong>Sin internet:</strong>
+- <strong>Emitir sí funciona.</strong> El acta queda en cola con folio <strong>AE-P-…</strong> y se descarga un <strong>PDF provisional</strong> (dice «PROVISIONAL») para firmar. Al volver internet se emite con su número AE definitivo y reserva el stock; lo que no alcance queda como sobregiro. Descarga después el PDF definitivo desde <strong>Actas emitidas</strong>.
+- <strong>Necesitan internet:</strong> las actas que vienen de una <strong>orden de compra</strong>, <strong>Confirmar entrega</strong>, <strong>Subir firmada</strong> y <strong>Eliminar acta</strong>.</p>
+<p><strong>Si pasa esto…</strong>
+- <strong>El botón Emitir está gris</strong>: arriba de los botones aparece la lista de lo que falta (centro, bodega, cantidades).
+- <strong>«…: es medicamento controlado, no puede entregarse sin stock en sistema»</strong>: un controlado solo se entrega con stock registrado.
+- <strong>«Sin respaldo: N»</strong> en un producto: estás entregando más de lo que hay en el sistema. Quedará como sobregiro. Antes de emitir, confirma que de verdad lo tienes físicamente.
+- <strong>«Esta acta ya no está pendiente de confirmar»</strong>: otra persona la confirmó o la eliminó. Actualiza la pantalla.
+- <strong>«El archivo pesa más de 6 MB»</strong>: escanea con menos calidad o en blanco y negro.
+- <strong>El correo no salió</strong>: la bitácora del acta dice si quedó <strong>pendiente</strong> (sale en horario hábil, de lunes a viernes de 8:00 a 17:00) o <strong>NO enviado</strong>.</p>
+<p><strong>Reglas</strong>
+- <strong>Un acta emitida no es una entrega.</strong> La entrega existe cuando se sube el acta <strong>firmada</strong> con <strong>Confirmar entrega</strong>.
+- Máximo <strong>60 productos</strong> por acta.
+- Para probar el formato, usa <strong>Acta de prueba</strong>, nunca un acta real que después tengas que eliminar.
+- Lo que escribas en <strong>«¿Entregas físicamente otro similar?…»</strong> es solo interno: no sale en el acta.</p></section><section class="mod" id="movimientos-solicitudes-recibidas"><h3><span class="n">3.5</span> Solicitudes recibidas</h3><p><strong>Para qué sirve</strong>
+Es la bandeja de bodega para atender lo que piden los servicios desde <strong>«Pedir insumos»</strong> (la página del teléfono) y los inventarios de las bodegas de uso (transitoria, aseo, oficina). Cada solicitud tiene un número <strong>SOL-AAAA-NNNN</strong> y pasa por estos estados:</p>
+<table>
+<thead>
+<tr>
+<th>Estado</th>
+<th>Significa</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Enviada</strong></td>
+<td>Llegó; nadie la ha revisado.</td>
+</tr>
+<tr>
+<td><strong>Procesando</strong></td>
+<td>Bodega empezó a revisar los productos.</td>
+</tr>
+<tr>
+<td><strong>Procesada</strong></td>
+<td>El stock ya se movió (salió de bodega o va <strong>en camino</strong>).</td>
+</tr>
+<tr>
+<td><strong>Cerrada</strong></td>
+<td>Entregada o recibida.</td>
+</tr>
+<tr>
+<td><strong>Anulada</strong></td>
+<td>Se canceló sin mover stock.</td>
+</tr>
+</tbody>
+</table>
+<p>Quien pidió ve el estado en su teléfono.</p>
+<p><strong>Quién lo usa</strong>
+Encargado de bodega, Administrador y Superadministrador. El menú muestra un número con las solicitudes nuevas.</p>
+<p><strong>Paso a paso — Revisar cada producto</strong>
+1. Entra a <strong>MOVIMIENTOS → Solicitudes recibidas</strong>. Usa el filtro (<strong>Abiertas</strong>, <strong>Enviadas</strong>, <strong>Procesando</strong>, <strong>Procesadas</strong>, <strong>Cerradas</strong>, <strong>Todas</strong>) o busca por N° SOL, nombre, correo o producto.
+2. Abre la solicitud. Cada producto pedido trae su foto y una tabla <strong>Dónde · Lote · Vence · Hay · Sacar</strong>.
+   - La columna <strong>Sacar</strong> viene prellenada: primero la bodega a la que se pidió y, después, <strong>el lote que vence antes</strong>. Corrígela si sacas de otro lote.
+   - En las <strong>reposiciones</strong> de una bodega de uso, solo aparecen lotes de <strong>otras</strong> bodegas (Central, camión, etc.).
+3. Si el producto fue <strong>escrito a mano</strong> por quien pidió y no aparece en el inventario, pulsa <strong>Asociar a producto del inventario</strong> y búscalo por su nombre de fábrica.
+4. Pulsa <strong>Confirmar</strong> para guardar lo elegido (queda <strong>Confirmado</strong> o <strong>Parcial</strong>), o <strong>No hay</strong> si no tienes. Dejar todo en 0 también cuenta como «No hay» y quien pidió queda avisado.
+5. Si te equivocaste, pulsa <strong>Cambiar</strong> para reabrir el producto, siempre que todavía no se haya movido.</p>
+<p><strong>Paso a paso — Pistolear la caja</strong>
+Úsalo cuando la caja tiene etiqueta <strong>BUL</strong>: así el stock y la caja quedan cuadrados.
+1. En el producto, pulsa <strong>Pistolear o leer QR de la caja</strong>.
+2. Pistolea la etiqueta, o pulsa <strong>Cámara (QR)</strong> para leerla con el teléfono.
+3. El Visor revisa que la caja sea de ese producto, que no esté vacía y que su lote tenga stock. Luego pregunta <strong>«¿Qué vas a sacar de esta caja?»</strong>:
+   - <strong>La caja completa (N u.)</strong>, o
+   - <strong>Unidades sueltas</strong>: escribe cuántas.
+   - En una <strong>caja grande</strong> con cajas pequeñas: sale <strong>la caja grande completa</strong>, o pistoleas <strong>cada caja pequeña</strong> que sacas.
+4. Pulsa <strong>Sacar de esta caja</strong>. La caja queda en la lista (con <strong>✕</strong> se quita). Para agregar otra, pulsa <strong>Otra caja (pistola o QR)</strong>; al terminar, <strong>Listo</strong>.
+5. Lo pistoleado pasa a la columna <strong>Sacar</strong>. Pulsa <strong>Confirmar</strong>.</p>
+<p><strong>Paso a paso — Procesar</strong>
+1. Cuando todos los productos están decididos, el botón de abajo dice:
+   - <strong>Procesar: enviar a «bodega»</strong> si es una reposición, o
+   - <strong>Procesar: entregar</strong> si es un pedido de una persona.
+   Si todavía dice <strong>Procesar (faltan N)</strong>, te quedan productos por decidir.
+2. Revisa la ventana «¿Procesar SOL-…?» y pulsa <strong>Procesar</strong>.
+   - <strong>Reposición:</strong> el stock sale de su bodega y queda <strong>«En tránsito»</strong> (en camino). Todavía no está disponible en la bodega de destino.
+   - <strong>Pedido de una persona:</strong> el stock sale de la bodega por lote (salida).
+3. La solicitud pasa a <strong>Procesada</strong>.</p>
+<p><strong>Paso a paso — En tránsito y recibir (solo reposiciones)</strong>
+1. Lleva la mercadería a la bodega de uso.
+2. Cuando llegue, pulsa <strong>Marcar recibido en «bodega»</strong>. Si la encargada ya lo marcó en su teléfono, el botón dice <strong>Confirmar recibido (lo marcó …)</strong>.
+3. En la ventana «¿Recibido en …?» revisa producto, cantidad y lote, y pulsa <strong>Recibido</strong>.
+4. El stock entra a la bodega de uso y la solicitud se <strong>cierra</strong> sola.</p>
+<p><strong>Paso a paso — Cerrar (pedidos de personas)</strong>
+- Cuando entregues la mercadería, pulsa <strong>Cerrar solicitud (entregada)</strong>.</p>
+<p><strong>Otras acciones</strong>
+- <strong>Copiar para WhatsApp</strong>: copia el texto de picking.
+- <strong>Anular</strong>: solo mientras no se haya movido stock.
+- <strong>Inventario por revisar</strong> (inventarios de bodegas de uso): muestra por producto lo que decía el sistema, lo contado y lo <strong>usado</strong>.
+  - <strong>Aceptar y descontar</strong> aplica lo usado.
+  - <strong>Pedir reconteo (N)</strong> devuelve los productos marcados a la encargada para que los cuente de nuevo.
+  - Mientras el inventario no esté aceptado, el botón dice <strong>Procesar (acepta el inventario)</strong>.</p>
+<p><strong>Sin internet:</strong> <strong>Confirmar</strong>, <strong>Procesar</strong> y <strong>Marcar recibido</strong> quedan en cola (se ve <strong>«en cola»</strong> o <strong>«En cola: se hará solo al volver internet»</strong>) y se aplican solos al volver la conexión, sin duplicarse. La pantalla usa la copia del equipo, que se actualiza sola; la línea de estado dice <strong>«Copia para trabajar sin internet: se actualiza sola · última …»</strong>.</p>
+<p><strong>Si pasa esto…</strong>
+- <strong>«… no es una etiqueta de caja (BUL).»</strong>: pistoleaste otro código. Busca la etiqueta BUL de la caja.
+- <strong>«Esa caja es de «…», no de lo que se pide aquí.»</strong>: tomaste otra caja.
+- <strong>«… ya está elegida en …: una caja sale una sola vez.»</strong>: esa caja (o su caja grande o sus cajas pequeñas) ya está asignada en otra solicitud.
+- <strong>«La caja dice X, pero el lote … tiene stock en Y…»</strong> o <strong>«El lote … de esta caja no tiene stock en el sistema…»</strong>: no adivines otro lote. Avisa al encargado para corregir la caja o el stock.
+- <strong>«En el lote … pistoleaste más de lo que pusiste en «Sacar»…»</strong>: corrige la cantidad o quita la caja con ✕.
+- <strong>«N lote(s) no se movieron…»</strong>: pulsa <strong>Reintentar lo que no se movió</strong>. Si un lote ya no se puede mover, pulsa <strong>Quedarse con lo movido</strong>.
+- <strong>«Ya movido — Este producto ya salió de su bodega: no se puede cambiar.»</strong>: es correcto; lo movido no se deshace desde aquí.</p>
+<p><strong>Reglas</strong>
+- Lo que está <strong>«En tránsito» no es stock disponible</strong>: no lo entregues ni lo cuentes en ninguna bodega hasta marcarlo recibido.
+- Marca <strong>Recibido</strong> solo cuando la mercadería está físicamente en la bodega de destino.
+- Saca primero el lote que vence antes, salvo que la caja pistoleada diga otro.</p></section><section class="mod" id="movimientos-distribucion-a-centros"><h3><span class="n">3.6</span> Distribución a centros</h3><p><strong>Para qué sirve</strong>
+Para repartir entre los centros una compra global (SDC → orden de compra). Se arma una lista por centro con el mismo formato de las planillas de los centros (<strong>Convenio Marco</strong> o <strong>No Marco</strong>), se descarga en Excel para confirmar y se entrega con actas. Cada distribución lleva un correlativo <strong>DIST-AAAA-NNNN</strong>.</p>
+<p><strong>Quién lo usa</strong>
+Encargado de bodega, Administrador y Superadministrador.</p>
+<p><strong>Paso a paso</strong>
+1. Entra a <strong>MOVIMIENTOS → Distribución a centros</strong>.
+2. Crea la distribución de una de dos formas:
+   - <strong>Nueva distribución</strong>: escribe el nombre (por ejemplo, «SDC 1122 · insumos de curación») y elige el tipo de compra (<strong>Convenio Marco</strong> o <strong>No Marco</strong>).
+   - <strong>Importar Excel</strong>: elige la planilla de los centros (una hoja por centro).
+3. En el detalle completa <strong>Nombre</strong>, <strong>Tipo de compra</strong>, <strong>N° de SDC</strong>, <strong>Orden de compra asociada</strong> (cuando exista) y <strong>Estado</strong>.
+4. Cada centro tiene su pestaña. Con <strong>+ Centro</strong>, <strong>Renombrar</strong>, <strong>Quitar centro</strong> y <strong>+ Agregar línea</strong> ajustas la lista.
+5. Por cada línea verás:
+   - <strong>Entregado antes</strong>: escríbelo a mano solo si se entregó antes de usar el Visor.
+   - <strong>Entregado con actas</strong>: se calcula solo.
+   - <strong>Pendiente</strong>.
+   - <strong>Stock / se puede entregar</strong>: lo que hay en Bodega Central.
+6. Pulsa <strong>Guardar</strong>.
+7. Para mandarla a confirmar: <strong>Descargar Excel</strong> (marca <strong>con columna Entregado</strong> si quieres incluir lo ya entregado).
+8. Para entregar: en la pestaña del centro pulsa <strong>Entregar a este centro (acta)</strong>. Se abre <strong>Actas de entrega</strong> con el acta precargada: lo que hay en stock se entrega y lo que falta queda pendiente. Sigue el capítulo 3.</p>
+<p><strong>Sin internet:</strong> no verificado. Trabaja esta pantalla con conexión.</p>
+<p><strong>Si pasa esto…</strong>
+- <strong>«No encontré líneas en ninguna hoja (se busca la columna «DESCRIPCIÓN»)»</strong>: la planilla no tiene la columna DESCRIPCIÓN. Revisa el archivo.
+- <strong>«Un acta admite 60 productos: se armó con los primeros 60…»</strong>: emite esa acta y repite para el resto.
+- <strong>«Este centro no tiene cantidades pendientes de entrega.»</strong>: ya se entregó todo.
+- <strong>Aparece «sin stock en sistema»</strong>: la orden aún no se ha ingresado. Se podrá entregar cuando se ingrese.</p>
+<p><strong>Reglas</strong>
+- No anotes a mano en «Entregado antes» lo que ya salió con actas del Visor: se contaría dos veces.
+- Las distribuciones no se borran: se archivan (estado <strong>Archivada</strong>).</p></section><section class="mod" id="movimientos-pendientes-por-entregar"><h3><span class="n">3.7</span> Pendientes por entregar</h3><p><strong>Para qué sirve</strong>
+Muestra, por centro, lo que se pidió en las actas y todavía no se entrega, cruzado con el stock disponible. La campana avisa cuando ya hay stock para entregar.</p>
+<p><strong>Quién lo usa</strong>
+Encargado de bodega, Administrador y Superadministrador.</p>
+<p><strong>Paso a paso</strong>
+1. Entra a <strong>MOVIMIENTOS → Pendientes por entregar</strong>.
+2. Arriba ves el resumen: centros, productos pendientes y cuántos tienen stock para entregar ahora.
+3. Abre un centro. Cada producto aparece agrupado por fecha, acta, orden o distribución, con su estado: <strong>Completo</strong>, <strong>Se pueden N</strong> o <strong>Sin stock</strong>.
+4. <strong>Hoja de picking</strong> (de un centro) o <strong>Hoja de picking (todos)</strong>: imprime lo que hay que retirar de bodega.
+5. <strong>Imprimir pendientes</strong>: imprime la lista para enviar al centro.
+6. Para entregar, arma el acta en <strong>Actas de entrega</strong> (capítulo 3).
+7. <strong>Actualizar</strong> recarga los datos.</p>
+<p><strong>Sin internet:</strong> muestra lo último descargado; para ver datos al día, necesita conexión.</p>
+<p><strong>Reglas</strong>
+- Esta pantalla <strong>no entrega nada</strong>: solo informa. La entrega siempre es con acta.</p></section><section class="mod" id="movimientos-oxigeno-portatil"><h3><span class="n">3.8</span> Oxígeno portátil</h3><p><strong>Para qué sirve</strong>
+Para llevar el control de cada balón de oxígeno portátil por su <strong>N° de serie</strong>: estado, recargas, préstamos o entregas a centros e incidencias. Los balones son <strong>equipos</strong>, no insumos: no se descuentan del inventario.</p>
+<p>Estados: <strong>Lleno</strong>, <strong>Vacío</strong>, <strong>En recarga</strong>, <strong>Entregado a centro</strong>, <strong>Fuera de servicio</strong>.</p>
+<p><strong>Quién lo usa</strong>
+Encargado de bodega, Administrador y Superadministrador. Enfermería no tiene acceso.</p>
+<p><strong>Paso a paso — Dar de alta balones</strong>
+1. Entra a <strong>MOVIMIENTOS → Oxígeno portátil</strong>.
+2. Pulsa <strong>+ Agregar balones</strong>.
+3. Escribe los <strong>N° de serie</strong> (uno por línea o separados por coma), y elige <strong>Capacidad</strong>, <strong>Tipo de gas</strong>, <strong>Proveedor</strong>, <strong>Estado actual</strong> y <strong>Fecha de carga</strong>.
+4. Pulsa <strong>Guardar</strong>.</p>
+<p><strong>Paso a paso — Registrar lo que pasa con un balón</strong>
+1. En la fila del balón, abre <strong>Acción…</strong> y elige una opción:
+   - <strong>Enviado a recarga</strong>
+   - <strong>Recarga recibida (lleno)</strong>
+   - <strong>Marcar como vacío (se usó)</strong>
+   - <strong>Devuelto al SAR</strong>
+   - <strong>Registrar incidencia (sin cambiar estado)</strong>
+   - <strong>Fuera de servicio</strong>
+   - <strong>Volver a servicio (vacío)</strong>
+   - <strong>Cambiar capacidad</strong>
+   - <strong>Cambiar tipo de gas</strong>
+2. Completa la fecha y los datos que pida, y pulsa <strong>Guardar</strong>.
+3. <strong>Historial</strong> muestra todo lo que le ha pasado al balón.
+4. <strong>Editar</strong> corrige datos mal escritos (serie, capacidad, gas, proveedor, fecha, recargas). Pide un <strong>motivo</strong> y deja un código <strong>CAM</strong>. El estado no se cambia desde Editar: se cambia con <strong>Acción…</strong>.</p>
+<p><strong>Paso a paso — Entregar balones a un centro con acta</strong>
+1. Marca la casilla de los balones <strong>llenos</strong> que salen (solo los llenos tienen casilla).
+2. Pulsa <strong>Acta de entrega (N)</strong>.
+3. Escribe el <strong>Centro</strong>, el documento asociado (opcional), quién <strong>Entrega</strong> y quién <strong>Recibe</strong>.
+4. Pulsa <strong>Emitir acta</strong>. Sale un acta <strong>AE</strong> con el mismo formato y correlativo de las actas de insumos, y se descarga el PDF.
+5. Cuando esté firmada, súbela con <strong>Subir firmada</strong> (en el panel «Prestados a otros centros» o en Actas de entrega).</p>
+<p><strong>Paso a paso — Préstamo de balones (llenos o vacíos)</strong>
+1. En el panel <strong>«Prestados a otros centros»</strong>, pulsa <strong>Registrar préstamo</strong>.
+2. Elige el centro, la fecha de entrega y los balones (solo los que están en el SAR), y escribe quién entrega y quién recibe.
+3. Pulsa <strong>Generar acta y registrar</strong>: se emite un acta AE y se descarga para firmar.
+4. Después usa <strong>Subir firmada</strong>, <strong>Agregar fotos</strong>, <strong>Ver acta firmada</strong> o <strong>Ver acta y bitácora</strong>.</p>
+<p><strong>Precintos:</strong> <strong>Precinto</strong> (por balón) o <strong>Precintos (N)</strong> (todos los de la lista filtrada) imprimen la etiqueta de control con el N° de serie.</p>
+<p><strong>Sin internet:</strong> <strong>necesita internet</strong>. Esta pantalla no tiene cola sin conexión.</p>
+<p><strong>Si pasa esto…</strong>
+- <strong>«El balón … no está lleno»</strong>: solo se entregan con acta los balones <strong>Lleno</strong>.
+- <strong>«Ya existe otro balón con el N° de serie …»</strong>: revisa la serie; no se repite.
+- <strong>«Elige el motivo de la corrección.»</strong>: en <strong>Editar</strong>, el motivo es obligatorio.</p>
+<p><strong>Reglas</strong>
+- El estado del balón en el Visor debe ser <strong>el mismo que en la realidad</strong> en todo momento.
+- No se registran datos de pacientes (ni a quién se le puso el balón).
+- Un acta de oxígeno no se anula: cuando el balón vuelve, se registra <strong>Devuelto al SAR</strong>.</p></section><section class="mod" id="movimientos-bodegas-administracion"><h3><span class="n">3.9</span> Bodegas (administración)</h3><p><strong>Para qué sirve</strong>
+Para crear bodegas, cambiarles el nombre, definir si usan estantes, cambiar el encargado, cerrarlas y archivarlas.</p>
+<p><strong>Quién lo usa</strong>
+Administrador y Superadministrador. El Encargado de bodega no ve este menú.</p>
+<p><strong>Paso a paso — Crear una bodega</strong>
+1. Entra a <strong>INVENTARIO → Bodegas</strong> («Gestión de Bodegas»).
+2. En <strong>Nueva Bodega</strong>, completa:
+   - <strong>Nombre del Recinto</strong>.
+   - <strong>Tipo de Recinto</strong>: Bodega Principal, Farmacia / Despacho, Bodega Satélite, Bodega Transitoria (stock de turno), Carro de paro o Centro externo.
+   - <strong>Responsable</strong>: escribe el nombre del encargado; se sugieren los ya usados.
+   - <strong>Capacidad (Pallets / M2)</strong>.
+   - <strong>Prefijo de códigos (opcional)</strong>, por ejemplo BS.
+3. Marca <strong>Usar estantes / ubicaciones</strong> si la bodega se ordena por estante. Deja <strong>Bodega Operativa</strong> marcada.
+4. Pulsa <strong>Crear Bodega</strong>. Aparece <strong>«Éxito — Bodega creada correctamente.»</strong></p>
+<p><strong>Paso a paso — Ver y editar una bodega</strong>
+1. Pulsa la tarjeta de la bodega. Se abre el detalle: <strong>Stock Total</strong>, <strong>Estado</strong>, <strong>Responsable</strong> y <strong>Qué hay en esta bodega</strong>.
+2. <strong>Cambiar encargado</strong>: pulsa el lápiz junto al Responsable.
+3. <strong>Nombre de la bodega</strong>: escríbelo y pulsa <strong>Guardar nombre</strong>. Si hay productos con el nombre anterior, el Visor pregunta si pasan al nombre nuevo; el stock sigue en la misma bodega.
+4. <strong>Estantes y etiquetas</strong>: activa o desactiva <strong>Usar estantes / ubicaciones en esta bodega</strong>, define el <strong>Prefijo</strong> y pulsa <strong>Guardar</strong>. Desde aquí también se imprime la <strong>Etiqueta general de la bodega</strong>.
+5. Una bodega inactiva o archivada muestra <strong>Reactivar</strong>.</p>
+<p><strong>Paso a paso — Cerrar una bodega con stock</strong>
+1. En el detalle, pulsa <strong>Cerrar bodega…</strong>.
+2. En <strong>Devolver el stock a</strong>, elige el destino (normalmente la Bodega Central).
+3. Pulsa <strong>Ver qué se movería</strong> y revisa la lista.
+4. Escribe el <strong>Motivo del cierre</strong> y, para confirmar, <strong>el nombre exacto de la bodega</strong>. Si hay controlados, confirma que el destino puede guardarlos bajo llave.
+5. Pulsa <strong>Cerrar y mover el stock</strong>. Todo pasa al destino, queda en el Historial (folio <strong>CIE</strong>) y la bodega queda <strong>archivada</strong>.</p>
+<p><strong>Paso a paso — Eliminar</strong>
+- <strong>Eliminar</strong> (abajo, en rojo) solo borra una bodega <strong>sin stock</strong> (incluido lo reservado y lo adeudado).
+- Si tiene stock, ofrece <strong>archivarla</strong>: queda inactiva, conserva su stock e historial y se puede reactivar.</p>
+<p><strong>Bodegas de uso (transitoria, aseo, oficina):</strong> qué tipo de pedidos recibe cada bodega de uso se fija en <strong>MOVIMIENTOS → Bodega transitoria</strong> (ver la parte del manual correspondiente).</p>
+<p><strong>Sin internet:</strong> <strong>necesita internet</strong>.</p>
+<p><strong>Si pasa esto…</strong>
+- <strong>«Acceso Denegado — Solo administradores pueden crear bodegas.»</strong>: tu rol no lo permite.
+- <strong>«Ya existe otra bodega con ese nombre.»</strong>: elige otro nombre.
+- <strong>«Hay productos en cuarentena — No se puede cerrar hasta resolverlos.»</strong>
+- <strong>«Cierre incompleto»</strong>: lo ya movido quedó registrado; repite el cierre y no se duplica nada.</p>
+<p><strong>Reglas</strong>
+- Una bodega con stock <strong>no se elimina</strong>: se cierra (el stock vuelve a otra bodega) o se archiva.
+- Los medicamentos controlados solo van en bodegas que se guardan bajo llave.
+- Escribe el nombre sin espacios de más y no crees dos bodegas para el mismo lugar.</p></section></section><section class="cap" id="catalogo"><h2><span class=n>4</span> Catálogo, órdenes de compra y ajustes</h2><p><strong>Roles que se nombran en esta parte</strong> (así aparecen en <strong>Usuarios</strong>):
+- <strong>Superadministrador</strong> («Super Admin (Control Total)»): ve y hace todo.
+- <strong>Administrador</strong> («Administrador (Inventario)»): todo, menos lo marcado «solo superadministrador».
+- <strong>Operador</strong> («Administrador de Bodega»): trabaja la bodega; no ve <strong>Usuarios</strong>, <strong>Configuración</strong>, <strong>Directorio</strong> ni <strong>Repetidos y salud</strong>.
+- <strong>Enfermero:</strong> no entra a ninguna de las pantallas de esta parte.
+- <strong>Solicitante</strong> y <strong>Solo Bodega transitoria:</strong> tampoco las ven (tienen su propia pantalla).</p>
+<p><strong>Atajo para encontrar una pantalla:</strong> botón <strong>Buscar</strong> de la barra superior (o teclas <strong>Ctrl+K</strong> o <strong>/</strong>). Escribe, por ejemplo, «ajustes», «merma» u «OC».</p><section class="mod" id="catalogo-catalogo-de-productos"><h3><span class="n">4.1</span> Catálogo de productos</h3><p><strong>Para qué sirve:</strong> tener una sola ficha por producto, con su nombre, su ID de Mercado Público, su proveedor, sus fotos (caja y producto) y dónde está su stock. El catálogo se llena solo: cada orden de compra que se ingresa y cada ingreso de existencias agregan sus productos.</p>
+<p>Hoy el catálogo se usa desde cuatro lugares:
+- <strong>COMPRAS · ADQUISICIONES SAR → Catálogo de Insumos</strong>: tarjetas con foto, stock y estado. Al tocar una tarjeta se abre la <strong>ficha del producto</strong>.
+- <strong>Seguimiento de OC → Catálogo de productos</strong>: lista para confirmar fotos y subirlas a mano.
+- <strong>INVENTARIO → Existencias → lápiz (Editar Insumo Clínico)</strong>: el <strong>ID del producto</strong> y la foto principal.
+- <strong>Revisar productos parecidos</strong>, <strong>Repetidos y salud</strong> y <strong>Directorio → Nomenclaturas y correlativos</strong>: para mantener el catálogo ordenado.</p>
+<p><strong>Quién lo usa:</strong>
+- <strong>Catálogo de Insumos</strong>, la ficha y <strong>Revisar productos parecidos</strong>: operador, administrador y superadministrador.
+- <strong>Repetidos y salud</strong> y <strong>Directorio</strong>: administrador y superadministrador.
+- <strong>Pedir al teléfono</strong> (en Editar insumo) y la sección <strong>Fotos de productos</strong>: solo superadministrador.</p>
+<h3>A. Buscar un producto en el Catálogo de Insumos</h3>
+<ol>
+<li>Menú lateral → <strong>COMPRAS · ADQUISICIONES SAR → Catálogo de Insumos</strong> (también desde <strong>Inicio → Accesos → Catálogo de insumos</strong>).</li>
+<li>Arriba ves cuatro números: <strong>Stock maestro</strong> (productos en el catálogo), <strong>Stock Saludable</strong>, <strong>Stock Bajo / Reorden</strong> y <strong>Quiebre Crítico</strong> (stock 0).</li>
+<li>Escribe en el buscador. Busca por <strong>descripción, ID de Mercado Público, nombre de inventario o proveedor</strong>.</li>
+<li>Si quieres, filtra con <strong>Categoría: Todas</strong> y <strong>Estado Stock: Todos</strong> (<strong>En Stock Óptimo</strong>, <strong>Stock Bajo / Reorden</strong>, <strong>Quiebre Crítico</strong>).</li>
+<li>Los productos salen agrupados por categoría. Cada tarjeta muestra la foto, el <strong>Cód. MP</strong>, el proveedor, las <strong>un. en stock</strong> por bodega y, si hay una orden abierta, <strong>«Pendiente de recepción: N un. (OC …)»</strong>.</li>
+<li>Toca la foto para verla en grande. Toca el resto de la tarjeta para abrir la ficha.</li>
+</ol>
+<h3>B. La ficha del producto</h3>
+<ol>
+<li>Desde una tarjeta del Catálogo de Insumos, toca el producto. La ficha se abre al costado (en el teléfono, a pantalla completa).</li>
+<li>Arriba: nombre, <strong>Cód. MP</strong>, categoría, <strong>unidades en stock</strong>, <strong>bodega(s)</strong> y <strong>próximo vencimiento</strong>.</li>
+<li><strong>Fotos:</strong> foto de la <strong>Caja / envase</strong> y foto de <strong>Cómo es el producto</strong> (ver letra C).</li>
+<li><strong>Dónde está y por lote:</strong> bodega, estante, lote, vencimiento y cantidad. Lo que vence antes va primero; lo vencido sale en rojo y lo que vence en menos de 90 días, en amarillo.</li>
+<li><strong>Ingresos y movimientos:</strong> primer ingreso, último ingreso, último movimiento y los 25 movimientos más recientes. El resto está en <strong>Historial</strong> o en <strong>Auditoría → Contable</strong>.</li>
+<li>Con las flechas <strong>▲ ▼</strong> (o las del teclado) pasas al producto anterior o siguiente. <strong>Esc</strong> o <strong>×</strong> cierra.</li>
+</ol>
+<h3>C. Fotos desde la ficha</h3>
+<p>Cada producto debe tener <strong>dos fotos</strong>: la <strong>caja o envase</strong> (la que se ve en todo el Visor) y <strong>cómo es el producto</strong> fuera de la caja.
+1. En la ficha, sección <strong>Fotos</strong>, elige:
+   - <strong>Foto de la caja</strong> (o <strong>Cambiar foto de la caja</strong>): abre la cámara del teléfono o el selector de archivos.
+   - <strong>Foto del producto (cómo es)</strong> (o <strong>Otra foto del producto</strong>): hasta 4 fotos extra.
+   - <strong>Buscar en internet</strong>: busca en la tienda de Convenio Marco y en internet. Tarda 20 a 40 segundos.
+2. Si usaste <strong>Buscar en internet</strong>, aparecen dos grupos: <strong>Caja / envase</strong> y <strong>El producto</strong>. Toca una foto y elige <strong>Usar como caja</strong> o <strong>Usar como producto</strong>. Si ninguna sirve, sácale foto con los botones de arriba o abre <strong>Ver más en Google Imágenes</strong>.
+3. Al guardar aparece <strong>«Foto guardada»</strong>.
+4. Para quitar una foto extra, toca <strong>✕</strong> junto a ella.</p>
+<h3>D. Confirmar las fotos que el sistema encontró solo</h3>
+<p>El Visor busca fotos automáticamente: cada 30 minutos entre 8:00 y 17:00, mientras haya un equipo de bodega con el Visor abierto. Esas fotos se muestran con una marca naranja <strong>«?»</strong> (<strong>por confirmar</strong>) hasta que alguien las revise.
+1. En la ficha, debajo de la foto por confirmar:
+   - Caja: <strong>✔ Es correcta</strong> o <strong>✖ No es</strong>.
+   - Producto: <strong>✔</strong> (confirmar) o <strong>✕</strong> (no es: se quita y no se vuelve a buscar sola).
+2. También puedes revisarlas en <strong>Seguimiento de OC → Catálogo de productos → Fotos por confirmar</strong>: <strong>Ver en la tienda</strong>, <strong>Es este producto</strong> o <strong>No es</strong>. Ahí solo salen las fotos de la tienda de Convenio Marco.
+3. Para ver qué productos no tienen foto: <strong>Catálogo de Insumos → Productos sin fotografía (N)</strong>. Cada producto dice por qué le falta («Caja: no se encontró (fecha) · se vuelve a buscar el …» o «aún sin buscar») y trae el botón <strong>Buscar o sacar foto</strong>.
+4. <strong>Buscar fotos que faltan</strong> lanza la búsqueda ahora mismo y sigue en segundo plano: puedes seguir trabajando, y el Visor avisa al terminar.</p>
+<h3>E. Fotos a mano desde Seguimiento de OC → Catálogo de productos</h3>
+<ol>
+<li><strong>Seguimiento de OC → Catálogo de productos</strong>.</li>
+<li>Busca con <strong>«Buscar por nombre, código o proveedor…»</strong>.</li>
+<li>En la fila del producto:
+   - <strong>Buscar foto</strong>: abre Google Imágenes con el nombre.
+   - <strong>Pegar</strong>: pega una imagen que copiaste (clic derecho → «Copiar imagen»). No aparece en el teléfono.
+   - <strong>Subir</strong>: elige un archivo de imagen.</li>
+<li><strong>Cargar productos y fotos de las órdenes ya ingresadas</strong> vuelve a leer todas las órdenes y busca sus fotos.</li>
+<li>Cierra con <strong>Cerrar</strong>.</li>
+</ol>
+<h3>F. El ID del producto (ID de Mercado Público)</h3>
+<p>Es el número de 6 o 7 dígitos que trae la orden de compra entre paréntesis (por ejemplo, 2228845). Sirve para unir el producto con su orden y encontrar su foto. Es distinto del <strong>Código SAR</strong> (SAR-000123), que el Visor asigna solo a cada producto.
+- Al ingresar una orden de compra, el ID queda guardado solo.
+- En <strong>Ingresos</strong>: campo <strong>ID MERCADO PÚBLICO</strong> (opcional).
+- En <strong>Existencias → lápiz → Editar Insumo Clínico</strong>: campo <strong>ID del producto</strong>.
+- En <strong>Recibir mercadería → Agregar producto</strong>: campo <strong>ID Mercado Público (opcional)</strong>.
+- En <strong>Auditoría → Disponible</strong>: los productos provisionales sin ID traen el botón <strong>Asignar ID</strong>.</p>
+<h3>G. Revisar productos parecidos</h3>
+<ol>
+<li>Menú lateral → <strong>MOVIMIENTOS → Revisar productos parecidos</strong>.</li>
+<li>Verás <strong>Posibles duplicados (N grupo(s))</strong>. Cada grupo dice si son <strong>nombres casi iguales</strong> (una letra, un punto, un espacio o un acento de diferencia), <strong>mismo nombre en varios lugares</strong> o productos que comparten el mismo ID con nombres distintos.</li>
+<li>Más abajo aparece la lista <strong>Ingresados manualmente, aún provisionales</strong>: productos que se crearon al emitir un acta sin stock.</li>
+<li>Esta pantalla <strong>no cambia nada</strong>. Anota lo que haya que unir y avísale a un administrador, que lo une en <strong>Repetidos y salud</strong>.</li>
+<li><strong>Actualizar</strong> vuelve a comparar.</li>
+</ol>
+<p><strong>Ojo:</strong> el mismo producto en dos bodegas distintas, o tallas distintas («TALLA S», «TALLA M», «TALLA L»), aparecen como parecidos, pero <strong>no son duplicados</strong>. No se unen.</p>
+<h3>H. Repetidos y salud del inventario (administrador)</h3>
+<ol>
+<li>Menú lateral → <strong>INVENTARIO → Repetidos y salud</strong> (con un número rojo si hay casos).</li>
+<li>La pantalla <strong>Salud del inventario</strong> revisa: <strong>Nombres de bodega con espacios de más</strong>, <strong>Productos con stock sin bodega</strong>, <strong>Productos repetidos en una bodega</strong>, <strong>Unidades adeudadas en productos que ya tienen stock</strong>, <strong>Bodega que no existe</strong>, <strong>Lotes que no suman el total</strong> y <strong>Cantidades negativas</strong>.</li>
+<li>Antes de corregir, <strong>descarga el respaldo del día</strong> (lo pide la misma pantalla).</li>
+<li>Según el caso, usa <strong>Unificar nombre</strong>, <strong>Asignar</strong>, <strong>Unir</strong>, <strong>Regularizar</strong> o <strong>Descontar N</strong>. Cada botón pide confirmar y explica qué va a pasar.</li>
+<li><strong>Volver a revisar</strong> recarga la revisión.</li>
+</ol>
+<h3>I. Directorio → Nomenclaturas y correlativos (administrador)</h3>
+<ol>
+<li>Menú lateral (abajo) → <strong>Directorio</strong> → pestaña <strong>Nomenclaturas y correlativos</strong>.</li>
+<li>Es una tabla, solo para leer, con todos los códigos que usa el Visor: formato, ejemplo, para qué sirve, quién lo asigna y el último número emitido. Por ejemplo: SAR, lote, ING, CAM, AJU, AE, SOL, REC, BUL y TRA.</li>
+<li>Busca con <strong>«Buscar formato, ejemplo o uso…»</strong>.</li>
+<li>La otra pestaña, <strong>Errores y alertas</strong>, explica cada aviso del sistema por su código <strong>ERR-XXX-NNN</strong>.</li>
+</ol>
+<p><strong>Si pasa esto…</strong>
+- <strong>La tarjeta dice «0 un. en stock», pero el producto sí está en Existencias:</strong> el catálogo suma el stock por nombre. Si el producto está guardado en Existencias con otro nombre, no lo suma. Revisa el nombre en <strong>Revisar productos parecidos</strong>.
+- <strong>«Aún no hay productos…»:</strong> espera unos segundos. El catálogo vuelve a intentar mientras esté vacío. Si sigue igual, usa <strong>Cargar productos y fotos de las órdenes ingresadas</strong>.
+- <strong>«Para buscar en internet falta actualizar el script…»:</strong> avísale al administrador (<strong>Configuración → SCRIPT Y CORREO</strong>).
+- <strong>«No se pudo pegar»:</strong> el navegador no dio permiso. Usa <strong>Subir</strong>.
+- <strong>«Máximo 4 fotos extra: quita una antes.»:</strong> quita una foto con <strong>✕</strong> y vuelve a intentar.</p>
+<p><strong>Reglas</strong>
+- <strong>Un producto = una ficha.</strong> Antes de crear un producto nuevo (en un ingreso, una recepción o un acta), búscalo por nombre y por ID.
+- El nombre del producto va en <strong>MAYÚSCULAS</strong>, igual que en la orden de compra.
+- La <strong>categoría</strong> (familia clínica) y el <strong>tipo de insumo</strong> (médico / aseo / oficina) son cosas distintas: llena las dos.
+- Una foto propia (subida o sacada con la cámara) manda sobre la foto automática.
+- Si una foto automática no corresponde, márcala <strong>No es</strong>: así no vuelve a aparecer.</p>
+<p><strong>Sin internet:</strong> el Catálogo de Insumos y la ficha muestran la última copia guardada en el equipo. Las fotos propias se ven, pero puede que las de la tienda o de internet no carguen. Buscar fotos, confirmar y subir <strong>necesitan conexión</strong>.</p></section><section class="mod" id="catalogo-ordenes-de-compra-seguimiento-de-oc"><h3><span class="n">4.2</span> Órdenes de compra: Seguimiento de OC</h3><p><strong>Para qué sirve:</strong> seguir cada orden de compra (OC) de Mercado Público desde que se ingresa hasta la recepción conforme: plazos, qué llegó, qué falta, incidencias, archivos y una bitácora con fecha y autor.</p>
+<p><strong>Quién lo usa:</strong> operador, administrador y superadministrador. Solo administrador y superadministrador ven <strong>Anular</strong> (una recepción), <strong>Registrar decisión de multa</strong>, <strong>Cerrar seguimiento / Reabrir seguimiento</strong>, <strong>Configurar correo</strong> y <strong>Eliminar orden</strong>.</p>
+<h3>A. Ingresar una orden desde el PDF</h3>
+<ol>
+<li>Menú lateral → <strong>COMPRAS · ADQUISICIONES SAR → Seguimiento de OC</strong> (o <strong>Inicio → Ingresar orden de compra</strong>).</li>
+<li>Toca <strong>Ingresar desde PDF</strong>.</li>
+<li>En <strong>Orden de compra (Mercado Público): PDF o Excel</strong>, sube el archivo. El Visor lo lee y muestra lo que encontró.</li>
+<li>Si tienes el <strong>Cuadro de distribución</strong>, súbelo en su recuadro (es opcional). En la tabla de memos, marca en <strong>Cargar</strong> los memos que corresponden (por defecto, los del SAR).</li>
+<li>Si tienes el correo del despacho, pega su texto en <strong>Correo del despacho</strong>: así se leen el plazo para aceptar y los días de entrega.</li>
+<li><strong>Revisa cada dato</strong> (N° de orden, proveedor, fechas, plazos, productos, cantidades y valores). Puedes corregir, quitar una fila (<strong>✕</strong>) o agregarla (<strong>+ Producto</strong>).</li>
+<li>Toca <strong>Ingresar orden</strong>. Se abre la ficha de la orden.</li>
+</ol>
+<p><strong>Orden histórica:</strong> si la orden ya se recibió y se usó antes de existir el Visor, marca <strong>Orden histórica</strong>, indica <strong>Fecha de recepción</strong> y adjunta, si los tienes, la recepción conforme y el acta. Queda cerrada y <strong>no mueve stock</strong>.</p>
+<p><strong>Con cuadro Excel:</strong> si no tienes el PDF, usa <strong>Con cuadro Excel</strong>. Ahí son obligatorios el <strong>N° de orden</strong>, la fecha <strong>Aceptada por el proveedor</strong> y el Excel del cuadro.</p>
+<h3>B. La ficha de la orden</h3>
+<ul>
+<li><strong>Plazo de la orden:</strong> emitida, aceptada (opcional), plazo en días hábiles, fecha en que vence y multa. El cuadro de color dice <strong>Por aceptar</strong>, <strong>Aceptación vencida</strong>, <strong>Vence en N días hábiles</strong>, <strong>Atrasada N días hábiles</strong>, <strong>Recibida completa</strong> o <strong>Seguimiento cerrado</strong>.</li>
+<li><strong>Barra «Siguiente paso»:</strong> dice qué hacer ahora y trae el botón que corresponde (<strong>Recibir mercadería</strong>, <strong>Recibir lo que falta</strong>, <strong>Recepción conforme</strong>, <strong>Ir a Actas de entrega</strong>). <strong>Registrar aceptación</strong> es opcional.</li>
+<li><strong>Pedido y recibido:</strong> recibido / pedido por producto (se abre al tocarlo). Desde ahí también: <strong>Buscar fotos de esta orden</strong> y, cuando ya llegó algo, <strong>Lotes y vencimientos</strong> y <strong>Descargar pendientes</strong>.</li>
+<li><strong>Recepciones y recepción conforme</strong>, <strong>Pendiente de recibir</strong>, <strong>Discrepancias</strong>, <strong>Datos de la orden, memos y distribución</strong>, <strong>Archivos de la orden</strong> y <strong>Bitácora de la orden</strong>.</li>
+<li><strong>← Órdenes</strong> vuelve a la lista.</li>
+</ul>
+<h3>C. Recibir mercadería (cuando llega el camión)</h3>
+<ol>
+<li>En la ficha, toca <strong>Recibir mercadería</strong> (o <strong>Recibir lo que falta</strong>).</li>
+<li>Si la orden tiene varios memos, marca en <strong>¿Qué memos se recibieron?</strong> los que llegaron juntos.</li>
+<li>En <strong>Guías de despacho</strong>, escribe el <strong>N° guía de despacho</strong>. Si quieres, sube la <strong>Foto o PDF de la guía</strong>: el Visor intenta leer el lote, el vencimiento y la empresa, y los deja escritos para que los revises. Si llegaron varias guías, usa <strong>Agregar otra guía</strong>.</li>
+<li>Revisa la <strong>Fecha</strong> (por defecto, hoy).</li>
+<li>Por cada producto, escribe en <strong>Llega ahora</strong> cuántas <strong>unidades</strong> llegaron. <strong>✔ N</strong> anota que llegó completo. <strong>Marcar todo recibido</strong> marca todos y <strong>Limpiar</strong> borra todo.</li>
+<li>Revisa <strong>Producto en inventario</strong>: elige de la lista el nombre exacto que ya existe en bodega.</li>
+<li>Si quieres dejar lote y vencimiento ahora, marca <strong>Anotar lote y vencimiento ahora</strong> (también se puede hacer después).</li>
+<li>En <strong>Cajas</strong>, anota cuántas cajas o bultos llegaron: se imprime una etiqueta por caja.</li>
+<li>Si algo vino mal, elige la <strong>Incidencia</strong> (<strong>Dañado / defectuoso</strong>, <strong>Vencimiento corto</strong>, <strong>Producto distinto al pedido</strong>, <strong>Faltante</strong>, <strong>Otro</strong>) y escribe el detalle.</li>
+<li>Elige la <strong>Bodega de destino</strong> (por defecto, Bodega Central). Si no existe, el administrador la crea con <strong>+ Nueva bodega</strong>.</li>
+<li>Deja marcado <strong>Ingresar lo recibido al stock de …</strong> para que el stock quede disponible y se descuente al entregarlo con un acta.</li>
+<li><strong>Avisar por correo a la lista</strong> viene marcado: avisa a Compras de esta recepción.</li>
+<li>Toca <strong>Guardar recepción</strong>. Al final aparece <strong>«Recepción cargada»</strong> con su número <strong>REC-AAAA-NNNNN</strong>.</li>
+<li>Después se abre la ventana <strong>Recepción conforme · REC-…</strong> con <strong>Descargar PDF</strong>, <strong>Descargar Word</strong>, <strong>Editar datos</strong> y <strong>Cerrar</strong>. Elige si es <strong>Parcial</strong> o <strong>Total</strong>.</li>
+</ol>
+<p>Si un producto llegó pero no estaba en la lista: <strong>Agregar producto</strong> → escribe la descripción (el Visor sugiere nombres), el ID si lo tienes, <strong>Pedido según el documento</strong> y <strong>Llega ahora</strong> → <strong>Agregar a la lista</strong>.</p>
+<h3>D. Recepción conforme con correo</h3>
+<ol>
+<li>Cuando ya está todo recibido, la barra dice <strong>«Todo recibido. Siguiente paso: la recepción conforme…»</strong>. Toca <strong>Recepción conforme</strong>. Si falta mercadería y quieres darla por conforme igual, usa <strong>Recepción conforme con correo (parcial)</strong>.</li>
+<li>En <strong>Guías o facturas del proveedor</strong>, revisa el tipo (<strong>Guía de despacho</strong> / <strong>Factura</strong>), el <strong>N° del documento</strong> y sube el <strong>PDF</strong> de cada una (<strong>Agregar otra guía o factura</strong> si son varias).</li>
+<li>Revisa <strong>¿Con qué fecha se emite el acta?</strong>: el Visor propone el día en que se registró la recepción. <strong>Usar hoy</strong> la cambia a hoy.</li>
+<li><strong>Tipo de recepción:</strong> <strong>Total</strong> o <strong>Parcial (faltan N unidades)</strong>.</li>
+<li>Revisa el <strong>Encabezado del acta</strong> y el detalle: puedes quitar o corregir líneas, y queda igual en el PDF.</li>
+<li>Revisa <strong>Contraparte técnica (firma del acta)</strong>, <strong>Correo firmado por</strong> y <strong>Cargo</strong>.</li>
+<li><strong>Enviar correo con el acta y la guía/factura a la lista</strong> viene marcado. Revisa <strong>Para</strong> y <strong>Cc</strong>.</li>
+<li>Toca <strong>Guardar</strong>. El acta queda en <strong>Archivos de la orden</strong> y en la bitácora.</li>
+</ol>
+<p>Después puedes usar <strong>Editar recepción conforme</strong> o <strong>Regenerar recepción conforme (modelo vigente)</strong> desde <strong>Archivos de la orden</strong>. Cada recepción (REC-…) tiene además sus propios botones <strong>PDF</strong>, <strong>Word</strong> y <strong>Editar</strong>.</p>
+<h3>E. Otras acciones de la ficha</h3>
+<ul>
+<li><strong>Lotes y vencimientos:</strong> completa el lote y el vencimiento de lo que entró sin ellos («S/L»). Puedes asignar solo una parte de las unidades.</li>
+<li><strong>Descargar pendientes:</strong> baja un archivo CSV (se abre con Excel) con lo que falta por recibir.</li>
+<li><strong>Resolver: (producto):</strong> cierra una incidencia. Hay que escribir cómo se resolvió.</li>
+<li><strong>Agregar archivo:</strong> guarda en la orden un PDF, un Excel o una imagen (máximo 8 MB), con su tipo y un comentario.</li>
+<li><strong>Bitácora de la orden:</strong> escribe el comentario, elige la <strong>Etapa</strong> (opcional), adjunta archivos si quieres y toca <strong>Registrar comentario</strong>. No se puede editar ni borrar. <strong>Enviar correo a la lista</strong> viene desmarcado.</li>
+<li><strong>Generar acta (N un.):</strong> si la orden trae productos para otros centros, arma el acta de entrega para ese centro con lo que ya está en bodega.</li>
+<li><strong>Anular</strong> una recepción (administrador): pide el motivo, devuelve lo recibido a «por recibir» y lo saca del stock. No se puede si ese stock ya se entregó.</li>
+<li><strong>Eliminar orden</strong> (administrador): solo si no tiene recepciones. Hay que escribir el N° de la orden para confirmar.</li>
+</ul>
+<p><strong>Si pasa esto…</strong>
+- <strong>«Ya existe — Esa orden ya está en seguimiento.»:</strong> la orden ya fue ingresada. Búscala en la lista.
+- <strong>«Revisa antes de guardar …»</strong> (producto nuevo, guía ya registrada): lee el aviso. Si está correcto, toca <strong>Guardar recepción</strong> otra vez.
+- <strong>«N producto(s) no existen en el inventario y se crearían como nuevos»:</strong> casi siempre es un nombre mal elegido en <strong>Producto en inventario</strong>. Corrígelo antes de guardar para no crear un duplicado.
+- <strong>«Cantidad no válida»:</strong> escribe un número entero que no supere lo pendiente.
+- <strong>«Vencimiento pasado»:</strong> revisa la fecha de vencimiento.
+- <strong>Recepción conforme: «Hay N incidencia(s) abierta(s): resuélvelas antes…»:</strong> usa <strong>Resolver</strong> en <strong>Discrepancias</strong>.
+- <strong>«Faltan N unidad(es) por recibir. … marca "Recepción parcial".»:</strong> cambia el <strong>Tipo de recepción</strong> a <strong>Parcial</strong>.
+- <strong>«Adjunta el PDF de la guía o factura.»:</strong> cada documento necesita su PDF.
+- <strong>«Correo programado»:</strong> se hizo fuera del horario de envío (lunes a viernes, 8:00 a 17:00, sin feriados). Sale solo después.
+- <strong>«Adjunta los archivos»:</strong> el envío automático no está configurado. Se descargaron el acta y la guía y se abrió un borrador de correo: adjúntalos a mano.
+- <strong>«No se puede eliminar» la orden:</strong> primero hay que anular sus recepciones.</p>
+<p><strong>Reglas</strong>
+- Lo que entra a stock por una OC queda en la bodega elegida y en el historial con su N° REC.
+- La aceptación del proveedor es opcional. Si llegó mercadería, se da por aceptada.
+- Los plazos se cuentan en <strong>días hábiles</strong> (lunes a viernes, sin feriados).
+- «Llega ahora» se cuenta en <strong>unidades</strong>, igual que en la orden. Si la orden viene por cajas, conversa antes con el encargado (ver notas).
+- La recepción conforme lleva siempre la firma y el timbre de la contraparte técnica.
+- La bitácora y los archivos de la orden no se modifican.</p>
+<p><strong>Sin internet:</strong> la lista y la ficha muestran la última copia. <strong>Guardar recepción</strong> funciona: queda en cola con un número provisional <strong>REC-P-…</strong>, se aplica sola al volver la conexión y recién ahí sale el correo. Las fotos o PDF de las guías <strong>no</strong> se guardan en la cola: súbelos después con <strong>Agregar archivo</strong>. <strong>Ingresar desde PDF</strong>, <strong>Recepción conforme</strong>, <strong>Buscar fotos</strong>, anular y eliminar <strong>necesitan conexión</strong>.</p></section><section class="mod" id="catalogo-bitacora-de-ordenes"><h3><span class="n">4.3</span> Bitácora de órdenes</h3><p><strong>Para qué sirve:</strong> ver cada orden como un «caso», cruzando lo que dice el Visor (pedido y recibido) con los correos de la cuenta de Compras: despachos, guías, facturas, reclamos y recepciones conformes. Solo lee el correo: no envía ni cambia nada.</p>
+<p><strong>Quién lo usa:</strong> operador, administrador y superadministrador. La configuración del script la hace el administrador.</p>
+<p><strong>Paso a paso</strong>
+1. Menú lateral → <strong>MOVIMIENTOS → Bitácora de órdenes</strong>.
+2. Arriba ves <strong>Última revisión del correo</strong>. El correo se revisa solo a las 07:00, 12:00 y 17:00. Para revisarlo ahora, toca <strong>Revisar el correo ahora</strong>.
+3. Busca con <strong>«Buscar por N° de orden o proveedor»</strong> o filtra con: <strong>Todas</strong>, <strong>Discrepancia</strong>, <strong>Sin gestión</strong>, <strong>Parciales</strong>, <strong>En gestión</strong>, <strong>Para otros centros</strong>, <strong>Compra compartida</strong>, <strong>Con conforme</strong> y <strong>Falta conforme</strong>.
+4. Cada fila muestra el estado, el avance (recibido / pedido), el último correo y las alertas.
+5. Toca una orden para abrir el caso a pantalla completa: <strong>Ciclo de vida</strong> (6 etapas), <strong>Hallazgos</strong>, <strong>Bitácora</strong> (vista <strong>Por etapa</strong> o <strong>Cronológica</strong>) y <strong>Productos y centros</strong>.
+6. <strong>Abrir en Seguimiento de OC</strong> lleva a la ficha de la orden. <strong>Volver a la lista</strong> (o <strong>Esc</strong>) cierra.</p>
+<p><strong>Si pasa esto…</strong>
+- <strong>«Aún no hay datos del correo. Configura el script…»:</strong> falta conectar el script de la cuenta de Compras (botón <strong>Configurar</strong>). Mientras tanto se ven solo las órdenes del Visor.
+- <strong>«La primera revisión del correo todavía está en curso»:</strong> es normal la primera vez. Se completa sola en las siguientes revisiones.
+- <strong>Estado «Solo en correo»:</strong> la orden aparece en los correos, pero no está ingresada en el Visor. Ingrésala en <strong>Seguimiento de OC</strong>.</p>
+<p><strong>Reglas</strong>
+- <strong>Discrepancia</strong> = la recepción conforme enviada por correo no coincide con lo recibido en el Visor (por ejemplo, dice TOTAL y faltan unidades).
+- <strong>Sin gestión</strong> = sin correos, o más de 7 días sin movimiento y sin nada recibido.</p>
+<p><strong>Sin internet:</strong> no funciona (lee el correo en línea).</p></section><section class="mod" id="catalogo-ajustes-de-stock"><h3><span class="n">4.4</span> Ajustes de stock</h3><p><strong>Para qué sirve:</strong> corregir la cantidad de un producto cuando lo que hay en la bodega no coincide con el sistema (merma, daño, error de digitación, conteo, devolución…). Cada ajuste queda con un <strong>motivo</strong>, una <strong>observación</strong> y un código correlativo <strong>AJU-AAAA-NNNNNN</strong>, y aparece en el Historial y en el informe contable.</p>
+<p><strong>Quién lo usa:</strong>
+- <strong>Superadministrador:</strong> el ajuste se aplica al tiro. Además, aprueba o rechaza las solicitudes de los demás en <strong>Aprobaciones Pendientes</strong>.
+- <strong>Administrador y operador:</strong> el ajuste queda como <strong>solicitud</strong> hasta que el superadministrador la apruebe. Siguen su estado en <strong>Mis Solicitudes</strong>.
+- <strong>Enfermero:</strong> no tiene acceso.</p>
+<h3>A. Hacer o solicitar un ajuste</h3>
+<ol>
+<li>Menú lateral → <strong>MOVIMIENTOS → Ajustes de Stock</strong>. Se abre en <strong>Solicitar Ajuste</strong>.</li>
+<li>En <strong>Buscar Medicamento</strong>, escribe al menos 2 letras del nombre, el código, el lote o el ID.</li>
+<li>En <strong>Coincidencias Encontradas</strong>, toca la tarjeta correcta. Cada tarjeta trae foto, nombre completo, bodega, ID, stock y lotes con su vencimiento (amarillo = vence en 90 días o menos; rojo = vencido). <strong>Fíjate en la bodega:</strong> el mismo producto aparece una vez por cada bodega.</li>
+<li>En <strong>¿A qué lote va el ajuste?</strong>, elige el lote. Si los lotes no suman el total, aparece <strong>Sin lote específico</strong> (el sistema elige el que vence antes). <strong>Lote nuevo</strong> sirve <strong>solo para sumar</strong>: escribe el lote y el vencimiento.</li>
+<li>En <strong>Cantidad a Ajustar</strong>, escribe la diferencia con signo: <strong>-10</strong> para restar, <strong>50</strong> para sumar. <strong>Nuevo Proyectado</strong> muestra cómo queda.</li>
+<li>Elige el <strong>Motivo del ajuste</strong>: <strong>Error de digitación</strong>, <strong>Producto no está / no se encontró</strong>, <strong>Merma o daño</strong>, <strong>Conteo físico (toma de inventario)</strong>, <strong>Devolución</strong>, <strong>Corrección de lote o vencimiento</strong>, <strong>Corrección de proveedor o documento</strong>, <strong>Cambio de bodega</strong> u <strong>Otro</strong>.</li>
+<li>Escribe la <strong>Observación de Auditoría</strong>: qué pasó y cómo lo comprobaste (más de 10 caracteres).</li>
+<li>Toca <strong>Ejecutar Ajuste y Auditar</strong>.</li>
+<li>Revisa el resumen en <strong>¿Confirmar el ajuste?</strong> (producto, antes → después, lote, motivo). Toca <strong>Confirmar ajuste</strong> (superadministrador) o <strong>Enviar solicitud</strong> (los demás). <strong>Revisar</strong> vuelve atrás.</li>
+<li>Resultado:<ul>
+<li>Superadministrador: <strong>«Ajuste realizado — Código: AJU-…»</strong>.</li>
+<li>Los demás: <strong>«Solicitud Creada — … código: AJU-… Debe ser aprobada por el Superadministrador.»</strong></li>
+</ul>
+</li>
+</ol>
+<h3>B. Mis Solicitudes</h3>
+<ol>
+<li>Toca <strong>Mis Solicitudes</strong>.</li>
+<li>Ves tus solicitudes con <strong>Código</strong>, <strong>Insumo</strong>, <strong>Fecha</strong>, <strong>Variación</strong>, <strong>Stock (Prev -&gt; Proy)</strong>, <strong>Estado</strong> (<strong>PENDIENTE</strong>, <strong>APROBADO</strong>, <strong>RECHAZADO</strong>) y la observación (con el lote, y el motivo si se rechazó).</li>
+<li>Cuando el superadministrador la aprueba o la rechaza, te llega un aviso: <strong>«Ajuste AJU-… Aprobado»</strong> o <strong>«Ajuste AJU-… Rechazado — Motivo: …»</strong>.</li>
+<li>El superadministrador ve aquí las solicitudes de todos.</li>
+</ol>
+<h3>C. Aprobaciones Pendientes (solo superadministrador)</h3>
+<ol>
+<li>Toca <strong>Aprobaciones Pendientes</strong>. El número rojo indica cuántas hay.</li>
+<li>Revisa cada fila: código, quién la pidió, insumo, fecha, variación (con lote) y justificación. Aquí también llegan los faltantes de las <strong>tomas de inventario</strong>.</li>
+<li>Toca <strong>Aprobar</strong>: el ajuste se aplica en ese momento sobre el stock real y aparece <strong>«Solicitud Aprobada»</strong>.</li>
+<li>O toca <strong>Rechazar</strong>, escribe el motivo en la ventana del navegador y acepta. Aparece <strong>«Solicitud Rechazada»</strong>.</li>
+</ol>
+<p><strong>Si pasa esto…</strong>
+- <strong>«Debe seleccionar un insumo.»:</strong> toca una tarjeta de la lista.
+- <strong>«Ingrese una cantidad válida (+ o -). No puede ser cero.»:</strong> escribe un número distinto de 0.
+- <strong>«Elige el motivo del ajuste.»</strong> o <strong>«La observación debe tener más de 10 caracteres.»:</strong> completa el campo.
+- <strong>«El stock resultante no puede ser negativo.»</strong> o <strong>«El lote X tiene N u.: no se pueden restar M.»:</strong> estás restando más de lo que hay. Revisa el lote o la cantidad.
+- <strong>«Elige el lote al que va el ajuste…»:</strong> falta elegir el lote, o el «lote nuevo» repite el nombre de uno que ya existe.
+- <strong>«A un lote nuevo solo se le puede sumar.»:</strong> para restar, elige un lote existente.
+- <strong>«Además hay N u. reservadas por actas por confirmar…»:</strong> esas unidades siguen físicamente en la bodega. Si contaste el estante, réstalas antes de ajustar.
+- <strong>Al aprobar: «La solicitud cambió mientras la revisabas…»</strong> o <strong>«El lote … cambió desde el conteo…»:</strong> alguien movió ese stock entremedio. Rechaza la solicitud y pide que se vuelva a contar.
+- <strong>«Solicitud ya procesada»:</strong> ya estaba aprobada. No se aplicó dos veces.</p>
+<p><strong>Reglas</strong>
+- Un ajuste <strong>no reemplaza</strong> a un traspaso, una entrega con acta ni una corrección de ingreso. Úsalo solo cuando la cantidad física no coincide.
+- Corrección directa de un ingreso (lápiz en <strong>Historial</strong>): solo dentro de las 12 horas siguientes y si todavía no ha salido nada de ese producto. Después, se corrige con un ajuste.
+- El código AJU se asigna al confirmar. Si después la solicitud se rechaza, ese número no se vuelve a usar.
+- El stock nunca puede quedar negativo.</p>
+<p><strong>Sin internet:</strong> el ajuste se guarda en el equipo (<strong>«Guardado sin conexión»</strong>) y se aplica solo al volver la conexión, con el stock de ese momento. El código AJU se asigna al sincronizar. Si ya no alcanza el stock, queda «para revisar» en el indicador <strong>N sin sincronizar</strong>. <strong>Aprobar</strong> y <strong>Rechazar</strong> necesitan conexión.</p></section><section class="mod" id="catalogo-historial"><h3><span class="n">4.5</span> Historial</h3><p><strong>Para qué sirve:</strong> ver todos los movimientos de stock en orden de fecha (ingresos, traspasos, entregas, ajustes, recepciones…), con quién los hizo y su documento de respaldo. El historial no se puede modificar.</p>
+<p><strong>Quién lo usa:</strong> operador, administrador y superadministrador. <strong>Excel</strong>, <strong>PDF</strong> y el lápiz <strong>Editar ingreso</strong> son solo para administrador y superadministrador.</p>
+<p><strong>Paso a paso</strong>
+1. Menú lateral → <strong>MOVIMIENTOS → Historial</strong> (pantalla <strong>Historial de Transacciones</strong>).
+2. La tabla muestra los últimos 50 movimientos y se actualiza sola: <strong>FECHA/HORA</strong>, <strong>TIPO</strong>, <strong>PRODUCTO</strong> (con el operador), <strong>LOTE / CANT.</strong>, documento y código de ingreso (<strong>ING-…</strong>), <strong>DOC. RESPALDO</strong> y <strong>ACCIÓN</strong>.
+3. Para buscar, escribe en <strong>«Buscar por producto u operador...»</strong>. También encuentra lotes, tipos, documentos e IDs, pero <strong>solo entre los movimientos ya cargados</strong>. Para buscar más atrás, toca primero <strong>Cargar Más Resultados</strong> (trae 50 más cada vez).
+4. Para ver un día, elige la fecha en el calendario. <strong>LIMPIAR</strong> vuelve al tiempo real.
+5. El ojo muestra producto, fecha y usuario.
+6. Lápiz (solo en los ingresos de proveedor): abre <strong>Editar ingreso</strong>. Corrige y toca <strong>Guardar cambios</strong>. Si cambias cantidad, lote o vencimiento, el Visor pide el motivo y entrega un código <strong>CAM-…</strong>.
+7. <strong>Excel</strong> o <strong>PDF</strong> descargan lo que está cargado en la tabla.</p>
+<p><strong>Para ver la historia completa de un producto</strong> (el kárdex, con el saldo línea a línea) usa <strong>Auditoría → Contable</strong> (siguiente módulo).</p>
+<p><strong>Si pasa esto…</strong>
+- <strong>No encuentro un movimiento antiguo:</strong> toca <strong>Cargar Más Resultados</strong> hasta llegar a esa fecha, o filtra por el día.
+- <strong>«Has llegado al final del historial.»:</strong> ya no hay más movimientos.
+- <strong>«No se pudo buscar por fecha.»:</strong> reintenta con conexión.
+- <strong>Al editar: «Pasaron más de 12 h desde el ingreso.»</strong> o <strong>«Ya salió stock de este insumo…»:</strong> ya no se puede corregir directo. Usa <strong>Ajustes de Stock</strong>.
+- <strong>«Por ahora solo se editan los ingresos de proveedor…»:</strong> las entregas, traspasos y ajustes no se editan desde aquí.</p>
+<p><strong>Reglas</strong>
+- No hay que borrar movimientos: los errores se corrigen con un movimiento nuevo (un ajuste o una edición con código).
+- El N° de OC o documento de un ingreso se puede agregar después con el lápiz, sin límite de tiempo.</p>
+<p><strong>Sin internet:</strong> muestra los movimientos recientes guardados en el equipo (hasta 3.000). Lo hecho sin conexión aparece cuando se sincroniza. Editar un ingreso necesita conexión.</p></section><section class="mod" id="catalogo-auditoria"><h3><span class="n">4.6</span> Auditoría</h3><p><strong>Para qué sirve:</strong> dos informes para cuadrar el inventario:
+- <strong>Disponible:</strong> cuántas unidades hay realmente para entregar, por producto y bodega (lo que está en el sistema menos lo ya entregado sin respaldo, el «sobregiro»).
+- <strong>Contable:</strong> el libro de cada producto (kárdex): cada entrada y salida con su motivo, bodega, lote, código, responsable y saldo.</p>
+<p><strong>Quién lo usa:</strong> operador, administrador y superadministrador. El enfermero no la ve.</p>
+<h3>A. Pestaña Disponible</h3>
+<ol>
+<li>Menú lateral → <strong>MOVIMIENTOS → Auditoría</strong>. Se abre en <strong>Disponible</strong>.</li>
+<li>Arriba: <strong>unidades disponibles</strong>, <strong>productos en bodega</strong>, <strong>con sobregiro</strong> y <strong>valor disponible</strong>.</li>
+<li>Busca con <strong>«Buscar insumo, ID o bodega…»</strong>, filtra con <strong>Todas las bodegas</strong> o marca <strong>Solo con sobregiro</strong>.</li>
+<li>Cada fila muestra <strong>Disponible</strong>, <strong>En sistema</strong>, <strong>Sobregiro</strong>, <strong>Bodega</strong> y <strong>Estado</strong>: <strong>OK</strong>, <strong>Listo para cuadrar</strong>, <strong>Sin respaldo</strong> o <strong>Provisional</strong>.</li>
+<li>Si el estado es <strong>Listo para cuadrar</strong> (hay stock para cubrir lo entregado sin respaldo), toca <strong>Cuadrar</strong> y escribe, si lo sabes, el N° de la OC o SDC. <strong>Cuadrar N listos</strong> hace todos juntos.</li>
+<li>Si es un producto provisional sin ID, toca <strong>Asignar ID</strong> y escribe el ID de Mercado Público.</li>
+<li><strong>Informe disponible (Excel)</strong> descarga el informe (archivo CSV que se abre con Excel). <strong>Actualizar</strong> recarga.</li>
+<li>Toca el nombre de un producto para abrir su libro en <strong>Contable</strong>.</li>
+</ol>
+<h3>B. Pestaña Contable</h3>
+<ol>
+<li>Toca <strong>Contable</strong>.</li>
+<li>Escribe en <strong>«Producto o ID de Mercado Público…»</strong> y elige el producto de la lista.</li>
+<li>Ves <strong>Stock actual (todas las bodegas)</strong>, <strong>Saldo según movimientos</strong>, <strong>Sobregiro</strong> y <strong>Reservado por actas</strong>.</li>
+<li>Si dice <strong>«El stock actual difiere en N u. de lo que suman los movimientos…»</strong>, hay stock que se cargó antes del sistema, por toma de inventario o sin movimiento. Si dice <strong>«El stock actual coincide…»</strong>, el libro está cuadrado.</li>
+<li>Toca cualquier línea del libro para ver <strong>todo el detalle</strong> del movimiento (tipo, cantidad, efecto en el stock, lote, desde/hacia, código, responsable, motivo, documentos).</li>
+<li><strong>Descargar libro (Excel)</strong> baja el libro del producto.</li>
+<li>Más abajo están <strong>Recepciones de mercadería</strong> (busca por <strong>REC-…</strong>, orden o guía) y <strong>Cambios con código de seguimiento</strong> (los CAM y AJU con su motivo).</li>
+</ol>
+<p><strong>Si pasa esto…</strong>
+- <strong>«No se cuadró»:</strong> léelo y reintenta con conexión. Si sigue, avisa al administrador.
+- <strong>No encuentro el producto en Contable:</strong> prueba con el ID de Mercado Público o con parte del nombre.</p>
+<p><strong>Reglas</strong>
+- <strong>Disponible</strong> es lo que se puede prometer a un centro. <strong>En sistema</strong> puede incluir unidades ya entregadas sin respaldo.
+- Los productos <strong>Provisional</strong> o <strong>Sin respaldo</strong> se crearon al entregar sin stock. <strong>No se borran</strong>: se cuadran al ingresar su OC o SDC.</p>
+<p><strong>Sin internet:</strong> muestra la última copia del inventario y de las órdenes. Cuadrar y Asignar ID necesitan conexión.</p></section><section class="mod" id="catalogo-fotos-de-productos-solo-superadministrador"><h3><span class="n">4.7</span> Fotos de productos (solo superadministrador)</h3><p><strong>Para qué sirve:</strong> completar las dos fotos de cada producto (<strong>producto</strong> y <strong>caja</strong>) desde el teléfono, ver todo el catálogo ordenado por lo que falta y saber quién subió o cambió cada foto.</p>
+<p><strong>Quién lo usa:</strong> solo el <strong>superadministrador</strong>. Para cualquier otro rol, la sección no aparece en el menú y la página del teléfono no lo deja entrar. (Ojo: la ficha del producto, en el Catálogo de Insumos, sí permite subir fotos al resto del personal de bodega.)</p>
+<h3>A. En el computador: sección Fotos de productos</h3>
+<ol>
+<li>Menú lateral → <strong>INVENTARIO → Fotos de productos</strong>.</li>
+<li><strong>Accesos directos para el teléfono:</strong> <strong>Visor Logístico</strong>, <strong>Pedir insumos</strong> y <strong>Fotos SAR</strong>, cada uno con <strong>QR</strong> y <strong>Copiar</strong>.</li>
+<li>Pestaña <strong>Catálogo:</strong> todo el catálogo, primero lo que no tiene ninguna foto. Filtros: <strong>Sin ninguna foto</strong>, <strong>Sin foto del producto</strong>, <strong>Sin foto de la caja</strong>, <strong>Pedidas al teléfono</strong>, <strong>Completos</strong> y <strong>Todo el catálogo</strong>. Busca con <strong>«Buscar por nombre, ID o nombre común…»</strong>.</li>
+<li>En cada producto:
+   - Toca el recuadro <strong>Producto</strong> o <strong>Caja</strong> para subir o cambiar esa foto desde el computador.
+   - <strong>Pedir al teléfono</strong> lo deja en la lista de pendientes del teléfono (<strong>Quitar pedido</strong> lo saca).</li>
+<li>Pestaña <strong>Seguimiento de cambios:</strong> fecha, producto, qué foto, qué pasó (<strong>Subió foto nueva</strong> / <strong>Cambió la foto</strong>), quién y desde dónde (teléfono o computador).</li>
+<li><strong>Actualizar</strong> recarga.</li>
+</ol>
+<h3>B. Instalar «Fotos SAR» en el teléfono (una sola vez)</h3>
+<ol>
+<li>En <strong>Accesos directos para el teléfono</strong>, toca <strong>QR</strong> en <strong>Fotos SAR</strong>.</li>
+<li>Escanéalo con la cámara del teléfono y abre el enlace.</li>
+<li>Agrégalo a la pantalla de inicio (<strong>Compartir → Agregar a inicio</strong>). El ícono es naranjo, con una cámara.</li>
+<li>Entra con tu correo y clave del Visor (<strong>Entrar</strong>). La sesión queda guardada en el teléfono.</li>
+</ol>
+<h3>C. En el teléfono: sacar las fotos</h3>
+<ol>
+<li>Abre <strong>Fotos SAR</strong>. Por defecto se ven los <strong>Pendientes</strong>: productos con stock a los que les falta una foto, y los pedidos desde el computador (marcados <strong>pedida</strong>).</li>
+<li>Para ver todo, toca <strong>Todo el catálogo</strong>.</li>
+<li>Filtra con los botones (<strong>Todos</strong>, <strong>Pedidas</strong>, <strong>Sin foto del producto</strong>, <strong>Sin foto de la caja</strong>…) o busca con <strong>«Buscar producto…»</strong>.</li>
+<li>En cada producto, toca:
+   - <strong>Foto del producto</strong>: el producto fuera de la caja.
+   - <strong>Foto de la caja</strong>: el envase con su etiqueta.
+   - <strong>Otra foto</strong>: un detalle extra (rótulo, lote, etc.).</li>
+<li>Se abre la cámara. Saca la foto y confirma. Aparece <strong>«Foto guardada»</strong> y el recuadro cambia a <strong>«Producto listo · cambiar»</strong> o <strong>«Caja lista · cambiar»</strong>.</li>
+<li>Cuando el producto tiene las dos fotos, sale solo de los pendientes.</li>
+<li><strong>Salir</strong> cierra la sesión.</li>
+</ol>
+<p><strong>Si pasa esto…</strong>
+- <strong>«Esta cuenta no puede cargar fotos: solo el superadministrador.»:</strong> la cuenta no tiene ese rol.
+- <strong>«Correo o clave incorrectos.»</strong> o <strong>«Sin internet.»:</strong> revisa los datos o la conexión.
+- <strong>«Ya tiene 4 fotos adicionales: quita una en la ficha del producto antes de agregar otra.»:</strong> quita una foto desde la ficha del producto (Catálogo de Insumos).
+- <strong>«Todo al día: no hay productos sin fotos.»:</strong> no queda nada pendiente.
+- <strong>La foto queda «subiendo» y no termina:</strong> probablemente no hay internet. Espera la conexión con la página abierta (ver notas).</p>
+<p><strong>Reglas</strong>
+- <strong>Caja</strong> = la foto que se ve en todo el Visor. <strong>Producto</strong> = cómo es por dentro. Si las cambias de lugar, se confunde al personal.
+- Saca la foto con buena luz, la etiqueta derecha y legible, y sin datos de pacientes ni personas.
+- Las fotos se achican solas en el teléfono para que el catálogo no pese.</p>
+<p><strong>Sin internet:</strong> la página abre si ya se usó antes, pero para entrar la primera vez y para guardar fotos <strong>hace falta conexión</strong>.</p></section></section>
+</main></div>
+<script>
+(function(){
+  var mb=document.getElementById('mb'),toc=document.getElementById('toc');
+  mb.addEventListener('click',function(){var a=toc.classList.toggle('abierto');mb.setAttribute('aria-expanded',a);});
+  toc.addEventListener('click',function(e){if(e.target.closest('a')&&window.innerWidth<=860){toc.classList.remove('abierto');mb.setAttribute('aria-expanded','false');}});
+  var q=document.getElementById('q'),mods=[].slice.call(document.querySelectorAll('.mod')),sr=document.getElementById('sr');
+  var norm=function(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();};
+  var txt=mods.map(function(m){return norm(m.textContent);});
+  q.addEventListener('input',function(){var t=norm(q.value.trim()),n=0;
+    mods.forEach(function(m,i){var ok=!t||txt[i].indexOf(t)>=0;m.classList.toggle('oculto',!ok);if(ok)n++;
+      var l=toc.querySelector('a[href="#'+m.id+'"]');if(l)l.parentNode.classList.toggle('oculto',!ok);});
+    sr.classList.toggle('oculto',n>0||!t);});
+})();
+</script>
+</body></html>

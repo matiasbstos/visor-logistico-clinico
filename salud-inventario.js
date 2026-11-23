@@ -109,7 +109,7 @@
   }
   const tarjeta = (titulo, ayuda, n, cuerpo, k) => `<section class="shi-sec${n ? '' : ' shi-sec--ok'}" data-sec="${k}"><header><h3>${titulo}</h3><span class="shi-n">${n ? n : '<i class="ph-bold ph-check"></i> Sin casos'}</span></header><p class="si-v">${ayuda}</p>${n ? cuerpo : ''}</section>`;
   function pintar() {
-    const r = document.getElementById('sal-root'); if (!r) return;
+    const r = document.getElementById('shi-root'); if (!r) return;
     if (!datos) { r.innerHTML = `<div class="si-wrap si-ancho"><div class="si-cab"><div><h2 class="si-t">Salud del inventario</h2><p class="si-s">Revisando el inventario…</p></div></div>${window.SAR_Progreso ? window.SAR_Progreso.cargando('Leyendo productos y bodegas…') : ''}</div>`; return; }
     const a = datos.a, opts = (sel) => a.bodegas.map(b => `<option${b === sel ? ' selected' : ''}>${esc(b)}</option>`).join('');
     r.innerHTML = `<div class="si-wrap si-ancho"><div class="si-cab"><div><h2 class="si-t">Salud del inventario</h2><p class="si-s">Lo que puede hacer que un producto con stock no aparezca, salga en 0 o quede con deuda. Cada corrección queda en el historial. ${a.total ? `<b>${a.total} caso${a.total === 1 ? '' : 's'} por revisar.</b>` : '<b>Todo en orden.</b>'} Antes de corregir, descarga el respaldo del día.</p></div><button type="button" class="btn btn-secondary btn-sm" id="sal-re"><i class="ph-bold ph-arrows-clockwise"></i> Volver a revisar</button></div>
@@ -151,7 +151,7 @@
   async function abrir() {
     if (cargando) return; cargando = true; datos = null; pintar();
     try { const l = await leer(); datos = { a: analizar(l.ins, l.bod), tope: l.tope }; }
-    catch (e) { const r = document.getElementById('sal-root'); if (r) r.innerHTML = `<div class="si-wrap"><p class="shi-aviso">No pude revisar el inventario: ${esc((e && e.message) || e)}</p></div>`; cargando = false; return; }
+    catch (e) { const r = document.getElementById('shi-root'); if (r) r.innerHTML = `<div class="si-wrap"><p class="shi-aviso">No pude revisar el inventario: ${esc((e && e.message) || e)}</p></div>`; cargando = false; return; }
     cargando = false; pintar();
   }
   const api = { analizar, abrir, corregirNombre, asignarBodega, resolverDeuda, limpia };

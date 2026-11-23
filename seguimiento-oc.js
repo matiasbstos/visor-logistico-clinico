@@ -297,7 +297,10 @@
     // ---------------------------------------------------------------
     // Interfaz
     // ---------------------------------------------------------------
-    let lista = [], unsubLista = null, unsubEventos = null, ocActual = null, eventos = [];
+    let lista = [], unsubLista = null, unsubEventos = null, ocActual = null, eventos = [], soloPorRecibir = false;
+    /** 4.306: ¿la orden tiene unidades del SAR por recibir? (abierta y con lo pedido al centro propio mayor que lo recibido) */
+    const porRecibir = (oc) => { if (!oc || oc.cerrada) return false; const t = totalesPorCentro(oc), mio = t.find(x => x.centro === CENTRO_PROPIO) || t[0]; return !!(mio && num(mio.pedido) > num(mio.recibido)); };
+    const ordenLista = (l) => l.map((oc, i) => ({ oc, i, r: porRecibir(oc) ? 0 : 1 })).sort((a, b) => (a.r - b.r) || (a.i - b.i)).map(x => x.oc);
     const root = () => document.getElementById('soc-root');
     const usuario = () => (window.firebaseAuth && window.firebaseAuth.currentUser && window.firebaseAuth.currentUser.email) || 'Usuario';
     const ETIQ = { EN_PLAZO: 'En plazo', ATRASADA: 'Atrasada', COMPLETA: 'Completa', CERRADA: 'Cerrada' };
@@ -343,20 +346,21 @@
     function pintarLista() {
         ocActual = null; if (unsubEventos) { try { unsubEventos(); } catch (e) { /* noop */ } unsubEventos = null; }
         root().innerHTML = `
-            <div class="page-header mb-24"><div class="page-title"><h1>Seguimiento de órdenes de compra</h1>
-                <p>Plazos, recepciones por centro, discrepancias, notas y avisos por correo.</p></div>
+            <div class="page-header mb-24"><div class="page-title"><h1>Seguimiento de OC</h1>
+                <p>Seguimiento de órdenes de compra: plazos, recepciones por centro, discrepancias, notas y avisos por correo. Primero las que tienen unidades por recibir.</p></div>
                 <div class="soc-acc"><button type="button" class="btn btn-primary" id="soc-pdf"><i class="ph-bold ph-file-pdf"></i> Ingresar desde PDF</button>
                 <button type="button" class="btn btn-outline" id="soc-catalogo"><i class="ph-bold ph-images"></i> Catálogo de productos</button>
                 <button type="button" class="btn btn-outline" id="soc-nueva"><i class="ph-bold ph-microsoft-excel-logo"></i> Con cuadro Excel</button></div></div>
             <div class="soc-buscar"><input type="search" id="soc-buscar" placeholder="Buscar orden por número, proveedor o descripción…" aria-label="Buscar orden" autocomplete="off"></div>
-            <div class="soc-lista">${lista.length ? lista.map(oc => {
+            <div class="bit-chips" role="group" aria-label="Filtrar órdenes"><button type="button" class="bit-chip${soloPorRecibir ? '' : ' on'}" data-soc-f="todas" aria-pressed="${!soloPorRecibir}">Todas <em>${lista.length}</em></button><button type="button" class="bit-chip${soloPorRecibir ? ' on' : ''}" data-soc-f="recibir" aria-pressed="${soloPorRecibir}">Por recibir <em>${lista.filter(porRecibir).length}</em></button></div>
+            <div class="soc-lista">${lista.length ? (ordenLista(soloPorRecibir ? lista.filter(porRecibir) : lista).map(oc => {
                 const pl = estadoPlazo(oc), tot = totalesPorCentro(oc), mio = tot.find(t => t.centro === CENTRO_PROPIO) || tot[0];
                 const pct = mio && mio.pedido ? Math.min(100, Math.round(mio.recibido * 100 / mio.pedido)) : 0;
                 return `<button type="button" class="erp-card soc-card" data-oc="${esc(oc.id)}">
                     <div class="soc-card__top"><strong>${esc(oc.numeroOC)}</strong>${chip(pl)}</div>
                     <div class="soc-card__sub">${esc(oc.proveedor || 'Proveedor sin indicar')} · ${oc.aceptada ? 'vence ' + fmtFecha(pl.limite) : (pl.limite ? 'acepta hasta ' + fmtFecha(pl.limite) : 'sin aceptar')}</div>
                     ${mio ? `<div class="soc-barra" title="${esc(mio.centro)}"><span style="width:${pct}%"></span></div><small>${esc(mio.centro)}: ${mio.recibido} de ${mio.pedido} unidades recibidas</small>` : ''}
-                </button>`; }).join('') : '<div class="home-empty">Aún no hay órdenes en seguimiento. Usa "Ingresar desde PDF".</div>'}</div>
+                </button>`; }).join('') || '<div class="home-empty">No hay órdenes con unidades por recibir.</div>') : '<div class="home-empty">Aún no hay órdenes en seguimiento. Usa "Ingresar desde PDF".</div>'}</div>
             ${pendienteHTML()}
             ${window.SAR_CDP ? `<details class="soc-det soc-det--cdp"><summary>Presupuesto por CDP (opcional)</summary>${window.SAR_CDP.cardHTML(lista)}</details>` : ''}`;
         if (window.SAR_CDP) window.SAR_CDP.enlazar(root(), lista, modal, toast, pintarLista);
@@ -364,6 +368,7 @@
         root().querySelector('#soc-nueva').addEventListener('click', formNueva);
         root().querySelector('#soc-pdf').addEventListener('click', formDesdePDF);
         root().querySelectorAll('[data-oc]').forEach(b => b.addEventListener('click', () => abrirDetalle(b.dataset.oc)));
+        root().querySelectorAll('[data-soc-f]').forEach(b => b.addEventListener('click', () => { soloPorRecibir = b.dataset.socF === 'recibir'; pintarLista(); }));
         marcarMigas(false);
         const bus = root().querySelector('#soc-buscar');
         if (bus) bus.addEventListener('input', () => { const t = norm(bus.value); root().querySelectorAll('.soc-lista .soc-card').forEach(c => { c.style.display = !t || norm(c.textContent).includes(t) ? '' : 'none'; }); });

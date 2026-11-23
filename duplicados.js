@@ -58,16 +58,19 @@
         if (sc) sc.forEach(d => { const x = d.data(); items.push({ fuente: 'Catálogo', id: d.id, nombre: String(x.insumoName || x.descripcion || ''), codigo: x.codigoMP || '', origen: x.origen || '' }); });
         datos = { grupos: agrupar(items), manuales: items.filter(x => x.fuente === 'Stock' && x.provisional).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')) };
     }
-    const fila = (x) => `<tr><td>${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}</td><td>${esc(x.nombre)}</td><td>${esc(x.codigo || '')}</td><td>${esc(x.fuente)}${x.provisional ? ' · <b>manual provisional</b>' : ''}${x.origen === 'manual' ? ' · manual' : ''}</td><td>${esc(x.bodega || '')}</td><td class="n">${x.fuente === 'Stock' ? x.qty + (x.sobregiro ? ` <small>(sobregiro ${x.sobregiro})</small>` : '') : ''}</td></tr>`;
+    /* 4.306: la columna ID se oculta si viene vacía en toda la tabla */
+    const cabeza = (conId) => `<thead><tr><th></th><th>Nombre</th>${conId ? '<th>ID</th>' : ''}<th>Dónde</th><th>Bodega</th><th>Stock</th></tr></thead>`;
+    const tabla = (l) => { const conId = l.some(x => String(x.codigo || '').trim()); return `<table class="sus-t">${cabeza(conId)}<tbody>${l.map(x => fila(x, conId)).join('')}</tbody></table>`; };
+    const fila = (x, conId) => `<tr><td>${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}</td><td>${esc(x.nombre)}</td>${conId ? `<td>${esc(x.codigo || '')}</td>` : ''}<td>${esc(x.fuente)}${x.provisional ? ' · <b>manual provisional</b>' : ''}${x.origen === 'manual' ? ' · manual' : ''}</td><td>${esc(x.bodega || '')}</td><td class="n">${x.fuente === 'Stock' ? x.qty + (x.sobregiro ? ` <small>(sobregiro ${x.sobregiro})</small>` : '') : ''}</td></tr>`;
     function pintar() {
         const r = root(); if (!r) return;
-        r.innerHTML = `<div class="sus-w"><h2>Revisar productos parecidos</h2>
-          <p class="act-hint">Solo para revisar: no se modifica nada. Aquí aparecen productos con nombres casi iguales (una letra, un punto, un acento) y los ingresados manualmente en actas, para decidir uno a uno si corresponde unificarlos antes de cuadrar.</p>
-          <div class="sus-acc"><button type="button" class="btn btn-outline btn-sm" id="dup-rec">Actualizar</button></div>
+        r.innerHTML = `<div class="sus-w"><div class="page-header mb-16"><div class="page-title"><h1>Revisar productos parecidos</h1>
+          <p>Solo para revisar: no se modifica nada. Aquí aparecen productos con nombres casi iguales (una letra, un punto, un acento) y los ingresados manualmente en actas, para decidir uno a uno si corresponde unificarlos antes de cuadrar.</p></div>
+          <div class="page-actions"><button type="button" class="btn btn-outline" id="dup-rec"><i class="ph-bold ph-arrows-clockwise"></i> Actualizar</button></div></div>
           <h3>Posibles duplicados (${datos.grupos.length} grupo(s))</h3>
-          ${datos.grupos.length ? datos.grupos.map((g, n) => `<div class="dup-g"><h4>Grupo ${n + 1} · ${esc(g.razon)} (${g.miembros.length})</h4><table class="sus-t"><thead><tr><th></th><th>Nombre</th><th>ID</th><th>Dónde</th><th>Bodega</th><th>Stock</th></tr></thead><tbody>${g.miembros.map(fila).join('')}</tbody></table></div>`).join('') : '<p class="act-hint">No encontré productos parecidos.</p>'}
+          ${datos.grupos.length ? datos.grupos.map((g, n) => `<div class="dup-g"><h4>Grupo ${n + 1} · ${esc(g.razon)} (${g.miembros.length})</h4>${tabla(g.miembros)}</div>`).join('') : '<p class="act-hint">No encontré productos parecidos.</p>'}
           <h3>Ingresados manualmente, aún provisionales (${datos.manuales.length})</h3>
-          ${datos.manuales.length ? `<table class="sus-t"><thead><tr><th></th><th>Nombre</th><th>ID</th><th>Dónde</th><th>Bodega</th><th>Stock</th></tr></thead><tbody>${datos.manuales.map(fila).join('')}</tbody></table>` : '<p class="act-hint">No hay productos provisionales.</p>'}
+          ${datos.manuales.length ? tabla(datos.manuales) : '<p class="act-hint">No hay productos provisionales.</p>'}
         </div>`;
         r.querySelector('#dup-rec').addEventListener('click', abrir);
         if (window.SAR_Imagenes && window.SAR_Imagenes.rellenar) window.SAR_Imagenes.rellenar(r);

@@ -141,13 +141,14 @@
     function pintar() {
         const r = root(); if (!r) return;
         const total = grupos.reduce((s, g) => s + g.items.length, 0), listos = grupos.reduce((s, g) => s + g.listos, 0);
-        r.innerHTML = `<div class="erp-card pen-cab"><div class="pen-grupo__cab"><div><h3>Pendientes por entregar</h3>
-            <p class="act-hint">${total ? `<b>${grupos.length}</b> centro(s) · <b>${total}</b> producto(s) pendiente(s) · <b>${listos}</b> con stock para entregar ahora.` : 'Lo que cada centro pidió y aún no se le entrega, según las actas.'}</p></div>
-            <div class="pen-acc"><button type="button" class="btn btn-outline btn-sm" id="pen-recargar"><i class="ph-bold ph-arrows-clockwise"></i> Actualizar</button>
-            ${grupos.length ? '<button type="button" class="btn btn-outline btn-sm" id="pen-fotos"><i class="ph-bold ph-images"></i> Buscar fotos que faltan</button><button type="button" class="btn btn-outline btn-sm" id="pen-imp-todo"><i class="ph-bold ph-printer"></i> Imprimir pendientes</button><button type="button" class="btn btn-primary btn-sm" id="pen-pick-todo"><i class="ph-bold ph-clipboard-text"></i> Hoja de picking (todos)</button>' : ''}</div></div></div>
+        /* 4.306: encabezado estándar (h1 fuera de la tarjeta, bajada con los totales); primaria «Hoja de picking», el resto con borde */
+        r.innerHTML = `<div class="page-header mb-16"><div class="page-title"><h1>Pendientes por entregar</h1>
+            <p>${total ? `<b>${grupos.length}</b> centro(s) · <b>${total}</b> producto(s) pendiente(s) · <b>${listos}</b> con stock para entregar ahora.` : 'Lo que cada centro pidió y aún no se le entrega, según las actas.'}</p></div>
+            <div class="page-actions pen-acc"><button type="button" class="btn btn-outline" id="pen-recargar"><i class="ph-bold ph-arrows-clockwise"></i> Actualizar</button>
+            ${grupos.length ? '<button type="button" class="btn btn-outline" id="pen-fotos"><i class="ph-bold ph-images"></i> Buscar fotos que faltan</button><button type="button" class="btn btn-outline" id="pen-imp-todo"><i class="ph-bold ph-printer"></i> Imprimir pendientes</button><button type="button" class="btn btn-primary" id="pen-pick-todo"><i class="ph-bold ph-clipboard-text"></i> Hoja de picking</button>' : ''}</div></div>
             ${grupos.length ? `<div class="erp-card pen-lista">${grupos.map((g, gi) => `<details class="pen-centro" data-gi="${gi}"${abiertos.has(g.centro) ? ' open' : ''}><summary>
                 <strong>${esc(g.centro)}</strong><span class="soc-n">${g.items.length}</span><span class="pen-res">${resumen(g)}</span></summary>
-                <div class="pen-det"><div class="pen-acc"><button type="button" class="btn btn-primary btn-sm" data-pen-pick="${gi}"${g.listos ? '' : ' disabled'}><i class="ph-bold ph-clipboard-text"></i> Hoja de picking</button><button type="button" class="btn btn-outline btn-sm" data-pen-imp="${gi}"><i class="ph-bold ph-printer"></i> Imprimir pendientes</button></div>${filas(g)}</div></details>`).join('')}</div>`
+                <div class="pen-det"><div class="pen-acc"><button type="button" class="btn btn-outline btn-sm" data-pen-pick="${gi}"${g.listos ? '' : ' disabled'}><i class="ph-bold ph-clipboard-text"></i> Hoja de picking</button><button type="button" class="btn btn-outline btn-sm" data-pen-imp="${gi}"><i class="ph-bold ph-printer"></i> Imprimir pendientes</button></div>${filas(g)}</div></details>`).join('')}</div>`
             : '<div class="erp-card"><p class="act-hint">No hay pendientes por entregar. Cuando en un acta pongas un pedido mayor a lo que entregas (o agregues pendientes), aparecen aquí.</p></div>'}`;
         r.querySelector('#pen-recargar').addEventListener('click', abrir);
         const bt = r.querySelector('#pen-imp-todo'); if (bt) bt.addEventListener('click', () => imprimir(grupos));

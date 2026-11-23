@@ -1502,7 +1502,7 @@ document.addEventListener('DOMContentLoaded', () => {
             acciones.push({
                 nivel: vencido ? 'red' : 'orange',
                 codigo: vencido ? 'VENCIDO' : 'POR VENCER',
-                tag: vencido ? `${Math.abs(u.diffDays)} d vencido` : `Vence en ${u.diffDays} d`,
+                tag: vencido ? `Vencido hace ${Math.abs(u.diffDays).toLocaleString('es-CL')} d` : `Vence en ${u.diffDays} d`,
                 titulo: u.name || 'Insumo',
                 sub: `Lote ${u.batch || 'S/L'} • ${u.location || 'Bodega Central'}`,
                 boton: 'Ver', scroll: 'card-dash-urgencias'
@@ -1510,14 +1510,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         (window.globalDashboardCriticalItems || []).slice().sort((a, b) => (a.quantity / (a.criticalLimit || 1)) - (b.quantity / (b.criticalLimit || 1))).slice(0, 3).forEach(c => {
             acciones.push({
-                nivel: 'orange', codigo: 'STOCK CRÍTICO', tag: `${c.quantity} / ${c.criticalLimit}`,
+                nivel: 'orange', codigo: 'STOCK CRÍTICO', tag: `Stock crítico · ${(Number(c.quantity) || 0).toLocaleString('es-CL')} / ${(Number(c.criticalLimit) || 0).toLocaleString('es-CL')}`,
                 titulo: c.name || 'Insumo', sub: `Bajo su límite crítico • ${c.location || 'Bodega Central'}`,
                 boton: 'Reponer', go: 'view-inventario'
             });
         });
         const b = window.globalDashboardBandejas || {};
         if (b.EN_RECEPCION > 0) {
-            acciones.push({ nivel: 'orange', codigo: 'BANDEJAS', tag: `${b.EN_RECEPCION} por cerrar`,
+            acciones.push({ nivel: 'orange', codigo: 'BANDEJAS', tag: `Bandejas · ${b.EN_RECEPCION} por cerrar`,
                 titulo: 'Bandejas esperando cierre en bodega', sub: 'Retornaron del turno y falta cuadrarlas', boton: 'Cerrar', go: 'view-bandejas' });
         }
         const totalUrg = (window.globalDashboardUrgenciasItems || []).length;
@@ -1533,20 +1533,16 @@ document.addEventListener('DOMContentLoaded', () => {
             list.innerHTML = '<div class="home-empty"><i class="ph-fill ph-check-circle" style="color:var(--sar-green); font-size:24px;"></i><br>Sin acciones pendientes.</div>';
             return;
         }
+        /* 4.306: fila blanca con punto de color, una sola etiqueta de estado y «Ver» con borde */
         list.innerHTML = visibles.map(a => {
             const attr = a.go ? `data-go="${a.go}"` : `data-scroll="${a.scroll}"`;
-            const cls = a.nivel === 'red' ? 'erp-alert-item erp-alert-item--red' : 'erp-alert-item erp-alert-item--orange';
-            const btn = a.nivel === 'red' ? 'erp-btn--danger' : 'erp-btn--warning';
-            return `<div class="${cls}">
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px;">
-                    <span style="font-size:11px; font-weight:800; color:${a.nivel === 'red' ? 'var(--sar-red)' : 'var(--sar-orange-strong)'};">${esc(a.codigo)}</span>
-                    <span class="badge ${a.nivel === 'red' ? 'badge-sar-red' : 'badge-sar-orange'}">${esc(a.tag)}</span>
+            return `<div class="erp-alert-item home-accion home-accion--${a.nivel}">
+                <span class="home-accion__punto" aria-hidden="true"></span>
+                <div class="home-accion__txt">
+                    <div class="home-accion__t">${esc(a.titulo)}</div>
+                    <div class="home-accion__s"><span class="home-accion__estado">${esc(a.tag)}</span> · ${esc(a.sub)}</div>
                 </div>
-                <div style="font-size:13px; font-weight:800; color:#0F172A;">${esc(a.titulo)}</div>
-                <div style="display:flex; justify-content:space-between; align-items:center; gap:8px; margin-top:4px;">
-                    <span style="font-size:11.5px; color:#64748B;">${esc(a.sub)}</span>
-                    <button type="button" class="erp-btn ${btn}" style="padding:4px 10px; font-size:11px;" ${attr}>${esc(a.boton)}</button>
-                </div>
+                <button type="button" class="btn btn-outline btn-sm" ${attr}>${esc(a.boton)}</button>
             </div>`;
         }).join('') + (ocultos > 0 ? `<div class="home-more"><button type="button" class="erp-btn erp-btn--outline" style="padding:6px 12px; font-size:12px;" data-scroll="card-dash-urgencias">+${ocultos} más: ver listado completo</button></div>` : '');
     };

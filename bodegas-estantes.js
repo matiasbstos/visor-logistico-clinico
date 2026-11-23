@@ -695,10 +695,10 @@
                     <h3>${esc(r.nombre)}</h3>
                     ${r.bodegas.map(b => `
                         <div class="donde__bodega">
-                            <div class="donde__bodega-top"><strong>${esc(b.bodega)}</strong><span>${b.cantidad}</span></div>
+                            <div class="donde__bodega-top"><strong>${esc(b.bodega)}</strong><span>${(Number(b.cantidad) || 0).toLocaleString('es-CL')} u.</span></div>
                             ${b.usaEstantes ? `<div class="donde__ubic">
-                                ${b.ubicaciones.map(u => `<a class="bodega-estantes__chip" href="#u/${encodeURIComponent(b.bodegaId)}/${encodeURIComponent(u.codigo)}">${esc(u.codigo)} · ${u.cantidad}</a>`).join(' ')}
-                                ${b.sinUbicar > 0 ? `<span class="acceso-bodega__sinubicar">${b.sinUbicar} sin ubicar</span>` : ''}
+                                ${b.ubicaciones.map(u => `<a class="bodega-estantes__chip" href="#u/${encodeURIComponent(b.bodegaId)}/${encodeURIComponent(u.codigo)}">${esc(u.codigo)} · ${(Number(u.cantidad) || 0).toLocaleString('es-CL')}</a>`).join(' ')}
+                                ${b.sinUbicar > 0 ? `<span class="acceso-bodega__sinubicar">${b.sinUbicar.toLocaleString('es-CL')} sin ubicar</span>` : ''}
                             </div>` : '<div class="donde__ubic"><span class="acceso-bodega__sinubicar">Bodega sin estantes</span></div>'}
                         </div>`).join('')}
                 </div>`).join('');
@@ -721,7 +721,7 @@
                 const bods = c.bodegas.filter(b => b.name && b.isActive !== false).map(b => ({ b, n: tot.get(b.name) || 0 })).sort((x, y) => y.n - x.n);
                 const crit = new Map(); c.insumos.forEach(i => { if (i.isCritical === true && i.name) { const m = crit.get(i.name) || { n: 0, loc: new Map(), cod: i.codigoMP }; m.n += Number(i.quantity) || 0; m.loc.set(String(i.location || ''), (m.loc.get(String(i.location || '')) || 0) + (Number(i.quantity) || 0)); crit.set(i.name, m); } });
                 const filas = Array.from(crit.entries()).sort((a, b) => a[1].n - b[1].n).slice(0, 6);
-                host.innerHTML = `${bods.length ? `<section><h4 class="donde__sec">Bodegas</h4><div class="donde__chips">${bods.map(x => `<a class="donde__chip" href="#b/${encodeURIComponent(x.b.id)}"><i class="ph-bold ph-buildings" aria-hidden="true"></i>${esc(x.b.name)} <b>${x.n}</b></a>`).join('')}</div></section>` : ''}${filas.length ? `<section><h4 class="donde__sec">Críticos ahora</h4><div class="donde__crit">${filas.map(([nombre, m]) => { const top = Array.from(m.loc.entries()).sort((a, b) => b[1] - a[1])[0]; return `<button type="button" class="donde__fila" data-q="${esc(nombre)}">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(nombre, { codigo: m.cod }) : ''}<span class="donde__fila-t"><b>${esc(nombre)}</b><small>${top && top[0] ? esc(top[0]) : 'Sin bodega'}</small></span><span class="donde__fila-n"><i class="donde__dot" aria-hidden="true"></i>${m.n} u. · Crítico</span></button>`; }).join('')}</div></section>` : '<p class="donde__nada">Sin productos críticos por ahora.</p>'}`;
+                host.innerHTML = `${bods.length ? `<section><h4 class="donde__sec">Bodegas</h4><div class="donde__chips">${bods.map(x => `<a class="donde__chip" href="#b/${encodeURIComponent(x.b.id)}"><i class="ph-bold ph-buildings" aria-hidden="true"></i>${esc(x.b.name)} <b>${(Number(x.n) || 0).toLocaleString('es-CL')} u.</b></a>`).join('')}</div></section>` : ''}${filas.length ? `<section><h4 class="donde__sec">Críticos ahora</h4><div class="donde__crit">${filas.map(([nombre, m]) => { const top = Array.from(m.loc.entries()).sort((a, b) => b[1] - a[1])[0]; return `<button type="button" class="donde__fila" data-q="${esc(nombre)}">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(nombre, { codigo: m.cod }) : ''}<span class="donde__fila-t"><b>${esc(nombre)}</b><small>${top && top[0] ? esc(top[0]) : 'Sin bodega'}</small></span><span class="donde__fila-n"><i class="donde__dot" aria-hidden="true"></i>${(Number(m.n) || 0).toLocaleString('es-CL')} u. · Crítico</span></button>`; }).join('')}</div></section>` : '<p class="donde__nada">Sin productos críticos por ahora.</p>'}`;
                 alClic();
             } catch (e) { const host = document.getElementById('donde-ini-datos'); if (host) host.innerHTML = '<p class="donde__nada">Escribe el nombre del producto para empezar.</p>'; }
         }

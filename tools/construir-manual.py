@@ -71,6 +71,35 @@ def slug(s):
         s = s.replace(a, b)
     return re.sub(r'[^a-z0-9]+', '-', s).strip('-')
 
+FIG = {  # slug del título del módulo → (imagen en manual/img, leyenda de los números)
+    'existencias': ('existencias', ['Busca el producto', 'Filtra por bodega', 'Ver desglose por lote']),
+    'donde-esta': ('donde-esta', ['Escribe el producto', 'O toca una bodega para ver lo que tiene']),
+    'toma-de-inventario': ('toma', ['Elige la bodega', 'Tipo de toma: parcial o completa', 'Abrir toma']),
+    'bultos-y-etiquetas': ('bultos', ['Crear etiquetas', 'Escanear bulto', 'Contar por bultos']),
+    'impresion-de-etiquetas': ('etiquetas', ['Etiquetas por orden de compra', 'Filtra las pendientes']),
+    'ingresos': ('ingresos', ['Nuevo registro', 'Tipo de insumo', 'Elige el insumo']),
+    'ingreso-rapido': ('ingreso-rapido', ['Bodega de destino', 'Leer desde fotos', 'Pegar una lista']),
+    'transferencias-entre-bodegas': ('transferencias', ['Bodega de origen', 'Bodega de destino']),
+    'actas-de-entrega': ('actas', ['Bodega de origen', 'Centro al que se entrega', 'Actas emitidas']),
+    'solicitudes-recibidas': ('solicitudes', ['Elige la solicitud', 'Asocia el producto si no está en el inventario', 'Confirmar (o «No hay»)']),
+    'distribucion-a-centros': ('distribucion', ['Nueva distribución', 'Importar Excel']),
+    'pendientes-por-entregar': ('pendientes', ['Imprimir pendientes', 'Hoja de picking']),
+    'oxigeno-portatil': ('oxigeno', ['Agregar balones', 'Acción de cada balón', 'Acta de entrega']),
+    'bodegas-administracion': ('bodegas', ['Nuevo anexo', 'Formulario «Nueva Bodega»']),
+    'catalogo-de-productos': ('catalogo', ['Productos sin fotografía', 'Buscar fotos que faltan']),
+    'ordenes-de-compra-seguimiento-de-oc': ('seguimiento-oc', ['Ingresar desde PDF', 'Catálogo de productos']),
+    'bitacora-de-ordenes': ('bitacora', ['Revisar el correo ahora', 'Filtros por estado']),
+    'ajustes-de-stock': ('ajustes', ['Solicitar ajuste', 'Mis solicitudes', 'Aprobaciones pendientes']),
+    'historial': ('historial', ['Busca y filtra por fecha', 'Exportar a Excel', 'Exportar a PDF']),
+    'auditoria': ('auditoria', ['Disponible', 'Contable', 'Informe en Excel']),
+    'fotos-de-productos-solo-superadministrador': ('fotos', ['QR para abrir en el teléfono', 'Catálogo', 'Seguimiento de cambios']),
+}
+def figura(img, leyenda, titulo):
+    ley = ''.join(f'<li><span class="nb">{i}</span> {html.escape(t)}</li>' for i, t in enumerate(leyenda, 1))
+    return f'<figure class="fig"><img src="manual/img/{img}.jpg" alt="Pantalla: {html.escape(titulo)}" loading="lazy" width="1280" height="575"><figcaption><ol>{ley}</ol></figcaption></figure>'
+FIG_INTRO = figura('inicio', ['Buscar cualquier pantalla (Ctrl+K)', 'Accesos directos', 'Avisos'], 'Inicio')
+USADAS = set()
+
 toc, cuerpo = [], []
 for n, (cid, ctit, cintro, secs) in enumerate(capitulos):
     num = '' if n == 0 else f'{n}.'
@@ -79,9 +108,11 @@ for n, (cid, ctit, cintro, secs) in enumerate(capitulos):
     for k, (t, b) in enumerate(secs, 1):
         sid = f'{cid}-{slug(t)}'
         sub.append(f'<li><a href="#{sid}">{num}{k} {html.escape(t)}</a></li>')
-        secs_html.append(f'<section class="mod" id="{sid}"><h3><span class="n">{num}{k}</span> {html.escape(t)}</h3>{md2html(b)}</section>')
+        f = FIG.get(slug(t)); fh = figura(f[0], f[1], t) if f else ''
+        if f: USADAS.add(slug(t))
+        secs_html.append(f'<section class="mod" id="{sid}"><h3><span class="n">{num}{k}</span> {html.escape(t)}</h3>{fh}{md2html(b)}</section>')
     toc.append(f'<li><a href="#{cid}"><b>{(num + " ") if num else ""}{html.escape(ctit)}</b></a>' + (f'<ul>{"".join(sub)}</ul>' if sub else '') + '</li>')
-    cuerpo.append(f'<section class="cap" id="{cid}"><h2>{(f"<span class=n>{n}</span> ") if num else ""}{html.escape(ctit)}</h2>{md2html(cintro)}{"".join(secs_html)}</section>')
+    cuerpo.append(f'<section class="cap" id="{cid}"><h2>{(f"<span class=n>{n}</span> ") if num else ""}{html.escape(ctit)}</h2>{md2html(cintro)}{FIG_INTRO if cid == 'intro' else ''}{"".join(secs_html)}</section>')
 
 hoy = datetime.date.today().strftime('%d/%m/%Y')
 PAGE = f"""<!doctype html>
@@ -118,6 +149,9 @@ table{{border-collapse:collapse;width:100%;margin:10px 0;font-size:14px;display:
 th{{background:#EEF2F8;color:var(--azul);text-align:left;font-size:12px;text-transform:uppercase;letter-spacing:.04em}}
 th,td{{border:1px solid var(--borde);padding:7px 9px;vertical-align:top}}
 code{{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.92em;background:#F1F5F9;padding:1px 5px;border-radius:4px}}
+.fig{{margin:12px 0 16px;border:1px solid var(--borde);border-radius:10px;overflow:hidden;background:#fff}} .fig img{{display:block;width:100%;height:auto}}
+.fig figcaption{{padding:8px 12px;background:#F4F7FB;border-top:1px solid var(--borde);font-size:13px}} .fig ol{{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:6px 16px}}
+.nb{{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:var(--azul);color:#fff;font:700 11px Inter,sans-serif;margin-right:4px}}
 blockquote{{margin:10px 0;padding:8px 14px;border-left:4px solid var(--verde);background:#F4FAEA;border-radius:0 8px 8px 0}}
 ol li,ul li{{margin:3px 0}}
 .oculto{{display:none!important}} .sinres{{color:var(--tx2);font-size:13px;padding:4px 6px}}
@@ -130,7 +164,7 @@ ol li,ul li{{margin:3px 0}}
 @media print{{
   header.top,nav.toc{{display:none}} .wrap{{display:block}} main{{padding:0}} body{{background:#fff;font-size:11pt}}
   .portada{{-webkit-print-color-adjust:exact;print-color-adjust:exact;break-after:page}} .cap{{break-before:page}} .cap#intro{{break-before:auto}}
-  .mod{{break-inside:auto;border:none;padding:0;margin:14px 0}} .mod h3{{break-after:avoid}} th{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+  .fig{{break-inside:avoid}} .nb{{-webkit-print-color-adjust:exact;print-color-adjust:exact}} .mod{{break-inside:auto;border:none;padding:0;margin:14px 0}} .mod h3{{break-after:avoid}} th{{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
   a{{color:inherit;text-decoration:none}}
 }}
 </style></head>
@@ -159,6 +193,8 @@ ol li,ul li{{margin:3px 0}}
 </script>
 </body></html>
 """
+faltan = set(FIG) - USADAS
+if faltan: print('AVISO: figuras sin módulo:', faltan)
 (R / 'manual.html').write_text(PAGE, encoding='utf-8')
 print('manual.html', len(PAGE) // 1024, 'KB ·', sum(len(c[3]) for c in capitulos), 'módulos')
 

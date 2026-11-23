@@ -312,7 +312,7 @@
                     <a href="#" class="menu-item normal" data-target="view-oxigeno" data-title="Oxígeno portátil">
                         <i class="ph-bold ph-wind"></i><span class="menu-label">Oxígeno portátil</span>
                     </a>
-                    <a href="#" class="menu-item normal" data-target="view-ajustes" data-title="Ajustes de Stock">
+                    <a href="#" class="menu-item normal" data-target="view-ajustes" data-title="Ajustes de stock">
                         <i class="ph-bold ph-sliders"></i><span class="menu-label">Ajustes de Stock</span>
                     </a>
                     <a href="#" class="menu-item normal" data-target="view-historial" data-title="Historial">
@@ -2214,22 +2214,22 @@
                 <div class="dashboard-container">
                     <div class="page-header">
                         <div class="page-title">
-                            <h1>Ajustes de Inventario</h1>
-                            <p>Gestión y auditoría de variaciones de stock físico con flujos de aprobación.</p>
+                            <h1>Ajustes de stock</h1>
+                            <p>Corrige diferencias entre el sistema y lo físico, con motivo, código AJU y aprobación del superadministrador.</p>
                         </div>
                     </div>
 
                     <!-- Pestañas de Navegación de Ajustes -->
-                    <div style="display: flex; gap: 15px; margin-bottom: 25px; border-bottom: 2px solid #e9ecef; padding-bottom: 15px;">
-                        <button id="btn-subtab-crear-ajuste" class="btn btn-primary" style="font-weight: 500; font-size: 1.05em; padding: 10px 25px;">
-                            <i class="ph ph-plus-circle"></i> Solicitar Ajuste
+                    <div class="aud-tabs" role="tablist" aria-label="Secciones de ajustes">
+                        <button type="button" id="btn-subtab-crear-ajuste" class="aud-tab on" role="tab">
+                            <i class="ph ph-plus-circle"></i> Solicitar ajuste
                         </button>
-                        <button id="btn-subtab-mis-solicitudes" class="btn btn-outline" style="border-color: var(--primary); color: var(--primary); font-weight: 500; font-size: 1.05em; padding: 10px 25px;">
-                            <i class="ph ph-list-dashes"></i> Mis Solicitudes
+                        <button type="button" id="btn-subtab-mis-solicitudes" class="aud-tab" role="tab">
+                            <i class="ph ph-list-dashes"></i> Mis solicitudes
                         </button>
-                        <!-- Aprobaciones Pendientes: visible para superadmin y administrador, pero las acciones se controlan -->
-                        <button id="btn-subtab-aprobaciones" class="btn btn-outline superadmin-only" style="border-color: var(--danger); color: var(--danger); font-weight: 500; font-size: 1.05em; padding: 10px 25px; display: none;">
-                            <i class="ph ph-bell"></i> Aprobaciones Pendientes <span id="badge-count-aprobaciones" class="badge-red-solid" style="margin-left: 8px; font-size: 11px; padding: 2px 8px; border-radius: 12px; display: none; background-color: var(--danger); color: white;">0</span>
+                        <!-- Aprobaciones pendientes: solo superadmin (sin rojo; el contador va en <em>) -->
+                        <button type="button" id="btn-subtab-aprobaciones" class="aud-tab superadmin-only" role="tab" style="display: none;">
+                            <i class="ph ph-bell"></i> Aprobaciones pendientes <em id="badge-count-aprobaciones" style="display: none;">0</em>
                         </button>
                     </div>
 
@@ -2280,9 +2280,15 @@
                                 </div>
 
                                 <div class="form-group">
-                                    <label class="form-label" for="ajuste-cantidad">Cantidad a Ajustar</label>
-                                    <input type="number" id="ajuste-cantidad" class="form-control" placeholder="Ej: -10 (Merma) o 50 (Sobrante)">
-                                    <small class="text-muted" style="font-size: 11px; margin-top: 4px; display: block;">Use signo negativo (-) para restar o positivo (+) para sumar stock.</small>
+                                    <span class="form-label" id="aj-signo-lbl">¿Qué hace el ajuste?</span>
+                                    <div class="aj-signo" role="radiogroup" aria-labelledby="aj-signo-lbl">
+                                        <button type="button" class="aj-signo__b on" data-signo="-1" role="radio" aria-checked="true"><i class="ph-bold ph-minus"></i> Restar</button>
+                                        <button type="button" class="aj-signo__b" data-signo="1" role="radio" aria-checked="false"><i class="ph-bold ph-plus"></i> Sumar</button>
+                                    </div>
+                                    <label class="form-label" for="ajuste-cantidad-abs" style="margin-top: 12px;">Cantidad</label>
+                                    <input type="number" id="ajuste-cantidad-abs" class="form-control" min="1" step="1" inputmode="numeric" placeholder="Ej: 10">
+                                    <input type="hidden" id="ajuste-cantidad" value="">
+                                    <small class="text-muted" style="font-size: 12px; margin-top: 4px; display: block;">Escribe la cantidad sin signo: «Restar» descuenta (merma, no está) y «Sumar» agrega (sobrante).</small>
                                 </div>
 
                                 <div class="form-group">
@@ -2292,8 +2298,8 @@
                                 </div>
 
                                 <div class="form-group">
-                                    <label class="form-label" for="ajuste-justificacion">Observación de Auditoría</label>
-                                    <textarea id="ajuste-justificacion" class="form-control" placeholder="Motivo detallado del ajuste (mínimo 10 caracteres)..." style="min-height: 80px; resize: vertical;"></textarea>
+                                    <label class="form-label" for="ajuste-justificacion">Observación <span id="aj-obs-req" class="text-muted" style="text-transform:none;">(opcional; obligatoria con el motivo «Otro»)</span></label>
+                                    <textarea id="ajuste-justificacion" class="form-control" placeholder="Detalle del ajuste (con «Otro», mínimo 10 caracteres)…" style="min-height: 80px; resize: vertical;"></textarea>
                                 </div>
 
                                 <div style="display: flex; justify-content: flex-end; margin-top: 16px;">

@@ -1024,14 +1024,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         const cantidadParsed = Number(cantidadInputStr);
                         if (!cantidadInputStr || isNaN(cantidadParsed) || cantidadParsed === 0) {
-                            return window.showAlertCenter("Notificación", 'Ingrese una cantidad válida (+ o -). No puede ser cero.');
+                            return window.showAlertCenter("Notificación", 'Escribe una cantidad mayor que cero y elige «Restar» o «Sumar».');
                         }
 
                         if (!motivoSel) {
                             return window.showAlertCenter("Notificación", 'Elige el motivo del ajuste.');
                         }
-                        if (justificacion.length <= 10) {
-                            return window.showAlertCenter("Notificación", 'La observación debe tener más de 10 caracteres.');
+                        if (motivoSel === 'Otro' && justificacion.length <= 10) {   /* 4.306: la observación solo es obligatoria con «Otro» */
+                            return window.showAlertCenter("Notificación", 'Con el motivo «Otro», la observación debe tener más de 10 caracteres.');
                         }
 
                         const docId = selectedOption.value;
@@ -1051,21 +1051,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
                         const isSuperAdmin = userRole === 'superadmin';
 
-                        let codigoGob = null, justificacionFinal = `[${motivoSel}] ${justificacion}`;
+                        let codigoGob = null, justificacionFinal = `[${motivoSel}]${justificacion ? " " + justificacion : ""}`;
                         /* v21.233: una sola confirmación, con la ventana del sitio: resumen + código AJU que se asignará */
                         {
                             const P = window.SAR_Progreso, e = window.escapeHTML;
-                            const ok = P && P.confirmar ? await P.confirmar({ titulo: '¿Confirmar el ajuste?', texto: `<b>${e(insumoNombre)}</b>: ${stockActual} → <b>${nuevoStock}</b> (${cantidadParsed > 0 ? '+' : ''}${cantidadParsed}).`, lineas: [...(loteAj && loteAj.fefo ? ['Lote: <b>el sistema elige</b> (primero el que vence antes)'] : []), ...(loteAj && !loteAj.fefo ? [`Lote: <b>${e(loteAj.lote)}</b>${loteAj.nuevo ? ' (nuevo)' : ` · ${loteAj.q} → ${loteAj.q + cantidadParsed}`}${loteAj.vence ? ' · vence ' + e(loteAj.vence) : ''}`] : []), `Motivo: <b>${e(motivoSel)}</b>`, `Observación: ${e(justificacion)}`, isSuperAdmin ? 'Se aplica ahora y recibe un código <b>AJU</b>.' : 'Queda como solicitud con código <b>AJU</b> para que la apruebe el superadministrador.'], si: isSuperAdmin ? 'Confirmar ajuste' : 'Enviar solicitud', no: 'Revisar' }) : true;
+                            const ok = P && P.confirmar ? await P.confirmar({ titulo: '¿Confirmar el ajuste?', texto: `<b>${e(insumoNombre)}</b>: ${stockActual} → <b>${nuevoStock}</b> (${cantidadParsed > 0 ? '+' : ''}${cantidadParsed}).`, lineas: [...(loteAj && loteAj.fefo ? ['Lote: <b>el sistema elige</b> (primero el que vence antes)'] : []), ...(loteAj && !loteAj.fefo ? [`Lote: <b>${e(loteAj.lote)}</b>${loteAj.nuevo ? ' (nuevo)' : ` · ${loteAj.q} → ${loteAj.q + cantidadParsed}`}${loteAj.vence ? ' · vence ' + e(loteAj.vence) : ''}`] : []), `Motivo: <b>${e(motivoSel)}</b>`, `Observación: ${e(justificacion || '—')}`, isSuperAdmin ? 'Se aplica ahora y recibe un código <b>AJU</b>.' : 'Queda como solicitud con código <b>AJU</b> para que la apruebe el superadministrador.'], si: isSuperAdmin ? 'Confirmar ajuste' : 'Enviar solicitud', no: 'Revisar' }) : true;
                             if (!ok) return;
                         }
                         if (window.SAR_Gobernanza) {
                             const r = { motivo: motivoSel, nota: '' };
                             if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) {   // sin internet: el ajuste queda en el teléfono y se aplica al volver la conexión, con el stock de ese momento
-                                window.SAR_Cola.encolar({ tipo: 'ajuste', titulo: `Ajuste ${cantidadParsed > 0 ? '+' : ''}${cantidadParsed} · ${insumoNombre}`, datos: { docId, nombre: insumoNombre, cantidad: cantidadParsed, ...optLote, justificacion: `[${r.motivo}${r.nota ? ' - ' + r.nota : ''}] ${justificacion}`, motivo: r.motivo, nota: r.nota, observacion: justificacion, directo: isSuperAdmin, en: Date.now() } });
+                                window.SAR_Cola.encolar({ tipo: 'ajuste', titulo: `Ajuste ${cantidadParsed > 0 ? '+' : ''}${cantidadParsed} · ${insumoNombre}`, datos: { docId, nombre: insumoNombre, cantidad: cantidadParsed, ...optLote, justificacion: `[${r.motivo}${r.nota ? ' - ' + r.nota : ''}]${justificacion ? " " + justificacion : ""}`, motivo: r.motivo, nota: r.nota, observacion: justificacion, directo: isSuperAdmin, en: Date.now() } });
                                 return window.showAlertCenter('Guardado sin conexión', `El ajuste de ${insumoNombre} (${cantidadParsed > 0 ? '+' : ''}${cantidadParsed}) quedó en este teléfono y se aplicará solo al volver internet.`);
                             }
                             codigoGob = await window.SAR_Gobernanza.codigo('AJU');
-                            justificacionFinal = `[${r.motivo}${r.nota ? ' - ' + r.nota : ''}] ${justificacion}`;
+                            justificacionFinal = `[${r.motivo}${r.nota ? ' - ' + r.nota : ''}]${justificacion ? " " + justificacion : ""}`;
                             if (isSuperAdmin) window.SAR_Gobernanza.registrar({ nombre: insumoNombre, delta: cantidadParsed, codigo: codigoGob, motivo: r.motivo, nota: r.nota, origen: 'AJUSTE', antes: { cantidad: stockActual }, despues: { cantidad: nuevoStock }, insumoId: docId }).catch(() => {});
                         }
 
@@ -1098,6 +1098,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                             // Limpiar
                             document.getElementById('ajuste-cantidad').value = "";
+                            { const ab = document.getElementById('ajuste-cantidad-abs'); if (ab) ab.value = ''; }
                             document.getElementById('ajuste-justificacion').value = "";
                             { const m = document.getElementById('ajuste-motivo'); if (m) m.value = ''; }
                             if (buscadorAjuste) buscadorAjuste.value = "";
@@ -1128,11 +1129,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         const panel = subtabPanels[key];
                         if (btn && panel) {
                             if (key === activeKey) {
-                                btn.className = 'btn btn-primary';
+                                btn.classList.add('on'); btn.setAttribute('aria-selected', 'true');   /* 4.306: pestañas estándar (.aud-tab) */
                                 btn.style.display = (key === 'aprobaciones' && userRole !== 'superadmin') ? 'none' : 'inline-flex';
                                 panel.style.display = 'block';
                             } else {
-                                btn.className = 'btn btn-outline';
+                                btn.classList.remove('on'); btn.setAttribute('aria-selected', 'false');
                                 btn.style.display = (key === 'aprobaciones' && userRole !== 'superadmin') ? 'none' : 'inline-flex';
                                 panel.style.display = 'none';
                             }

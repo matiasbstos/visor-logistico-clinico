@@ -75,5 +75,25 @@
     /** Borra la elección y la caja de lotes (tras ajustar o al volver a buscar). */
     function limpiar() { elegidoLote = null; lotesAct = []; const b = document.getElementById('ajuste-lotes'); if (b) b.innerHTML = ''; }
     document.addEventListener('input', (e) => { if (e.target && e.target.id === 'ajuste-cantidad') proyectar(); });
-    window.SAR_AjusteUI = { lista, lotes, elegido, limpiar };
+    /* 4.306: «Restar / Sumar» + cantidad positiva. El campo oculto #ajuste-cantidad sigue llevando el número con signo,
+       así la validación, la proyección y ejecutarAjusteDirecto reciben exactamente lo mismo que antes. */
+    function signo() { const b = document.querySelector('.aj-signo__b.on'); return b ? Number(b.dataset.signo) || -1 : -1; }
+    function sincronizar() {
+        const ab = document.getElementById('ajuste-cantidad-abs'), h = document.getElementById('ajuste-cantidad'); if (!ab || !h) return;
+        const v = Math.abs(Number(String(ab.value).replace(',', '.')) || 0);
+        h.value = v ? String(signo() * v) : '';
+        h.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    document.addEventListener('click', (e) => {
+        const b = e.target && e.target.closest ? e.target.closest('.aj-signo__b') : null; if (!b) return;
+        b.parentElement.querySelectorAll('.aj-signo__b').forEach(x => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-checked', String(on)); });
+        sincronizar();
+    });
+    document.addEventListener('input', (e) => { if (e.target && e.target.id === 'ajuste-cantidad-abs') sincronizar(); });
+    document.addEventListener('change', (e) => {
+        if (!e.target || e.target.id !== 'ajuste-motivo') return;
+        const r = document.getElementById('aj-obs-req'), otro = e.target.value === 'Otro';
+        if (r) r.textContent = otro ? '(obligatoria con «Otro»: mínimo 10 caracteres)' : '(opcional; obligatoria con el motivo «Otro»)';
+    });
+    window.SAR_AjusteUI = { lista, lotes, elegido, limpiar, signo };
 })(window, document);

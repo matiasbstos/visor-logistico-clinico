@@ -1753,7 +1753,7 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
 2. **Tag «CONTADO» preimpreso** (Inventario → Tags de conteo, admin y superadmin).
    - Su número es un **folio BUL reservado** con la misma lógica que las etiquetas de caja (`SAR_Bultos.reservarFolios`, extraída de `crear`: transacción sobre `correlativo-bultos-AAAA`; sin internet, tramo del equipo con `navigator.locks`). Será el folio de la etiqueta definitiva de la caja grande.
    - Al reservarlo se crea `Contadores/bulto-<folio>` con `tipo: 'tag-conteo'` y `estado: 'TAG'`. El tipo no es `bulto` para que no aparezca en Bultos ni en Impresión de etiquetas: no tiene contenido.
-   - PDF 100×60 (Zebra ZD230), un tag por página: 0–11 mm logo, franja invertida «CONTADO» y «N° 000845»; 12–40 mm líneas para escribir a mano; 42–57 mm Code 128 C (misma geometría que la BUL), QR de 16,5 mm (`qrcode(0,'L')`, 33 módulos × 4 puntos) con `https://sarinventario.web.app/solicitar.html#tag=<folio>` y el folio legible.
+   - PDF 100×60 (Zebra ZD230), un tag por página: 0–11 mm logo, franja invertida «CONTADO» y «N° 000845»; 12–40 mm líneas para escribir a mano; 42–57 mm Code 128 C (misma geometría que la BUL), QR de 16,5 mm (`qrcode(0,'M')`, 33 módulos × 4 puntos) con `https://sarinventario.web.app/solicitar.html#t=<10 dígitos>` (también acepta el `#tag=<folio>` antiguo) y el folio legible.
    - La tabla une `Contadores` (tags) con `Conteos_Cajas`: número, impresión, estado (sin usar / contado / reconteo pedido / incorporado / etiquetado / rechazado), bodega, producto, lote y vencimiento, total, estructura («9×50 + 1 abierta (30)»), quién contó y cuándo. Filtros por bodega y estado, búsqueda por número.
 3. **Rol `contador`** («Contador (levantamiento de inventario)» en Usuarios).
    - Reglas: `isContador()` aparte; **`hasRole()` excluye al contador** (hasRole da escritura en Historial, Bandejas, Metadata, etc.). Solo lee `Insumos` y `Bodegas` y crea o corrige sus `Conteos_Cajas`.
@@ -1783,3 +1783,11 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
      - En el teléfono: se rechaza `#bulto=`; al abrir un tag se lee `Contadores/bulto-<folio>` (si es una caja, «Esta es la etiqueta de una caja, no un tag»); sin internet se usa la lista guardada en «Preparar sin internet». Con el N° corto, si no existe en el año en curso se prueba el año anterior.
    - **Terreno (Penny):** P5 con la caja pendiente dice «NO escribas todavía: pega el tag sin anotar · pendiente de confirmar» y avisa al confirmarse; cuando está confirmada pide anotar Insumo, Lote, Vence, Total, estructura, iniciales y fecha. Unidad dentro del número grande (fondo ámbar en las preguntas de cajas). «Sin lote» (S/L con mes y año) y «Sin lote ni vencimiento». Resumen de las últimas 12 horas, solo del usuario conectado, con unidades por producto y lote; las cajas «para revisar» muestran el motivo y «Separa la caja y avisa a bodega». SIGUIENTE CAJA abre la cámara. «Mismo producto, otro lote». Años con el anterior primero. Franja con «u.». La tarjeta «Deja esta página…» se oculta durante el levantamiento. Al cerrar sesión se borra `lev-insumos-v1` (no la caché de IndexedDB).
    - **Pendiente:** `integrity` (SRI) para `html5-qrcode@2.3.8`: no se pudo obtener el hash exacto sin red; agregarlo junto con `crossOrigin` (o servir la copia local). Un tag reservado sin internet todavía no existe en el servidor: si el teléfono guarda una caja antes de que el PC suba ese tag, la regla la rechaza y queda «para revisar».
+- **Revisión de Amy (v21.249).**
+  - Una corrección que llega como un segundo `setDoc` sin internet puede traer su propio `servidorEn = request.time`.
+  - `reintentar` no da por enviada una caja que solo está en la copia local (`hasPendingWrites`).
+  - `isContador`/`rolConteo` soportan un rol que no es texto.
+  - Al corregir a controlado se borran `baseSistema` y `deudaSistema`.
+  - **Límite conocido:** el contador no lee `Catalogo_Productos` (solo staff), así que en P1/P2 solo ve las fotos de `assets/imagenes-mp.json`.
+  - El punto 8 de arriba quedó superado por el 9: la toma ya distingue un tag.
+

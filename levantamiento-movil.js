@@ -143,8 +143,9 @@
     d.nombreNorm = norm(d.nombre).slice(0, 120); d.huella = huella(d); return d;
   }
   /** Al corregir: solo los campos que cambian (updateDoc). Nunca estado de bodega, autor ni folio. */
+  const BORRAR = '__borrar__';   /* marca: el campo se elimina al corregir (controlados) */
   const EDITABLES = ['bodega', 'bodegaId', 'insumoId', 'nombre', 'nombreNorm', 'nuevo', 'tipo', 'controlado', 'lote', 'vence', 'sinLote', 'estructura', 'total', 'contadoNombre', 'baseSistema', 'baseSistemaEn', 'deudaSistema', 'huella', 'app'];
-  function cambiosDe(antes, d) { const c = {}; EDITABLES.forEach(k => { if (d[k] === undefined) return; if (JSON.stringify(antes ? antes[k] : undefined) !== JSON.stringify(d[k])) c[k] = d[k]; }); c.estado = 'REGISTRADO'; c.editadoEn = new Date().toISOString(); return c; }
+  function cambiosDe(antes, d) { const c = {}; EDITABLES.forEach(k => { if (d[k] === undefined) return; if (JSON.stringify(antes ? antes[k] : undefined) !== JSON.stringify(d[k])) c[k] = d[k]; }); if (d.controlado) { c.baseSistema = BORRAR; c.deudaSistema = BORRAR; } c.estado = 'REGISTRADO'; c.editadoEn = new Date().toISOString(); return c; }
   /** Cajas del turno: las de este usuario en las últimas 12 horas (un turno de noche cruza la medianoche). */
   const TURNO_MS = 12 * 3600 * 1000;
   function delTurno(cajas, u, ahora) { const t0 = (ahora || Date.now()) - TURNO_MS; return (cajas || []).filter(c => c && c.doc && c.doc.contadoPor === u && new Date(c.doc.en).getTime() >= t0); }
@@ -430,11 +431,12 @@
   /** Escribe una caja: crear = setDoc (solo si no existe en el servidor); corregir = updateDoc con lo que cambia (la regla rechaza si ya fue aceptada). */
   function escribir(c) {
     const f = fsx(), ref = f.doc(f.collection(dbx(), COL), c.folio);
-    return c.op === 'editar' ? f.updateDoc(ref, c.campos) : f.setDoc(ref, { ...c.doc, servidorEn: f.serverTimestamp() });
+    const campos = {}; Object.entries(c.campos || {}).forEach(([k, v]) => { campos[k] = v === BORRAR ? (f.deleteField ? f.deleteField() : null) : v; });
+    return c.op === 'editar' ? f.updateDoc(ref, campos) : f.setDoc(ref, { ...c.doc, servidorEn: f.serverTimestamp() });
   }
   async function guardar() {
     if (guardando) return; const dr = bor(), u = { correo: usuario(), nombre: nombreUsuario || usuario() }, d = armarDoc(dr, u, sistemaDe(dr)), errs = validar(d);
-    if (errs.length) { toast('Revisa la caja', errs.map(esc).join('<br>'), 'warning'); return; }
+    if (errs.length) { toast('Revisa la caja', errs.map(esc).join(' · '), 'warning'); return; }
     if (!dr.editando && cajas().some(c => c.folio === d.folio)) { toast('Tag ya usado', 'Este tag ya está guardado en el teléfono.', 'warning'); return; }
     guardando = true; repintar();
     const previa = cajas().find(c => c.folio === d.folio), antes = dr.orig || (previa && previa.doc) || null;
@@ -461,7 +463,7 @@
     if (reintentando || navigator.onLine === false) return; const u = usuario(), pend = cajas().filter(c => c.estado === 'pend' && c.doc.contadoPor === u); if (!pend.length) return; reintentando = true; const f = fsx(); let ok = 0;
     for (const c of pend) {
       try {
-        if (c.op !== 'editar') { const sn = await conTiempo(f.getDoc(f.doc(f.collection(dbx(), COL), c.folio)), 5000); if (sn.exists()) { const x = sn.data(); if (x.contadoPor === u) { marcar(c.folio, 'ok', null, x.estado); ok++; } else marcar(c.folio, 'revisar', 'El tag ya lo contó otra persona'); continue; } }
+        if (c.op !== 'editar') { const sn = await conTiempo(f.getDoc(f.doc(f.collection(dbx(), COL), c.folio)), 5000); if (sn.metadata && sn.metadata.hasPendingWrites) continue; if (sn.exists()) { const x = sn.data();   /* lo que aún está solo en la copia local no cuenta como enviado */ if (x.contadoPor === u) { marcar(c.folio, 'ok', null, x.estado); ok++; } else marcar(c.folio, 'revisar', 'El tag ya lo contó otra persona'); continue; } }
         await conTiempo(escribir(c), 8000); marcar(c.folio, 'ok', null, 'REGISTRADO'); ok++;
       } catch (e) { if (esPermiso(e) || /not-found/i.test(String(e.code || ''))) marcar(c.folio, 'revisar', String(e.code || e.message || e)); else break; }
     }

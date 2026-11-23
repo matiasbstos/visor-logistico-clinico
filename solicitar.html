@@ -109,12 +109,12 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
-        import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, setDoc, getDoc, getDocs, updateDoc, query, where, limit, onSnapshot, serverTimestamp, waitForPendingWrites, runTransaction } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+        import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, setDoc, getDoc, getDocs, updateDoc, query, where, limit, onSnapshot, serverTimestamp, waitForPendingWrites, runTransaction, deleteField } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
         // Configuración pública del proyecto (la misma del visor; no es una clave secreta).
         const app = initializeApp({ apiKey: "AIzaSyAyktOnoB-j7nX4-YZLa6B74wOBCbZvlsA", authDomain: "sarinventario.firebaseapp.com", projectId: "sarinventario", storageBucket: "sarinventario.firebasestorage.app", messagingSenderId: "358257655117", appId: "1:358257655117:web:b7f46ad97e94afa1324b04" });
         const auth = getAuth(app), db = initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
         window.firebaseAuth = auth; window.firebaseDb = db;
-        window.firebaseFirestore = { doc, collection, setDoc, getDoc, getDocs, updateDoc, query, where, limit, onSnapshot, serverTimestamp, runTransaction };
+        window.firebaseFirestore = { doc, collection, setDoc, getDoc, getDocs, updateDoc, query, where, limit, onSnapshot, serverTimestamp, runTransaction, deleteField };
         // Mensajes cortos arriba (bajo la cabecera), nunca sobre los botones de abajo; el texto puede traer <b> ya escapado por quien llama
         window.showToast = (t, m, tipo) => { const pila = document.getElementById('sp-toasts') || Object.assign(document.body.appendChild(document.createElement('div')), { id: 'sp-toasts', className: 'sp-toasts' }); const d = document.createElement('div'); d.className = 'sp-toast ' + (tipo || ''); d.setAttribute('role', 'status'); const b = document.createElement('b'); b.textContent = String(t || ''); const p = document.createElement('span'); p.innerHTML = String(m || '').replace(/<(?!\/?b>)[^>]*>/g, ''); d.append(b, p); pila.prepend(d); while (pila.children.length > 2) pila.lastElementChild.remove(); setTimeout(() => d.remove(), 4500); };
         window.SAR_SOLICITUD_PUBLICA = true;   // sin cuenta: lista pública de productos y solicitudes a su nombre

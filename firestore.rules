@@ -54,7 +54,7 @@ service cloud.firestore {
     // Rol «contador» (v21.249, levantamiento con teléfono): solo lee Insumos y Bodegas y registra SUS Conteos_Cajas.
     // Queda FUERA de hasRole(): hasRole() da escritura en Historial, Bandejas, Metadata y otras colecciones.
     function isContador() {
-      return getUserRole().lower().trim() == 'contador';
+      return getUserRole() is string && getUserRole().lower().trim() == 'contador';
     }
 
     function isOwner(userId) {
@@ -341,7 +341,7 @@ service cloud.firestore {
     // No mueve stock. Crea quien cuenta (a su nombre); corrige el autor mientras esté REGISTRADO (o RECONTEO pedido por bodega);
     // bodega (admin) solo cambia el estado y los campos de aceptación/rechazo; una caja ACEPTADA solo pasa a ETIQUETADO.
     match /Conteos_Cajas/{folio} {
-      function rolConteo() { return isContador() || getUserRole().lower().trim() == 'operador' || isAdmin(); }
+      function rolConteo() { return isContador() || (getUserRole() is string && getUserRole().lower().trim() == 'operador') || isAdmin(); }
       function camposCaja() {
         return ['folio', 'bodega', 'bodegaId', 'insumoId', 'nombre', 'nombreNorm', 'nuevo', 'tipo', 'controlado', 'lote', 'vence', 'sinLote',
                 'estructura', 'total', 'contadoPor', 'contadoNombre', 'en', 'servidorEn', 'editadoEn', 'estado', 'app',
@@ -410,7 +410,8 @@ service cloud.firestore {
           && resource.data.contadoPor == request.auth.token.email
           && resource.data.estado in ['REGISTRADO', 'RECONTEO'] && request.resource.data.estado == 'REGISTRADO'
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(camposCaja())
-          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['contadoPor', 'folio', 'en', 'servidorEn', 'aceptadoPor', 'aceptadoEn', 'lev', 'hijos'])
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['contadoPor', 'folio', 'en', 'aceptadoPor', 'aceptadoEn', 'lev', 'hijos'])
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['servidorEn']) || request.resource.data.servidorEn == request.time)   /* una corrección que llega como 2.º setDoc (sin internet) trae su propio serverTimestamp */
           && cajaOk(request.resource.data))
         // bodega: solo estado y campos de aceptación/rechazo; una caja ACEPTADA solo pasa a ETIQUETADO
         || (isAdmin()

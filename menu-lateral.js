@@ -96,7 +96,7 @@
         const vacio = mk('p', 'ml-vacio', 'Nada coincide con esa búsqueda.'); vacio.hidden = true;
         wrap.insertBefore(caja, wrap.firstChild); wrap.appendChild(vacio);
         const inp = caja.querySelector('input');
-        const items = () => [...sb.querySelectorAll('.sidebar-menu-wrapper .menu-item, .sidebar-footer .ml-mas-cuerpo .menu-item')];
+        const items = () => [...new Set(sb.querySelectorAll('.sidebar-menu-wrapper .menu-item, .ml-mas-cuerpo .menu-item'))];
         const aplicar = () => {
             const q = inp.value; sb.classList.toggle('ml-buscando', !!q.trim());
             const todos = items(); todos.forEach(i => i.classList.remove('ml-oculto', 'ml-hit'));
@@ -119,7 +119,7 @@
 
     function pie(sb) {
         const pie = sb.querySelector('.sidebar-footer'); if (!pie || pie.dataset.ml) return; pie.dataset.ml = '1';
-        const ids = [document.getElementById('menu-acerca'), pie.querySelector('[data-target="view-errores"]'), document.getElementById('menu-config')].filter(Boolean);
+        const ids = [document.getElementById('menu-acerca'), document.getElementById('menu-memo-flujo'), sb.querySelector('.menu-item[data-target="view-errores"]'), document.getElementById('menu-config')].filter(Boolean);
         if (!ids.length) return;
         const abierto = !!estado.mas;
         const btn = mk('button', 'ml-mas-btn', '<i class="ph-bold ph-dots-three-circle"></i><span class="menu-label">Más opciones</span><i class="ph-bold ph-caret-up ml-chev"></i>');
@@ -127,7 +127,10 @@
         const cuerpo = mk('div', 'ml-body ml-mas-cuerpo' + (abierto ? ' ml-abierto' : '')), dentro = mk('div', 'ml-in'); cuerpo.id = 'ml-mas-cuerpo'; cuerpo.appendChild(dentro);
         ids.forEach(i => dentro.appendChild(i));
         btn.addEventListener('click', () => { const v = !cuerpo.classList.contains('ml-abierto'); cuerpo.classList.toggle('ml-abierto', v); btn.setAttribute('aria-expanded', String(v)); estado.mas = v; guardar(); });
-        const salir = pie.querySelector('.danger'); pie.insertBefore(cuerpo, salir); pie.insertBefore(btn, cuerpo);
+        /* 4.306: «Más opciones» va al final del área que se desplaza (no fija abajo): con 575 px de alto el menú ya no queda en una caja de 180 px. En el pie queda solo «Salir». */
+        const wrap = sb.querySelector('.sidebar-menu-wrapper'), salir = pie.querySelector('.danger');
+        const grupo = mk('div', 'ml-mas'); grupo.appendChild(btn); grupo.appendChild(cuerpo);
+        if (wrap) { const vac = wrap.querySelector('.ml-vacio'); if (vac) wrap.insertBefore(grupo, vac); else wrap.appendChild(grupo); } else { pie.insertBefore(cuerpo, salir); pie.insertBefore(btn, cuerpo); }
         // oculta el botón si el rol no ve ninguna de las opciones
         const rev = () => { btn.hidden = !ids.some(i => i.offsetParent !== null); }; rev(); new MutationObserver(rev).observe(document.body, { attributes: true, attributeFilter: ['data-user-role'] });
     }

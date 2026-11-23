@@ -694,7 +694,7 @@
                 <input type="number" min="0" value="${num(i.solicitado) > num(i.cantidad) ? num(i.solicitado) : ''}" class="act-qty act-sedit" data-k="${k}" placeholder="Pedido" aria-label="Cantidad pedida"><input type="number" min="0" value="${i.cantidad}" class="act-qty act-edit" data-k="${k}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-del" data-k="${k}" aria-label="Quitar">✕</button></div>`;
         const errores = validarBorrador(borrador);
         r.innerHTML = `
-        <div class="page-header mb-24"><div class="page-title"><h2>Actas de entrega</h2>
+        <div class="page-header mb-24"><div class="page-title"><h1>Actas de entrega</h1>
             <p>Arma el acta desde el stock de la bodega. Al emitirla queda con su número; el stock sale cuando subes el acta firmada.</p></div>
 </div>
         <nav class="act-tabs" role="tablist" aria-label="Secciones de actas de entrega"${tab === 'seguimiento' ? ' hidden' : ''}>${TABS.map(t => `<button type="button" role="tab" class="act-tab${t[0] === tab ? ' active' : ''}" data-tab="${t[0]}" aria-selected="${t[0] === tab}"><i class="ph-bold ${t[1]}"></i><span>${t[2]}</span>${t[0] === 'emitidas' ? `<em>${historial.length}</em>` : ''}</button>`).join('')}</nav>

@@ -6781,3 +6781,136 @@ body:has(.lv-root .lv) .sp-inst{display:none}
 .lv-ay-l { margin: 0; padding: 12px 16px 16px 36px; line-height: 1.5; font-size: 1rem; }
 .lv-ay-l li { margin: 6px 0; }
 
+
+/* ==========================================================================
+   ESTÁNDAR DE PANTALLAS (4.306 · revisión de Face y Penny, 22-11)
+   Plantilla: encabezado .page-header (h1 = nombre del menú + bajada) → pestañas
+   (.aud-tabs) → filtros en una fila → contenido. Ver docs/IDENTIDAD_VISUAL.md.
+   ========================================================================== */
+
+/* A1. Barra superior en una línea desde 768 px; el título se corta con «…» */
+@media (min-width: 768px) {
+    .topbar { flex-wrap: nowrap; }
+    .topbar-left { flex: 1 1 auto; min-width: 0; }
+    .topbar-right { flex: 0 0 auto; flex-wrap: nowrap; }
+    .topbar .erp-breadcrumb { min-width: 0; overflow: hidden; }
+    .topbar-title { display: block; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
+/* El buscador de Compras y «Nueva SDC» salieron de la barra (Nueva SDC está en la cabecera de Compras) */
+.topbar .topbar-global-search, .topbar #btn-erp-nueva-sdc { display: none !important; }
+/* Estado de la nube: un punto en la barra superior (reemplaza la tarjeta «Estado Red SAR» del menú) */
+.topbar .status-badge { padding: 0; width: 28px; height: 28px; justify-content: center; border-radius: 50%; background: transparent; border: 0; }
+.topbar .status-badge i, .topbar .status-badge span { display: none; }
+.topbar .status-badge::before { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--sar-green); box-shadow: 0 0 0 3px rgba(140, 198, 63, .25); }
+.sidebar .sidebar-node-status { display: none !important; }
+
+/* A2. Historial: filtros centrados; Excel y PDF como .btn-outline normales */
+.historial-toolbar, .filters-group { align-items: center; }
+
+/* A3. Pestañas: un solo estilo (.aud-tab), subrayado azul de 3 px, sin raya roja */
+.aud-tabs, .page-tabs, .act-tabs { display: flex; align-items: flex-end; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--id-borde); margin: 4px 0 16px; padding: 0; }
+.aud-tab, .page-tab, .act-tab, .bu-tabs button { appearance: none; display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 10px 16px; margin-bottom: -1px; font: inherit; font-size: 14px; font-weight: 600; color: var(--text-muted); background: none; border: 0; border-bottom: 3px solid transparent; border-radius: 0; box-shadow: none; cursor: pointer; }
+.aud-tab:hover, .page-tab:hover, .act-tab:hover, .bu-tabs button:hover { color: var(--sar-blue); background: none; border-color: transparent; border-bottom-color: transparent; }
+.aud-tab.on, .act-tab.active, .bu-tabs button.on,
+body[data-view="view-toma-inventario"] .page-tab[data-go="view-toma-inventario"],
+body[data-view="view-inventario-semanal"] .page-tab[data-go="view-inventario-semanal"] { color: var(--sar-blue); background: none; border-bottom-color: var(--sar-blue); box-shadow: none; }
+.aud-tab em, .act-tab em { font-style: normal; font-size: 11px; font-weight: 700; background: #EEF2F7; color: var(--sar-blue); border-radius: 999px; padding: 1px 8px; }
+.aud-tab:focus-visible, .page-tab:focus-visible, .act-tab:focus-visible, .bu-tabs button:focus-visible { outline: 3px solid var(--sar-green); outline-offset: -3px; }
+.page-tabs .page-tabs__spacer { flex: 1; }
+.page-tabs .btn { margin-bottom: 6px; }
+.bu-tabs { display: flex; gap: 4px; background: none; border-radius: 0; padding: 0; border-bottom: 1px solid var(--id-borde); }
+.bu-tabs button { flex: 0 0 auto; }
+@media (max-width: 600px) { .aud-tabs, .page-tabs, .act-tabs { flex-wrap: nowrap; overflow-x: auto; } .aud-tab, .page-tab, .act-tab { flex: 0 0 auto; white-space: nowrap; } }
+
+/* A4. Chips de 40 px como .bit-chip (directorio, bultos, etiquetas, fotos) */
+.err-chip, .ft-chip, .bu-chip, .etq-chip { min-height: 40px; padding: 7px 14px; border: 1px solid #CBD5E1; background: #fff; border-radius: 999px; font: inherit; font-size: 13px; font-weight: 600; color: #334155; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.err-chip.on, .ft-chip.on, .bu-chip.on, .etq-chip.on { background: var(--sar-blue); border-color: var(--sar-blue); color: #fff; }
+.err-chips { gap: 8px; }
+
+/* A5. Títulos: h1 en todas las vistas, mismo estilo que .view-section h1 */
+.view-section h1.si-t, .view-section .page-title h1, .view-section .err-cab h1, .view-section .sus-w h1 { font-size: 1.6rem; font-weight: 800; letter-spacing: -.01em; color: var(--sar-blue); margin: 0 0 4px; }
+#view-bultos .si-wrap, #view-etiquetas .si-wrap, #view-solicitudes-insumos .si-wrap { max-width: none; margin: 0; padding: 0; }
+.toma2 .tm-cab h2.tm-folio { margin: 0; font-size: 1.2rem; font-weight: 800; color: var(--sar-blue); }
+.page-header .page-actions { flex-wrap: wrap; }
+
+/* A6. Contenedor y elementos base */
+.dashboard-container { padding: 24px 32px; }
+@media (max-width: 767px) { .dashboard-container { padding: 16px; } }
+.btn { min-height: 40px; }
+.btn.btn-sm { min-height: 32px; }
+.oxi-card { border: 1px solid var(--id-borde); background: #fff; flex-direction: column; }
+.oxi-card b { color: var(--sar-blue); display: inline-flex; align-items: center; gap: 8px; }
+.oxi-card b::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+.oxi-card.oxi-on { background: #F1F5FB; border-color: var(--sar-blue); box-shadow: inset 0 0 0 1px var(--sar-blue); }
+.oxi-card.oxi-on b, .oxi-card.oxi-on span { color: var(--sar-blue); }
+.dis-card, .dis-card:hover, .dis-card:focus-visible { border-top: 1px solid #e2e8f0; }
+.dis-card:hover, .dis-card:focus-visible { border-color: var(--sar-blue); }
+
+/* A7. Menú lateral: «Más opciones» dentro del área que se desplaza; en el pie solo «Salir» */
+.sidebar-menu-wrapper .ml-mas { border-top: 1px solid rgba(255, 255, 255, .14); padding-top: 6px; }
+.sidebar-footer { padding: 8px 12px; gap: 0; }
+
+/* B. Por vista */
+/* Existencias: filtros en una fila; lote y vencimiento ≥ 12 px */
+#view-inventario .page-header { flex-wrap: wrap; }
+.stk-filtros { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; flex: 0 0 auto; width: 100%; min-width: 0; }
+.stk-filtros .stk-buscar { flex: 1 1 240px; min-width: 0; width: auto; }
+.stk-filtros .stk-selects { display: flex; gap: 12px; align-items: center; flex-wrap: nowrap; }
+.stk-filtros .stk-selects select { width: auto; font-weight: 500; }
+@media (min-width: 1024px) { .stk-filtros { flex-wrap: nowrap; } }
+@media (max-width: 767px) { .stk-filtros .stk-selects { flex-wrap: wrap; width: 100%; } .stk-filtros .stk-selects select { flex: 1 1 140px; } }
+#inventory-table-body .stk-lote, #inventory-table-body .item-category { font-size: 12px; }
+.stk-acciones .btn-compras { white-space: nowrap; }
+/* Ajustes: Restar / Sumar */
+.aj-signo { display: inline-flex; border: 1px solid #CBD5E1; border-radius: var(--shape-card); overflow: hidden; }
+.aj-signo__b { appearance: none; border: 0; background: #fff; color: #334155; font: inherit; font-weight: 700; font-size: 14px; min-height: 40px; padding: 8px 18px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.aj-signo__b + .aj-signo__b { border-left: 1px solid #CBD5E1; }
+.aj-signo__b.on { background: var(--sar-blue); color: #fff; }
+.aj-signo__b:focus-visible { outline: 3px solid var(--sar-green); outline-offset: -3px; }
+/* Ingresos: escáner inteligente en tarjeta normal, sin borde punteado */
+#view-movimientos .smart-scanner-box { border: 1px solid var(--id-borde); border-style: solid; background: #fff; box-shadow: none; }
+/* Inventario semanal: aviso de configuración */
+.semanal-aviso { margin: 0 0 16px; padding: 14px 16px; }
+.semanal-aviso p { margin: 4px 0 0; color: #475569; font-size: 13.5px; }
+/* Historial: tipos con color (Salida en rojo, Traspaso en azul, Ajuste/Toma/Cuadre en amarillo) */
+.action-badge.red-badge { background-color: var(--danger-badge); color: var(--danger-text); }
+.action-badge.blue-badge { background-color: #E8EEF8; color: var(--sar-blue); }
+.action-badge.yellow-badge { background-color: #FEF6D7; color: #854D0E; }
+/* Auditoría: buscador ocupa el espacio libre */
+.sal-barra #sal-q { flex: 1 1 240px; min-width: 0; }
+/* Bitácora: aviso mientras se revisa el correo */
+.bit-revisando { display: flex; align-items: center; gap: 8px; }
+.bit-punto { width: 8px; height: 8px; border-radius: 50%; background: var(--sar-yellow); animation: bitLatido 1.2s ease-in-out infinite; }
+@keyframes bitLatido { 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .bit-punto { animation: none; } }
+/* Catálogo: esqueleto en los indicadores mientras carga */
+.erp-kpi-card__value .cat-sk { display: inline-block; width: 64px; height: 28px; margin: 0; vertical-align: middle; }
+/* Transferencias: campo de pistola */
+.tb-barra .tb-pistola { flex: 1 1 260px; min-width: 0; }
+.tb-barra .tb-pistola input { width: 100%; }
+/* Inicio: acción inmediata en blanco con punto de color, atajos en 4 columnas */
+#view-panel .home-accion { display: flex; flex-direction: row; align-items: center; gap: 10px; text-align: left; background: #fff; border: 1px solid var(--id-borde); padding: 10px 12px; }
+#view-panel .home-accion .btn { flex: 0 0 auto; }
+.home-accion__punto { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; background: var(--sar-red); }
+.home-accion--orange .home-accion__punto { background: var(--sar-orange); }
+.home-accion__txt { flex: 1 1 auto; min-width: 0; }
+.home-accion__t { font-size: 13px; font-weight: 800; color: #0F172A; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.home-accion__s { font-size: 12px; color: #64748B; }
+.home-accion__estado { font-weight: 700; color: var(--sar-red); }
+.home-accion--orange .home-accion__estado { color: var(--sar-orange-strong, #C2410C); }
+.qa-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 1023px) { .qa-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 480px) { .qa-grid { grid-template-columns: 1fr; } }
+/* Cuenta sin rol: «Pide acceso al encargado» */
+body[data-user-role="sin_acceso"] #main-app { display: none !important; }
+.sin-acceso { position: fixed; inset: 0; z-index: 9000; display: grid; place-items: center; padding: 16px; background: var(--sar-bg-app, #F8F9FA); }
+.sin-acceso__c { max-width: 440px; background: #fff; border: 1px solid var(--id-borde); border-radius: var(--shape-card); box-shadow: var(--id-sombra, 0 8px 24px rgba(26, 54, 104, .08)); padding: 28px; text-align: center; }
+.sin-acceso__c h1 { font-size: 1.4rem; font-weight: 800; color: var(--sar-blue); margin: 12px 0 8px; }
+.sin-acceso__c p { color: #475569; font-size: 14px; margin: 0 0 18px; }
+.sin-acceso__logo { height: 40px; width: auto; }
+@media (min-width: 768px) { .page-header .page-title { flex: 1 1 320px; min-width: 0; } }
+.stk-filtros { flex-direction: row !important; }
+@media (max-width: 767px) {
+    .stk-filtros .stk-buscar { flex: 1 1 100%; height: auto; }
+    #view-toma-inventario .dashboard-container > .page-header.tm-encabezado { order: -1; }   /* el encabezado va antes de las pestañas también en teléfono */
+}

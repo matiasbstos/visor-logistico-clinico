@@ -107,7 +107,8 @@
         const r = root(); if (!r) return;
         const v = validar();
         r.innerHTML = `
-        <div class="erp-card"><h2>Ingreso rápido de inventario</h2>
+        <div class="page-header mb-16"><div class="page-title"><h1>Ingreso rápido</h1><p>Ingreso rápido de inventario: carga una bodega completa de una vez.</p></div></div>
+        <div class="erp-card">
             <p class="act-hint">Para inventariar una bodega de una sola vez (por ejemplo el camión). Elige la bodega, pega la lista o escríbela, revisa y confirma. Cada producto queda con ID, lote y vencimiento, y se ve en todo el sistema.</p>
             <div class="act-fila"><select id="irp-b" aria-label="Bodega de destino"><option value="">— Elige la bodega de destino —</option>${bodegas.map(b => `<option value="${esc(b.name)}" ${b.name === bodegaSel ? 'selected' : ''}>${esc(b.name)}</option>`).join('')}</select>
                 <button type="button" class="btn btn-outline" id="irp-nb">+ Nueva bodega</button></div>

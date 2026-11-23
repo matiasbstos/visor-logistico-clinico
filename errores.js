@@ -99,13 +99,13 @@
     function pintar() {
         const r = root(); if (!r) return;
         if (pestana === 'nom' && window.SAR_Nomenclaturas) {
-            r.innerHTML = `<div class="err-cab"><div><h2>Directorio</h2><p>Errores del sistema y nomenclaturas de todos los códigos.</p></div></div>${pestanas()}<div id="nom-root"></div>`;
+            r.innerHTML = `<div class="page-header mb-16 err-cab"><div class="page-title"><h1>Directorio</h1><p>Errores del sistema y nomenclaturas de todos los códigos.</p></div></div>${pestanas()}<div id="nom-root"></div>`;
             ligarPestanas(r); window.SAR_Nomenclaturas.montar(r.querySelector('#nom-root')); return;
         }
         const log = leer(); const cuenta = {}; log.forEach(x => { cuenta[x.c] = (cuenta[x.c] || 0) + (x.n || 1); });
         const lista = C.filter(e => (!filtroCat || e.cat === filtroCat) && (!q || `${e.codigo} ${e.codigo.replace(/^ERR-/, 'sar-')} ${e.titulo} ${e.mensaje} ${e.causa} ${e.solucion}`.toLowerCase().includes(q)));
         r.innerHTML = `
-        <div class="err-cab"><div><h2>Directorio</h2><p>Errores del sistema y nomenclaturas de todos los códigos.</p></div></div>${pestanas()}
+        <div class="page-header mb-16 err-cab"><div class="page-title"><h1>Directorio</h1><p>Errores del sistema y nomenclaturas de todos los códigos.</p></div></div>${pestanas()}
         <p class="act-hint">${C.length} códigos de error · cada aviso del sistema muestra su <b>Ref.</b> para ubicarlo aquí.</p>
         <div class="err-barra">
           <input id="err-q" class="form-control" type="search" placeholder="Buscar por código, texto, causa o solución…" value="${esc(q)}">

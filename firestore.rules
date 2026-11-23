@@ -84,9 +84,10 @@ service cloud.firestore {
       allow read: if isOperadorOrAdmin() || isOwner(userId);
       // CREACIÓN: admin, operador (solo enfermeros) o el propio titular con correo
       // institucional verificado que crea SU perfil inicial de superadmin (arranque).
+      // v21.249 (Decker): se cerró el arranque «el titular con correo institucional se crea superadmin».
+      // Los perfiles y roles los crea el administrador en Usuarios.
       allow create: if isAdmin()
-        || (getUserRole() == 'operador' && request.resource.data.rol == 'enfermero')
-        || (isOwner(userId) && isInstitutionalEmail() && request.resource.data.rol == 'superadmin');
+        || (getUserRole() == 'operador' && request.resource.data.rol == 'enfermero');
       // ACTUALIZACIÓN: Un usuario regular NO puede modificar su propio campo 'rol' o 'role'
       allow update: if isAdmin() || (isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['rol', 'role'])));
       allow delete: if isAdmin();

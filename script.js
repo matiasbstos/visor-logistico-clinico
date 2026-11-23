@@ -3347,11 +3347,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     quantityMarkup = `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;"><span class="badge-red-solid">${item.quantity}</span><span class="text-danger" style="font-size:8px;font-weight:700;">${Number(item.quantity) <= 0 ? 'AGOTADO' : 'STOCK CRÍTICO'}</span></div>`;
                     codeClass = "text-danger";
                 } else if (isCritical) {
-                    quantityMarkup = `<span class="badge-orange">${(item.quantity || 0).toLocaleString('en-US')}</span>`;
+                    quantityMarkup = `<span class="badge-orange">${(item.quantity || 0).toLocaleString('es-CL')}</span>`;
                 } else {
-                    quantityMarkup = `<span class="badge-green">${(item.quantity || 0).toLocaleString('en-US')}</span>`;
+                    quantityMarkup = `<span class="badge-green">${(item.quantity || 0).toLocaleString('es-CL')}</span>`;
                 }
-                if (Number(_data.reservado) > 0) quantityMarkup += `<small class="stk-reserva" title="Reservado por actas por confirmar (${window.escapeHTML(Object.keys(_data.reservas || {}).join(', '))}): no está disponible">+${Number(_data.reservado).toLocaleString('en-US')} reservado</small>`;   /* v21.235 */
+                if (Number(_data.reservado) > 0) quantityMarkup += `<small class="stk-reserva" title="Reservado por actas por confirmar (${window.escapeHTML(Object.keys(_data.reservas || {}).join(', '))}): no está disponible">+${Number(_data.reservado).toLocaleString('es-CL')} reservado</small>`;   /* v21.235 */
 
                 const categoryClass = isCritical ? "item-category text-danger" : "item-category";
                 const isQuarantined = item.status === 'CUARENTENA';
@@ -3370,11 +3370,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         const bExp = formatDate(b.expirationDate), la = _lotesAl[bi] && _lotesAl[bi].batch === (b.batch || 'S/L') ? _lotesAl[bi] : null;
                         const col = la ? ({ vencido: 'var(--danger, #dc2626)', urgente: '#ea580c', precaucion: '#b45309' }[la.nivel] || '') : '';
                         const tag = la && la.nivel !== 'ok' && la.nivel !== 'sin_fecha' ? ` <b style="color:${col};">⚠ ${window.SAR_LotesAlertas.etiqueta(la)}</b>` : '';
-                        batchesMarkup += `<div class="${categoryClass}" style="font-size:10px; margin-bottom:2px;${col ? ' color:' + col + ';' : ''}">
-                            <strong>${window.escapeHTML(b.batch)}</strong> | Cant: ${b.quantity} | Vto: ${bExp}${b.provider && b.provider !== 'S/I' ? ' | ' + window.escapeHTML(String(b.provider).trim()) : ''}${tag}
+                        batchesMarkup += `<div class="${categoryClass} stk-lote" style="font-size:12px; margin-bottom:2px;${col ? ' color:' + col + ';' : ''}">
+                            <strong>${window.escapeHTML(b.batch)}</strong> | Cant: ${(Number(b.quantity) || 0).toLocaleString('es-CL')} | Vto: ${bExp}${b.provider && b.provider !== 'S/I' ? ' | ' + window.escapeHTML(String(b.provider).trim()) : ''}${tag}
                         </div>`;
                     });
-                    if (_al && _al.criticoUtil) batchesMarkup += `<div style="font-size:10px; font-weight:700; color:var(--danger, #dc2626);">⚠ Stock vigente bajo el mínimo: ${_al.util} u. (mínimo ${_al.minimo})</div>`;
+                    if (_al && _al.criticoUtil) batchesMarkup += `<div style="font-size:12px; font-weight:700; color:var(--danger, #dc2626);">⚠ Stock vigente bajo el mínimo: ${_al.util} u. (mínimo ${_al.minimo})</div>`;
                 } else {
                     batchesMarkup = `<div class="${categoryClass}">LOTE: ${window.escapeHTML(item.batch) || 'N/A'}</div><div class="${categoryClass}">Vto: ${visualExpDate}</div>`;
                 }
@@ -3388,14 +3388,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>${quantityMarkup}</td>
                 <td class="font-bold">${formattedTotal}</td>
                 <td><div style="display:flex; flex-direction:column; gap:2px;">${batchesMarkup}</div>${Array.isArray(item.batches) && item.batches.length ? `<button type="button" class="btn btn-outline btn-sm btn-desglose" data-id="${docSnapshot.id}" aria-expanded="false" style="margin-top:6px; padding:2px 8px; font-size:11px;"><i class="ph ph-caret-down"></i> Ver desglose</button>` : ''}</td>
-                <td><div class="font-bold">${window.escapeHTML(item.location || item.ubicacion || 'Bodega Central')}</div></td>
+                <td>${(() => { /* 4.306: bodega + estante; «Sin ubicación» si falta */ const bod = _data.bodegaNombre || _data.location || _data.ubicacion || '', est = _data.ubicacionEstante || ''; return bod ? `<div class="font-bold">${window.escapeHTML(bod)}</div>${est ? `<div class="item-category">Estante ${window.escapeHTML(String(est))}</div>` : ''}` : '<span class="text-muted">Sin ubicación</span>'; })()}</td>
                 <td>
-                    <div style="display:flex;gap:8px">
-                        ${isCritical ? '<button class="btn btn-primary text-sm font-bold" style="background-color: #3730a3;"><i class="ph-fill ph-sparkle"></i> ALTERNATIVA</button>' : '<button class="btn btn-outline text-primary text-sm font-bold"><i class="ph-fill ph-sparkle"></i> ALTERNATIVA</button>'}
+                    <div class="stk-acciones" style="display:flex;gap:8px">
                         <button class="btn btn-icon btn-mover-bodega" title="Mover a otra bodega" aria-label="Mover a otra bodega"><i class="ph ph-arrows-left-right"></i></button>
-                        <button class="btn btn-icon btn-kardex" title="Ver Kardex y Trazabilidad"><i class="ph ph-chart-line-up"></i></button>
-                        <button class="btn btn-icon btn-edit-insumo"><i class="ph ph-pencil-simple"></i></button>
-                        <button class="btn btn-icon btn-delete-insumo admin-only"><i class="ph ph-trash"></i></button>
+                        <button class="btn btn-icon btn-kardex" title="Ver Kardex y Trazabilidad" aria-label="Ver Kardex y Trazabilidad"><i class="ph ph-chart-line-up"></i></button>
+                        <button class="btn btn-icon btn-edit-insumo" title="Editar producto" aria-label="Editar producto"><i class="ph ph-pencil-simple"></i></button>
+                        <button class="btn btn-icon btn-delete-insumo admin-only" title="Eliminar producto" aria-label="Eliminar producto"><i class="ph ph-trash"></i></button>
                     </div>
                 </td>
             `;
@@ -3491,19 +3490,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     const actionContainer = col.parentElement.querySelector('td:last-child > div');
                     if (actionContainer && !actionContainer.querySelector('.btn-compras')) {
                         const btnCompras = document.createElement('button');
-                        btnCompras.className = "btn btn-compras text-sm font-bold";
-                        btnCompras.style.backgroundColor = "var(--success)";
-                        btnCompras.style.color = "white";
-                        btnCompras.innerHTML = '<i class="ph-fill ph-shopping-cart"></i> COMPRAR';
+                        btnCompras.type = 'button';
+                        btnCompras.className = "btn btn-outline btn-sm btn-compras";   /* 4.306: solo cuando corresponde, con borde (sin «ALTERNATIVA») */
+                        btnCompras.title = 'Preparar solicitud de compra';
+                        btnCompras.innerHTML = '<i class="ph-bold ph-shopping-cart"></i> Comprar';
                         btnCompras.onclick = () => window.generatePurchaseDraft(col.parentElement.dataset.id, insumoName, stock, burnRate, diasRestantes);
-
-                        // Reemplazar el botón de Alternativa si existe
-                        const btnAlternativa = actionContainer.querySelector('.btn-primary, .btn-outline.text-primary');
-                        if (btnAlternativa && btnAlternativa.textContent.includes('ALTERNATIVA')) {
-                            actionContainer.replaceChild(btnCompras, btnAlternativa);
-                        } else {
-                            actionContainer.prepend(btnCompras);
-                        }
+                        actionContainer.prepend(btnCompras);
                     }
                 }
             });
@@ -5372,6 +5364,26 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
+        /* 4.306: tipos de movimiento legibles para el Historial (texto, signo y color). El signo de Ajuste y Toma sale de la cantidad. */
+        window.SAR_TipoMov = window.SAR_TipoMov || function (m) {
+            const t = String((m && (m.type || m.tipo)) || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
+            const q = Number(m && (m.quantity != null ? m.quantity : m.cantidad)) || 0, pm = q < 0 ? '−' : '+';
+            const E = (texto) => ({ texto, signo: '+', clase: 'green-badge' }), S = (texto) => ({ texto, signo: '−', clase: 'red-badge' });
+            const D = {
+                entrada: E('Ingreso'), ingreso: E('Ingreso'), ingreso_proveedor: E('Ingreso'), ingreso_oc: E('Ingreso por OC'), ingreso_inventario: E('Ingreso'), carga_masiva: E('Carga masiva'), carga_masiva_excel: E('Carga masiva'),
+                retorno_bandeja: E('Retorno de bandeja'), devolucion_anulacion_bandeja: E('Devolución'), anulacion_acta: E('Acta anulada'),
+                salida: S('Salida'), entrega_acta: S('Salida/Acta'), acta: S('Salida/Acta'), salida_solicitud: S('Salida/Solicitud'), envio: S('Salida/Bandeja'), merma_inventario: S('Merma'), merma_despacho: S('Merma'), eliminacion_inventario: S('Eliminación'),
+                traspaso: { texto: 'Traspaso', signo: '↔', clase: 'blue-badge' }, transferencia: { texto: 'Traspaso', signo: '↔', clase: 'blue-badge' },
+                cuadre_sobregiro: { texto: 'Cuadre de deuda', signo: '+', clase: 'yellow-badge' }, regulariza_sobregiro: { texto: 'Cuadre de deuda', signo: '+', clase: 'yellow-badge' }, reversa_cuadre: { texto: 'Cuadre revertido', signo: '−', clase: 'yellow-badge' },
+                reserva_acta: { texto: 'Reserva', signo: '↔', clase: 'purple-badge' }, libera_reserva: { texto: 'Reserva liberada', signo: '↔', clase: 'purple-badge' }
+            };
+            if (D[t]) return D[t];
+            if (/^ajuste|auditoria_modificacion/.test(t)) return { texto: 'Ajuste ' + pm, signo: pm, clase: 'yellow-badge' };
+            if (/toma/.test(t)) return { texto: 'Toma ' + pm, signo: pm, clase: 'yellow-badge' };
+            const txt = t ? t.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) : 'Sin tipo';
+            return { texto: txt, signo: q ? pm : '↔', clase: 'purple-badge' };
+        };
+
         function renderHistorial(data) {
             const tbody = document.getElementById('historial-table-body');
             const countHoyEl = document.querySelector('.rh-value');
@@ -5394,37 +5406,34 @@ document.addEventListener('DOMContentLoaded', () => {
                 const dateFmt = date.toLocaleDateString('es-CL');
                 const timeFmt = date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
 
-                let baseType = (m.type || m.tipo || 'S/T').toLowerCase();
-                if (baseType === 'carga_masiva_excel') baseType = 'carga masiva';
-
-                const typeClass = baseType === 'entrada' ? 'green-badge' :
-                    baseType === 'traspaso' ? 'blue-badge' :
-                        baseType === 'ajuste' || baseType === 'carga masiva' ? 'yellow-badge' : 'purple-badge';
-                const typeText = baseType.toUpperCase();
-                const qtyClass = baseType === 'entrada' ? 'text-green' :
-                    baseType === 'salida' ? 'text-red' :
-                        baseType === 'ajuste' || baseType === 'traspaso' || baseType === 'carga masiva' ? 'text-blue' : 'text-red';
-                const qtySign = baseType === 'entrada' ? '+' : baseType === 'salida' ? '-' : '';
+                /* 4.306: tipo legible con signo y color; sin documento → «—»; sin nombre → «Registro incompleto» */
+                const tm = window.SAR_TipoMov(m), esc = window.escapeHTML;
+                const qn = Math.abs(Number(m.quantity != null ? m.quantity : m.cantidad) || 0);
+                const qtyClass = tm.signo === '+' ? 'text-green' : tm.signo === '−' ? 'text-red' : 'text-blue';
+                const nombreMov = m.insumoName || m.articleName || m.nombre || m.productName || '';
+                const docMov = m.document || m.supportDocument || m.documento || m.folio || '';
+                const ori = m.origenNombre || m.origin || '', des = m.destinoNombre || m.dest || '';
+                const ruta = ori || des ? `${esc(ori || '—')} → ${esc(des || '—')}` : '—';
 
                 const patientInfo = ''; // sin datos de pacientes (docs/DECISIONES.md §2)
 
                 tr.innerHTML = `
                 <td><div class="item-name">${dateFmt}</div><div class="item-category">${timeFmt}</div></td>
-                <td><span class="action-badge ${typeClass}">${typeText}</span></td>
+                <td><span class="action-badge ${tm.clase}">${esc(tm.texto)}</span></td>
                 <td>
                     <div class="flex-item-icon">
                         <i class="ph ph-package"></i>
                         <div>
-                            <div class="item-name">${window.escapeHTML(m.insumoName || m.articleName || 'Insumo Modificado')}</div>
-                            <div class="item-category">Operador: ${window.escapeHTML(m.user || m.operatorUid || m.usuario || 'S/I')}</div>
+                            <div class="item-name">${nombreMov ? esc(nombreMov) : '<span class="text-muted">Registro incompleto</span>'}</div>
+                            <div class="item-category">Operador: ${esc(m.user || m.operatorUid || m.usuario || 'S/I')}</div>
                             ${patientInfo}
                         </div>
                     </div>
                 </td>
-                <td><div class="item-name">L: ${window.escapeHTML(m.batch || m.lote || 'S/L')}</div><div class="${qtyClass} font-bold">${qtySign} ${m.quantity || 0} uds</div></td>
-                <td><div class="item-category">Doc: ${window.escapeHTML(m.document || m.supportDocument || 'S/N')}</div>${m.codigoIngreso ? `<div class="item-category"><b>${window.escapeHTML(m.codigoIngreso)}</b></div>` : ''}</td>
-                <td><span class="doc-badge">${window.escapeHTML(m.document || m.supportDocument || 'FACT-000')}</span></td>
-                <td><button class="btn btn-icon" onclick="window.showAlertCenter('Mensaje del Sistema', 'Detalle:\\nProducto: ${window.escapeHTML(m.insumoName || m.articleName || 'Insumo').replace(/'/g, "\\'")}\\nFecha: ${dateFmt} ${timeFmt}\\nUsuario: ${window.escapeHTML(m.user || m.operatorUid || m.usuario || 'S/I').replace(/'/g, "\\'")}')"><i class="ph ph-eye"></i></button>${m.type === 'INGRESO_PROVEEDOR' ? `<button type="button" class="btn btn-icon btn-edit-mov admin-only" data-id="${window.escapeHTML(m.id || '')}" title="Editar ingreso" aria-label="Editar ingreso"><i class="ph ph-pencil-simple"></i></button>` : ''}${m.editado ? '<div class="item-category" title="Este ingreso fue corregido">editado</div>' : ''}</td>
+                <td><div class="item-name">L: ${esc(m.batch || m.lote || 'S/L')}</div><div class="${qtyClass} font-bold">${tm.signo === '↔' ? '' : tm.signo + ' '}${qn.toLocaleString('es-CL')} u.</div></td>
+                <td><div class="item-category">${ruta}</div>${m.codigoIngreso ? `<div class="item-category"><b>${esc(m.codigoIngreso)}</b></div>` : ''}</td>
+                <td>${docMov ? `<span class="doc-badge">${esc(docMov)}</span>` : '<span class="text-muted">—</span>'}</td>
+                <td><button class="btn btn-icon" title="Ver detalle" aria-label="Ver detalle" onclick="window.showAlertCenter('Mensaje del Sistema', 'Detalle:\\nProducto: ${esc(nombreMov || 'Registro incompleto').replace(/'/g, "\\'")}\\nFecha: ${dateFmt} ${timeFmt}\\nUsuario: ${esc(m.user || m.operatorUid || m.usuario || 'S/I').replace(/'/g, "\\'")}')"><i class="ph ph-eye"></i></button>${m.type === 'INGRESO_PROVEEDOR' ? `<button type="button" class="btn btn-icon btn-edit-mov admin-only" data-id="${esc(m.id || '')}" title="Editar ingreso" aria-label="Editar ingreso"><i class="ph ph-pencil-simple"></i></button>` : ''}${m.editado ? '<div class="item-category" title="Este ingreso fue corregido">editado</div>' : ''}</td>
             `;
                 tbody.appendChild(tr);
             });

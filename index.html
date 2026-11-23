@@ -762,16 +762,16 @@
                             <h1>Existencias</h1>
                             <p>Control de existencias y búsqueda de suministros.</p>
                         </div>
-                        <div style="display:flex; gap:12px; align-items:center;">
+                        <div class="stk-filtros">
                             <!-- Buscador Manual -->
-                            <div class="search-input-wrapper" style="width: 350px;">
+                            <div class="search-input-wrapper stk-buscar">
                                 <i class="ph ph-magnifying-glass"></i>
                                 <input type="text" id="inventory-search-input" class="form-control"
-                                    placeholder="Buscar medicamento por nombre o código..." aria-label="Buscar medicamento por nombre o código..." title="Buscar medicamento por nombre o código...">
+                                    placeholder="Buscar producto por nombre o código…" aria-label="Buscar producto por nombre o código" title="Buscar producto por nombre o código">
                             </div>
 
                             <!-- Filtros Avanzados -->
-                            <div style="display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+                            <div class="stk-selects">
                                 <select id="inv-filter-location" class="form-control" style="width:auto; font-weight:500;" aria-label="inv filter location" title="inv filter location">
                                     <option value="all">Todas las Ubicaciones</option>
                                     <option value="Bodega Central">Bodega Central</option>
@@ -2371,7 +2371,8 @@
                 <div class="dashboard-container">
                     <div class="page-header mb-16">
                     <div class="page-title">
-                        <h1>Historial de Transacciones</h1>
+                        <h1>Historial</h1>
+                        <p>Todos los movimientos de stock: ingresos, salidas por acta, traspasos, ajustes y tomas, con su documento de respaldo.</p>
                     </div>
                 </div>
 
@@ -2386,16 +2387,14 @@
                             <input type="date" id="historial-date-filter" class="form-control" title="Filtrar por fecha" style="padding-left:12px; border:none; background:transparent;">
                             <button id="btn-clear-historial-date" class="btn text-danger" style="display:none; padding:0 12px; font-weight:bold; font-size:12px; border-left:1px solid var(--border-color); border-radius:0;" title="Borrar filtro y volver a Tiempo Real"><i class="ph ph-x"></i> LIMPIAR</button>
                         </div>
-                        <button class="btn btn-primary admin-only" id="btn-export-historial-excel"><i
+                        <button class="btn btn-outline admin-only" id="btn-export-historial-excel"><i
                                 class="ph ph-file-xls"></i> Excel</button>
-                        <button class="btn btn-outline admin-only" id="btn-export-historial-pdf"
-                            style="color:var(--danger); border-color:var(--danger);"><i class="ph ph-file-pdf"></i>
+                        <button class="btn btn-outline admin-only" id="btn-export-historial-pdf"><i class="ph ph-file-pdf"></i>
                             PDF</button>
                     </div>
                     <div class="registros-hoy">
                         <div class="rh-title">REGISTROS HOY</div>
                         <div class="rh-value">0</div>
-                        <div class="rh-trend"><i class="ph ph-trend-up"></i> 12% más que ayer</div>
                         <i class="ph ph-files rh-icon"></i>
                     </div>
                 </div>

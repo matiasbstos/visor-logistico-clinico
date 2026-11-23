@@ -18,7 +18,9 @@
   function barras(num) {
     // Juego C (pares de dígitos): el folio PI-2026-0001 se codifica como 20260001 (79 módulos, legible a 203 dpi)
     const d = String(num).replace(/\D/g, ''); const cods = [105]; let suma = 105;
-    for (let i = 0; i + 1 < d.length; i += 2) { const v = Number(d.slice(i, i + 2)); cods.push(v); suma += v * (i / 2 + 1); }
+    let pos = 0;
+    for (let i = 0; i + 1 < d.length; i += 2) { const v = Number(d.slice(i, i + 2)); cods.push(v); suma += v * ++pos; }
+    if (d.length % 2) { cods.push(100); suma += 100 * ++pos; const v = d.charCodeAt(d.length - 1) - 32; cods.push(v); suma += v * ++pos; }   /* v21.248: dígito impar (PI-2027-00123) → cambio a juego B; antes se perdía el último dígito */
     cods.push(suma % 103, 106);
     return cods.map(c => C128[c]).join('').split('').map(Number); /* [barra, espacio, barra, …] en módulos */
   }

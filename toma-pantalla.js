@@ -174,9 +174,13 @@
       const b = await B.leer(folio).catch(() => null); if (!b) { toast('Etiqueta', `${folio} no existe en el sistema.`, 'warning'); return; }
       const x = insumos.find(i => i.id === b.insumoId) || insumos.find(i => norm(i.name) === norm(b.nombre)); if (!x) { toast('Etiqueta', `La caja es de «${b.nombre}», que no está en ${toma.bodega}.`, 'warning'); return; }
       await refrescar(x.id); const p = ficha(x.id); if (p.conteos.some(c => c.folio === folio)) { toast('Ya contada', `${folio} ya está en el conteo.`, 'warning'); sel = x.id; pintar(); return; }
+      /* v21.248 (Howard A1): una caja grande y sus interiores no se cuentan dos veces */
+      const ya = new Set(p.conteos.map(c => c.folio).filter(Boolean)), hijos = Array.isArray(b.hijos) ? b.hijos : [];
+      if (b.padre && ya.has(b.padre)) { toast('Ya contada', `${folio} va dentro de ${b.padre}, que ya contaste completa.`, 'warning'); sel = x.id; pintar(); return; }
+      if (hijos.length && hijos.some(h => ya.has(h))) { toast('Caja grande', `Ya pistoleaste interiores de ${folio}: sigue con sus interiores y cuenta solo las unidades sueltas.`, 'warning'); sel = x.id; pintar(); return; }
       sel = x.id; loteSel = { clave: T().clave(b.lote, b.vence), lote: T().lote(b.lote), vence: b.vence || 'N/A', nuevo: !p.snap.batches.some(z => T().clave(z.batch, z.expirationDate) === T().clave(b.lote, b.vence)) };
       if (b.estado === 'CERRADA' && num(b.contenido) > 0) { await sumar(num(b.contenido), { folio }); toast('Caja contada', `${folio}: ${num(b.contenido)} u. del lote ${T().lote(b.lote)}.`, 'success'); return; }
-      pintar(); toast('Caja abierta', `${folio} está abierta: cuenta las unidades y súmalas.`, 'info'); return;
+      pintar(); toast('Caja abierta', hijos.length ? `${folio} está abierta: pistolea cada caja interior y suma aparte solo las unidades sueltas.` : `${folio} está abierta: cuenta las unidades y súmalas.`, 'info'); return;
     }
     const t = norm(txt), x = insumos.find(i => [i.codigoSAR, i.codigoMP, i.code, i.codigoBarras].some(c => c && norm(c) === t)) || insumos.find(i => norm(i.name) === t);
     if (x) elegir(x.id); else { q = txt; pintar(); }

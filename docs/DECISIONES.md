@@ -1740,3 +1740,10 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
    - El cierre de una toma desde la cola usa como `requester` a quien está conectado y guarda `contadoPor`.
    - **Las reglas las publica el usuario.**
 
+
+### 4.304 Correcciones de Howard (v21.248)
+1. **Toma: caja grande e interiores no se cuentan dos veces.**
+   - Si se pistolea una interior cuya caja grande ya se contó cerrada, no suma.
+   - Si se pistolea una caja grande después de haber pistoleado alguna de sus interiores, tampoco suma: se sigue por interiores y se cuentan aparte solo las unidades sueltas.
+   - Si la caja grande está abierta, el aviso pide pistolear cada interior.
+2. **Precinto PI: el código de barras ya no pierde el último dígito.** Con un número impar de dígitos (por ejemplo PI-2027-00123) se codifica en Code 128 C y el último dígito pasa al juego B (código 100). Verificado decodificando el código y su dígito de control.

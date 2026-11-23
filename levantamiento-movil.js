@@ -242,7 +242,8 @@
   // ---------------- abrir un tag ----------------
   async function abrirTag(fo, alternativas) {
     const b = bodega(); if (!b) { pendTag = fo; toast('Elige la bodega', 'Primero elige en qué bodega estás contando.', 'warning'); ir('p0'); return; }
-    pendTag = ''; const loc0 = cajas().find(c => c.folio === fo);
+    pendTag = ''; try { localStorage.setItem('lev-ayuda-vista', '1'); } catch (e) { /* sin almacenamiento */ }   /* ya empezó a contar: el manual no vuelve a aparecer solo */
+    const loc0 = cajas().find(c => c.folio === fo);
     if (!loc0) {
       let tf = await tipoFolio(fo);
       /* N° corto: si no existe en el año en curso, se prueba con el año anterior */

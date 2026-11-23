@@ -680,6 +680,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Validamos roles y aplicamos capa de Seguridad Visual
             await window.enforceRBACLogic(user);
+            if (document.body.getAttribute('data-user-role') === 'sin_acceso') return;   /* 4.306: sin rol no se abre nada más (las reglas lo negarían igual) */
             if (window.cargarSelectEnfermeros) window.cargarSelectEnfermeros();
 
             // ==========================================
@@ -7462,6 +7463,20 @@ document.addEventListener('DOMContentLoaded', () => {
     /* ----------------------------------------------------
        10. SEGURIDAD FRONTEND: Role-Based Access Control (RBAC)
        ---------------------------------------------------- */
+    /* 4.306: pantalla para una cuenta sin rol: no ve el sistema y se le indica a quién pedir acceso */
+    window.SAR_SinAcceso = function (userAuth) {
+        document.body.setAttribute('data-user-role', 'sin_acceso');
+        const roleDisplay = document.getElementById('ui-user-role-display'); if (roleDisplay) roleDisplay.textContent = 'SIN ACCESO';
+        if (document.getElementById('sar-sin-acceso')) return;
+        const d = document.createElement('div'); d.id = 'sar-sin-acceso'; d.className = 'sin-acceso'; d.setAttribute('role', 'alertdialog'); d.setAttribute('aria-labelledby', 'sin-acceso-t');
+        d.innerHTML = `<div class="sin-acceso__c"><img src="assets/logo-sar.png" alt="" class="sin-acceso__logo"><h1 id="sin-acceso-t">Pide acceso al encargado</h1>
+            <p>Tu cuenta <b></b> todavía no tiene un rol en el Visor. El encargado de bodega (superadministrador) te lo asigna en <b>Usuarios</b>; después vuelve a entrar.</p>
+            <button type="button" class="btn btn-primary" id="sin-acceso-salir"><i class="ph-bold ph-sign-out"></i> Salir</button></div>`;
+        d.querySelector('p b').textContent = (userAuth && userAuth.email) || '';
+        d.querySelector('#sin-acceso-salir').addEventListener('click', async () => { try { await signOut(auth); } catch (e) { /* ya sin sesión */ } window.location.reload(); });
+        document.body.appendChild(d);
+    };
+
     window.enforceRBACLogic = async function (userAuth) {
         if (!userAuth) {
             document.body.setAttribute('data-user-role', 'operador');
@@ -7502,8 +7517,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.body.setAttribute('data-user-role', 'superadmin');
                     console.info("RBAC: SUPERADMIN conectado. Nivel jerárquico máximo autorizado.");
                 } else {
-                    console.warn(`RBAC Warning: Rol '${userRole}' no reconocido. Aplicando fallback de operador.`);
-                    document.body.setAttribute('data-user-role', 'operador');
+                    /* 4.306: un rol vacío, «sin_acceso» o desconocido NO recibe «operador»: queda sin acceso hasta que el superadmin le asigne uno en Usuarios */
+                    console.warn(`RBAC: rol '${userRole}' sin acceso.`);
+                    window.SAR_SinAcceso(userAuth);
+                    return;
                 }
 
                 if (userRole === 'superadmin' || userRole === 'global' || userRole === 'admin' || userRole === 'administrador') {
@@ -7541,24 +7558,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             } else {
-                if (userAuth.email && (userAuth.email.startsWith('somesar.aera') || userAuth.email.includes('comunel.cl') || userAuth.email.includes('cormunel.cl'))) {
-                    console.info(`Asignando auto-rol SuperAdmin al propietario: ${userAuth.email}`);
-                    try {
-                        await setDoc(userDocRef, {
-                            nombre: userAuth.displayName || userAuth.email.split('@')[0],
-                            email: userAuth.email,
-                            rol: 'superadmin',
-                            fechaCreacion: serverTimestamp(),
-                            estado: 'activo'
-                        });
-                        window.location.reload();
-                        return;
-                    } catch (e) {
-                        console.error("No se pudo auto-asignar superadmin. Revisa reglas de firestore.", e);
-                    }
-                }
-                console.warn(`RBAC Warning: No existe documento para el usuario UID ${userAuth.uid}. Aplicando fallback de operador.`);
-                document.body.setAttribute('data-user-role', 'operador');
+                /* 4.306: sin perfil en Usuarios → sin acceso. Se quitó el superadmin automático por dominio de correo
+                   (las reglas ya no lo permiten desde v21.249): los roles los asigna el superadmin en Usuarios. */
+                console.warn(`RBAC: ${userAuth.email} no tiene perfil en Usuarios: sin acceso.`);
+                window.SAR_SinAcceso(userAuth);
             }
         } catch (error) {
             console.error("RBAC Bloqueo Seguro: Fallo al recuperar rol de usuario. Restringiendo UI.", error);

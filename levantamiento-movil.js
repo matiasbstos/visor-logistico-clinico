@@ -281,13 +281,28 @@
   function pintarP0(r, dr) {
     const b = bodega(), u = usuario(), l = delTurno(cajas(), u), pend = cajas().filter(c => c.estado === 'pend' && c.doc.contadoPor === u).length;
     const enCursoTag = dr.folio && ['p1', 'nuevo', 'p2', 'p3', 'p4'].includes(dr.vistaAntes);
-    r.innerHTML = `<div class="si-wrap lv"><div class="lv-cab"><span class="lv-cab-t"><small>Levantamiento · ${esc(nombreUsuario || u)}</small><b>Inicio del turno</b></span><button type="button" class="lv-btn lv-btn--sec lv-btn--chico" data-lv-salir>Salir</button></div>
+    r.innerHTML = `<div class="si-wrap lv"><div class="lv-cab"><span class="lv-cab-t"><small>Levantamiento · ${esc(nombreUsuario || u)}</small><b>Inicio del turno</b></span><button type="button" class="lv-btn lv-btn--sec lv-btn--chico" data-lv-ir="ayuda">¿Cómo se cuenta?</button><button type="button" class="lv-btn lv-btn--sec lv-btn--chico" data-lv-salir>Salir</button></div>
       <label class="si-l">Bodega donde cuentas<select id="lv-bod" class="si-in lv-in"><option value="">Elige la bodega…</option>${(bodegas || []).map(x => `<option value="${esc(x.id)}"${b && b.id === x.id ? ' selected' : ''}>${esc(x.name)}</option>`).join('')}</select></label>
       ${enCursoTag ? `<button type="button" class="lv-btn lv-btn--sec" data-lv-seguir>Seguir con el tag N° ${esc(numTag(dr.folio))}</button>` : ''}
       <button type="button" class="lv-btn lv-btn--grande" data-lv-cam${b ? '' : ' disabled'}><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8V5a1 1 0 0 1 1-1h3M16 4h3a1 1 0 0 1 1 1v3M20 16v3a1 1 0 0 1-1 1h-3M8 20H5a1 1 0 0 1-1-1v-3M7 12h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>ESCANEAR TAG</button>
       <form class="lv-fila" data-lv-num><input id="lv-num" class="si-in lv-in" inputmode="numeric" placeholder="o escribe el N° del tag" value="${esc(pendTag ? numTag(pendTag) : '')}" autocomplete="off" aria-label="Número del tag"><button type="submit" class="lv-btn"${b ? '' : ' disabled'}>Abrir</button></form>
       <div class="lv-hoy"><span>Contadas en el turno: <b>${l.length}</b>${pend ? ` · <b class="lv-pend">${pend}</b> por enviar` : ''}</span><button type="button" class="lv-lnk" data-lv-ir="resumen">Ver resumen</button></div>
       <button type="button" class="lv-btn lv-btn--sec" data-lv-prep>Preparar sin internet</button><p class="lv-s">${(() => { const c = ls.get(K_INS); return c && c.al ? `Productos guardados en el teléfono: ${(c.l || []).length} (al ${esc(hora(c.al))}).` : 'Antes de ir a una bodega sin señal, toca «Preparar sin internet» con conexión.'; })()}</p></div>`;
+  }
+  const vistaAyuda = () => { try { return localStorage.getItem('lev-ayuda-vista') === '1'; } catch (e) { return true; } };
+  /** Mini manual para el contador (v21.250): se muestra la primera vez y desde «¿Cómo se cuenta?». */
+  function pintarAyuda(r) {
+    const S = (t, c) => `<details class="lv-card lv-ay"${t.abierto ? ' open' : ''}><summary><b>${t.n}</b> ${t.t}</summary>${c}</details>`;
+    r.innerHTML = `<div class="si-wrap lv"><div class="lv-cab"><span class="lv-cab-t"><small>Conteo e ingreso</small><b>¿Cómo se cuenta?</b></span><button type="button" class="lv-btn lv-btn--sec lv-btn--chico" data-lv-ir="p0">Volver</button></div>
+      <p class="lv-s">Cuentas lo que hay en la bodega, <b>caja por caja</b>. Nada entra al stock hasta que bodega lo revise y lo acepte en el PC.</p>
+      ${S({ n: '1', t: 'Antes de salir', abierto: true }, `<ul class="lv-ay-l"><li>Entra con <b>tu correo y tu clave</b>: cada caja queda a tu nombre.</li><li>Elige la <b>bodega</b> donde vas a contar.</li><li>Si allá no hay señal, toca <b>Preparar sin internet</b> aquí, con conexión.</li><li>Lleva tus <b>tags «CONTADO»</b> (ya traen número y QR) y un <b>bolígrafo</b> (no plumón).</li></ul>`)}
+      ${S({ n: '2', t: 'Cada caja, paso a paso' }, `<ol class="lv-ay-l"><li><b>Pega un tag</b> en la caja, en una cara que se vea.</li><li>Toca <b>ESCANEAR TAG</b> y apunta al QR (o escribe el número).</li><li>Busca el <b>producto</b> y mira la <b>foto</b>: confirma que es el mismo (medida, estéril o no, mg/ml).</li><li>Elige el <b>lote</b> de la lista, o <b>+ Otro lote</b> si no aparece. El vencimiento se marca con los botones de mes y año.</li><li>Responde las <b>preguntas de la caja</b> (abajo, punto 4).</li><li>Revisa el <b>total en UNIDADES</b> y toca <b>GUARDAR</b>.</li><li>Cuando diga que llegó, <b>anota en el tag</b> lo que te indica la pantalla. Si dice «NO escribas todavía», pega el tag sin anotar y espera la confirmación.</li></ol>`)}
+      ${S({ n: '3', t: 'Cómo llenar el tag' }, `<ul class="lv-ay-l"><li><b>Insumo</b>: el nombre como aparece en la pantalla.</li><li><b>Lote / Vence</b>: los de la caja (mes/año). Si no trae lote, escribe <b>S/L</b>.</li><li><b>Total</b>: las <b>unidades</b> de la caja (no la cantidad de cajas).</li><li>Marca <b>Sin subdivisión</b>, o escribe <b>___ cajas × ___ u.</b> si trae cajas chicas, o <b>Granel</b> si son unidades sueltas.</li><li>Marca <b>ABIERTA</b> si la caja está abierta.</li><li><b>Contó</b>: tus iniciales. <b>Fecha</b>: la de hoy.</li><li>En cajas grandes, el tag va en una cara; las etiquetas definitivas (dos caras) llegan después desde bodega.</li></ul>`)}
+      ${S({ n: '4', t: 'Las variables del conteo' }, `<ul class="lv-ay-l"><li><b>Caja cerrada sin cajas chicas</b>: cuántas unidades trae (lo dice la caja).</li><li><b>Caja cerrada con cajas chicas</b>: cuántas cajas chicas y cuánto trae cada una. Ej.: 10 × 50 = 500 u.</li><li><b>Caja abierta con cajas chicas</b>: cuántas chicas <b>cerradas</b>, cuánto trae cada una y, por cada chica <b>abierta</b>, cuántas unidades quedan. Ej.: 9 × 50 + 1 abierta con 30 = <b>480 u.</b></li><li><b>Unidades sueltas (granel)</b>: cuéntalas de a 10 con los botones +10 / +50.</li><li><b>Sin lote</b>: si la caja tiene vencimiento pero no lote, usa «Sin lote» (igual pide mes y año). «Sin lote ni vencimiento» solo si no trae ninguno.</li><li><b>Vencido</b>: si sale «VENCIDO», cuéntalo igual y <b>sepáralo</b>.</li><li><b>Controlados</b>: se cuentan sin ver lo que dice el sistema; bodega pide un segundo conteo.</li></ul>`)}
+      ${S({ n: '5', t: 'Mientras cuentas' }, `<ul class="lv-ay-l"><li>Arriba ves por lote: <b>Sistema</b> · <b>contado</b> · <b>faltan / sobran</b>. No cuentes «hasta que cuadre»: cuenta lo que hay.</li><li>Otra caja del mismo producto y lote: <b>MISMO PRODUCTO Y LOTE</b> (3 toques).</li><li>El mismo producto con otro lote: <b>Mismo producto, otro lote</b>.</li><li>Un tag por caja. Si un tag ya se usó, la pantalla te lo dice: no lo repitas.</li><li>Si bodega pide <b>recontar</b>, aparece en <b>Ver resumen</b>: abre esa caja y corrige.</li></ul>`)}
+      ${S({ n: '6', t: 'Al terminar el turno' }, `<ul class="lv-ay-l"><li>Abre <b>Ver resumen</b>: revisa que no queden cajas <b>por enviar</b>.</li><li>Si quedan, conéctate a internet y espera a que se envíen antes de cerrar sesión.</li><li>Las cajas «para revisar»: sepáralas y avisa a bodega.</li></ul>`)}
+      <button type="button" class="lv-btn lv-btn--grande" data-lv-ir="p0">Entendido: empezar</button></div>`;
+    r.querySelectorAll('[data-lv-ir="p0"]').forEach(b => b.addEventListener('click', () => { try { localStorage.setItem('lev-ayuda-vista', '1'); } catch (e) { /* sin almacenamiento */ } }));   /* vista: solo al cerrarla, no al pintarla */
   }
   function pintarUsado(r, dr) {
     const d = dr.usado || {}, mio = d.contadoPor && d.contadoPor === usuario(), puede = mio && ['REGISTRADO', 'RECONTEO'].includes(d.estado);
@@ -398,7 +413,7 @@
     const dr = bor();
     if (pendTag && bodega()) { const t = pendTag; pendTag = ''; abrirTag(t); return; }
     if (!dr.folio && dr.vista !== 'p0' && dr.vista !== 'resumen') dr.vista = 'p0';
-    ({ p0: pintarP0, usado: pintarUsado, p1: pintarP1, nuevo: pintarNuevo, p2: pintarP2, p3: pintarP3, p4: pintarP4, p5: pintarP5, resumen: pintarResumen }[dr.vista] || pintarP0)(r, dr);
+    ({ p0: pintarP0, ayuda: pintarAyuda, usado: pintarUsado, p1: pintarP1, nuevo: pintarNuevo, p2: pintarP2, p3: pintarP3, p4: pintarP4, p5: pintarP5, resumen: pintarResumen }[(!vistaAyuda() && !pendTag && (!dr.vista || dr.vista === 'p0')) ? 'ayuda' : (dr.vista || 'p0')] || pintarP0)(r, dr);
   }
 
   // ---------------- acciones ----------------
@@ -544,7 +559,9 @@
       if (b) ls.set(K_BOD, b); else ls.del(K_BOD); cargarConteos(b).catch(() => {}); repintar(); if (b && pendTag) abrirTag(pendTag);
     });
   }
-  function leerHash() { const m = /[#&](?:tag|t)=([^&]+)/.exec(location.hash || ''); if (!m) return; let v = ''; try { v = decodeURIComponent(m[1]); } catch (e) { v = m[1]; } const fo = folioTag(v); if (fo) { pendTag = fo; mostrar = true; try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* nada */ } } }
+  /** Enlace propio «Conteo e ingreso» (solicitar.html?modo=contar o #contar): abre directo el conteo. */
+  const esEnlaceConteo = () => { try { return /(?:^|[?&])modo=contar\b/.test(location.search || '') || /^#contar\b/.test(location.hash || ''); } catch (e) { return false; } };
+  function leerHash() { if (esEnlaceConteo()) mostrar = true; const m = /[#&](?:tag|t)=([^&]+)/.exec(location.hash || ''); if (!m) return; let v = ''; try { v = decodeURIComponent(m[1]); } catch (e) { v = m[1]; } const fo = folioTag(v); if (fo) { pendTag = fo; mostrar = true; try { history.replaceState(null, '', location.pathname + location.search); } catch (e) { /* nada */ } } }
 
   if (typeof document.addEventListener === 'function' && typeof window.addEventListener === 'function' && typeof location !== 'undefined') {
     leerHash();

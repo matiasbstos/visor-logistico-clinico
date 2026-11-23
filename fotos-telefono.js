@@ -181,6 +181,7 @@
     const ENLACES = () => [
         { t: 'Visor Logístico', d: 'El sistema completo, para el computador.', url: new URL('./', window.location.href).href.replace(/#.*$/, ''), ico: 'assets/icon-192.png' },
         { t: 'Pedir insumos', d: 'Para que los servicios pidan insumos desde el teléfono.', url: new URL('solicitar.html', window.location.href).href, ico: 'assets/icon-pedidos-192.png' },
+        { t: 'Conteo e ingreso', d: 'Para los contadores: levantamiento caja por caja con tag «CONTADO» (rol contador).', url: new URL('solicitar.html?modo=contar', window.location.href).href, ico: 'assets/icon-conteo-192.png' },
         { t: 'Fotos SAR', d: 'Para sacar y cambiar fotos de productos y cajas (solo superadministrador).', url: URL_FOTOS(), ico: 'assets/icon-fotos-192.png' }];
     async function abrirVista(root) {
         if (!root) return;

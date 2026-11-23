@@ -143,19 +143,62 @@
     items = []; s.forEach(x => { const d = x.data(); if (num(d.quantity) > 0) items.push({ id: x.id, d }); });
     items.sort((a, b) => String(a.d.name).localeCompare(String(b.d.name), 'es'));
   }
+  /* 4.306: lo marcado (a mano o con la pistola) sobrevive a cada repintado (filtro, pistola) */
+  function guardarMarcas(el) {
+    const m = new Map(); el.querySelectorAll('tr[data-id]').forEach(tr => { const c = tr.querySelector('.tb-chk'); m.set(tr.dataset.id, { chk: !!(c && c.checked), lotes: [...tr.querySelectorAll('.tb-cant')].map(x => [x.dataset.clave, x.value]) }); });
+    return m;
+  }
+  function ponerMarcas(el, m) {
+    el.querySelectorAll('tr[data-id]').forEach(tr => { const g = m.get(tr.dataset.id); if (!g) return; const c = tr.querySelector('.tb-chk'); if (c && !c.disabled) c.checked = g.chk; g.lotes.forEach(([k, v]) => { const x = [...tr.querySelectorAll('.tb-cant')].find(z => z.dataset.clave === k); if (x) x.value = v; }); });
+  }
   function pintar() {
     const el = root(); if (!el) return;
+    const marcas = guardarMarcas(el);
     const desde = (document.getElementById('tb-desde') || {}).value || '', hasta = (document.getElementById('tb-hasta') || {}).value || '';
     const op = (sel) => `<option value="">Seleccione…</option>` + bodegas.map(b => `<option value="${esc(b)}"${b === sel ? ' selected' : ''}>${esc(b)}</option>`).join('');
     const filtro = norm((document.getElementById('tb-buscar') || {}).value || '');
     const vis = items.filter(i => !filtro || norm(i.d.name).includes(filtro) || String(i.d.codigoMP || '').includes(filtro));
     el.innerHTML = `<div class="tb-fila"><label>Bodega de origen<select id="tb-desde" class="form-control">${op(desde)}</select></label><span class="tb-flecha" aria-hidden="true"><i class="ph-bold ph-arrow-right"></i></span><label>Bodega de destino<select id="tb-hasta" class="form-control">${op(hasta)}</select></label></div>
-      ${desde ? `<div class="tb-barra"><input type="search" id="tb-buscar" class="form-control" placeholder="Buscar producto o ID Mercado Público…" value="${esc((document.getElementById('tb-buscar') || {}).value || '')}"><button type="button" class="btn btn-outline btn-sm" id="tb-todo">Marcar todo lo visible</button></div>
+      ${desde ? `<div class="tb-barra"><span class="scan-input-group tb-pistola"><i class="ph ph-barcode" aria-hidden="true"></i><input type="text" id="tb-pistola" autocomplete="off" placeholder="Pistolea una etiqueta BUL o el código del producto" aria-label="Pistola: etiqueta BUL o código del producto"></span><input type="search" id="tb-buscar" class="form-control" placeholder="Buscar producto o ID Mercado Público…" value="${esc((document.getElementById('tb-buscar') || {}).value || '')}"><button type="button" class="btn btn-outline btn-sm" id="tb-todo">Marcar todo lo visible</button></div>
       <div class="tb-tabla-w"><table class="bit-tabla"><thead><tr><th scope="col"></th><th scope="col">Producto</th><th scope="col">Stock</th><th scope="col">Cantidad a mover</th></tr></thead><tbody>${vis.length ? vis.map(i => { const cu = i.d.status === 'CUARENTENA', lt = lotesDe(i.d).filter(b => num(b.quantity) > 0).sort(window.fefoCompare || (() => 0)), uno = lt.length <= 1; const inputs = lt.map(b => `<label class="tb-lote"><span>${uno ? '' : 'Lote ' + esc(b.batch || 'S/L') + (b.expirationDate ? ' · ' + esc(b.expirationDate) : '') + ' (' + num(b.quantity) + ')'}</span><input type="number" class="tb-cant form-control" data-clave="${esc(claveL(b))}" min="0" max="${num(b.quantity)}" value="${uno ? num(b.quantity) : 0}"${cu ? ' disabled' : ''} aria-label="Cantidad ${esc(i.d.name)}"></label>`).join(''); return `<tr data-id="${esc(i.id)}"><td><input type="checkbox" class="tb-chk" aria-label="Mover ${esc(i.d.name)}"${cu ? ' disabled' : ''}></td><td><b>${esc(i.d.name)}</b>${cu ? ' <i class="mf-chip mf-warn">Cuarentena</i>' : ''}${uno ? '' : '<br><small class="act-hint">Tiene ' + lt.length + ' lotes: indica cuánto mover de cada uno.</small>'}</td><td>${num(i.d.quantity)}</td><td class="tb-lotes-in">${inputs || '—'}</td></tr>`; }).join('') : '<tr><td colspan="4">No hay productos con stock en esta bodega.</td></tr>'}</tbody></table></div>
       <label class="tb-nota">Nota (opcional)<input type="text" id="tb-nota" class="form-control" maxlength="120" placeholder="Ej: reposición de la bodega de turno"></label>
       <div class="tb-acc"><span id="tb-resumen" class="act-hint"></span><button type="button" class="btn btn-primary" id="tb-ir">Mover seleccionados</button></div><div id="tb-res"></div>` : '<p class="act-hint">Elige la bodega de origen para ver sus productos.</p>'}`;
     const resumen = () => { const n = el.querySelectorAll('.tb-chk:checked').length; const r = document.getElementById('tb-resumen'); if (r) r.textContent = n ? `${n} producto(s) seleccionado(s)` : 'Ningún producto seleccionado'; };
+    ponerMarcas(el, marcas);
+    const pi = document.getElementById('tb-pistola'); if (pi && window.SAR_Pistola) window.SAR_Pistola.conectar(pi, pistola);
     resumen(); el.addEventListener('change', (e) => { if (e.target.classList && e.target.classList.contains('tb-chk')) resumen(); }, { once: false });
+  }
+  /** 4.306: pistola en Transferencias. BUL → su producto y su lote, con el contenido de la caja; código de producto → lo marca. */
+  const cajasLeidas = new Map();   /* id del insumo → folios BUL ya leídos en esta transferencia */
+  async function pistola(txt) {
+    const P = window.SAR_Pistola, t = window.showToast || (() => {}), el = root(); if (!P || !el) return;
+    const pi = document.getElementById('tb-pistola'); if (pi) pi.value = '';
+    const desde = (document.getElementById('tb-desde') || {}).value || '';
+    let r; try { r = await P.interpretar(txt, items.map(i => ({ id: i.id, ...i.d }))); } catch (e) { t('Pistola', 'No pude leer el código: ' + ((e && e.message) || e), 'error'); return; }
+    if (r.tipo === 'tag') { t('Tag CONTADO', window.SAR_Bultos && window.SAR_Bultos.avisoTag ? window.SAR_Bultos.avisoTag(r.folio) : `${r.folio} es un tag de conteo, no una caja.`, 'warning'); return; }
+    if (r.tipo === 'nada') { t('Sin coincidencia', r.folio ? `${r.folio} no existe en el sistema.` : `«${String(r.texto).slice(0, 40)}» no es un producto de ${desde}.`, 'warning'); return; }
+    const b = r.bulto, it = r.tipo === 'bulto' ? (items.find(i => i.id === b.insumoId) || items.find(i => norm(i.d.name) === norm(b.nombre))) : items.find(i => i.id === r.insumo.id);
+    if (!it) { t('No está en el origen', `${r.tipo === 'bulto' ? `La caja ${r.folio} es de «${b.nombre}»` : `«${r.insumo.name}»`}, que no tiene stock en ${desde}.`, 'warning'); return; }
+    const bus = document.getElementById('tb-buscar'); if (bus && bus.value) { bus.value = ''; pintar(); }   /* que la fila se vea */
+    const tr = [...el.querySelectorAll('tr[data-id]')].find(x => x.dataset.id === it.id); if (!tr) return;
+    const chk = tr.querySelector('.tb-chk'); if (!chk || chk.disabled) { t('Cuarentena', `«${it.d.name}» está en cuarentena: no se puede mover.`, 'warning'); return; }
+    const cants = [...tr.querySelectorAll('.tb-cant')];
+    if (r.tipo === 'bulto') {
+      const lote = lotesDe(it.d).find(z => String(z.batch || 'S/L').toUpperCase() === String(b.lote || 'S/L').toUpperCase() && (!b.vence || !z.expirationDate || String(z.expirationDate).slice(0, 7) === String(b.vence).slice(0, 7))) || lotesDe(it.d).find(z => String(z.batch || 'S/L').toUpperCase() === String(b.lote || 'S/L').toUpperCase());
+      const inp = lote && cants.find(c => c.dataset.clave === claveL(lote));
+      if (!inp) { t('Lote no encontrado', `La caja ${r.folio} es del lote ${b.lote || 'S/L'}, que no está en ${desde}.`, 'warning'); return; }
+      const yaUsadas = [...(cajasLeidas.get(it.id) || [])]; if (yaUsadas.includes(r.folio)) { t('Ya leída', `${r.folio} ya está en la lista.`, 'warning'); return; }
+      /* la primera caja reemplaza lo que trae la fila por defecto (todo el stock o 0); las siguientes suman */
+      const base = yaUsadas.length || chk.checked ? num(inp.value) : 0;
+      if (!yaUsadas.length && !chk.checked) cants.forEach(c => { if (c !== inp) c.value = 0; });
+      inp.value = Math.min(num(inp.max), base + num(b.contenido)); cajasLeidas.set(it.id, new Set([...yaUsadas, r.folio]));
+      chk.checked = true; chk.dispatchEvent(new Event('change', { bubbles: true }));
+      t('Caja agregada', `${r.folio}: ${it.d.name} · lote ${b.lote || 'S/L'} · ${num(b.contenido)} u.`, 'success');
+    } else {
+      chk.checked = true; chk.dispatchEvent(new Event('change', { bubbles: true }));
+      t('Producto agregado', `${it.d.name}${cants.length > 1 ? ': indica cuánto mover de cada lote.' : ''}`, 'success');
+    }
+    tr.scrollIntoView({ block: 'nearest' }); const p2 = document.getElementById('tb-pistola'); if (p2) p2.focus();
   }
   async function ir() {
     const el = root(), desde = document.getElementById('tb-desde').value, hasta = document.getElementById('tb-hasta').value, nota = (document.getElementById('tb-nota').value || '').trim();
@@ -181,19 +224,19 @@
     out.innerHTML = `<div class="tb-res">${ok.length ? `<p class="tb-ok"><b>${ok.length} movido(s):</b> ${ok.map(s => `${esc(s.name)} (${s.qty})`).join(', ')}.</p>` : ''}${mal2.length ? `<p class="tb-mal"><b>No se movieron ${mal2.length}:</b> ${mal2.map(s => `${esc(s.name)} — ${esc(s.err)}`).join('; ')}.</p>` : ''}</div>`;
     if (prog) { if (mal2.length && !ok.length) prog.error('No se pudo mover'); else prog.listo(`${ok.length} producto(s) movido(s) a ${hasta}`, { aviso: false }); }
     btn.disabled = false;
-    if (!mal2.length) { ['tb-desde', 'tb-hasta', 'tb-nota', 'tb-buscar'].forEach(id => { const x = document.getElementById(id); if (x) x.value = ''; }); items = []; }   // todo movido: la pantalla queda en blanco, lista para otra transferencia
+    if (!mal2.length) { ['tb-desde', 'tb-hasta', 'tb-nota', 'tb-buscar'].forEach(id => { const x = document.getElementById(id); if (x) x.value = ''; }); items = []; cajasLeidas.clear(); }   // todo movido: la pantalla queda en blanco, lista para otra transferencia
     else await cargarItems(desde);
     pintar(); const o2 = document.getElementById('tb-res'); if (o2) o2.innerHTML = out.innerHTML;
     if (mal2.length) t('Transferencia', `${mal2.length} producto(s) no se pudieron mover; revisa el detalle.`, 'warning');
   }
-  function limpiar() { items = []; const el = root(); if (el) el.innerHTML = ''; }
+  function limpiar() { cajasLeidas.clear(); items = []; const el = root(); if (el) el.innerHTML = ''; }
   async function abrir() {
     const el = root(); if (!el) return; limpiar();
     try { await cargarBodegas(); pintar(); } catch (e) { el.innerHTML = '<p class="cierre-error">No se pudieron leer las bodegas. Revisa tu conexión.</p>'; }
   }
   function iniciar() {
     const el = root(); if (!el || el.dataset.ok) return; el.dataset.ok = '1';
-    el.addEventListener('change', async (e) => { if (e.target.id === 'tb-desde') { await cargarItems(e.target.value).catch((er) => { items = []; if (window.showToast) window.showToast('No pude leer el stock', 'La bodega puede tener productos aunque la lista salga vacía: ' + ((er && er.message) || er) + '. Vuelve a elegirla o recarga.', 'error'); });   /* v21.228: antes se callaba y parecía «sin stock» */ pintar(); } else if (e.target.id === 'tb-hasta') { const h = e.target.value; pintar(); const s = document.getElementById('tb-hasta'); if (s) s.value = h; } });
+    el.addEventListener('change', async (e) => { if (e.target.id === 'tb-desde') { cajasLeidas.clear(); await cargarItems(e.target.value).catch((er) => { items = []; if (window.showToast) window.showToast('No pude leer el stock', 'La bodega puede tener productos aunque la lista salga vacía: ' + ((er && er.message) || er) + '. Vuelve a elegirla o recarga.', 'error'); });   /* v21.228: antes se callaba y parecía «sin stock» */ pintar(); } else if (e.target.id === 'tb-hasta') { const h = e.target.value; pintar(); const s = document.getElementById('tb-hasta'); if (s) s.value = h; } });
     el.addEventListener('input', (e) => { if (e.target.id === 'tb-buscar') { const v = e.target.value; pintar(); const b = document.getElementById('tb-buscar'); if (b) { b.value = v; b.focus(); b.setSelectionRange(v.length, v.length); } } });
     el.addEventListener('click', (e) => { if (e.target.closest('#tb-ir')) ir(); if (e.target.closest('#tb-todo')) el.querySelectorAll('.tb-chk:not(:disabled)').forEach(c => { c.checked = true; c.dispatchEvent(new Event('change', { bubbles: true })); }); });
     window.addEventListener('hashchange', () => { if (window.location.hash !== '#view-transferencias') limpiar(); });

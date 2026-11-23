@@ -65,6 +65,7 @@ const urlsToCache = [
   './tabla-columnas.js?v=21.250',
   './acerca.js?v=21.250',
   './memo-flujo.js?v=21.250',
+  './pistola.js?v=21.250',
   './traspaso-bodegas.js?v=21.250',
   './distribucion-centros.js?v=21.250',
   './primeros-pasos.js?v=21.250',

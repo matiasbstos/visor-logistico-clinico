@@ -1594,41 +1594,32 @@
                 <div class="dashboard-container">
                     <div class="page-header">
                         <div class="page-title">
-                            <h1>Registro de Ingresos</h1>
-                            <p>Recepción de suministros de proveedores e ingreso manual al sistema.</p>
+                            <h1>Ingresos</h1>
+                            <p>Registro de ingresos: recepción de suministros de proveedores e ingreso manual al sistema (el historial completo está en el menú «Historial»).</p>
                         </div>
                         <div style="display:flex; gap:12px; align-items:center;">
                             <button class="btn btn-outline" id="btn-download-template"
                                 title="Descargar Planilla Oficial SAR">
                                 <i class="ph ph-file-arrow-down"></i> Descargar Plantilla
                             </button>
-                            <button class="btn btn-primary" id="btn-trigger-upload">
-                                <i class="ph ph-file-arrow-up"></i> Carga Masiva (Excel)
+                            <button class="btn btn-outline" id="btn-trigger-upload">
+                                <i class="ph ph-file-arrow-up"></i> Carga masiva (Excel)
                             </button>
                         </div>
-                    </div>
-
-                    <!-- Pestañas de Navegación Superiores -->
-                    <div style="display: flex; gap: 15px; margin-bottom: 25px; border-bottom: 2px solid #e9ecef; padding-bottom: 15px; flex-wrap: wrap;">
-                        <button id="tab-ingreso-registro" class="btn btn-primary" style="font-weight: 500; font-size: 1.05em; padding: 10px 25px;">
-                            <i class="ph ph-plus-circle" style="font-size: 1.2em; vertical-align: middle; margin-right: 8px;"></i> Nuevo Registro
-                        </button>
-                        <button id="tab-ingreso-historial" class="btn btn-outline" style="border-color: var(--primary); color: var(--primary); font-weight: 500; font-size: 1.05em; padding: 10px 25px;" onclick="document.querySelector('.menu-item[data-target=\'view-historial\']').click();">
-                            <i class="ph ph-list-dashes" style="font-size: 1.2em; vertical-align: middle; margin-right: 8px;"></i> Historial Completo
-                        </button>
                     </div>
 
                     <div class="card form-card mb-24">
                         <div class="ingreso-scanners-grid">
                             <div class="barcode-scanner-box">
-                                <label class="section-label text-primary">ESCANEO RÁPIDO (PISTOLA)</label>
+                                <label class="section-label text-primary" for="ingreso-pistola">ESCANEO RÁPIDO (PISTOLA)</label>
                                 <div class="scan-input-group">
                                     <i class="ph ph-barcode"></i>
-                                    <input type="text" placeholder="Escanee el código de barras del producto..." aria-label="Escanee el código de barras del producto..." title="Escanee el código de barras del producto...">
-                                    <span class="badge-gray">AUTO-DETECCIÓN</span>
+                                    <input type="text" id="ingreso-pistola" autocomplete="off" placeholder="Pistolea el código del producto…" aria-label="Pistola: código del producto" title="Lee el código SAR, el ID Mercado Público o el código de barras del producto">
+                                    <span class="badge-gray">PISTOLA</span>
                                 </div>
+                                <small class="text-muted" style="font-size:12px;">Busca por código SAR, ID Mercado Público o código de barras y selecciona el producto abajo.</small>
                             </div>
-                            <div id="banner-trigger-triaje" class="smart-scanner-box" title="Abrir Escáner Inteligente de Triaje">
+                            <div id="banner-trigger-triaje" class="smart-scanner-box erp-card" title="Abrir Escáner Inteligente de Triaje">
                                 <div class="smart-scanner-info">
                                     <div class="smart-scanner-icon">
                                         <i class="ph-bold ph-scan"></i>
@@ -1638,8 +1629,8 @@
                                         <div class="smart-scanner-sub">Foto de etiqueta médica, detección Lote, Vto, Fabr. y control de caja</div>
                                     </div>
                                 </div>
-                                <button type="button" class="btn btn-primary btn-scan-box-action">
-                                    Escanear Caja <i class="ph-bold ph-arrow-right"></i>
+                                <button type="button" class="btn btn-outline btn-scan-box-action">
+                                    Escanear caja <i class="ph-bold ph-arrow-right"></i>
                                 </button>
                             </div>
                         </div>
@@ -2651,11 +2642,15 @@
 
             <!-- VIEW: Transferencias -->
             <section id="view-transferencias" class="view-section" style="display: none;">
-                <div class="view-header" style="padding: 20px; border-bottom: 1px solid #ddd;">
-                    <h2>Transferencias entre bodegas</h2>
-                    <p class="act-hint" style="margin:4px 0 0;">Mueve varios productos de una bodega a otra en un solo paso. Se conservan lote y vencimiento y queda registro en el historial.</p>
+                <div class="dashboard-container">
+                    <div class="page-header mb-16">
+                        <div class="page-title">
+                            <h1>Transferencias</h1>
+                            <p>Transferencias entre bodegas: mueve varios productos en un solo paso (también con la pistola). Se conservan lote y vencimiento y queda registro en el historial.</p>
+                        </div>
+                    </div>
+                    <div id="tb-root" class="tb-root"></div>
                 </div>
-                <div id="tb-root" class="tb-root" style="padding: 20px;"></div>
             </section>
 
             <!-- VIEW: Bodegas -->
@@ -6025,6 +6020,7 @@
     <script src="tabla-columnas.js?v=21.250"></script>
     <script src="acerca.js?v=21.250"></script>
     <script src="memo-flujo.js?v=21.250"></script>
+    <script src="pistola.js?v=21.250"></script>
     <script src="traspaso-bodegas.js?v=21.250"></script>
     <script src="distribucion-centros.js?v=21.250"></script>
     <script src="primeros-pasos.js?v=21.250"></script>

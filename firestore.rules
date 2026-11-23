@@ -51,6 +51,12 @@ service cloud.firestore {
       return getUserRole() in ['transitoria', 'TRANSITORIA'];
     }
 
+    // Rol «contador» (v21.249, levantamiento con teléfono): solo lee Insumos y Bodegas y registra SUS Conteos_Cajas.
+    // Queda FUERA de hasRole(): hasRole() da escritura en Historial, Bandejas, Metadata y otras colecciones.
+    function isContador() {
+      return getUserRole() is string && getUserRole().lower().trim() == 'contador';
+    }
+
     function isOwner(userId) {
       // Comparación relajada para asegurar lectura propia
       return isAuthenticated() && (request.auth.uid == userId || request.auth.token.email == userId);
@@ -59,7 +65,7 @@ service cloud.firestore {
     // Usuario autenticado que además tiene un rol asignado en /Usuarios.
     // Una cuenta recién registrada, sin perfil, queda como 'sin_acceso'.
     function hasRole() {
-      return isAuthenticated() && getUserRole() != 'sin_acceso';
+      return isAuthenticated() && getUserRole() != 'sin_acceso' && !isContador();
     }
 
     // Correo institucional REAL: dominio anclado tras la arroba y correo verificado.
@@ -78,9 +84,10 @@ service cloud.firestore {
       allow read: if isOperadorOrAdmin() || isOwner(userId);
       // CREACIÓN: admin, operador (solo enfermeros) o el propio titular con correo
       // institucional verificado que crea SU perfil inicial de superadmin (arranque).
+      // v21.249 (Decker): se cerró el arranque «el titular con correo institucional se crea superadmin».
+      // Los perfiles y roles los crea el administrador en Usuarios.
       allow create: if isAdmin()
-        || (getUserRole() == 'operador' && request.resource.data.rol == 'enfermero')
-        || (isOwner(userId) && isInstitutionalEmail() && request.resource.data.rol == 'superadmin');
+        || (getUserRole() == 'operador' && request.resource.data.rol == 'enfermero');
       // ACTUALIZACIÓN: Un usuario regular NO puede modificar su propio campo 'rol' o 'role'
       allow update: if isAdmin() || (isOwner(userId) && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['rol', 'role'])));
       allow delete: if isAdmin();
@@ -90,7 +97,7 @@ service cloud.firestore {
     // GESTIÓN DE BODEGAS (Sucursales)
     // -----------------------------------------------------
     match /Bodegas/{bodegaId} {
-      allow read: if hasRole();
+      allow read: if hasRole() || isContador();
       allow write: if isAdmin();
     }
 
@@ -111,7 +118,7 @@ service cloud.firestore {
     // CIBERSEGURIDAD: Reglas de la Colección 'Insumos'
     // -----------------------------------------------------
     match /Insumos/{insumoId} {
-      allow read: if hasRole();
+      allow read: if hasRole() || isContador();
       allow create: if isOperadorOrAdmin();
       allow update: if isOperadorOrAdmin()
         || (isTransitoria() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ubicacionEstante', 'updatedAt']));
@@ -318,6 +325,9 @@ service cloud.firestore {
     match /Contadores/{id} {
       allow read: if isStaff() || (isTransitoria() && id.matches('transitoria-.*'))
         || (request.auth != null && id.matches('correlativo-solicitudes-[0-9]{4}'));
+      // v21.249: el contador valida el tag que escanea (¿es un tag «CONTADO» o la etiqueta de una caja?) y guarda la lista de tags para usarla sin internet
+      allow get: if isContador() && id.matches('bulto-BUL-[0-9]{4}-[0-9]{6}');
+      allow list: if isContador() && resource.data.tipo == 'tag-conteo';
       allow create, update: if isStaff();
       // N° SOL al enviar desde «Pedir insumos» (v21.219): el contador sube de a 1 y solo junto con la solicitud que lleva ese número
       allow create: if request.auth != null && id.matches('correlativo-solicitudes-[0-9]{4}')
@@ -327,6 +337,94 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['valor', 'actualizado', 'ultima']) && request.resource.data.valor == resource.data.valor + 1
         && getAfter(/databases/$(database)/documents/Solicitudes_Insumos/$(request.resource.data.ultima)).data.correlativoN == request.resource.data.valor;
       allow delete: if false;
+    }
+    // LEVANTAMIENTO CON TELÉFONO (v21.249, DECISIONES 4.305): una caja contada por tag «CONTADO» (id = folio BUL).
+    // No mueve stock. Crea quien cuenta (a su nombre); corrige el autor mientras esté REGISTRADO (o RECONTEO pedido por bodega);
+    // bodega (admin) solo cambia el estado y los campos de aceptación/rechazo; una caja ACEPTADA solo pasa a ETIQUETADO.
+    match /Conteos_Cajas/{folio} {
+      function rolConteo() { return isContador() || (getUserRole() is string && getUserRole().lower().trim() == 'operador') || isAdmin(); }
+      function camposCaja() {
+        return ['folio', 'bodega', 'bodegaId', 'insumoId', 'nombre', 'nombreNorm', 'nuevo', 'tipo', 'controlado', 'lote', 'vence', 'sinLote',
+                'estructura', 'total', 'contadoPor', 'contadoNombre', 'en', 'servidorEn', 'editadoEn', 'estado', 'app',
+                'baseSistema', 'baseSistemaEn', 'deudaSistema', 'huella'];
+      }
+      function camposBodega() {
+        return ['estado', 'aceptadoPor', 'aceptadoEn', 'aceptadoTotal', 'aceptadoLote', 'aceptadoVence', 'aceptadoInsumoId', 'lev', 'hijos', 'insumoId',
+                'motivoRechazo', 'rechazadoPor', 'rechazadoEn', 'reconteoPedidoPor', 'reconteoEn', 'nota'];
+      }
+      function n6(v) { return v is int && v >= 0 && v <= 1000000; }
+      // texto opcional (o null) de hasta n caracteres
+      function txt(d, k, n) { return !(k in d) || d[k] == null || (d[k] is string && d[k].size() <= n); }
+      function tagReservado() {
+        return get(/databases/$(database)/documents/Contadores/$('bulto-' + folio)).data.get('tipo', '') == 'tag-conteo'
+          && get(/databases/$(database)/documents/Contadores/$('bulto-' + folio)).data.get('estado', '') == 'TAG';
+      }
+      function cajaOk(d) {
+        return d.folio == folio && folio.matches('^BUL-[0-9]{4}-[0-9]{6}$')
+          && d.bodega is string && d.bodega.size() > 0 && d.bodega.size() <= 120
+          && d.nombre is string && d.nombre.size() > 0 && d.nombre.size() <= 120
+          && d.lote is string && d.lote.size() > 0 && d.lote.size() <= 60
+          && d.vence is string && (d.vence == 'N/A' || d.vence.matches('^[0-9]{4}-(0[1-9]|1[0-2])$'))
+          && txt(d, 'bodegaId', 120) && txt(d, 'insumoId', 120) && txt(d, 'nombreNorm', 120) && txt(d, 'tipo', 120) && txt(d, 'controlado', 120)
+          && txt(d, 'contadoPor', 120) && txt(d, 'contadoNombre', 120) && txt(d, 'en', 120) && txt(d, 'editadoEn', 120) && txt(d, 'app', 120)
+          && txt(d, 'baseSistemaEn', 120) && txt(d, 'huella', 120) && txt(d, 'estado', 120)
+          && d.nuevo is bool && d.sinLote is bool
+          && n6(d.total)
+          && d.estructura is map && d.estructura.keys().hasOnly(['estado', 'interiores', 'sueltas'])
+          && d.estructura.estado in ['CERRADA', 'ABIERTA']
+          && d.estructura.interiores is list && d.estructura.interiores.size() <= 200
+          && n6(d.estructura.sueltas)
+          && (d.get('baseSistema', null) == null || n6(d.baseSistema))
+          && (!('deudaSistema' in d) || n6(d.deudaSistema));
+      }
+      // sin cambio de estado solo mientras se cuenta; ETIQUETADO y RECHAZADO quedan fijos (salvo agregar lev, abajo)
+      function transicion(a, b) {
+        return (a == b && a in ['REGISTRADO', 'RECONTEO'])
+          || (a == 'REGISTRADO' && b in ['RECONTEO', 'ACEPTADO', 'RECHAZADO'])
+          || (a == 'RECONTEO' && b in ['REGISTRADO', 'RECHAZADO'])
+          || (a == 'ACEPTADO' && b == 'ETIQUETADO');
+      }
+      function bodegaOk(n, o, cambia) {
+        return (!cambia.hasAny(['aceptadoPor']) || n.aceptadoPor == request.auth.token.email)
+          && (!cambia.hasAny(['rechazadoPor']) || n.rechazadoPor == request.auth.token.email)
+          && (!cambia.hasAny(['reconteoPedidoPor']) || n.reconteoPedidoPor == request.auth.token.email)
+          && txt(n, 'aceptadoEn', 120) && txt(n, 'rechazadoEn', 120) && txt(n, 'reconteoEn', 120) && txt(n, 'lev', 120) && txt(n, 'insumoId', 120)
+          && txt(n, 'aceptadoLote', 120) && txt(n, 'aceptadoVence', 120) && txt(n, 'aceptadoInsumoId', 120)
+          && txt(n, 'nota', 300) && txt(n, 'motivoRechazo', 300)
+          && (!('hijos' in n) || (n.hijos is list && n.hijos.size() <= 600))
+          // al aceptar, bodega confirma exactamente lo que se contó (si la caja cambió entremedio, se rechaza)
+          && (n.estado != 'ACEPTADO' || o.estado == 'ACEPTADO'
+              || (n.get('aceptadoTotal', -1) == o.total && n.get('aceptadoLote', '') == o.lote && n.get('aceptadoVence', '') == o.vence
+                  && n.get('aceptadoInsumoId', null) == n.get('insumoId', null)));
+      }
+      allow read: if rolConteo();
+      allow create: if rolConteo()
+        && request.resource.data.keys().hasOnly(camposCaja())
+        && request.resource.data.contadoPor == request.auth.token.email
+        && request.resource.data.estado == 'REGISTRADO'
+        && request.resource.data.servidorEn == request.time
+        && cajaOk(request.resource.data)
+        && tagReservado();
+      allow update: if
+        // autor: corrige su caja mientras esté REGISTRADO (o en RECONTEO pedido por bodega) y la deja REGISTRADO
+        (rolConteo()
+          && resource.data.contadoPor == request.auth.token.email
+          && resource.data.estado in ['REGISTRADO', 'RECONTEO'] && request.resource.data.estado == 'REGISTRADO'
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(camposCaja())
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['contadoPor', 'folio', 'en', 'aceptadoPor', 'aceptadoEn', 'lev', 'hijos'])
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['servidorEn']) || request.resource.data.servidorEn == request.time)   /* una corrección que llega como 2.º setDoc (sin internet) trae su propio serverTimestamp */
+          && cajaOk(request.resource.data))
+        // bodega: solo estado y campos de aceptación/rechazo; una caja ACEPTADA solo pasa a ETIQUETADO
+        || (isAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(camposBodega())
+          && transicion(resource.data.estado, request.resource.data.estado)
+          && bodegaOk(request.resource.data, resource.data, request.resource.data.diff(resource.data).affectedKeys()))
+        // ETIQUETADO o RECHAZADO: solo se puede agregar el folio LEV si aún no lo tenía
+        || (isAdmin()
+          && resource.data.estado in ['ETIQUETADO', 'RECHAZADO'] && !('lev' in resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lev'])
+          && request.resource.data.lev is string && request.resource.data.lev.size() <= 120);
+      allow delete: if isSuperAdmin();
     }
     match /Config_Correo/{id} {
       allow read: if isStaff();

@@ -172,6 +172,7 @@
     const B = window.SAR_Bultos, folio = B && B.folioDe ? B.folioDe(txt) : '';
     if (folio) {
       const b = await B.leer(folio).catch(() => null); if (!b) { toast('Etiqueta', `${folio} no existe en el sistema.`, 'warning'); return; }
+      if (B.esTag && B.esTag(b)) { toast('Tag CONTADO', B.avisoTag(folio), 'warning'); return; }   /* v21.249: un tag aún no es una caja */
       const x = insumos.find(i => i.id === b.insumoId) || insumos.find(i => norm(i.name) === norm(b.nombre)); if (!x) { toast('Etiqueta', `La caja es de «${b.nombre}», que no está en ${toma.bodega}.`, 'warning'); return; }
       await refrescar(x.id); const p = ficha(x.id); if (p.conteos.some(c => c.folio === folio)) { toast('Ya contada', `${folio} ya está en el conteo.`, 'warning'); sel = x.id; pintar(); return; }
       /* v21.248 (Howard A1): una caja grande y sus interiores no se cuentan dos veces */

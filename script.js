@@ -182,6 +182,7 @@ window.escapeHTML = function (str) {
 const ROLES_SISTEMA = [
     { id: 'transitoria', label: 'Solo Bodega transitoria (conteo)' },
     { id: 'solicitante', label: 'Solicitante (solo pide insumos)' },
+    { id: 'contador', label: 'Contador (levantamiento de inventario)' },
     { id: 'enfermero', label: 'Enfermero (Gestión de Bandejas)' },
     { id: 'operador', label: 'Administrador de Bodega' },
     { id: 'administrador', label: 'Administrador (Inventario)' },
@@ -2136,6 +2137,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'view-bultos': 'Bultos y etiquetas',
             'view-fotos': 'Fotos de productos',
             'view-etiquetas': 'Impresión de etiquetas',
+            'view-tags-conteo': 'Tags de conteo',
             'view-salud-inventario': 'Repetidos y salud del inventario',
             'view-solicitudes-insumos': 'Solicitudes recibidas',
             'view-bitacora-oc': 'Bitácora de órdenes',
@@ -2181,8 +2183,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Control de acceso por rol (espejo de las reglas CSS del menú; la barrera real son las reglas de Firestore)
             const VISTAS_BLOQUEADAS = {
                 enfermero: ['view-movimientos', 'view-historial', 'view-ajustes', 'view-compras', 'view-informes', 'view-bodegas',
-                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-compras-agiles', 'view-ingreso-rapido', 'view-pendientes-entrega', 'view-distribucion-centros', 'view-transitoria', 'view-sustituciones', 'view-solicitudes-insumos', 'view-bultos', 'view-etiquetas', 'view-salud-inventario', 'view-bitacora-oc', 'view-duplicados', 'view-actas-entrega', 'view-auditoria', 'view-oxigeno', 'view-errores'],
-                operador: ['view-compras', 'view-usuarios', 'view-configuracion', 'view-errores', 'view-salud-inventario']
+                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-compras-agiles', 'view-ingreso-rapido', 'view-pendientes-entrega', 'view-distribucion-centros', 'view-transitoria', 'view-sustituciones', 'view-solicitudes-insumos', 'view-bultos', 'view-etiquetas', 'view-tags-conteo', 'view-salud-inventario', 'view-bitacora-oc', 'view-duplicados', 'view-actas-entrega', 'view-auditoria', 'view-oxigeno', 'view-errores'],
+                operador: ['view-compras', 'view-usuarios', 'view-configuracion', 'view-errores', 'view-salud-inventario', 'view-tags-conteo']
             };
             const rolActual = String(document.body.dataset.userRole || '').toLowerCase();
             // Rol «transitoria»: solo puede ver la Bodega transitoria (cualquier otra vista la devuelve ahí)
@@ -2263,6 +2265,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (window.SAR_Salud) window.SAR_Salud.abrir();
                 } else if (hash === 'view-etiquetas') {
                     if (window.SAR_Bultos) window.SAR_Bultos.abrirEtiquetas();
+                } else if (hash === 'view-tags-conteo') {
+                    if (window.SAR_TagsConteo) window.SAR_TagsConteo.abrir();
                 } else if (hash === 'view-solicitud-insumos') {
                     if (window.SAR_Solicitudes) window.SAR_Solicitudes.abrirPide();
                 } else if (hash === 'view-solicitudes-insumos') {
@@ -7471,6 +7475,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else if (userRole === 'solicitante') {
                     document.body.setAttribute('data-user-role', 'solicitante');
                     window.location.replace('solicitar.html');   // quien solo pide insumos va a su página propia, sin el resto del sistema
+                } else if (userRole === 'contador') {
+                    document.body.setAttribute('data-user-role', 'contador');
+                    window.location.replace('solicitar.html');   // v21.249: el contador solo hace el levantamiento desde «Pedir insumos»
                 } else if (userRole === 'enfermero' || userRole === 'enfermera') {
                     document.body.setAttribute('data-user-role', 'enfermero');
                 } else if (userRole === 'admin' || userRole === 'administrador' || userRole === 'global') {

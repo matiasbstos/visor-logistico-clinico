@@ -1791,3 +1791,14 @@ Pedidos del usuario: «escriba "ajustes" y me lo muestre»; en Ajustes ver nombr
   - **Límite conocido:** el contador no lee `Catalogo_Productos` (solo staff), así que en P1/P2 solo ve las fotos de `assets/imagenes-mp.json`.
   - El punto 8 de arriba quedó superado por el 9: la toma ya distingue un tag.
 
+
+### 4.306 Enlace propio «Conteo e ingreso» y mini manual del contador (v21.250)
+- **Enlace propio** para los contadores (decisión del usuario): `solicitar.html?modo=contar` (también `#contar`).
+  - Abre directamente el levantamiento.
+  - Trae su propio manifiesto (`manifest-conteo.json`, «Conteo SAR», ícono azul oscuro con portapapeles y check), así queda como un acceso directo aparte en el teléfono.
+  - Aparece en Fotos de productos → Accesos directos para el teléfono.
+  - El rol contador que entra al Visor va directo ahí.
+  - «Pedir insumos» queda para pedir. El botón «Levantamiento» dentro de Pedir insumos se mantiene para el personal.
+- **«¿Cómo se cuenta?»**: un manual corto dentro de la pantalla, en 6 secciones (antes de salir, cada caja paso a paso, cómo llenar el tag, variables del conteo, mientras cuentas, al terminar el turno).
+  - Se muestra la primera vez, hasta que se toca «Entendido».
+  - Después queda en el botón «¿Cómo se cuenta?» del inicio del turno.

@@ -7477,7 +7477,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     window.location.replace('solicitar.html');   // quien solo pide insumos va a su página propia, sin el resto del sistema
                 } else if (userRole === 'contador') {
                     document.body.setAttribute('data-user-role', 'contador');
-                    window.location.replace('solicitar.html');   // v21.249: el contador solo hace el levantamiento desde «Pedir insumos»
+                    window.location.replace('solicitar.html?modo=contar');   // v21.250: el contador entra directo a «Conteo e ingreso» · v21.249: el contador solo hace el levantamiento desde «Pedir insumos»
                 } else if (userRole === 'enfermero' || userRole === 'enfermera') {
                     document.body.setAttribute('data-user-role', 'enfermero');
                 } else if (userRole === 'admin' || userRole === 'administrador' || userRole === 'global') {

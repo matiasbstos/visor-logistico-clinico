@@ -170,6 +170,7 @@
         <button type="button" class="si-hbtn" id="si-h-pedir" aria-expanded="${pedirAbierto}"><span class="si-hic">${IC_PEDIR}</span><span class="si-cat-tx"><b>Pedir insumos</b><small>Médicos, aseo u oficina · no necesitas usuario</small></span><i aria-hidden="true">${pedirAbierto ? '▴' : '▾'}</i></button>
         ${pedirAbierto ? `<div class="si-cats si-cats--sub">${CATS.map(c => `<button type="button" class="si-cat si-cat--${c.k}" data-cat="${c.k}"><span class="si-cat-ic">${c.ic}</span><span class="si-cat-tx"><b>${c.t}</b><small>${c.s}</small></span><i aria-hidden="true">›</i></button>`).join('')}</div>` : ''}
         <button type="button" class="si-hbtn si-hbtn--inv" id="si-h-inv"><span class="si-hic">${IC_INV}</span><span class="si-cat-tx"><b>Inventario de bodega</b><small>${u ? 'Sesión de ' + esc(window.SAR_Sesion.usuario()) : 'Para encargadas de bodega · con tu usuario'}</small></span><i aria-hidden="true">›</i></button>
+        ${window.SAR_Lev ? `<button type="button" class="si-hbtn si-hbtn--inv" id="si-h-lev"><span class="si-hic">${IC_INV}</span><span class="si-cat-tx"><b>Levantamiento (contar cajas)</b><small>Con tag «CONTADO» · con tu usuario</small></span><i aria-hidden="true">›</i></button>` : ''}
       </div>
       ${u ? `<div id="si-inv"></div><div id="si-ses">${sesionHTML()}</div>` : ''}<div id="si-mias"></div></div>`;
     if (u && window.SAR_InvMovil) window.SAR_InvMovil.boton(document.getElementById('si-inv'), { soloAvisos: true });
@@ -185,6 +186,7 @@
   function abrirInventario() {
     const I = window.SAR_InvMovil, rolOk = /^(transitoria|admin|superadmin|operador|administrador|global)$/i.test(String(window.SAR_Rol || ''));
     if (!conUsuario()) { vista = 'login'; pintarPide(); return; }
+    if (/^contador$/i.test(String(window.SAR_Rol || '')) && window.SAR_Lev) { vista = ''; window.SAR_Lev.abrir(); return; }   /* v21.249: el contador hace el levantamiento */
     if (!rolOk) { toast('Sin inventario asignado', 'Tu usuario no tiene una bodega para inventariar. Avísale a bodega.', 'warning'); return; }
     vista = ''; if (I && I.abrir) I.abrir();
   }
@@ -219,6 +221,7 @@
   function pintarPide() {
     const r = rootPide(); if (!r) return;
     if (!editando && vista === 'login') { if (conUsuario()) vista = ''; else { pintarLogin(r); return; } }
+    if (!catSel && !editando && window.SAR_Lev && window.SAR_Lev.enCurso()) { window.SAR_Lev.pintar(r); return; }   /* v21.249: levantamiento (contar cajas) */
     if (!catSel && !editando) { if (window.SAR_InvMovil && window.SAR_InvMovil.enCurso()) { window.SAR_InvMovil.pintar(r); return; } pintarCategorias(r); return; }
     if (!editando && (cambiandoQuien || !form.solicitante.trim() || !correoOk(form.correo))) { pintarQuien(r); return; }
     const cat = catDe(catSel);
@@ -412,6 +415,7 @@
       else if (b.id === 'si-q-x') { cambiandoQuien = true; pintarPide(); }
       else if (b.id === 'si-h-pedir') { pedirAbierto = !pedirAbierto; pintarPide(); }
       else if (b.id === 'si-h-inv') abrirInventario();
+      else if (b.id === 'si-h-lev') { vista = ''; if (window.SAR_Lev) window.SAR_Lev.abrir(); }
       else if (b.id === 'si-volver') { vista = ''; sesForm = false; cambiandoQuien = false; catSel = ''; pintarPide(); window.scrollTo && window.scrollTo(0, 0); }
       else if (b.id === 'si-ses-in') { sesForm = true; pintarPide(); const c = document.getElementById('si-ses-c'); if (c) c.focus(); }
       else if (b.id === 'si-ses-cancel') { sesForm = false; vista = ''; pintarPide(); }

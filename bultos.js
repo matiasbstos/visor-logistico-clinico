@@ -155,15 +155,21 @@
     if (!t) throw new Error(`Sin internet solo puedes crear ${Math.max(0, ...r.map(x => x.fin - x.sig + 1), 0)} etiqueta(s) seguidas con los folios reservados en este equipo (necesitas ${n}). Crea menos cajas o espera la conexión.`);
     const ini = t.sig; t.sig += n; guardarRangos(r); return ini;
   }
+  /** v21.249: reserva n folios BUL seguidos (con internet: transacción sobre el contador; sin internet: del tramo del equipo,
+   *  con navigator.locks para que dos pestañas no tomen el mismo). Lo usan las etiquetas de caja y los tags «CONTADO». */
+  async function reservarFolios(n) {
+    const f = fs(), anio = new Date().getFullYear(), rc = f.doc(f.collection(db(), 'Contadores'), 'correlativo-bultos-' + anio);
+    const enLinea = !(window.SAR_Cola && !(await window.SAR_Cola.hayConexion()));
+    const ini = enLinea ? await f.runTransaction(db(), async (tx) => { const s = await tx.get(rc), v = s.exists() ? num(s.data().valor) : 0; tx.set(rc, { valor: v + n, actualizado: new Date().toISOString() }); return v + 1; }) : (navigator.locks && navigator.locks.request ? await navigator.locks.request('sar-bul', () => tomarReservados(n)) : tomarReservados(n));   /* dos pestañas no toman el mismo folio */
+    if (enLinea) reservarTramo().catch(() => {});   /* deja folios listos para la próxima vez sin internet */
+    return { anio, ini, enLinea };
+  }
   async function crear(g) {
     const plan = planCajas(g), cajas = plan.map(p => p.q); if (!cajas.length) throw new Error('Indica el total de unidades y cuántas cajas son (o cuántas vienen por caja).');
     const nFol = plan.reduce((t, p) => t + 1 + p.hijos.length, 0);
     if (cajas.length > 300) throw new Error('Son más de 300 cajas: revisa las unidades por caja.');
     if (nFol > 600) throw new Error(`Serían ${nFol} etiquetas (cajas grandes + interiores): revisa las unidades por caja interior.`);
-    const f = fs(), anio = new Date().getFullYear(), rc = f.doc(f.collection(db(), 'Contadores'), 'correlativo-bultos-' + anio);
-    const enLinea = !(window.SAR_Cola && !(await window.SAR_Cola.hayConexion()));
-    const ini = enLinea ? await f.runTransaction(db(), async (tx) => { const s = await tx.get(rc), v = s.exists() ? num(s.data().valor) : 0; tx.set(rc, { valor: v + nFol, actualizado: new Date().toISOString() }); return v + 1; }) : (navigator.locks && navigator.locks.request ? await navigator.locks.request('sar-bul', () => tomarReservados(nFol)) : tomarReservados(nFol));   /* dos pestañas no toman el mismo folio */
-    if (enLinea) reservarTramo().catch(() => {});   /* deja folios listos para la próxima vez sin internet */
+    const f = fs(), { anio, ini, enLinea } = await reservarFolios(nFol);
     const ahora = new Date().toISOString(), fol = (k) => `BUL-${anio}-${String(ini + k).padStart(6, '0')}`, grupo = fol(0);
     const comun = { tipo: 'bulto', grupo, estado: 'CERRADA', nombre: g.nombre, insumoId: g.insumoId || '', codigoMP: g.codigoMP || '', bodega: g.bodega || '', lote: g.lote || 'S/L', vence: g.vence || '', proveedor: g.proveedor || '', oc: g.oc || '', rec: g.rec || '', fechaRecepcion: g.fechaRecepcion || hoyISO(), creadoEn: ahora, creadoPor: usuario(), impresiones: 0, historial: [{ accion: 'CREADO', por: usuario(), en: ahora }], ...(g.origen ? { origen: g.origen } : {}) };
     const lista = []; let k = 0;
@@ -817,6 +823,6 @@
     inp.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => registrar('nada'), 250); });
     pintar(''); setTimeout(() => inp.focus(), 50); return ov;
   }
-  window.SAR_Bultos = { reservarTramo, quedanReservados, leerCajasTx, leerConCamara, leer, sacar, probarPistola, hojaPrueba, code39, i2de5, planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
+  window.SAR_Bultos = { reservarFolios, reservarTramo, quedanReservados, leerCajasTx, leerConCamara, leer, sacar, probarPistola, hojaPrueba, code39, i2de5, planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_Bultos;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null, addEventListener() {} });

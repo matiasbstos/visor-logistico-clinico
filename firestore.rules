@@ -51,6 +51,12 @@ service cloud.firestore {
       return getUserRole() in ['transitoria', 'TRANSITORIA'];
     }
 
+    // Rol «contador» (v21.249, levantamiento con teléfono): solo lee Insumos y Bodegas y registra SUS Conteos_Cajas.
+    // Queda FUERA de hasRole(): hasRole() da escritura en Historial, Bandejas, Metadata y otras colecciones.
+    function isContador() {
+      return getUserRole() in ['contador', 'CONTADOR'];
+    }
+
     function isOwner(userId) {
       // Comparación relajada para asegurar lectura propia
       return isAuthenticated() && (request.auth.uid == userId || request.auth.token.email == userId);
@@ -59,7 +65,7 @@ service cloud.firestore {
     // Usuario autenticado que además tiene un rol asignado en /Usuarios.
     // Una cuenta recién registrada, sin perfil, queda como 'sin_acceso'.
     function hasRole() {
-      return isAuthenticated() && getUserRole() != 'sin_acceso';
+      return isAuthenticated() && getUserRole() != 'sin_acceso' && !isContador();
     }
 
     // Correo institucional REAL: dominio anclado tras la arroba y correo verificado.
@@ -90,7 +96,7 @@ service cloud.firestore {
     // GESTIÓN DE BODEGAS (Sucursales)
     // -----------------------------------------------------
     match /Bodegas/{bodegaId} {
-      allow read: if hasRole();
+      allow read: if hasRole() || isContador();
       allow write: if isAdmin();
     }
 
@@ -111,7 +117,7 @@ service cloud.firestore {
     // CIBERSEGURIDAD: Reglas de la Colección 'Insumos'
     // -----------------------------------------------------
     match /Insumos/{insumoId} {
-      allow read: if hasRole();
+      allow read: if hasRole() || isContador();
       allow create: if isOperadorOrAdmin();
       allow update: if isOperadorOrAdmin()
         || (isTransitoria() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ubicacionEstante', 'updatedAt']));
@@ -327,6 +333,65 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['valor', 'actualizado', 'ultima']) && request.resource.data.valor == resource.data.valor + 1
         && getAfter(/databases/$(database)/documents/Solicitudes_Insumos/$(request.resource.data.ultima)).data.correlativoN == request.resource.data.valor;
       allow delete: if false;
+    }
+    // LEVANTAMIENTO CON TELÉFONO (v21.249, DECISIONES 4.305): una caja contada por tag «CONTADO» (id = folio BUL).
+    // No mueve stock. Crea quien cuenta (a su nombre); corrige el autor mientras esté REGISTRADO (o RECONTEO pedido por bodega);
+    // bodega (admin) solo cambia el estado y los campos de aceptación/rechazo; una caja ACEPTADA solo pasa a ETIQUETADO.
+    match /Conteos_Cajas/{folio} {
+      function rolConteo() { return isContador() || getUserRole() in ['operador', 'OPERADOR'] || isAdmin(); }
+      function camposCaja() {
+        return ['folio', 'bodega', 'bodegaId', 'insumoId', 'nombre', 'nombreNorm', 'nuevo', 'tipo', 'controlado', 'lote', 'vence', 'sinLote',
+                'estructura', 'total', 'contadoPor', 'contadoNombre', 'en', 'servidorEn', 'editadoEn', 'estado', 'app',
+                'baseSistema', 'baseSistemaEn', 'deudaSistema', 'huella'];
+      }
+      function camposBodega() {
+        return ['estado', 'aceptadoPor', 'aceptadoEn', 'lev', 'hijos', 'insumoId', 'motivoRechazo', 'rechazadoPor', 'rechazadoEn',
+                'reconteoPedidoPor', 'reconteoEn', 'nota'];
+      }
+      function n6(v) { return v is int && v >= 0 && v <= 1000000; }
+      function cajaOk(d) {
+        return d.folio == folio && folio.matches('^BUL-[0-9]{4}-[0-9]{6}$')
+          && d.bodega is string && d.bodega.size() > 0 && d.bodega.size() <= 120
+          && d.nombre is string && d.nombre.size() > 0 && d.nombre.size() <= 200
+          && d.lote is string && d.lote.size() > 0 && d.lote.size() <= 60
+          && d.vence is string && (d.vence == 'N/A' || d.vence.matches('^[0-9]{4}-(0[1-9]|1[0-2])$'))
+          && n6(d.total)
+          && d.estructura is map && d.estructura.keys().hasOnly(['estado', 'interiores', 'sueltas'])
+          && d.estructura.estado in ['CERRADA', 'ABIERTA']
+          && d.estructura.interiores is list && d.estructura.interiores.size() <= 500
+          && n6(d.estructura.sueltas)
+          && (d.get('baseSistema', null) == null || n6(d.baseSistema))
+          && (!('deudaSistema' in d) || n6(d.deudaSistema))
+          && (!('huella' in d) || (d.huella is string && d.huella.size() <= 40));
+      }
+      function transicion(a, b) {
+        return a == b
+          || (a == 'REGISTRADO' && b in ['RECONTEO', 'ACEPTADO', 'RECHAZADO'])
+          || (a == 'RECONTEO' && b in ['REGISTRADO', 'RECHAZADO'])
+          || (a == 'ACEPTADO' && b == 'ETIQUETADO');
+      }
+      allow read: if rolConteo();
+      allow create: if rolConteo()
+        && request.resource.data.keys().hasOnly(camposCaja())
+        && request.resource.data.contadoPor == request.auth.token.email
+        && request.resource.data.estado == 'REGISTRADO'
+        && cajaOk(request.resource.data);
+      allow update: if
+        // autor: corrige su caja mientras esté REGISTRADO (o en RECONTEO pedido por bodega) y la deja REGISTRADO
+        (rolConteo()
+          && resource.data.contadoPor == request.auth.token.email
+          && resource.data.estado in ['REGISTRADO', 'RECONTEO'] && request.resource.data.estado == 'REGISTRADO'
+          && request.resource.data.contadoPor == resource.data.contadoPor
+          && request.resource.data.folio == resource.data.folio
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(camposCaja())
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['contadoPor', 'folio', 'aceptadoPor', 'aceptadoEn', 'lev', 'hijos'])
+          && cajaOk(request.resource.data))
+        // bodega: solo estado y campos de aceptación/rechazo; una caja ACEPTADA solo pasa a ETIQUETADO
+        || (isAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(camposBodega())
+          && transicion(resource.data.estado, request.resource.data.estado)
+          && (resource.data.estado != 'ACEPTADO' || request.resource.data.estado == 'ETIQUETADO'));
+      allow delete: if isSuperAdmin();
     }
     match /Config_Correo/{id} {
       allow read: if isStaff();

@@ -337,3 +337,32 @@ t('tags de conteo v21.249: unir, estados y filtros', () => { const T = require('
   assert.strictEqual(T.estadoDe(null, { estado: 'RECONTEO' }), 'reconteo'); assert.strictEqual(T.estadoDe(null, { estado: 'ETIQUETADO' }), 'etiquetado');
 });
 t('bultos v21.249: un tag CONTADO no es una caja', () => { const B = require('../bultos.js'); assert.strictEqual(B.esTag({ tipo: 'tag-conteo', estado: 'TAG' }), true); assert.strictEqual(B.esTag({ tipo: 'bulto' }), false); assert.strictEqual(B.esTag(null), false); assert.ok(/000845 es un tag CONTADO/.test(B.avisoTag('BUL-2026-000845'))); });
+t('cuadro de distribución PDF vertical con 2 memos SAR y FINANCIAMIENTO arriba (OC 1298355-965-CM26 · v21.251)', () => {
+  global.window = global.window || global; global.document = global.document || {};
+  const L = require('../oc-lector.js');
+  const items = [
+    { str: 'MEMO N°36', x: 285, y: 23, w: 30 }, { str: 'SAR', x: 294, y: 31, w: 12 },
+    { str: 'MEMO N°9 SAR', x: 320, y: 27, w: 42 },
+    { str: 'MEMO N°68', x: 373, y: 20, w: 30 }, { str: 'CESFAM', x: 376, y: 27, w: 24 }, { str: 'BORIS SOLER', x: 370, y: 34, w: 36 },
+    { str: 'MEMO N°59', x: 417, y: 20, w: 30 }, { str: 'POSTA', x: 422, y: 27, w: 20 }, { str: 'BOLLENAR', x: 416, y: 34, w: 32 },
+    { str: 'MEMO N°33', x: 461, y: 20, w: 30 }, { str: 'CESFAM', x: 464, y: 27, w: 24 }, { str: 'POMAIRE', x: 462, y: 34, w: 28 },
+    { str: 'FINANCIAMIENTO', x: 232, y: 46.5, w: 42 },
+    { str: 'MINSAL - 2026', x: 282, y: 43, w: 36 }, { str: 'SAR', x: 294, y: 50, w: 12 },
+    { str: 'MINSAL - 2026', x: 322, y: 43, w: 36 }, { str: 'SAR', x: 338, y: 50, w: 12 },
+    { str: 'PERCAPITA', x: 373, y: 46.5, w: 30 }, { str: 'PERCAPITA', x: 417, y: 46.5, w: 30 }, { str: 'PERCAPITA', x: 461, y: 46.5, w: 30 },
+    { str: 'CDP', x: 248, y: 59, w: 12 }, { str: '3550', x: 292, y: 59, w: 16 }, { str: '2667', x: 336, y: 59, w: 16 }, { str: '4715', x: 380, y: 59, w: 16 }, { str: '4492', x: 424, y: 59, w: 16 }, { str: '4469', x: 468, y: 59, w: 16 },
+    { str: 'ID', x: 32, y: 69, w: 8 }, { str: 'DESCRIPCION', x: 100, y: 69, w: 40 }, { str: 'VALOR NETO', x: 236, y: 69, w: 34 },
+    { str: 'CANTIDAD', x: 288, y: 69, w: 24 }, { str: 'CANTIDAD', x: 332, y: 69, w: 24 }, { str: 'CANTIDAD', x: 376, y: 69, w: 24 }, { str: 'CANTIDAD', x: 420, y: 69, w: 24 }, { str: 'CANTIDAD', x: 464, y: 69, w: 24 },
+    { str: 'CANTIDAD', x: 506, y: 65, w: 24 }, { str: 'TOTAL', x: 510, y: 72, w: 18 },
+    { str: '2229693', x: 28, y: 84, w: 24 }, { str: 'CATETER FOLEY 20 FR', x: 70, y: 84, w: 80 }, { str: '$ 2,870', x: 242, y: 84, w: 24 }, { str: '5', x: 298, y: 84, w: 5 }, { str: '30', x: 341, y: 84, w: 8 }, { str: '35', x: 515, y: 84, w: 8 },
+    { str: 'NETO', x: 245, y: 102, w: 16 }, { str: '$ 14,350', x: 286, y: 102, w: 28 }, { str: '$ 86,100', x: 330, y: 102, w: 28 }
+  ];
+  const d = L.extraerDistribucion(items);
+  assert.deepStrictEqual(d.avisos, []);
+  assert.strictEqual(d.columnas.length, 5);
+  assert.strictEqual(d.columnas[0].memo, '36'); assert.strictEqual(d.columnas[0].centro, 'SAR'); assert.strictEqual(d.columnas[0].financiamiento, 'MINSAL - 2026 SAR'); assert.strictEqual(d.columnas[0].cdp, '3550');
+  assert.strictEqual(d.columnas[1].memo, '9'); assert.strictEqual(d.columnas[1].centro, 'SAR'); assert.strictEqual(d.columnas[1].financiamiento, 'MINSAL - 2026 SAR'); assert.strictEqual(d.columnas[1].cdp, '2667');
+  assert.strictEqual(d.columnas[2].memo, '68'); assert.strictEqual(d.columnas[2].centro, 'CESFAM BORIS SOLER'); assert.strictEqual(d.columnas[2].financiamiento, 'PERCAPITA');
+  assert.strictEqual(d.columnas[3].memo, '59'); assert.strictEqual(d.columnas[3].centro, 'POSTA BOLLENAR'); assert.strictEqual(d.columnas[3].financiamiento, 'PERCAPITA');
+  assert.strictEqual(d.columnas[4].memo, '33'); assert.strictEqual(d.columnas[4].centro, 'CESFAM POMAIRE'); assert.strictEqual(d.columnas[4].financiamiento, 'PERCAPITA');
+});

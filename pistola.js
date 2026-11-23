@@ -1,4 +1,4 @@
-/* Pistola lectora (4.306): un solo lector para Ingresos y Transferencias.
+/* Pistola lectora (4.307): un solo lector para Ingresos y Transferencias.
    Lee al recibir Enter, Tab o una pausa en la escritura (la pistola Spektra «teclea» muy rápido y puede no mandar Enter).
    Reconoce:
    - etiqueta de bulto (BUL-AAAA-NNNNNN, sus 10 dígitos o el QR con la URL), con SAR_Bultos.folioDe / leer;

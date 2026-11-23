@@ -76,7 +76,7 @@
   // ---------------- pantalla ----------------
   function pintar() {
     const r = root(); if (!r) return;
-    /* 4.306: el título de la pantalla va en el encabezado (index.html), antes de las pestañas; la bodega parte sin elegir */
+    /* 4.307: el título de la pantalla va en el encabezado (index.html), antes de las pestañas; la bodega parte sin elegir */
     if (!toma) { r.innerHTML = `<div class="card tm-abrir"><label class="form-label">Bodega<select id="tm-bod" class="form-control"><option value="">— Elige bodega —</option>${bodegas.map(b => `<option value="${esc(b.name)}">${esc(b.name)}</option>`).join('')}</select></label>
         <fieldset class="tm-tipo"><legend class="form-label">Tipo de toma</legend>
           <label><input type="radio" name="tm-tipo" value="parcial" checked> <b>Parcial</b> <small>lo que no cuentes queda igual</small></label>
@@ -146,7 +146,7 @@
   async function abrir() {
     const r = root(), bod = (r.querySelector('#tm-bod') || {}).value, tipo = (r.querySelector('input[name="tm-tipo"]:checked') || {}).value || 'parcial';
     if (!bod) { toast('Bodega', 'Elige la bodega que vas a contar.', 'warning'); const s = r.querySelector('#tm-bod'); if (s) s.focus(); return; }
-    /* 4.306: la completa deja en 0 lo que no se cuente: se confirma escribiendo el nombre de la bodega */
+    /* 4.307: la completa deja en 0 lo que no se cuente: se confirma escribiendo el nombre de la bodega */
     if (tipo === 'completa' && window.SAR_Progreso && window.SAR_Progreso.pedir) {
       const v = await window.SAR_Progreso.pedir({ titulo: 'Toma completa', texto: `Lo que no cuentes en <b>${esc(bod)}</b> quedará en 0 (faltante). Para confirmar, escribe el nombre de la bodega: <b>${esc(bod)}</b>`, placeholder: bod, exacto: bod, si: 'Abrir toma completa', no: 'Volver', peligro: true });
       if (v !== bod) return;

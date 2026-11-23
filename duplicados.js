@@ -58,7 +58,7 @@
         if (sc) sc.forEach(d => { const x = d.data(); items.push({ fuente: 'Catálogo', id: d.id, nombre: String(x.insumoName || x.descripcion || ''), codigo: x.codigoMP || '', origen: x.origen || '' }); });
         datos = { grupos: agrupar(items), manuales: items.filter(x => x.fuente === 'Stock' && x.provisional).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')) };
     }
-    /* 4.306: la columna ID se oculta si viene vacía en toda la tabla */
+    /* 4.307: la columna ID se oculta si viene vacía en toda la tabla */
     const cabeza = (conId) => `<thead><tr><th></th><th>Nombre</th>${conId ? '<th>ID</th>' : ''}<th>Dónde</th><th>Bodega</th><th>Stock</th></tr></thead>`;
     const tabla = (l) => { const conId = l.some(x => String(x.codigo || '').trim()); return `<table class="sus-t">${cabeza(conId)}<tbody>${l.map(x => fila(x, conId)).join('')}</tbody></table>`; };
     const fila = (x, conId) => `<tr><td>${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}</td><td>${esc(x.nombre)}</td>${conId ? `<td>${esc(x.codigo || '')}</td>` : ''}<td>${esc(x.fuente)}${x.provisional ? ' · <b>manual provisional</b>' : ''}${x.origen === 'manual' ? ' · manual' : ''}</td><td>${esc(x.bodega || '')}</td><td class="n">${x.fuente === 'Stock' ? x.qty + (x.sobregiro ? ` <small>(sobregiro ${x.sobregiro})</small>` : '') : ''}</td></tr>`;

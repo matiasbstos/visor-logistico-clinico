@@ -680,7 +680,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             // Validamos roles y aplicamos capa de Seguridad Visual
             await window.enforceRBACLogic(user);
-            if (document.body.getAttribute('data-user-role') === 'sin_acceso') return;   /* 4.306: sin rol no se abre nada más (las reglas lo negarían igual) */
+            if (document.body.getAttribute('data-user-role') === 'sin_acceso') return;   /* 4.307: sin rol no se abre nada más (las reglas lo negarían igual) */
             if (window.cargarSelectEnfermeros) window.cargarSelectEnfermeros();
 
             // ==========================================
@@ -1031,7 +1031,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (!motivoSel) {
                             return window.showAlertCenter("Notificación", 'Elige el motivo del ajuste.');
                         }
-                        if (motivoSel === 'Otro' && justificacion.length <= 10) {   /* 4.306: la observación solo es obligatoria con «Otro» */
+                        if (motivoSel === 'Otro' && justificacion.length <= 10) {   /* 4.307: la observación solo es obligatoria con «Otro» */
                             return window.showAlertCenter("Notificación", 'Con el motivo «Otro», la observación debe tener más de 10 caracteres.');
                         }
 
@@ -1130,7 +1130,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         const panel = subtabPanels[key];
                         if (btn && panel) {
                             if (key === activeKey) {
-                                btn.classList.add('on'); btn.setAttribute('aria-selected', 'true');   /* 4.306: pestañas estándar (.aud-tab) */
+                                btn.classList.add('on'); btn.setAttribute('aria-selected', 'true');   /* 4.307: pestañas estándar (.aud-tab) */
                                 btn.style.display = (key === 'aprobaciones' && userRole !== 'superadmin') ? 'none' : 'inline-flex';
                                 panel.style.display = 'block';
                             } else {
@@ -1534,7 +1534,7 @@ document.addEventListener('DOMContentLoaded', () => {
             list.innerHTML = '<div class="home-empty"><i class="ph-fill ph-check-circle" style="color:var(--sar-green); font-size:24px;"></i><br>Sin acciones pendientes.</div>';
             return;
         }
-        /* 4.306: fila blanca con punto de color, una sola etiqueta de estado y «Ver» con borde */
+        /* 4.307: fila blanca con punto de color, una sola etiqueta de estado y «Ver» con borde */
         list.innerHTML = visibles.map(a => {
             const attr = a.go ? `data-go="${a.go}"` : `data-scroll="${a.scroll}"`;
             return `<div class="erp-alert-item home-accion home-accion--${a.nivel}">
@@ -3386,7 +3386,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <td>${quantityMarkup}</td>
                 <td class="font-bold">${formattedTotal}</td>
                 <td><div style="display:flex; flex-direction:column; gap:2px;">${batchesMarkup}</div>${Array.isArray(item.batches) && item.batches.length ? `<button type="button" class="btn btn-outline btn-sm btn-desglose" data-id="${docSnapshot.id}" aria-expanded="false" style="margin-top:6px; padding:2px 8px; font-size:11px;"><i class="ph ph-caret-down"></i> Ver desglose</button>` : ''}</td>
-                <td>${(() => { /* 4.306: bodega + estante; «Sin ubicación» si falta */ const bod = _data.bodegaNombre || _data.location || _data.ubicacion || '', est = _data.ubicacionEstante || ''; return bod ? `<div class="font-bold">${window.escapeHTML(bod)}</div>${est ? `<div class="item-category">Estante ${window.escapeHTML(String(est))}</div>` : ''}` : '<span class="text-muted">Sin ubicación</span>'; })()}</td>
+                <td>${(() => { /* 4.307: bodega + estante; «Sin ubicación» si falta */ const bod = _data.bodegaNombre || _data.location || _data.ubicacion || '', est = _data.ubicacionEstante || ''; return bod ? `<div class="font-bold">${window.escapeHTML(bod)}</div>${est ? `<div class="item-category">Estante ${window.escapeHTML(String(est))}</div>` : ''}` : '<span class="text-muted">Sin ubicación</span>'; })()}</td>
                 <td>
                     <div class="stk-acciones" style="display:flex;gap:8px">
                         <button class="btn btn-icon btn-mover-bodega" title="Mover a otra bodega" aria-label="Mover a otra bodega"><i class="ph ph-arrows-left-right"></i></button>
@@ -3489,7 +3489,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (actionContainer && !actionContainer.querySelector('.btn-compras')) {
                         const btnCompras = document.createElement('button');
                         btnCompras.type = 'button';
-                        btnCompras.className = "btn btn-outline btn-sm btn-compras";   /* 4.306: solo cuando corresponde, con borde (sin «ALTERNATIVA») */
+                        btnCompras.className = "btn btn-outline btn-sm btn-compras";   /* 4.307: solo cuando corresponde, con borde (sin «ALTERNATIVA») */
                         btnCompras.title = 'Preparar solicitud de compra';
                         btnCompras.innerHTML = '<i class="ph-bold ph-shopping-cart"></i> Comprar';
                         btnCompras.onclick = () => window.generatePurchaseDraft(col.parentElement.dataset.id, insumoName, stock, burnRate, diasRestantes);
@@ -5362,7 +5362,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         }
 
-        /* 4.306: tipos de movimiento legibles para el Historial (texto, signo y color). El signo de Ajuste y Toma sale de la cantidad. */
+        /* 4.307: tipos de movimiento legibles para el Historial (texto, signo y color). El signo de Ajuste y Toma sale de la cantidad. */
         window.SAR_TipoMov = window.SAR_TipoMov || function (m) {
             const t = String((m && (m.type || m.tipo)) || '').toLowerCase().trim().replace(/[\s-]+/g, '_');
             const q = Number(m && (m.quantity != null ? m.quantity : m.cantidad)) || 0, pm = q < 0 ? '−' : '+';
@@ -5404,7 +5404,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const dateFmt = date.toLocaleDateString('es-CL');
                 const timeFmt = date.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
 
-                /* 4.306: tipo legible con signo y color; sin documento → «—»; sin nombre → «Registro incompleto» */
+                /* 4.307: tipo legible con signo y color; sin documento → «—»; sin nombre → «Registro incompleto» */
                 const tm = window.SAR_TipoMov(m), esc = window.escapeHTML;
                 const qn = Math.abs(Number(m.quantity != null ? m.quantity : m.cantidad) || 0);
                 const qtyClass = tm.signo === '+' ? 'text-green' : tm.signo === '−' ? 'text-red' : 'text-blue';
@@ -5557,7 +5557,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
             container.insertAdjacentHTML('beforeend', addCardHtml);
-            /* 4.306: «n estantes» (estantes activos de la subcolección Ubicaciones) en las bodegas que usan estantes */
+            /* 4.307: «n estantes» (estantes activos de la subcolección Ubicaciones) en las bodegas que usan estantes */
             container.querySelectorAll('.bod-estantes[data-bod]').forEach(async (el) => {
                 try {
                     const sn = await getDocs(collection(db, 'Bodegas', el.dataset.bod, 'Ubicaciones')), est = new Set();
@@ -7463,7 +7463,7 @@ document.addEventListener('DOMContentLoaded', () => {
     /* ----------------------------------------------------
        10. SEGURIDAD FRONTEND: Role-Based Access Control (RBAC)
        ---------------------------------------------------- */
-    /* 4.306: pantalla para una cuenta sin rol: no ve el sistema y se le indica a quién pedir acceso */
+    /* 4.307: pantalla para una cuenta sin rol: no ve el sistema y se le indica a quién pedir acceso */
     window.SAR_SinAcceso = function (userAuth) {
         document.body.setAttribute('data-user-role', 'sin_acceso');
         const roleDisplay = document.getElementById('ui-user-role-display'); if (roleDisplay) roleDisplay.textContent = 'SIN ACCESO';
@@ -7517,7 +7517,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     document.body.setAttribute('data-user-role', 'superadmin');
                     console.info("RBAC: SUPERADMIN conectado. Nivel jerárquico máximo autorizado.");
                 } else {
-                    /* 4.306: un rol vacío, «sin_acceso» o desconocido NO recibe «operador»: queda sin acceso hasta que el superadmin le asigne uno en Usuarios */
+                    /* 4.307: un rol vacío, «sin_acceso» o desconocido NO recibe «operador»: queda sin acceso hasta que el superadmin le asigne uno en Usuarios */
                     console.warn(`RBAC: rol '${userRole}' sin acceso.`);
                     window.SAR_SinAcceso(userAuth);
                     return;
@@ -7558,7 +7558,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
             } else {
-                /* 4.306: sin perfil en Usuarios → sin acceso. Se quitó el superadmin automático por dominio de correo
+                /* 4.307: sin perfil en Usuarios → sin acceso. Se quitó el superadmin automático por dominio de correo
                    (las reglas ya no lo permiten desde v21.249): los roles los asigna el superadmin en Usuarios. */
                 console.warn(`RBAC: ${userAuth.email} no tiene perfil en Usuarios: sin acceso.`);
                 window.SAR_SinAcceso(userAuth);
@@ -16029,7 +16029,7 @@ function doGet(e) {
             text.textContent = 'Sheets Semanal: Vinculado';
         } else {
             badge.className = 'badge-sheets-status status-offline';
-            text.textContent = 'Sheets Semanal: falta vincular';   /* 4.306: el aviso de abajo explica qué falta y quién lo configura */
+            text.textContent = 'Sheets Semanal: falta vincular';   /* 4.307: el aviso de abajo explica qué falta y quién lo configura */
         }
         { const av = document.getElementById('semanal-config-aviso'); if (av) av.hidden = !!url; }
     }

@@ -413,7 +413,7 @@ function doPost(e) {
         o.querySelector('#bit-url').focus();
     }
 
-    /* 4.306: la última respuesta del correo queda en este equipo para mostrarla al entrar, y la lectura tiene un límite de 8 s */
+    /* 4.307: la última respuesta del correo queda en este equipo para mostrarla al entrar, y la lectura tiene un límite de 8 s */
     const CLAVE_CORREO = 'sar_bitacora_correo_v1', LIMITE_CORREO = 8000;
     function correoGuardado() { try { const j = JSON.parse(localStorage.getItem(CLAVE_CORREO) || 'null'); return j && j.ok ? j : null; } catch (e) { return null; } }
     function guardarCorreo(j) { try { localStorage.setItem(CLAVE_CORREO, JSON.stringify(j)); } catch (e) { /* sin espacio: solo no se guarda */ } }

@@ -127,7 +127,7 @@
         const cuerpo = mk('div', 'ml-body ml-mas-cuerpo' + (abierto ? ' ml-abierto' : '')), dentro = mk('div', 'ml-in'); cuerpo.id = 'ml-mas-cuerpo'; cuerpo.appendChild(dentro);
         ids.forEach(i => dentro.appendChild(i));
         btn.addEventListener('click', () => { const v = !cuerpo.classList.contains('ml-abierto'); cuerpo.classList.toggle('ml-abierto', v); btn.setAttribute('aria-expanded', String(v)); estado.mas = v; guardar(); });
-        /* 4.306: «Más opciones» va al final del área que se desplaza (no fija abajo): con 575 px de alto el menú ya no queda en una caja de 180 px. En el pie queda solo «Salir». */
+        /* 4.307: «Más opciones» va al final del área que se desplaza (no fija abajo): con 575 px de alto el menú ya no queda en una caja de 180 px. En el pie queda solo «Salir». */
         const wrap = sb.querySelector('.sidebar-menu-wrapper'), salir = pie.querySelector('.danger');
         const grupo = mk('div', 'ml-mas'); grupo.appendChild(btn); grupo.appendChild(cuerpo);
         if (wrap) { const vac = wrap.querySelector('.ml-vacio'); if (vac) wrap.insertBefore(grupo, vac); else wrap.appendChild(grupo); } else { pie.insertBefore(cuerpo, salir); pie.insertBefore(btn, cuerpo); }

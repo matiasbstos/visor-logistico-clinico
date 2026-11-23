@@ -143,7 +143,7 @@
     items = []; s.forEach(x => { const d = x.data(); if (num(d.quantity) > 0) items.push({ id: x.id, d }); });
     items.sort((a, b) => String(a.d.name).localeCompare(String(b.d.name), 'es'));
   }
-  /* 4.306: lo marcado (a mano o con la pistola) sobrevive a cada repintado (filtro, pistola) */
+  /* 4.307: lo marcado (a mano o con la pistola) sobrevive a cada repintado (filtro, pistola) */
   function guardarMarcas(el) {
     const m = new Map(); el.querySelectorAll('tr[data-id]').forEach(tr => { const c = tr.querySelector('.tb-chk'); m.set(tr.dataset.id, { chk: !!(c && c.checked), lotes: [...tr.querySelectorAll('.tb-cant')].map(x => [x.dataset.clave, x.value]) }); });
     return m;
@@ -168,7 +168,7 @@
     const pi = document.getElementById('tb-pistola'); if (pi && window.SAR_Pistola) window.SAR_Pistola.conectar(pi, pistola);
     resumen(); el.addEventListener('change', (e) => { if (e.target.classList && e.target.classList.contains('tb-chk')) resumen(); }, { once: false });
   }
-  /** 4.306: pistola en Transferencias. BUL → su producto y su lote, con el contenido de la caja; código de producto → lo marca. */
+  /** 4.307: pistola en Transferencias. BUL → su producto y su lote, con el contenido de la caja; código de producto → lo marca. */
   const cajasLeidas = new Map();   /* id del insumo → folios BUL ya leídos en esta transferencia */
   async function pistola(txt) {
     const P = window.SAR_Pistola, t = window.showToast || (() => {}), el = root(); if (!P || !el) return;

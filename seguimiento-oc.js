@@ -298,7 +298,7 @@
     // Interfaz
     // ---------------------------------------------------------------
     let lista = [], unsubLista = null, unsubEventos = null, ocActual = null, eventos = [], soloPorRecibir = false;
-    /** 4.306: ¿la orden tiene unidades del SAR por recibir? (abierta y con lo pedido al centro propio mayor que lo recibido) */
+    /** 4.307: ¿la orden tiene unidades del SAR por recibir? (abierta y con lo pedido al centro propio mayor que lo recibido) */
     const porRecibir = (oc) => { if (!oc || oc.cerrada) return false; const t = totalesPorCentro(oc), mio = t.find(x => x.centro === CENTRO_PROPIO) || t[0]; return !!(mio && num(mio.pedido) > num(mio.recibido)); };
     const ordenLista = (l) => l.map((oc, i) => ({ oc, i, r: porRecibir(oc) ? 0 : 1 })).sort((a, b) => (a.r - b.r) || (a.i - b.i)).map(x => x.oc);
     const root = () => document.getElementById('soc-root');

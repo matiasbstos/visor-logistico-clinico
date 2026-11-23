@@ -75,7 +75,7 @@
     /** Borra la elección y la caja de lotes (tras ajustar o al volver a buscar). */
     function limpiar() { elegidoLote = null; lotesAct = []; const b = document.getElementById('ajuste-lotes'); if (b) b.innerHTML = ''; }
     document.addEventListener('input', (e) => { if (e.target && e.target.id === 'ajuste-cantidad') proyectar(); });
-    /* 4.306: «Restar / Sumar» + cantidad positiva. El campo oculto #ajuste-cantidad sigue llevando el número con signo,
+    /* 4.307: «Restar / Sumar» + cantidad positiva. El campo oculto #ajuste-cantidad sigue llevando el número con signo,
        así la validación, la proyección y ejecutarAjusteDirecto reciben exactamente lo mismo que antes. */
     function signo() { const b = document.querySelector('.aj-signo__b.on'); return b ? Number(b.dataset.signo) || -1 : -1; }
     function sincronizar() {

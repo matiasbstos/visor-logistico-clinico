@@ -76,7 +76,7 @@
         const fila = (nombre, codigo, stock, bodegas, fs) => {
             const ca = fs.map(normal), cj = ca.find(x => x.caja), au = ca.find(x => x.cajaAuto), pr = ca.find(x => x.producto);
             const destino = (cj && cj.c) || (pr && pr.c) || (codigo && fs.find(c => String(c.codigoMP || '') === String(codigo))) || fs[0];   /* se guarda en la ficha que ya tiene fotos */
-            /* 4.306: misma definición que imagenes-producto.js y el Catálogo (caja = imagen o foto automática confirmada; producto = fotosExtra tipo «producto»),
+            /* 4.307: misma definición que imagenes-producto.js y el Catálogo (caja = imagen o foto automática confirmada; producto = fotosExtra tipo «producto»),
                también para fichas que solo están en el índice de fotos (p. ej. foto de Convenio Marco por código) */
             const ui = typeof window !== 'undefined' && window.SAR_Imagenes && window.SAR_Imagenes.fotos ? window.SAR_Imagenes.fotos(nombre, codigo) : null;
             const cajaUI = !cj && !au && ui && ui.caja ? { web: ui.caja } : null;
@@ -103,7 +103,7 @@
         const f = fs(), ins = [], cat = [];
         (await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(10000)))).forEach(d => ins.push(d.data()));
         (await f.getDocs(f.query(f.collection(db(), 'Catalogo_Productos'), f.limit(5000)))).forEach(d => cat.push({ __id: d.id, ...d.data() }));
-        if (window.SAR_Imagenes && window.SAR_Imagenes.cargar) await window.SAR_Imagenes.cargar().catch(() => {});   /* 4.306: mismo índice de fotos que el Catálogo */
+        if (window.SAR_Imagenes && window.SAR_Imagenes.cargar) await window.SAR_Imagenes.cargar().catch(() => {});   /* 4.307: mismo índice de fotos que el Catálogo */
         return { ins, cat };
     }
     /** Guarda una foto en el catálogo. tipo: 'producto' | 'caja' | 'extra'. */

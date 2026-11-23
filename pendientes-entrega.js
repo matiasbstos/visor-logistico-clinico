@@ -141,7 +141,7 @@
     function pintar() {
         const r = root(); if (!r) return;
         const total = grupos.reduce((s, g) => s + g.items.length, 0), listos = grupos.reduce((s, g) => s + g.listos, 0);
-        /* 4.306: encabezado estándar (h1 fuera de la tarjeta, bajada con los totales); primaria «Hoja de picking», el resto con borde */
+        /* 4.307: encabezado estándar (h1 fuera de la tarjeta, bajada con los totales); primaria «Hoja de picking», el resto con borde */
         r.innerHTML = `<div class="page-header mb-16"><div class="page-title"><h1>Pendientes por entregar</h1>
             <p>${total ? `<b>${grupos.length}</b> centro(s) · <b>${total}</b> producto(s) pendiente(s) · <b>${listos}</b> con stock para entregar ahora.` : 'Lo que cada centro pidió y aún no se le entrega, según las actas.'}</p></div>
             <div class="page-actions pen-acc"><button type="button" class="btn btn-outline" id="pen-recargar"><i class="ph-bold ph-arrows-clockwise"></i> Actualizar</button>

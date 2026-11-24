@@ -29,7 +29,9 @@
     const CENTRO_PROPIO = 'SAR';
     const esCentroPropio = (c) => {
         const t = String((c && c.centro) || '').toUpperCase().trim();
-        return t === CENTRO_PROPIO || (/(^|[^A-Z])SAR([^A-Z]|$)/.test(t) && !/CESFAM|POSTA|COSAM|CECOSF/i.test(t));
+        if (t === CENTRO_PROPIO) return true;
+        if (/(^|[^A-Z])SAR([^A-Z]|$)/.test(t) && !/CESFAM|POSTA|COSAM|CECOSF/i.test(t)) return true;
+        return !t && /(^|[^A-Z])SAR([^A-Z]|$)/i.test(String((c && c.financiamiento) || ''));
     };
     const columnasPropias = (oc) => {
         const all = oc && Array.isArray(oc.columnas) ? oc.columnas : [];
@@ -73,7 +75,7 @@
     // ---------------------------------------------------------------
     function centrosDe(oc) {
         const m = {};
-        (oc.columnas || []).forEach(c => { (m[c.centro] = m[c.centro] || { centro: c.centro, columnas: [] }).columnas.push(c); });
+        (oc.columnas || []).forEach(c => { const nm = esCentroPropio(c) ? CENTRO_PROPIO : (c.centro || 'Sin centro'); (m[nm] = m[nm] || { centro: nm, columnas: [] }).columnas.push(c); });
         return Object.values(m);
     }
     function totalesPorCentro(oc) {
@@ -1137,33 +1139,47 @@
             <div id="p-estado" class="cierre-hint">Sube el PDF y revisa lo que se leyó. También puedes completar todo a mano.</div>
             <div id="p-rev"></div>`, async (o) => {
             leerRev(o);
+            const conTiempo = (p, ms, msg) => Promise.race([p, new Promise((_, r) => setTimeout(() => r(new Error(msg || 'Tiempo de espera agotado.')), ms))]);
+            let prog = progresoRecepcion(o, ['Validando la orden de compra…']);
+            try {
             let usoCuadro = null;
             if (window.SAR_ComprasAgiles && String(rev.numeroOC || '').trim() && !rev.distrib) {
+                prog.paso('Buscando compra ágil asociada…');
                 rev.cuadro = null;
-                const r = await window.SAR_ComprasAgiles.cuadroParaOC(String(rev.numeroOC).trim().toUpperCase(), rev.lineas.filter(l => String(l.descripcion || '').trim() && num(l.cantidad) > 0));
+                const r = await conTiempo(window.SAR_ComprasAgiles.cuadroParaOC(String(rev.numeroOC).trim().toUpperCase(), rev.lineas.filter(l => String(l.descripcion || '').trim() && num(l.cantidad) > 0)), 8000).catch(() => ({ error: 'sin compra ágil' }));
                 if (r && !r.error) { rev.cuadro = r; usoCuadro = r; } else if (r && r.error && r.error !== 'sin compra ágil') toast('Cuadro por centro', `No se usó el de la compra ágil ${r.compra}: ${r.error} Se ingresó todo al SAR; revisa el cuadro.`, 'warning');
             }
             const oc = armarOCdesdeRevision(rev);
             const id = slug(oc.numeroOC), ref = fs().doc(fs().collection(db(), 'Seguimiento_OC'), id);
-            if ((await fs().getDoc(ref)).exists()) { toast('Ya existe', 'Esa orden ya está en seguimiento.', 'warning'); return false; }
+            prog.paso('Verificando si la orden ya existe…');
+            let yaExiste = lista.some(x => x.id === id);
+            if (!yaExiste) {
+                const snEx = await conTiempo(fs().getDoc(ref), 12000).catch(() => null);
+                if (snEx && snEx.exists()) yaExiste = true;
+            }
+            if (yaExiste) { prog.cerrar(); toast('Ya existe', 'Esa orden ya está en seguimiento.', 'warning'); return false; }
             if (window.SAR_CDP) {                       // presupuesto CDP (opcional): avisa si esta orden lo sobregira
-                const al = await window.SAR_CDP.alertaNuevaOC({ ...oc, id }, lista);
-                if (al.length && !(await confirmar('Atención con el presupuesto', al.join('\n') + '\n\n¿Ingresar la orden de todos modos?', 'Ingresar igual'))) return false;
+                prog.paso('Revisando presupuesto CDP…');
+                const al = await conTiempo(window.SAR_CDP.alertaNuevaOC({ ...oc, id }, lista), 8000).catch(() => []);
+                if (al.length) {
+                    prog.cerrar();
+                    if (!(await confirmar('Atención con el presupuesto', al.join('\n') + '\n\n¿Ingresar la orden de todos modos?', 'Ingresar igual'))) return false;
+                    prog = progresoRecepcion(o, ['Guardando la orden de compra…']);
+                }
             }
             oc.destinatarios = [...(configCorreo.destinatariosBase || [])]; oc.creadoPor = usuario(); oc.creadoEn = fs().serverTimestamp();
             const hist = !!(o.querySelector('#p-hist') || {}).checked, hFecha = hist ? o.querySelector('#p-hist-fecha').value : '';
             if (hist) {
-                if (!hFecha) { toast('Falta la fecha', 'Indica cuándo se recibió esta orden histórica.', 'warning'); return false; }
+                if (!hFecha) { prog.cerrar(); toast('Falta la fecha', 'Indica cuándo se recibió esta orden histórica.', 'warning'); return false; }
                 oc.historica = true; oc.cerrada = true; oc.aceptada = hFecha; oc.fechaLimite = hFecha; oc.recepcionHistorica = { fecha: hFecha, documento: o.querySelector('#p-hist-doc').value.trim() };
                 oc.lineas.forEach(l => { (oc.columnas || []).forEach(c => { if (Number(l.dist && l.dist[c.key]) > 0) l.recibido = { ...(l.recibido || {}), [c.key]: Number(l.dist[c.key]) }; }); });
             }
-            const prog = progresoRecepcion(o, ['Guardando la orden de compra…']);
-            try {
-            await fs().runTransaction(db(), async (tx) => {
+            prog.paso('Guardando la orden de compra…');
+            await conTiempo(fs().runTransaction(db(), async (tx) => {
                 tx.set(ref, oc);
                 if (hist) tx.set(fs().doc(fs().collection(db(), 'Seguimiento_OC', id, 'Eventos')), { tipo: 'ESTADO', texto: `Orden HISTÓRICA cargada para trazabilidad: recibida el ${fmtFecha(hFecha)}${oc.recepcionHistorica.documento ? ' (' + oc.recepcionHistorica.documento + ')' : ''}. No movió stock.`, autor: usuario(), fecha: fs().serverTimestamp() });
                 tx.set(fs().doc(fs().collection(db(), 'Seguimiento_OC', id, 'Eventos')), { tipo: 'CREACION', texto: `Orden ingresada${oc.origen === 'OC_MP' ? ' desde el PDF' : ''}: ${oc.lineas.length} producto(s). El proveedor debe aceptarla hasta el ${fmtFecha(oc.aceptarLimite)}; entrega en ${oc.plazoDiasHabiles} días hábiles desde la aceptación.`, autor: usuario(), fecha: fs().serverTimestamp() });
-            });
+            }), 25000, 'La conexión con la base de datos tardó demasiado. Revisa tu internet o cierra otras pestañas del Visor e intenta de nuevo.');
             if (usoCuadro) window.SAR_ComprasAgiles.vincularOC(usoCuadro.id, oc.numeroOC);
             prog.paso('Buscando fotos y catálogo en segundo plano…');
             catalogoEnSegundoPlano({ ...oc, id });
@@ -1286,21 +1302,36 @@
         const pc = (ingresos.find(g => g.porCaja > 0) || {}).porCaja || 0;
         return { batches: lotes, quantity: num(doc && doc.quantity) + total, ingresado: total, ...(pc ? { porCaja: pc } : {}) };
     }
-    /** Aplica lo recibido a las líneas de la OC. Puro. */
+    /** Aplica lo recibido a las líneas de la OC (admite detalle multi-columna vía d.columna). Puro. */
     function aplicarRecepcion(data, key, det, incidencias, extra, ingresaStock) {
         const lineas = (data.lineas || []).map(l => ({ ...l, recibido: { ...(l.recibido || {}) }, ingresado: { ...(l.ingresado || {}) }, entregado: { ...(l.entregado || {}) } }));
-        det.forEach(d => { const l = lineas[d.i]; l.recibido[key] = num(l.recibido[key]) + d.cantidad; if (ingresaStock) l.ingresado[key] = num(l.ingresado[key]) + d.cantidad; if (d.insumoName) l.insumoName = d.insumoName; });
+        det.forEach(d => { const k = d.columna || key, l = lineas[d.i]; l.recibido[k] = num(l.recibido[k]) + d.cantidad; if (ingresaStock) l.ingresado[k] = num(l.ingresado[k]) + d.cantidad; if (d.insumoName) l.insumoName = d.insumoName; });
         return { lineas, incidencias: [...(data.incidencias || []), ...incidencias.map((n, k) => ({ id: `inc-${Date.now()}-${k}`, ...n, estado: 'ABIERTA', fecha: hoyISO(), ...(extra || {}) }))] };
     }
     /** Fila de una guía de despacho en «Recibir productos» (v21.226: se pueden agregar varias). */
     function filaGuiaR() { return `<div class="rc-doc"><div class="soc-fila"><label>N° guía de despacho<input type="text" class="r-gn" autocomplete="off"></label><label>Foto o PDF de la guía<input type="file" class="r-gf" accept="application/pdf,image/*"></label></div><div class="rc-doc-f"><button type="button" class="btn btn-outline btn-sm rc-dq" aria-label="Quitar esta guía"><i class="ph-bold ph-trash"></i> Quitar</button></div></div>`; }
-    /* v21.245: recepción hecha sin internet → UNA operación con todos sus memos, como con internet. Los folios REC definitivos se toman
-       una sola vez (quedan en la op); recepcionConStock no repite un REC ya guardado; el correo se envía aparte y queda marcado. */
+    /* v21.245 / v21.252: recepción hecha sin internet → UNA operación unificada con todos sus memos (y retrocompatible con cola anterior). */
     if (window.SAR_Cola && window.SAR_Cola.registrar) window.SAR_Cola.registrar('recepcion-oc', async (d, op) => {
-        const memos = d.memos || [];
-        let ids = d.recFinales; if (!ids) { ids = window.SAR_Folio ? await window.SAR_Folio.varios('REC', memos.length, { estricto: true }) : memos.map(m => m.recP); ids = [].concat(ids); if (window.SAR_Cola.actualizar) window.SAR_Cola.actualizar(op.id, { recFinales: ids }); }
         const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), 'Seguimiento_OC'), d.ocId)); if (!sn.exists()) throw new Error('La orden ya no existe.');
         const oc = { id: d.ocId, ...sn.data() };
+        if (d.unificada) {
+            let recId = d.recFinal;
+            if (!recId) { recId = window.SAR_Folio ? await window.SAR_Folio.siguiente('REC', { estricto: true }) : d.recP; if (window.SAR_Cola.actualizar) window.SAR_Cola.actualizar(op.id, { recFinal: recId }); }
+            const nota = `\n(Hecha sin conexión el ${new Date(d.en || Date.now()).toLocaleString('es-CL')}; folio provisional ${d.recP || ''}.)`;
+            const txt = String(d.textoBase || '').split('§REC§').join(recId) + nota;
+            if ((d.extras || []).length && (oc.lineas || []).length === d.baseN) oc.lineas = [...(oc.lineas || []), ...d.extras];
+            await recepcionConStock(oc, { provDoc: d.provDoc, extras: d.extras || [], baseN: d.baseN, onPaso: null, recId, hora: d.hora, key: d.key, columnas: d.columnas, det: d.det || [], incidencias: d.incidencias || [], guia: d.guia, fecha: d.fecha, obs: d.obs, notificar: false, ingresaStock: d.ingresaStock, central: d.central, texto: txt, titulo: d.titulo, textoCorreo: '' });
+            oc.lineas = aplicarRecepcion(oc, d.key, d.det || [], [], null, d.ingresaStock).lineas;
+            if (d.notificar && !d.correoEnviado) {
+                try { await cargarConfig(); } catch (e) { /* sin configuración: se intenta igual */ }
+                const r = await enviarCorreo(DESTINO_RECEPCION, armarCorreo(oc, d.titulo, txt, usuario()), { respaldo: true });
+                if (!r || !['enviado', 'programado'].includes(r.estado)) throw new Error('sin conexión: el correo de la recepción no salió; se reintenta (la recepción ya quedó guardada)');
+                if (window.SAR_Cola.actualizar) window.SAR_Cola.actualizar(op.id, { correoEnviado: true });
+            }
+            return;
+        }
+        const memos = d.memos || [];
+        let ids = d.recFinales; if (!ids) { ids = window.SAR_Folio ? await window.SAR_Folio.varios('REC', memos.length, { estricto: true }) : memos.map(m => m.recP); ids = [].concat(ids); if (window.SAR_Cola.actualizar) window.SAR_Cola.actualizar(op.id, { recFinales: ids }); }
         const nota = `\n(Hecha sin conexión el ${new Date(d.en || Date.now()).toLocaleString('es-CL')}; folios provisionales ${memos.map(m => m.recP).join(', ')}.)`;
         const poner = (t) => { let x = String(t || ''); memos.forEach((m, n) => { x = x.split('§REC' + n + '§').join(ids[n]); }); return x; };
         for (const [n, m] of memos.entries()) {
@@ -1316,7 +1347,7 @@
             if (window.SAR_Cola.actualizar) window.SAR_Cola.actualizar(op.id, { correoEnviado: true });
         }
     });
-    async function recepcionConStock(oc, { provDoc, extras, baseN, onPaso, recId, hora, key, det, incidencias, guia, fecha, obs, notificar, ingresaStock, central, texto, titulo, textoCorreo }) {
+    async function recepcionConStock(oc, { provDoc, extras, baseN, onPaso, recId, hora, key, columnas, det, incidencias, guia, fecha, obs, notificar, ingresaStock, central, texto, titulo, textoCorreo }) {
         const f = fs(); const paso = (t) => { if (onPaso) onPaso(t); };
         const aplicadoLocal = aplicarRecepcion(oc, key, det, incidencias, null, ingresaStock);
         let correo = null;
@@ -1344,6 +1375,7 @@
         }
         paso(`Guardando la recepción ${recId} y subiendo ${det.reduce((t, d) => t + d.cantidad, 0)} unidades al stock…`);
         let yaRegistrada = false, intentoPropio = false;
+        const colsList = Array.isArray(columnas) && columnas.length > 1 ? columnas : null;
         await f.runTransaction(db(), async (tx) => {
             const os = await tx.get(ocRef); if (!os.exists()) throw new Error('La orden ya no existe.');
             const lecturas = []; for (const g of grupos.values()) lecturas.push([g, await tx.get(g.ref)]);
@@ -1355,8 +1387,10 @@
                 if ((fresca.lineas || []).length !== baseN) throw new Error('La orden cambió mientras recibías. Cierra la ventana y vuelve a abrir la recepción.');
                 fresca.lineas = [...(fresca.lineas || []), ...extras.map(l => ({ ...l, agregadaPor: usuario(), agregadaEn: hoyISO() }))];
             }
-            det.forEach(d => { const l = (fresca.lineas || [])[d.i] || {}, pe = num(l.dist && l.dist[key]) - num(l.recibido && l.recibido[key]); if (d.cantidad > Math.max(0, pe)) throw new Error(`"${String(l.descripcion || '').slice(0, 40)}": solo quedan ${Math.max(0, pe)} por recibir (otra recepción se registró antes). Cierra y vuelve a abrir.`); });
-            tx.update(ocRef, { ...aplicarRecepcion(fresca, key, det, incidencias, null, ingresaStock), ...(guia ? { ultimaGuia: guia } : {}), ultimaRecepcion: fecha, recepciones: [...(fresca.recepciones || []), { recId, fecha, hora, guia: guia || '', columna: key, bodega: ingresaStock ? central : '', ingresoAStock: !!ingresaStock, usuario: usuario(), unidades: det.reduce((t, d) => t + d.cantidad, 0), detalle: det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, insumoName: d.insumoName || '', cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })) }], actualizadoEn: f.serverTimestamp() });
+            const porColLinea = new Map();
+            det.forEach(d => { const k = d.columna || key, ck = d.i + '|' + k; porColLinea.set(ck, (porColLinea.get(ck) || 0) + d.cantidad); });
+            porColLinea.forEach((cant, ck) => { const [iStr, k] = ck.split('|'), l = (fresca.lineas || [])[Number(iStr)] || {}, pe = num(l.dist && l.dist[k]) - num(l.recibido && l.recibido[k]); if (cant > Math.max(0, pe)) throw new Error(`"${String(l.descripcion || '').slice(0, 40)}": solo quedan ${Math.max(0, pe)} por recibir (otra recepción se registró antes). Cierra y vuelve a abrir.`); });
+            tx.update(ocRef, { ...aplicarRecepcion(fresca, key, det, incidencias, null, ingresaStock), ...(guia ? { ultimaGuia: guia } : {}), ultimaRecepcion: fecha, recepciones: [...(fresca.recepciones || []), { recId, fecha, hora, guia: guia || '', columna: key, ...(colsList ? { columnas: colsList } : {}), bodega: ingresaStock ? central : '', ingresoAStock: !!ingresaStock, usuario: usuario(), unidades: det.reduce((t, d) => t + d.cantidad, 0), detalle: det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, insumoName: d.insumoName || '', cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '', ...(d.columna ? { columna: d.columna } : {}) })) }], actualizadoEn: f.serverTimestamp() });
             const cuadresEv = [];   /* v21.228: lo adeudado que se descontó al ingresar (para poder anular la recepción sin perder unidades) */
             lecturas.forEach(([g, snap]) => {
                 const actual = snap.exists() ? snap.data() : null, m = mezclarIngreso(actual, g.ingresos);
@@ -1372,7 +1406,7 @@
                     insumoName: g.nombre, item: g.nombre, quantity: ing.cantidad, type: 'INGRESO_OC', batch: ing.lote, expirationDate: ing.vence, destination: central, dest: central, origin: oc.proveedor || 'Proveedor',
                     provider: oc.proveedor || provDoc || 'S/I', user: usuario(), date: f.serverTimestamp(), document: `${recId} · OC ${oc.numeroOC}${guia ? ' · guía ' + guia : ''}`, observacion: obs || '', ocId: oc.id, idInsumoDestino: g.ref.id }));
             });
-            tx.set(evRef, { tipo: 'RECEPCION', ...(cuadresEv.length ? { cuadres: cuadresEv } : {}), texto, autor: usuario(), fecha: f.serverTimestamp(), ...(correo ? { correo } : {}), columna: key, guia, recId, horaLlegada: hora, bodegaDestino: central, fechaRecepcion: fecha, ingresoAStock: !!ingresaStock, detalle: det.map(d => ({ i: d.i, ...(d._ref ? { idInsumo: d._ref } : {}), bodega: central, insumoName: d.insumoName || '', descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })), incidencias: incidencias.map(n => ({ producto: n.producto, tipo: n.tipo, detalle: n.detalle })) });
+            tx.set(evRef, { tipo: 'RECEPCION', ...(cuadresEv.length ? { cuadres: cuadresEv } : {}), texto, autor: usuario(), fecha: f.serverTimestamp(), ...(correo ? { correo } : {}), columna: key, ...(colsList ? { columnas: colsList } : {}), guia, recId, horaLlegada: hora, bodegaDestino: central, fechaRecepcion: fecha, ingresoAStock: !!ingresaStock, detalle: det.map(d => ({ i: d.i, ...(d._ref ? { idInsumo: d._ref } : {}), ...(d.columna ? { columna: d.columna } : {}), bodega: central, insumoName: d.insumoName || '', descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad, lote: d.lote || '', vence: d.vence || '' })), incidencias: incidencias.map(n => ({ producto: n.producto, tipo: n.tipo, detalle: n.detalle })) });
         });
         if (yaRegistrada && !intentoPropio) return null;
         if (notificar) { paso('Enviando el aviso por correo…'); try { correo = await enviarCorreo(DESTINO_RECEPCION, armarCorreo({ ...oc, ...aplicadoLocal }, titulo, textoCorreo || texto, usuario())); } catch (e) { toast('Recepción guardada', 'No se pudo preparar el correo: ' + e.message, 'warning'); } }
@@ -1417,10 +1451,10 @@
             const estadoActa = {}; for (const a of [...new Set((Array.isArray(ev.cuadres) ? ev.cuadres : []).flatMap(c => (c.cubiertas || []).map(x => x.acta)).filter(x => x && x !== '(sin acta)'))]) { try { const sa = await tx.get(f.doc(f.collection(db(), 'Actas_Entrega'), a)); estadoActa[a] = sa.exists() ? (sa.data().estado || 'EMITIDA') : 'EMITIDA'; } catch (e) { estadoActa[a] = 'EMITIDA'; } }
             const lineas = (fresca.lineas || []).map(l => ({ ...l, recibido: { ...(l.recibido || {}) }, ingresado: { ...(l.ingresado || {}) }, entregado: { ...(l.entregado || {}) } }));
             ev.detalle.forEach(d => {
-                const l = lineas[d.i]; if (!l) throw new Error('Una línea de la recepción ya no existe en la orden.');
-                if (num(l.recibido[key]) < d.cantidad) throw new Error(`"${String(l.descripcion || '').slice(0, 40)}": lo recibido ya es menor a lo que se quiere anular.`);
-                if (conStock && num(l.ingresado[key]) - d.cantidad < num(l.entregado[key])) throw new Error(`"${String(l.descripcion || '').slice(0, 40)}": ya se entregaron ${num(l.entregado[key])} u. con actas. Elimina esas actas antes de anular la recepción.`);
-                l.recibido[key] = num(l.recibido[key]) - d.cantidad; if (conStock) l.ingresado[key] = Math.max(0, num(l.ingresado[key]) - d.cantidad);
+                const k = d.columna || key, l = lineas[d.i]; if (!l) throw new Error('Una línea de la recepción ya no existe en la orden.');
+                if (num(l.recibido[k]) < d.cantidad) throw new Error(`"${String(l.descripcion || '').slice(0, 40)}": lo recibido ya es menor a lo que se quiere anular.`);
+                if (conStock && num(l.ingresado[k]) - d.cantidad < num(l.entregado[k])) throw new Error(`"${String(l.descripcion || '').slice(0, 40)}": ya se entregaron ${num(l.entregado[k])} u. con actas. Elimina esas actas antes de anular la recepción.`);
+                l.recibido[k] = num(l.recibido[k]) - d.cantidad; if (conStock) l.ingresado[k] = Math.max(0, num(l.ingresado[k]) - d.cantidad);
             });
             const nuevas = [];
             lecturas.forEach(([g, snap]) => {
@@ -1502,7 +1536,7 @@
     /** Panel de avance dentro de la ventana de recepción: qué se está haciendo y cuándo terminó. */
     function progresoRecepcion(ov, inicial) {
         const P = window.SAR_Progreso.iniciar('Procesando…', inicial, ov);
-        return { paso: P.paso, listo: (txt, sinInforme) => P.listo(txt, { informe: !sinInforme, ms: 60000, aviso: false }), error: () => P.error() };
+        return { paso: P.paso, listo: (txt, sinInforme) => P.listo(txt, { informe: !sinInforme, ms: 60000, aviso: false }), error: () => P.error(), cerrar: () => P.cerrar ? P.cerrar() : P.error() };
     }
     async function formRecepcion() {
         // Copia de trabajo: si se agregan productos que el lector no leyó, solo se guardan al confirmar la recepción
@@ -1549,12 +1583,13 @@
                 o.querySelectorAll('tr[data-i]').forEach(tr => {
                     const k = tr.dataset.k || keysS[0], g = porKey.get(k) || porKey.get(keysS[0]); if (!g) return;
                     const v = num(tr.querySelector('.r-c').value), tipo = tr.querySelector('.r-t').value, i = Number(tr.dataset.i);
-                    if (v > 0) { const venc = tr.querySelector('.r-v'); g.det.push({ i, cantidad: v, lote: tr.querySelector('.r-l') ? tr.querySelector('.r-l').value : '', vence: venc && venc.value ? venc.value : '', cajas: tr.querySelector('.r-cj') ? Math.max(0, Math.floor(num(tr.querySelector('.r-cj').value))) : 0, insumoName: tr.querySelector('.r-n') ? tr.querySelector('.r-n').value.trim() : '' }); }
+                    if (v > 0) { const venc = tr.querySelector('.r-v'); g.det.push({ i, columna: k, cantidad: v, lote: tr.querySelector('.r-l') ? tr.querySelector('.r-l').value : '', vence: venc && venc.value ? venc.value : '', cajas: tr.querySelector('.r-cj') ? Math.max(0, Math.floor(num(tr.querySelector('.r-cj').value))) : 0, insumoName: tr.querySelector('.r-n') ? tr.querySelector('.r-n').value.trim() : '' }); }
                     if (tipo) g.incidencias.push({ producto: oc.lineas[i].descripcion, tipo, detalle: tr.querySelector('.r-td').value.trim() });
                 });
                 const activos = keysS.filter(k => porKey.get(k).det.length || porKey.get(k).incidencias.length);
                 if (!activos.length) { toast('Sin datos', 'Indica una cantidad recibida o una incidencia.', 'warning'); return false; }
                 const allDet = activos.flatMap(k => porKey.get(k).det);
+                const allInc = activos.flatMap(k => porKey.get(k).incidencias);
                 // Producto agregado sin pedido: lo que se digita en "Llega ahora" pasa a ser su pedido; si no se digita nada, hay que quitarlo o indicar las unidades
                 const key0 = keysS[0];
                 const sinU = extras.find(l => !num(l.dist && l.dist[key0]) && !allDet.some(d => oc.lineas[d.i] === l));
@@ -1582,51 +1617,47 @@
                 if (avisos.length && o.dataset.aviso !== firma) { o.dataset.aviso = firma; toast('Revisa antes de guardar', avisos.join('. ') + '. Si es correcto, pulsa Guardar recepción otra vez.', 'warning'); return false; }
                 const nRec0 = eventos.filter(e => e.tipo === 'RECEPCION').length, hora = new Date().toTimeString().slice(0, 5), base = `REC-${String(oc.numeroOC).replace(/[^A-Za-z0-9-]+/g, '')}`;
                 const idDe = (n) => `${base}-${String(nRec0 + 1 + n).padStart(2, '0')}`;
-                const textoDe = (k, recId) => { const col = cols.find(c => c.key === k), g = porKey.get(k), det = g.det, incidencias = g.incidencias; return `${recId} · Recepción en ${col.centro}${col.memo ? ' (memo ' + col.memo + (col.cdp ? ', CDP ' + col.cdp : '') + ')' : ''} el ${fmtFecha(fecha)} a las ${hora}${guia ? ' · guía N° ' + guia : ''}:\n` +
+                const textoDe = (k, recId) => { const col = cols.find(c => c.key === k) || {}, g = porKey.get(k), det = g.det, incidencias = g.incidencias; const etqCol = [col.centro || 'SAR', col.memo ? 'memo ' + col.memo : '', col.cdp ? 'CDP ' + col.cdp : ''].filter(Boolean).join(' · '); return `${recId} · Recepción en ${etqCol} el ${fmtFecha(fecha)} a las ${hora}${guia ? ' · guía N° ' + guia : ''}:\n` +
                     (det.length ? det.map(d => `- ${oc.lineas[d.i].descripcion}${oc.lineas[d.i].agregada ? ' (agregado en la recepción)' : ''}: ${d.cantidad} un.${d.lote ? ' · lote ' + d.lote : ''}${d.vence ? ' · vence ' + fmtFecha(d.vence) : ''}`).join('\n') : '- (sin unidades recibidas)') +
                     (incidencias.length ? '\nINCIDENCIAS:\n' + incidencias.map(n => `- ${n.producto}: ${INCIDENCIAS[n.tipo]}${n.detalle ? ' — ' + n.detalle : ''}`).join('\n') : '') + (obs ? '\nObs.: ' + obs : '') + (ingresaStock ? `\nIngresado al stock de ${central}.` : ''); };
-                /* v21.246: sin internet la recepción queda en la cola del teléfono (una por memo) y se aplica sola al volver la conexión,
-                   con su folio REC definitivo y su correo; las guías (archivos) se adjuntan después desde la orden. */
+                const textoUnificado = (recId) => activos.map(k => textoDe(k, recId)).join('\n\n');
+                /* v21.252: varios memos que llegan en la misma guía se registran en UNA SOLA recepción (un solo REC- y una sola Recepción Conforme). */
                 const fGuiasN = filasG.filter(x => x.file).length, unidadesOff = allDet.reduce((t, d) => t + d.cantidad, 0);
-                const tituloOff = (activos.some(k => porKey.get(k).incidencias.length) ? 'Recepción con incidencias' : 'Recepción') + (activos.length > 1 ? ` de ${activos.length} memos` : ` en ${(cols.find(c => c.key === activos[0]) || {}).centro}`), textoOff = activos.map(k => textoDe(k, '§REC§')).join('\n\n');
+                const tituloRec = (allInc.length ? 'Recepción con incidencias' : 'Recepción') + (activos.length > 1 ? ` unificada (${activos.length} memos)` : ` en ${(cols.find(c => c.key === activos[0]) || {}).centro || 'SAR'}`);
                 if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) {
                     if (window.SAR_Cola.pendientes().some(x => x.tipo === 'recepcion-oc' && x.datos && x.datos.ocId === oc.id)) { toast('Ya hay una recepción en cola', `La OC ${oc.numeroOC} tiene una recepción esperando internet: recibe lo demás cuando se aplique, para no sumar dos veces.`, 'warning'); return false; }
-                    const memos = activos.map((k, n) => { const g = porKey.get(k); return { key: k, recP: window.SAR_Folio ? window.SAR_Folio.provisional('REC') : 'REC-P-' + Date.now().toString(36) + n, det: g.det.map(d => ({ ...d })), incidencias: g.incidencias, textoBase: textoDe(k, '§REC' + n + '§') }; });
-                    window.SAR_Cola.encolar({ tipo: 'recepcion-oc', titulo: `Recepción ${memos.map(m => m.recP).join(' + ')} · OC ${oc.numeroOC} · ${unidadesOff} u.`, datos: { ocId: oc.id, memos, provDoc: (docLeido && docLeido.empresa) || '', extras, baseN, hora, guia, fecha, obs, notificar: q('#r-correo').checked, ingresaStock, central, titulo: tituloOff, textoCorreo: activos.map((k, n) => textoDe(k, '§REC' + n + '§')).join('\n\n'), en: new Date().toISOString() } });
+                    const recP = window.SAR_Folio ? window.SAR_Folio.provisional('REC') : 'REC-P-' + Date.now().toString(36);
+                    window.SAR_Cola.encolar({ tipo: 'recepcion-oc', titulo: `Recepción ${recP} · OC ${oc.numeroOC} · ${unidadesOff} u.`, datos: { ocId: oc.id, unificada: true, recP, key: activos[0], columnas: activos, det: allDet.map(d => ({ ...d })), incidencias: allInc, textoBase: textoUnificado('§REC§'), provDoc: (docLeido && docLeido.empresa) || '', extras, baseN, hora, guia, fecha, obs, notificar: q('#r-correo').checked, ingresaStock, central, titulo: tituloRec, en: new Date().toISOString() } });
                     toast('Sin internet: recepción en cola', `OC ${oc.numeroOC}: ${unidadesOff} u.${ingresaStock ? ' entrarán a ' + central : ''} apenas vuelva la conexión (mantén el Visor abierto).${fGuiasN ? ' Las guías escaneadas adjúntalas después desde la orden.' : ''}`, 'info');
                     return;
                 }
-                const firmaRec = activos.join('|'); if (!o._recIds || o._recFirma !== firmaRec) { o._recIds = window.SAR_Folio ? await window.SAR_Folio.varios('REC', activos.length) : activos.map((k, n) => idDe(n)); o._recFirma = firmaRec; }   /* v21.230: los mismos N° REC si se reintenta en la misma ventana */
-                const ids = o._recIds, /* REC-AAAA-NNNNN: la OC queda como dato aparte; el archivo RC_<orden> no cambia */ unidades = allDet.reduce((t, d) => t + d.cantidad, 0), hayInc = activos.some(k => porKey.get(k).incidencias.length);
-                const textoCorreo = activos.map((k, n) => textoDe(k, ids[n])).join('\n\n'), tituloCorreo = (hayInc ? 'Recepción con incidencias' : 'Recepción') + (activos.length > 1 ? ` de ${activos.length} memos` : ` en ${(cols.find(c => c.key === activos[0]) || {}).centro}`);
+                const firmaRec = activos.join('|'); if (!o._recId || o._recFirma !== firmaRec) { o._recId = window.SAR_Folio ? await window.SAR_Folio.siguiente('REC') : idDe(0); o._recFirma = firmaRec; }   /* v21.252: un solo folio REC para todos los memos recibidos juntos */
+                const recId = o._recId, unidades = allDet.reduce((t, d) => t + d.cantidad, 0);
+                const textoFinal = textoUnificado(recId);
                 const prog = progresoRecepcion(o, ['Validando la recepción…']);
-                const recNuevas = [];
+                let recNueva = null;
                 try {
                 const fGuias = filasG.filter(x => x.file);
-                for (let n = 0; n < activos.length; n++) {
-                    const k = activos[n], g = porKey.get(k), col = cols.find(c => c.key === k), ultimo = n === activos.length - 1;
-                    if (activos.length > 1) prog.paso(`Memo ${col.memo} (${n + 1} de ${activos.length})…`);
-                    await recepcionConStock(oc, { provDoc: (docLeido && docLeido.empresa) || '', extras: n === 0 ? extras : [], baseN, onPaso: prog.paso, recId: ids[n], hora, key: k, det: g.det, incidencias: g.incidencias, guia, fecha, obs, notificar: ultimo && q('#r-correo').checked, ingresaStock, central, texto: textoDe(k, ids[n]), titulo: tituloCorreo, textoCorreo });
-                    if (ingresaStock) await aprenderNombres(oc, g.det);
-                    else if (n === 0) { const ex = extras.map(l => ({ i: oc.lineas.indexOf(l), insumoName: l.descripcion })).filter(d => d.i >= 0); if (ex.length) await aprenderNombres(oc, ex); }
-                    recNuevas.push({ recId: ids[n], fecha, hora, guia: guia || '', columna: k, unidades: g.det.reduce((t, d) => t + d.cantidad, 0), usuario: usuario(), ingresoAStock: !!ingresaStock, bodega: ingresaStock ? central : '', detalle: g.det.map(d => ({ descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad })) });
-                    oc.lineas = aplicarRecepcion(oc, k, g.det, [], null, ingresaStock).lineas;   // la copia local queda al día para el siguiente memo
-                }
-                for (const [n, x] of fGuias.entries()) { prog.paso(fGuias.length > 1 ? `Guardando la guía ${n + 1} de ${fGuias.length} en la orden…` : 'Guardando la guía en la orden…'); await guardarFile(oc.id, x.file, 'Guía de despacho' + (x.n ? ' N° ' + x.n : '') + ' · ' + ids.join(' + ')); }
+                await recepcionConStock(oc, { provDoc: (docLeido && docLeido.empresa) || '', extras, baseN, onPaso: prog.paso, recId, hora, key: activos[0], columnas: activos, det: allDet, incidencias: allInc, guia, fecha, obs, notificar: q('#r-correo').checked, ingresaStock, central, texto: textoFinal, titulo: tituloRec, textoCorreo: textoFinal });
+                if (ingresaStock) await aprenderNombres(oc, allDet);
+                else { const ex = extras.map(l => ({ i: oc.lineas.indexOf(l), insumoName: l.descripcion })).filter(d => d.i >= 0); if (ex.length) await aprenderNombres(oc, ex); }
+                recNueva = { recId, fecha, hora, guia: guia || '', columna: activos[0], ...(activos.length > 1 ? { columnas: activos } : {}), unidades, usuario: usuario(), ingresoAStock: !!ingresaStock, bodega: ingresaStock ? central : '', detalle: allDet.map(d => ({ descripcion: oc.lineas[d.i].descripcion, cantidad: d.cantidad, ...(d.columna ? { columna: d.columna } : {}) })) };
+                oc.lineas = aplicarRecepcion(oc, activos[0], allDet, [], null, ingresaStock).lineas;
+                for (const [n, x] of fGuias.entries()) { prog.paso(fGuias.length > 1 ? `Guardando la guía ${n + 1} de ${fGuias.length} en la orden…` : 'Guardando la guía en la orden…'); await guardarFile(oc.id, x.file, 'Guía de despacho' + (x.n ? ' N° ' + x.n : '') + ' · ' + recId); }
                 } catch (err) { prog.error(err); throw err; }
-                prog.listo(`Listo: ${ids.join(' + ')} · ${unidades} unidades${ingresaStock ? ` en ${central}` : ''}. Quedó registrada en Auditoría y en los informes contable y disponible.`);
+                prog.listo(`Listo: ${recId} · ${unidades} unidades${ingresaStock ? ` en ${central}` : ''}. Quedó registrada en Auditoría y en los informes contable y disponible.`);
                 await new Promise(r => setTimeout(r, 1400));
                 try {
                     const ocDoc = { ...oc };
-                    if (window.SAR_Bultos && ingresaStock) window.SAR_Bultos.desdeRecepcion({ rec: ids.join(' + '), lineas: allDet.map(d => ({ nombre: d.insumoName || oc.lineas[d.i].descripcion, codigoMP: oc.lineas[d.i].codigoMP || '', total: d.cantidad, cajas: d.cajas || 0, lote: d.lote || 'S/L', vence: d.vence || '', bodega: central, proveedor: oc.proveedor || '', oc: oc.numeroOC || '', rec: ids.join(' + '), fechaRecepcion: fecha || hoyISO() })) });   // v21.208: una etiqueta por caja contada al recibir
-                    if (window.SAR_RecepConf && recNuevas[0]) setTimeout(() => window.SAR_RecepConf.ofrecer({ oc: ocDoc, rec: recNuevas[0], toast, usuario: usuario(), guardarArchivo, eliminarCategoria: eliminarArchivosCategoria }), 300);
+                    if (window.SAR_Bultos && ingresaStock) window.SAR_Bultos.desdeRecepcion({ rec: recId, lineas: allDet.map(d => ({ nombre: d.insumoName || oc.lineas[d.i].descripcion, codigoMP: oc.lineas[d.i].codigoMP || '', total: d.cantidad, cajas: d.cajas || 0, lote: d.lote || 'S/L', vence: d.vence || '', bodega: central, proveedor: oc.proveedor || '', oc: oc.numeroOC || '', rec: recId, fechaRecepcion: fecha || hoyISO() })) });   // v21.208: una etiqueta por caja contada al recibir
+                    if (window.SAR_RecepConf && recNueva) setTimeout(() => window.SAR_RecepConf.ofrecer({ oc: ocDoc, rec: recNueva, toast, usuario: usuario(), guardarArchivo, eliminarCategoria: eliminarArchivosCategoria }), 300);
                 } catch (e) { /* los documentos se pueden descargar después desde la lista de recepciones */ }
                 const quedan = pendientesDe(oc).reduce((t, x) => t + x.pendiente, 0);
                 if (quedan > 0) toast('Recepción parcial', `Quedan ${quedan} unidades por recibir de esta orden. Las verás en "Pendiente de recibir" de la orden y en la campana.`, 'info');
                 else toast('Orden completa', 'Ya se recibió todo lo pedido para SAR en esta orden.', 'success');
                 if (window.SAR_Pendientes && window.SAR_Pendientes.refrescar) window.SAR_Pendientes.refrescar();
                 if (ingresaStock && typeof window.loadFirstPage === 'function') window.loadFirstPage();   // Existencias al día
-                toast('Recepción cargada', ingresaStock ? `${ids.join(' + ')}: ${unidades} unidades ingresadas a ${central}. Registrada en los informes contable y disponible (Auditoría). Entrégalas a los centros desde Actas de entrega.` : `${ids.join(' + ')}: se actualizó lo recibido.`, 'success');
+                toast('Recepción cargada', ingresaStock ? `${recId}: ${unidades} unidades ingresadas a ${central}. Registrada en los informes contable y disponible (Auditoría). Entrégalas a los centros desde Actas de entrega.` : `${recId}: se actualizó lo recibido.`, 'success');
             }, { ancho: true, ok: 'Guardar recepción' });
         const keysSel = () => { const k = [...ov.querySelectorAll('.r-mc')].filter(c => c.checked).map(c => c.dataset.key); return k.length ? k : [cols[0].key]; };
         const sincronizarMemo = () => { const sel = ov.querySelector('#r-col'); if (sel) sel.value = keysSel()[0]; const t = ov.querySelector('#r-mc-todos'); if (t) t.checked = [...ov.querySelectorAll('.r-mc')].every(c => c.checked); };

@@ -59,13 +59,21 @@
     }
 
     // ---------------- datos ----------------
-    let entradas = [];
-    async function cargar() {
-        try { const s = await fs().getDocs(fs().collection(db(), 'CDP_Presupuesto')); entradas = []; s.forEach(d => entradas.push({ id: d.id, ...d.data() })); entradas.sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es')); }
-        catch (e) { entradas = []; }
+    let entradas = [], cargadoEn = 0;
+    async function cargar(forzar) {
+        if (!forzar && cargadoEn && Date.now() - cargadoEn < 5 * 60 * 1000) return entradas;
+        try {
+            const s = await Promise.race([
+                fs().getDocs(fs().collection(db(), 'CDP_Presupuesto')),
+                new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 8000))
+            ]);
+            entradas = []; s.forEach(d => entradas.push({ id: d.id, ...d.data() }));
+            entradas.sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'));
+            cargadoEn = Date.now();
+        } catch (e) { if (!cargadoEn) entradas = []; }
         return entradas;
     }
-    async function alertaNuevaOC(ocNueva, ordenes) { await cargar(); return alertasDeOrden(entradas, ordenes, ocNueva); }
+    async function alertaNuevaOC(ocNueva, ordenes) { await cargar(false); return alertasDeOrden(entradas, ordenes, ocNueva); }
 
     // ---------------- pantalla ----------------
     function cardHTML(ordenes) {

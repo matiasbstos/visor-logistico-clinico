@@ -143,11 +143,40 @@
         const anchoItem = (i) => Number(i.w) > 0 ? Number(i.w) : limpiar(i.str).length * charW;
         const xRef = (i) => {
             const w = anchoItem(i);
-            return w > paso * 1.15 ? i.x + Math.min(anchoCant / 2, paso * 0.25) : i.x + w / 2;
+            return w > paso * 1.45 ? i.x + Math.min(anchoCant / 2, paso * 0.25) : i.x + w / 2;
         };
         const banda = (x) => { for (let k = 0; k < centros.length; k++) if (x >= lim[k] && x < lim[k + 1]) return k; return -1; };
         const bandaItem = (i) => banda(xRef(i));
         return { centros, paso, lim, xTotal, banda, bandaItem, xRef };
+    }
+    /** Si una columna absorbió 2+ «MEMO N°…» (por texto ancho o pegado por pdf.js) y la vecina quedó sin memo, los reparte. */
+    function repartirMemosEncabezado(cabs) {
+        const out = cabs.map(c => limpiar(c));
+        const tieneMemo = (t) => /MEMO\s*N\s*[°º]?\s*\d+/i.test(t);
+        const reSep = /(?=MEMO\s*N\s*[°º]?\s*\d+)/i;
+        for (let pass = 0; pass < out.length; pass++) {
+            for (let k = 0; k < out.length - 1; k++) {
+                const partes = out[k].split(reSep).map(limpiar).filter(Boolean);
+                if (partes.length > 1 && !tieneMemo(out[k + 1])) {
+                    out[k] = partes[0];
+                    out[k + 1] = limpiar(partes.slice(1).join(' ') + ' ' + out[k + 1]);
+                }
+            }
+            for (let k = out.length - 1; k > 0; k--) {
+                const partes = out[k].split(reSep).map(limpiar).filter(Boolean);
+                if (partes.length > 1 && !tieneMemo(out[k - 1])) {
+                    out[k - 1] = limpiar(out[k - 1] + ' ' + partes[0]);
+                    out[k] = partes.slice(1).join(' ');
+                }
+            }
+            for (let k = 1; k < out.length; k++) {
+                if (!tieneMemo(out[k]) && /^N\s*[°º]?\s*\d+/i.test(out[k]) && /\bMEMO$/i.test(out[k - 1])) {
+                    out[k - 1] = limpiar(out[k - 1].replace(/\bMEMO$/i, ''));
+                    out[k] = 'MEMO ' + out[k];
+                }
+            }
+        }
+        return out;
     }
     function reconoceDistribucion(texto) { return /MEMO\s*N\s*[°º]?\s*\d+/i.test(texto) && /\bCDP\b/.test(texto) && /CANTIDAD/i.test(texto) && (/FINANCIAMIENTO/i.test(texto) || (/PRESUPUESTO/i.test(texto) && /SALDO/i.test(texto))); }
     function extraerDistribucion(items) {
@@ -195,11 +224,13 @@
         const hastaEnc = [sec.financiamiento, sec.cdp].filter(Boolean).map(x => x[0]).filter(y => y < yEnc), encabezadoHasta = hastaEnc.length ? Math.min(...hastaEnc) : yEnc - 60;   // financiamiento puede ir arriba o al pie
         const texto = (k, y0, y1, junta) => { const v = its.filter(i => i.y >= y0 && i.y < y1 && bandaItem(i) === k).sort((a, b) => a.y - b.y || a.x - b.x).map(i => limpiar(i.str)); return limpiar(junta === '' ? v.join('').replace(/-\s+/g, '-') : v.join(' ')); };
         // 3) columnas
+        const cabs = repartirMemosEncabezado(centros.map((_, k) => texto(k, 0, encabezadoHasta)));
         const cols = centros.map((c, k) => {
-            const cab = texto(k, 0, encabezadoHasta); // "MEMO N°68 CESFAM BORIS SOLER"
+            const cab = cabs[k]; // "MEMO N°68 CESFAM BORIS SOLER"
             const m = /MEMO\s*N\s*[°º]?\s*(\d+)\s*(.*)$/i.exec(cab);
             const col = { memo: m ? m[1] : '', centro: m ? normalizarCentro(m[2]) : '', _k: k };
             col.financiamiento = sec.financiamiento ? texto(k, sec.financiamiento[0], sec.financiamiento[1]) : '';
+            if (!col.centro && /(^|[^A-Z])SAR([^A-Z]|$)/i.test(col.financiamiento)) col.centro = 'SAR';
             const cdpTxt = sec.cdp ? texto(k, sec.cdp[0], sec.cdp[1], '') : '';
             col.cdps = (cdpTxt.match(/\d+/g) || []); col.cdp = col.cdps.join('-');
             ['neto', 'iva', 'total'].forEach(n => { col[n] = sec[n] ? entero(its.filter(i => i.y >= sec[n][0] && i.y < sec[n][1] && bandaItem(i) === k && /\d/.test(i.str)).map(i => i.str).join('')) : 0; });
@@ -263,8 +294,9 @@
         etq.sort((a, b) => a.y - b.y);
         const yNeto = (etq.find(e => e.k === 'neto') || { y: Infinity }).y;
         // columnas: encabezado = texto sobre la fila "CANTIDAD"
+        const cabsB = repartirMemosEncabezado(centros.map((_, k) => unir(its.filter(i => i.y < yEnc - 2 && bandaItem(i) === k))));
         const cols = centros.map((c, k) => {
-            const cab = unir(its.filter(i => i.y < yEnc - 2 && bandaItem(i) === k));
+            const cab = cabsB[k];
             const m = /MEMO\s*N\s*[°º]?\s*(\d+)\s*(.*?)\s*CDP\s*N?\s*[°º]?\s*([\d\s\-–y,]+)/i.exec(cab) || /MEMO\s*N\s*[°º]?\s*(\d+)\s*(.*)$/i.exec(cab);
             const col = { memo: m ? m[1] : '', centro: m ? normalizarCentro(m[2]) : '', financiamiento: '', _k: k };
             col.cdps = m && m[3] ? (String(m[3]).match(/\d+/g) || []) : []; col.cdp = col.cdps.join('-');

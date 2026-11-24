@@ -1141,16 +1141,17 @@
             leerRev(o);
             const conTiempo = (p, ms, msg) => Promise.race([p, new Promise((_, r) => setTimeout(() => r(new Error(msg || 'Tiempo de espera agotado.')), ms))]);
             let prog = progresoRecepcion(o, ['Validando la orden de compra…']);
+            let usoCuadro = null, oc = null, id = '';
             try {
-            let usoCuadro = null;
             if (window.SAR_ComprasAgiles && String(rev.numeroOC || '').trim() && !rev.distrib) {
                 prog.paso('Buscando compra ágil asociada…');
                 rev.cuadro = null;
                 const r = await conTiempo(window.SAR_ComprasAgiles.cuadroParaOC(String(rev.numeroOC).trim().toUpperCase(), rev.lineas.filter(l => String(l.descripcion || '').trim() && num(l.cantidad) > 0)), 8000).catch(() => ({ error: 'sin compra ágil' }));
                 if (r && !r.error) { rev.cuadro = r; usoCuadro = r; } else if (r && r.error && r.error !== 'sin compra ágil') toast('Cuadro por centro', `No se usó el de la compra ágil ${r.compra}: ${r.error} Se ingresó todo al SAR; revisa el cuadro.`, 'warning');
             }
-            const oc = armarOCdesdeRevision(rev);
-            const id = slug(oc.numeroOC), ref = fs().doc(fs().collection(db(), 'Seguimiento_OC'), id);
+            oc = armarOCdesdeRevision(rev);
+            id = slug(oc.numeroOC);
+            const ref = fs().doc(fs().collection(db(), 'Seguimiento_OC'), id);
             prog.paso('Verificando si la orden ya existe…');
             let yaExiste = lista.some(x => x.id === id);
             if (!yaExiste) {

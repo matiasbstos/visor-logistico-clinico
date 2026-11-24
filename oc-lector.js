@@ -667,7 +667,7 @@
             r.total = r.totalNeto + r.iva;
         }
 
-        // --- Extracción de filas de productos tolerante a OCR ---
+        // --- Extracción de filas de productos tolerante a OCR (soporta 1D secuencial y 2D con columnas reales) ---
         const esInicioProducto = (t) => {
             const m = /^(\d[\d',.]{5,11})\s+(.+)$/.exec(t);
             if (!m) return false;
@@ -683,24 +683,32 @@
 
         const bloques = [];
         let actual = null;
-        for (const t of T) {
+        for (const l of L) {
+            const t = l.texto;
             if (esFinTabla(t)) { if (actual) { bloques.push(actual); actual = null; } continue; }
             if (esInicioProducto(t)) {
                 if (actual) bloques.push(actual);
-                actual = [t];
-                if (reCuatroNums.test(t)) { bloques.push(actual); actual = null; }
+                actual = [l];
                 continue;
             }
             if (actual) {
-                actual.push(t);
-                if (reCuatroNums.test(t)) { bloques.push(actual); actual = null; }
+                actual.push(l);
+                if (!reCuatroNums.test(actual[0].texto) && reCuatroNums.test(t)) { bloques.push(actual); actual = null; }
             }
         }
         if (actual) bloques.push(actual);
 
+        // Detectar coordenadas 2D de columnas si el PDF tiene encabezados de tabla ("Especificaciones" / "Precio")
+        const hEspItem = L.flatMap(l => l.items).find(i => /Espec[i¡]f/i.test(limpiar(i.str)));
+        const hPreItem = L.flatMap(l => l.items).find(i => /Pr?l?ecio|PlEcio/i.test(limpiar(i.str)) && (!hEspItem || i.x > hEspItem.x + 60));
+
         r.lineas = bloques.map(b => {
-            const full = limpiar(b.join(' '));
-            const sinCod = limpiar(full.replace(/^\d[\d',.]{5,11}\s+/, ''));
+            const firstText = b[0].texto;
+            const firstHasNums = reCuatroNums.test(firstText);
+            const full = limpiar(b.map(l => l.texto).join(' '));
+            // Si los 4 números están en la 1.ª línea (PDF 2D real), extraer de ahí y anexar continuación de Especificaciones
+            const baseText = firstHasNums ? firstText : full;
+            const sinCod = limpiar(baseText.replace(/^\d[\d',.]{5,11}\s+/, ''));
             const mNums = reCuatroNums.exec(sinCod);
             const precio = mNums ? montoOCR(mNums[1]) : 0;
             const valor = mNums ? montoOCR(mNums[4]) : 0;
@@ -716,7 +724,18 @@
             if (!elegido || !(elegido.cant > 0)) return null;
 
             const prodCat = limpiar(cuerpo.slice(0, elegido.idx));
-            const comprador = limpiar(cuerpo.slice(elegido.fin));
+            let comprador = limpiar(cuerpo.slice(elegido.fin));
+
+            // Anexar líneas de continuación de la columna Especificaciones Comprador en PDFs 2D
+            if (firstHasNums && b.length > 1) {
+                const xMinDesc = hEspItem ? hEspItem.x - 14 : 175;
+                const xMaxDesc = hPreItem ? hPreItem.x - 10 : 370;
+                const extraDesc = b.slice(1).map(l =>
+                    limpiar(l.items.filter(it => it.x >= xMinDesc && it.x < xMaxDesc).map(it => it.str).join(' '))
+                ).filter(Boolean).join(' ');
+                if (extraDesc) comprador = limpiar(`${comprador} ${extraDesc}`);
+            }
+
             const cod = /^\((\d{4,9})\)\s*/.exec(comprador);
             const desc = recorteNota(limpiar(comprador.replace(/^\(\d{4,9}\)\s*/, ''))) || prodCat;
             const linea = {
@@ -794,7 +813,15 @@
         const out = []; let offset = 0;
         for (let p = 1; p <= Math.min(pdf.numPages, 12); p++) {
             const page = await pdf.getPage(p), vp = page.getViewport({ scale: 1 }), tc = await page.getTextContent();
-            tc.items.forEach(i => { if (i.str && i.str.trim()) out.push({ str: i.str, x: i.transform[4], y: offset + (vp.height - i.transform[5]), w: Number(i.width) || 0, h: Math.abs(i.transform[3] || i.height || 0) }); });
+            const m = vp.transform;
+            tc.items.forEach(i => {
+                if (i.str && i.str.trim()) {
+                    const tx = i.transform[4], ty = i.transform[5];
+                    const vx = m ? (m[0] * tx + m[2] * ty + m[4]) : tx;
+                    const vy = m ? (m[1] * tx + m[3] * ty + m[5]) : (vp.height - ty);
+                    out.push({ str: i.str, x: vx, y: offset + vy, w: Number(i.width) || 0, h: Math.abs(i.transform[3] || i.height || 0) });
+                }
+            });
             offset += vp.height + 20;
         }
         return out;

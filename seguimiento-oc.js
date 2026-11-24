@@ -228,30 +228,57 @@
     }
 
     // ---------------------------------------------------------------
-    // Horario de los correos de respaldo (v21.94): lunes a viernes, 08:00 a 17:00 (hora de Chile),
-    // sin feriados. Fuera de ese horario quedan en cola (Contadores/cola-correo-*) y salen solos
-    // cuando un equipo con el Visor abierto detecta que ya es horario hábil.
+    // Horario de TODOS los correos notificatorios (v21.94 → reforzado v21.256):
+    // Lunes a viernes, 08:00 a 17:00 (hora de Chile, sin feriados).
+    // Todo proceso posterior a las 17:00 o en fin de semana/feriado queda en cola
+    // (Contadores/cola-correo-*) y sale de forma escalonada desde las 08:00 del
+    // siguiente día hábil (tandas de máx. 3 correos cada 5 min, con 15 s entre envíos).
     // ---------------------------------------------------------------
     const HORA_DESDE = 8, HORA_HASTA = 17;
+    const MAX_CORREOS_POR_TANDA = 3, PAUSA_ESCALONADA_MS = 15000;
+    const HORARIO_CORREO = { desde: HORA_DESDE, hasta: HORA_HASTA, maxPorTanda: MAX_CORREOS_POR_TANDA, pausaMs: PAUSA_ESCALONADA_MS };
+    const NOMBRES_DIA = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
     function partesChile(d) {
         try {
             const p = {}; new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Santiago', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', weekday: 'short' }).formatToParts(d).forEach(x => { p[x.type] = x.value; });
-            return { iso: `${p.year}-${p.month}-${p.day}`, hora: Number(p.hour) % 24, sem: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday) };
-        } catch (e) { return { iso: aISO(d), hora: d.getHours(), sem: d.getDay() }; }
+            return { iso: `${p.year}-${p.month}-${p.day}`, hora: Number(p.hour) % 24, min: Number(p.minute) || 0, sem: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(p.weekday) };
+        } catch (e) { return { iso: aISO(d), hora: d.getHours(), min: d.getMinutes(), sem: d.getDay() }; }
     }
-    /** true si en ese instante se pueden enviar correos de respaldo. */
+    /** true si en ese instante se pueden enviar correos notificatorios (L-V 08:00–17:00 Chile, sin feriados). */
     function enHorarioCorreo(d) {
         const p = partesChile(d || new Date());
         return p.sem >= 1 && p.sem <= 5 && !feriados.has(p.iso) && p.hora >= HORA_DESDE && p.hora < HORA_HASTA;
+    }
+    /** Calcula el próximo día hábil desde las 08:00 para informar cuándo saldrá un correo encolado. */
+    function proximoHorarioHabil(d) {
+        const base = d || new Date(), p0 = partesChile(base);
+        const esHabil = (iso, sem) => sem >= 1 && sem <= 5 && !feriados.has(iso);
+        // Si ya es día hábil antes de las 08:00, sale hoy mismo desde las 08:00
+        if (esHabil(p0.iso, p0.sem) && p0.hora < HORA_DESDE) {
+            return { iso: p0.iso, dia: NOMBRES_DIA[p0.sem], etiqueta: `hoy ${NOMBRES_DIA[p0.sem]} ${fmtFecha(p0.iso)} desde las 08:00` };
+        }
+        // En cualquier otro caso (después de las 17:00, fin de semana o feriado), buscar el siguiente día hábil
+        const [y, m, day] = p0.iso.split('-').map(Number);
+        for (let k = 1; k <= 14; k++) {
+            const cand = new Date(Date.UTC(y, m - 1, day + k, 12, 0, 0));
+            const iso = cand.toISOString().slice(0, 10), sem = cand.getUTCDay();
+            if (esHabil(iso, sem)) {
+                const pref = k === 1 ? 'mañana ' : 'el ';
+                return { iso, dia: NOMBRES_DIA[sem], etiqueta: `${pref}${NOMBRES_DIA[sem]} ${fmtFecha(iso)} desde las 08:00` };
+            }
+        }
+        return { iso: p0.iso, dia: '', etiqueta: 'el próximo día hábil desde las 08:00' };
     }
     async function encolarCorreo(destinatarios, correo, extra, motivo) {
         const carga = JSON.stringify({ destinatarios, correo, extra });
         let guardar = carga, nota = '';
         if (carga.length > 900000) { guardar = JSON.stringify({ destinatarios, correo, extra: Object.assign({}, extra, { attachments: [] }) }); nota = ' (sin adjuntos por tamaño)'; }
+        const prox = proximoHorarioHabil();
+        const ahoraMs = Date.now();
         try {
-            const id = 'cola-correo-' + Date.now() + '-' + Math.floor(Math.random() * 1e4);
-            await fs().setDoc(fs().doc(fs().collection(db(), 'Contadores'), id), { tipo: 'cola-correo', estado: 'pendiente', asunto: String(correo.subject || ''), carga: guardar, creadoPor: (window.firebaseAuth && window.firebaseAuth.currentUser && window.firebaseAuth.currentUser.email) || '', updatedAt: fs().serverTimestamp() });
-            return { estado: 'programado', destinatarios: (destinatarios || []).filter(emailValido), cc: ((extra && extra.cc) || []).filter(emailValido), detalle: (motivo || 'Fuera del horario de envío (lunes a viernes de 8:00 a 17:00, sin feriados). Quedó en cola y saldrá en el próximo horario hábil') + nota + '.' };
+            const id = 'cola-correo-' + ahoraMs + '-' + String(Math.floor(Math.random() * 1e4)).padStart(4, '0');
+            await fs().setDoc(fs().doc(fs().collection(db(), 'Contadores'), id), { tipo: 'cola-correo', estado: 'pendiente', asunto: String(correo.subject || ''), carga: guardar, creadoEnMs: ahoraMs, programadoPara: prox.iso + ' 08:00', creadoPor: (window.firebaseAuth && window.firebaseAuth.currentUser && window.firebaseAuth.currentUser.email) || '', updatedAt: fs().serverTimestamp() });
+            return { estado: 'programado', destinatarios: (destinatarios || []).filter(emailValido), cc: ((extra && extra.cc) || []).filter(emailValido), detalle: (motivo || `Fuera del horario de envío (lunes a viernes hasta las 17:00). Quedó en cola y saldrá de forma escalonada ${prox.etiqueta}`) + nota + '.' };
         } catch (e) { return { estado: 'error', detalle: 'No se pudo dejar el correo en cola: ' + String((e && e.message) || e) }; }
     }
     /** v21.122: cuando un correo de la cola sale, el aviso del acta (Contadores/aviso-<acta>-<evento>) pasa a «enviado» con la hora real. */
@@ -268,15 +295,39 @@
         await f.updateDoc(f.doc(f.collection(db(), 'Contadores'), id), { estado: 'enviado', detalle: '', enviadoEn: new Date().toISOString(), updatedAt: f.serverTimestamp() });
     }
     let vaciando = false;
-    async function vaciarCola() {
+    async function vaciarCola(opts) {
+        const pausaMs = opts && typeof opts.pausaMs === 'number' ? opts.pausaMs : PAUSA_ESCALONADA_MS;
+        const maxTanda = opts && typeof opts.maxTanda === 'number' ? opts.maxTanda : MAX_CORREOS_POR_TANDA;
         if (vaciando || !enHorarioCorreo() || !configCorreo.webhookUrl || !configCorreo.token) return 0;
         vaciando = true; let n = 0;
         try {
             const f = fs(), q = await f.getDocs(f.query(f.collection(db(), 'Contadores'), f.where('tipo', '==', 'cola-correo')));
-            const pend = []; q.forEach(x => { if (x.data().estado === 'pendiente') pend.push(x); });
-            for (const x of pend) {
-                const ref = f.doc(f.collection(db(), 'Contadores'), x.id);
-                const tomado = await f.runTransaction(db(), async (tx) => { const s = await tx.get(ref); if (!s.exists() || s.data().estado !== 'pendiente') return false; tx.update(ref, { estado: 'enviando', updatedAt: f.serverTimestamp() }); return true; });
+            const pend = [], ahoraMs = Date.now();
+            q.forEach(x => {
+                const d = x.data() || {};
+                const lockStale = d.estado === 'enviando' && d.tomadoEnMs && (ahoraMs - Number(d.tomadoEnMs) > 600000);
+                if (d.estado === 'pendiente' || lockStale) pend.push(x);
+            });
+            // Orden estrictamente cronológico (FIFO) para despachar de forma escalonada desde las 08:00
+            pend.sort((a, b) => (Number(a.data().creadoEnMs) || 0) - (Number(b.data().creadoEnMs) || 0) || a.id.localeCompare(b.id));
+            const lote = pend.slice(0, maxTanda);
+            for (let idx = 0; idx < lote.length; idx++) {
+                // Re-validar horario antes de cada correo para no exceder nunca las 17:00
+                if (!enHorarioCorreo()) break;
+                if (idx > 0 && pausaMs > 0) {
+                    await new Promise(ok => setTimeout(ok, pausaMs));
+                    if (!enHorarioCorreo()) break;
+                }
+                const x = lote[idx], ref = f.doc(f.collection(db(), 'Contadores'), x.id);
+                const tomado = await f.runTransaction(db(), async (tx) => {
+                    const s = await tx.get(ref);
+                    if (!s.exists()) return false;
+                    const sd = s.data() || {};
+                    const stale = sd.estado === 'enviando' && sd.tomadoEnMs && (Date.now() - Number(sd.tomadoEnMs) > 600000);
+                    if (sd.estado !== 'pendiente' && !stale) return false;
+                    tx.update(ref, { estado: 'enviando', tomadoEnMs: Date.now(), updatedAt: f.serverTimestamp() });
+                    return true;
+                });
                 if (!tomado) continue;
                 let r; try { const c = JSON.parse(x.data().carga); r = await enviarCorreoAhora(c.destinatarios, c.correo, c.extra); } catch (e) { r = { estado: 'error', detalle: String((e && e.message) || e) }; }
                 /* v21.237: lo enviado ya no guarda la carga (adjuntos en base64: la cola se lee cada 5 min); tras 30 intentos fallidos se deja de reintentar */
@@ -287,16 +338,20 @@
         } catch (e) { console.warn('[Correo] cola', e); }
         vaciando = false; return n;
     }
-    /** Envía ahora; si es un correo de respaldo (extra.respaldo) y no es horario hábil, lo deja en cola. */
+    /** Envía cualquier correo notificatorio respetando SIEMPRE el corte L-V 08:00–17:00 (Chile, sin feriados).
+     *  Fuera de horario (post 17:00, madrugada, fin de semana o feriado) queda en cola para envío escalonado desde las 08:00. */
     async function enviarCorreo(destinatarios, correo, extra) {
-        const respaldo = !!(extra && extra.respaldo && configCorreo.webhookUrl && configCorreo.token);
-        if (respaldo && !enHorarioCorreo()) return encolarCorreo(destinatarios, correo, extra);
+        const usaWebhook = !!(configCorreo.webhookUrl && configCorreo.token);
+        if (usaWebhook && !enHorarioCorreo()) return encolarCorreo(destinatarios, correo, extra);
         let r = await enviarCorreoAhora(destinatarios, correo, extra);
-        if (respaldo && r.estado === 'error') {   // v21.122: un reintento y, si sigue fallando, queda en cola (antes se perdía)
+        if (usaWebhook && r.estado === 'error') {
+            if (/fuera_de_horario/i.test(String(r.detalle || ''))) return encolarCorreo(destinatarios, correo, extra);
+            // v21.122: un reintento y, si sigue fallando, queda en cola (antes se perdía)
             await new Promise(ok => setTimeout(ok, 2500));
+            if (!enHorarioCorreo()) return encolarCorreo(destinatarios, correo, extra);
             r = await enviarCorreoAhora(destinatarios, correo, extra);
             if (r.estado === 'error') {
-                const q = await encolarCorreo(destinatarios, correo, extra, 'No se pudo enviar (' + (r.detalle || 'error de red') + '). Quedó en cola y se reintentará solo cada 5 minutos en horario hábil');
+                const q = await encolarCorreo(destinatarios, correo, extra, 'No se pudo enviar (' + (r.detalle || 'error de red') + '). Quedó en cola y se reintentará de forma escalonada en horario hábil (L-V 08:00–17:00)');
                 if (q.estado === 'programado') return q;
             }
         }
@@ -908,7 +963,7 @@
         host.innerHTML = evs.length ? '<ul class="soc-bit">' + evs.map(e => `<li><div><strong>${esc(ICONOS[e.tipo] || e.tipo)}</strong>${e.etapa ? ` <span class="soc-etapa">${esc(e.etapa)}</span>` : ''} · ${esc(e.autor || '')} · <small>${esc(fmtFechaHora(e.fecha))}</small></div>
             <div class="soc-bit__txt">${esc(e.texto || '')}</div>
             ${(e.archivoIds || []).map(id => { const a = archivos.find(x => x.id === id); return a ? `<button type="button" class="btn btn-outline btn-sm soc-bit__arch" data-barch="${esc(id)}"><i class="ph-bold ph-paperclip"></i> ${esc(a.nombre)}</button>` : ''; }).join('')}
-            ${e.correo ? `<small class="soc-correo soc-correo--${esc(e.correo.estado)}">${({ enviado: 'Correo enviado a ' + (e.correo.destinatarios || []).length + ' destinatario(s)', borrador: 'Borrador de correo abierto', error: 'El correo no se pudo enviar' + (e.correo.detalle ? ': ' + e.correo.detalle : ''), sin_destinatarios: 'Sin destinatarios: no se envió correo' })[e.correo.estado] || ''}</small>` : ''}</li>`).join('') + '</ul>'
+            ${e.correo ? `<small class="soc-correo soc-correo--${esc(e.correo.estado)}">${({ enviado: 'Correo enviado a ' + (e.correo.destinatarios || []).length + ' destinatario(s)', programado: 'Correo en cola (envío escalonado desde las 08:00 del próximo día hábil)' + (e.correo.detalle ? ' · ' + e.correo.detalle : ''), borrador: 'Borrador de correo abierto', error: 'El correo no se pudo enviar' + (e.correo.detalle ? ': ' + e.correo.detalle : ''), sin_destinatarios: 'Sin destinatarios: no se envió correo' })[e.correo.estado] || ''}</small>` : ''}</li>`).join('') + '</ul>'
             : '<p class="bodega-estantes__hint">Aún no hay comentarios.</p>';
         host.querySelectorAll('[data-barch]').forEach(b => b.addEventListener('click', () => { const a = archivos.find(x => x.id === b.dataset.barch); if (a) verArchivo(a).catch(er => toast('No se pudo abrir', er.message || String(er), 'error')); }));
     }
@@ -1315,7 +1370,7 @@
         return { lineas, incidencias: [...(data.incidencias || []), ...incidencias.map((n, k) => ({ id: `inc-${Date.now()}-${k}`, ...n, estado: 'ABIERTA', fecha: hoyISO(), ...(extra || {}) }))] };
     }
     /** Fila de una guía de despacho en «Recibir productos» (v21.226: se pueden agregar varias). */
-    function filaGuiaR() { return `<div class="rc-doc"><div class="soc-fila"><label>N° guía de despacho<input type="text" class="r-gn" autocomplete="off"></label><label>Foto o PDF de la guía<input type="file" class="r-gf" accept="application/pdf,image/*"></label></div><div class="rc-doc-f"><button type="button" class="btn btn-outline btn-sm rc-dq" aria-label="Quitar esta guía"><i class="ph-bold ph-trash"></i> Quitar</button></div></div>`; }
+    function filaGuiaR() { return `<div class="rc-doc"><div class="soc-fila"><label>N° guía o factura<input type="text" class="r-gn" autocomplete="off"></label><label>Foto o PDF de la guía o factura<input type="file" class="r-gf" accept="application/pdf,image/*"></label></div><div class="rc-doc-f"><button type="button" class="btn btn-outline btn-sm rc-dq" aria-label="Quitar este documento"><i class="ph-bold ph-trash"></i> Quitar</button></div></div>`; }
     /* v21.245 / v21.252: recepción hecha sin internet → UNA operación unificada con todos sus memos (y retrocompatible con cola anterior). */
     if (window.SAR_Cola && window.SAR_Cola.registrar) window.SAR_Cola.registrar('recepcion-oc', async (d, op) => {
         const f = fs(), sn = await f.getDoc(f.doc(f.collection(db(), 'Seguimiento_OC'), d.ocId)); if (!sn.exists()) throw new Error('La orden ya no existe.');
@@ -1709,6 +1764,7 @@
             const G = window.SAR_GuiaLector; if (!G) return;
             box.hidden = false; box.className = 'r-doc'; box.textContent = 'Leyendo el documento (lote, vencimiento y empresa)…';
             try {
+                if (!configCorreo.webhookUrl) await cargarConfig().catch(() => {});
                 const r = await G.leer(file, configCorreo); docLeido = r;
                 const m = G.emparejar(oc.lineas, r.lineas), key = ov.querySelector('#r-col').value;
                 const lv = ov.querySelector('#r-lv'); if (!lv.checked) { lv.checked = true; if (!ov.querySelector('#r-stock').checked) ov.querySelector('#r-stock').checked = true; pintar(); resumen(); }
@@ -1717,8 +1773,9 @@
                 const f = ov.querySelector('#r-fecha'); if (f && r.fecha && r.fecha <= hoyISO() && f.value === hoyISO()) f.value = r.fecha;
                 resumen();
                 const aparte = m.extras.map(x => `${x.descripcion}: lote ${x.lote || '—'}${x.vence ? ' vence ' + x.vence : ''} (${x.cantidad} u.)`);
+                const notaOCR = r.origenLectura === 'LOCAL_REUTTER_OCR' ? ' (leído con OCR del escáner: verifica cada lote y vencimiento)' : '';
                 box.className = 'r-doc r-doc--ok';
-                box.innerHTML = `<b>Documento leído.</b> ${r.empresa ? 'Empresa: <b>' + esc(r.empresa) + '</b>. ' : ''}${n} producto${n === 1 ? '' : 's'} con lote y vencimiento completados. Revísalos antes de guardar.` + (m.sinPar.length ? `<br>Sin coincidir con la orden: ${esc(m.sinPar.map(x => x.descripcion).join('; '))}.` : '') + (aparte.length ? `<br>Otros lotes del mismo producto (anótalos con «Agregar producto» o después en «Lotes y vencimientos»): ${esc(aparte.join('; '))}.` : '');
+                box.innerHTML = `<b>Documento leído${notaOCR}.</b> ${r.empresa ? 'Empresa: <b>' + esc(r.empresa) + '</b>. ' : ''}${r.numero ? 'Doc. N° <b>' + esc(r.numero) + '</b>. ' : ''}${n} producto${n === 1 ? '' : 's'} con lote y vencimiento completados. Revísalos antes de guardar.` + (m.sinPar.length ? `<br>Sin coincidir con la orden: ${esc(m.sinPar.map(x => x.descripcion).join('; '))}.` : '') + (aparte.length ? `<br>Otros lotes del mismo producto (anótalos con «Agregar producto» o después en «Lotes y vencimientos»): ${esc(aparte.join('; '))}.` : '');
             } catch (err) {
                 box.className = 'r-doc r-doc--aviso';
                 box.textContent = err.message === 'SIN_SCRIPT' ? 'Para leer el documento solo falta conectar el script en «Configurar correo». Puedes anotar lote y vencimiento a mano.' : err.message === 'SIN_CLAVE' ? 'Falta la clave de lectura en el Apps Script. Puedes anotar lote y vencimiento a mano.' : err.message === 'SCRIPT_VIEJO' ? 'El Apps Script aún no tiene la lectura de documentos: hay que pegar la versión nueva (Configurar correo → ver código) y publicarla. Mientras, anota lote y vencimiento a mano.' : 'No se pudo leer el documento: ' + (err.message || err) + '. Puedes anotar lote y vencimiento a mano.';
@@ -1784,6 +1841,10 @@ function doPost(e) {
       return salida({ ok: true, imagenes: out });
     }
     const ok = (l) => (l || []).filter(m => DOMINIOS.some(x => String(m).toLowerCase().endsWith('@' + x)));
+    // Resguardo de horario en servidor (L-V 08:00 a 17:00 hora Chile; fuera de horario el cliente lo deja en cola escalonada)
+    const diaCL = Number(Utilities.formatDate(new Date(), 'America/Santiago', 'u'));   // 1=lun .. 7=dom
+    const horaCL = Number(Utilities.formatDate(new Date(), 'America/Santiago', 'HH'));
+    if (diaCL > 5 || horaCL < 8 || horaCL >= 17) return salida({ ok: false, error: 'fuera_de_horario' });
     const to = ok(d.to), cc = ok(d.cc);
     if (!to.length) return salida({ ok: false, error: 'sin destinatarios permitidos' });
     const adj = (d.attachments || []).slice(0, 5).map(a => Utilities.newBlob(Utilities.base64Decode(a.base64), a.mime || 'application/pdf', String(a.name).slice(0, 120)));
@@ -1927,7 +1988,7 @@ function imagenesWeb(q, n) {   // busca la descripcion en imagenes de internet (
         if (!el) return; await cargarConfig(); const c = configCorreo;
         el.innerHTML = `<div class="cfg-scr">
           <h3>Script de Google (Apps Script)</h3>
-          <p class="cierre-hint">Un solo script hace todo esto: <b>envía los correos</b> (actas, recepciones, órdenes), <b>lee órdenes de compra escaneadas/fotos, fotos de cajas y guías/facturas</b>, <b>busca fotos</b> de productos en Convenio Marco y <b>en internet</b> (caja y producto).</p>
+          <p class="cierre-hint">Un solo script hace todo esto: <b>envía los correos</b> (actas, recepciones, órdenes), <b>lee órdenes de compra escaneadas/fotos, fotos de cajas y guías/facturas</b>, <b>busca fotos</b> de productos en Convenio Marco y <b>en internet</b> (caja y producto). <b>Horario de corte de correos:</b> lunes a viernes de 08:00 a 17:00 (hora Chile, sin feriados); todo proceso posterior o de fin de semana queda en cola y se despacha de forma escalonada desde las 08:00 del siguiente día hábil (máx. 3 correos por tanda cada 5 min, con 15 s entre envíos).</p>
           <ol class="cfg-pasos"><li>Copia el código con el botón de abajo.</li><li>Abre <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a>, entra a tu proyecto, borra el código anterior y pega este.</li><li>En la línea <code>const TOKEN = …</code> deja <b>la misma clave</b> que tienes abajo.</li><li><b>Implementar → Administrar implementaciones → Editar (lápiz) → Versión: Nueva versión → Implementar</b>. Así la URL no cambia.</li><li>Vuelve aquí y aprieta <b>Probar conexión</b>.</li></ol>
           <div class="cfg-fila"><button type="button" class="btn btn-primary btn-sm" id="c-copiar"><i class="ph-bold ph-copy"></i> Copiar código del script</button><button type="button" class="btn btn-secondary btn-sm" id="c-ver">Ver código</button><button type="button" class="btn btn-secondary btn-sm" id="c-probar"><i class="ph-bold ph-plugs-connected"></i> Probar conexión</button></div>
           <div id="c-diag"></div>
@@ -1972,6 +2033,6 @@ function imagenesWeb(q, n) {   // busca la descripcion en imagenes de internet (
         if (t.dataset.tab === 'script') setTimeout(() => pantallaConfig(document.getElementById('cfg-script')), 0);
     });
 
-    window.SAR_SeguimientoOC = { buscarFotosFaltantes, enHorarioCorreo, vaciarCola, abrirCuando, anularRecepcion, eliminarArchivosCategoria, eliminarArchivosActa, formCatalogo, registrarCatalogo, guardarArchivo, abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, cargarConfig, configurado: () => !!(configCorreo.webhookUrl && configCorreo.token), _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
+    window.SAR_SeguimientoOC = { buscarFotosFaltantes, enHorarioCorreo, proximoHorarioHabil, HORARIO_CORREO, vaciarCola, abrirCuando, anularRecepcion, eliminarArchivosCategoria, eliminarArchivosActa, formCatalogo, registrarCatalogo, guardarArchivo, abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, cargarConfig, configurado: () => !!(configCorreo.webhookUrl && configCorreo.token), _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
     if (typeof module !== 'undefined') module.exports = window.SAR_SeguimientoOC;
 })(window, document);

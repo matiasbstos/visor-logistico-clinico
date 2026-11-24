@@ -460,3 +460,58 @@ t('v21.252: reparto de 2 memos pegados en col 1, recepción multi-memo unificada
   const la = R.lineasActa({ ...oc, lineas: ap.lineas }, 'SAR');
   assert.strictEqual(la.length, 1); assert.strictEqual(la[0].pedido, 35); assert.strictEqual(la[0].recibido, 35);
 });
+t('v21.256: horario de corte universal de correos (L-V 08:00–17:00 Chile) y envío escalonado', () => {
+  global.window = global.window || global; global.document = global.document || { body: { dataset: {} }, addEventListener() {} };
+  const S = require('../seguimiento-oc.js');
+  // Fechas en noviembre 2026 (Chile en horario de verano UTC-3)
+  assert.strictEqual(S.enHorarioCorreo(new Date('2026-11-24T10:59:00Z')), false, 'martes 07:59 CL fuera de horario');
+  assert.strictEqual(S.enHorarioCorreo(new Date('2026-11-24T11:00:00Z')), true, 'martes 08:00 CL en horario');
+  assert.strictEqual(S.enHorarioCorreo(new Date('2026-11-24T19:59:00Z')), true, 'martes 16:59 CL en horario');
+  assert.strictEqual(S.enHorarioCorreo(new Date('2026-11-24T20:00:00Z')), false, 'martes 17:00 CL corte exacto');
+  assert.strictEqual(S.enHorarioCorreo(new Date('2026-11-24T23:30:00Z')), false, 'martes 20:30 CL fuera de horario');
+  assert.strictEqual(S.enHorarioCorreo(new Date('2026-11-28T15:00:00Z')), false, 'sábado 12:00 CL fuera de horario');
+  assert.strictEqual(S.enHorarioCorreo(new Date('2026-11-29T15:00:00Z')), false, 'domingo 12:00 CL fuera de horario');
+  // Próximo horario hábil desde las 08:00
+  assert.strictEqual(S.proximoHorarioHabil(new Date('2026-11-24T10:30:00Z')).iso, '2026-11-24', 'madrugada hábil → mismo día 08:00');
+  assert.strictEqual(S.proximoHorarioHabil(new Date('2026-11-24T21:00:00Z')).iso, '2026-11-25', 'martes 18:00 → miércoles 08:00');
+  assert.strictEqual(S.proximoHorarioHabil(new Date('2026-11-27T20:05:00Z')).iso, '2026-11-30', 'viernes 17:05 → lunes 08:00');
+  assert.strictEqual(S.proximoHorarioHabil(new Date('2026-11-28T15:00:00Z')).iso, '2026-11-30', 'sábado → lunes 08:00');
+  assert.strictEqual(S.proximoHorarioHabil(new Date('2026-11-29T18:00:00Z')).iso, '2026-11-30', 'domingo → lunes 08:00');
+  assert.strictEqual(S.HORARIO_CORREO.desde, 8);
+  assert.strictEqual(S.HORARIO_CORREO.hasta, 17);
+  assert.strictEqual(S.HORARIO_CORREO.maxPorTanda, 3);
+  assert.strictEqual(S.HORARIO_CORREO.pausaMs, 15000);
+});
+t('v21.257: modelo local REUTTER S.A. (Factura/Guía con L:;C:;V:) y emparejamiento de abreviaturas', () => {
+  const G = require('../guia-lector.js');
+  const items = [
+    { str: 'REUTTER S.A.', x: 10, y: 30 }, { str: 'R.U.T.: 81.210.400-4', x: 428, y: 39 },
+    { str: 'FACTURA ELECTRONICA', x: 408, y: 65 }, { str: "N'0001075247", x: 445, y: 88 },
+    { str: 'FECHA EMISION | 20/11t2026', x: 388, y: 152 },
+    { str: 'CODIGO', x: 23, y: 229 }, { str: 'CANTIDAD', x: 75, y: 229 }, { str: 'DETALLE', x: 241, y: 229 }, { str: 'CLAS', x: 402, y: 229 }, { str: 'UN MED', x: 428, y: 229 }, { str: 'PRECIO UN.', x: 469, y: 229 }, { str: 'TOTAL', x: 543, y: 229 },
+    { str: '50', x: 108, y: 244 }, { str: 'APOSITO fRANSPARENTE 6X7 CJ X 1OO', x: 120, y: 244 }, { str: 'CJ', x: 449, y: 244 }, { str: '497.500', x: 563, y: 244 },
+    { str: "L:4600002855;C:50;V:01 -06'2031", x: 120, y: 251 },
+    { str: 'AAVEGA03', x: 9, y: 258 }, { str: "'145", x: 104, y: 258 }, { str: 'VENDA GASA ELASTICA lOCM X 4M X 20 UN', x: 120, y: 258 }, { str: 'DM', x: 413, y: 258 }, { str: 'CJ', x: 449, y: 258 },
+    { str: 'L:4600002448iC:145iV:01 -1 l -2030', x: 120, y: 266 },
+    { str: 'AASOFS16', x: 10, y: 274 }, { str: '2A', x: 108, y: 274 }, { str: 'SOND FOL SILIC 2V C/BALON 5-10 CC 16 FR', x: 120, y: 274 }, { str: 'DM', x: 414, y: 274 }, { str: 'UN', x: 448, y: 274 },
+    { str: 'L:4600002705;C:20;V:01 -04-2031', x: 121, y: 282 },
+    { str: 'OC 18-11-2026 1 298355- 1 002-CM26', x: 19, y: 595 }
+  ];
+  assert.strictEqual(G.reconoceReutter(items.map(i => i.str).join('\n')), true);
+  const r = G.extraerReutter(items);
+  assert.strictEqual(r.empresa, 'REUTTER S.A.');
+  assert.strictEqual(r.tipoDocumento, 'FACTURA');
+  assert.strictEqual(r.numero, '1075247');
+  assert.strictEqual(r.fecha, '2026-11-20');
+  assert.strictEqual(r.numeroOC, '1298355-1002-CM26');
+  assert.strictEqual(r.lineas.length, 3);
+  assert.strictEqual(r.lineas[0].lote, '4600002855'); assert.strictEqual(r.lineas[0].vence, '2031-06-01'); assert.strictEqual(r.lineas[0].cantidad, 50);
+  assert.strictEqual(r.lineas[1].lote, '4600002448'); assert.strictEqual(r.lineas[1].vence, '2030-11-01'); assert.strictEqual(r.lineas[1].cantidad, 145);
+  assert.strictEqual(r.lineas[2].lote, '4600002705'); assert.strictEqual(r.lineas[2].vence, '2031-04-01'); assert.strictEqual(r.lineas[2].cantidad, 20);
+  const emp = G.emparejar([
+    { descripcion: 'Apósito transparente 6x7 cm caja x 100 unidades' },
+    { descripcion: 'Venda gasa elástica 10 cm x 4 m caja x 20 unidades' },
+    { descripcion: 'Sonda Foley silicona 2 vías con balón 5-10 cc 16 Fr' }
+  ], r.lineas);
+  assert.strictEqual(emp.pares.length, 3); assert.strictEqual(emp.sinPar.length, 0);
+});

@@ -47,7 +47,11 @@
     }
     async function revisar() {
         const f = window.firebaseFirestore, db = window.firebaseDb; if (!f || !db || !window.SAR_Avisos) return;
-        const ahora = new Date(); if (ahora.getHours() < 7) return;
+        const ahora = new Date();
+        // Horario de corte universal (L-V 08:00 a 17:00 Chile, sin feriados): no genera ni duplica resúmenes fuera de horario ni en fin de semana
+        const S = window.SAR_SeguimientoOC;
+        if (S && typeof S.enHorarioCorreo === 'function') { if (!S.enHorarioCorreo(ahora)) return; }
+        else { const d = ahora.getDay(), h = ahora.getHours(); if (d === 0 || d === 6 || h < 8 || h >= 17) return; }
         const id = 'resumen-stock-' + diaKey(ahora), ref = f.doc(f.collection(db, 'Contadores'), id);
         try { if ((await f.getDoc(ref)).exists()) return; } catch (e) { return; }
         let items = []; try { const sn = await f.getDocs(f.query(f.collection(db, 'Insumos'), f.limit(4000))); sn.forEach(d => items.push(d.data())); } catch (e) { return; }

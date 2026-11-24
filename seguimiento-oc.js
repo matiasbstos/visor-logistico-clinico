@@ -1126,7 +1126,7 @@
         let rev = { lineas: [], aceptarHoras: 48, entregaDias: 2, origen: 'MANUAL' };
         const campo = (id, et, v, tipo) => `<label>${et}<input type="${tipo || 'text'}" id="${id}" value="${esc(v == null ? '' : v)}"></label>`;
         const ov = modal('Ingresar orden de compra', `
-            <label>Orden de compra (Mercado Público): PDF o Excel<input type="file" id="p-file" accept="application/pdf,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></label>
+            <label>Orden de compra (Mercado Público): PDF (digital o escaneado), foto o Excel<input type="file" id="p-file" accept="application/pdf,image/*,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></label>
             <label>Cuadro de distribución (PDF o Excel, opcional): lee memos, CDP, cantidades por centro y montos<input type="file" id="p-dist" accept="application/pdf,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></label>
             <div id="p-dist-est" class="cierre-hint"></div>
             <label class="soc-hist-chk"><input type="checkbox" id="p-hist"> <b>Orden histórica</b>: ya se recibió y procesó antes; se carga solo para trazabilidad (no suma ni descuenta stock)</label>
@@ -1218,14 +1218,19 @@
             const est = q('#p-estado'); est.innerHTML = '<span class="r-prog__spin r-prog__spin--s"></span> Leyendo el archivo…';
             try {
                 if (!window.SAR_Lector) throw new Error('El lector de documentos no está cargado.');
-                const r = await window.SAR_Lector.leerArchivo(f);
+                if (!configCorreo.webhookUrl) await cargarConfig().catch(() => {});
+                const r = await window.SAR_Lector.leerArchivo(f, {
+                    configCorreo,
+                    onProgreso: (msg) => { est.innerHTML = `<span class="r-prog__spin r-prog__spin--s"></span> ${esc(msg)}`; }
+                });
                 if (r.tipo === 'DIST_OC') {             // pusieron el cuadro en el recuadro de la orden: se acomoda solo
                     leerRev(ov); rev.distrib = r; mostrarDist(r); q('#p-file').value = '';
                     est.innerHTML = '<strong>Ese archivo es el cuadro de distribución</strong>: lo puse en el recuadro del cuadro. Falta subir la orden de compra.'; return;
                 }
                 const c = window.SAR_Lector.extraerCorreo(q('#p-correo').value);
                 rev = { ...rev, ...r, aceptarHoras: c.aceptarHoras || rev.aceptarHoras || 48, entregaDias: c.entregaDias || rev.entregaDias || 2, contraparte: c.contraparte || r.contraparte, horario: c.horario || r.horario, origen: 'OC_MP' };
-                est.innerHTML = `<strong>Leído:</strong> ${esc(r.numeroOC || '—')} · ${r.lineas.length} producto(s). Revisa cada dato antes de guardar.`;
+                const modo = r.origenLectura === 'ESCANEADA_IA' ? ' (escaneada · IA)' : (r.origenLectura === 'ESCANEADA_OCR' ? ' (escaneada · OCR)' : '');
+                est.innerHTML = `<strong>Leído${modo}:</strong> ${esc(r.numeroOC || '—')} · ${r.lineas.length} producto(s). Revisa cada dato antes de guardar.`;
                 pintarRev(r.avisos);
                 if (rev.distrib) mostrarDist(rev.distrib);
             } catch (err) { est.innerHTML = `<span class="cierre-error">${esc(err.message)}</span>`; }
@@ -1770,6 +1775,7 @@ function doPost(e) {
     if (d.token !== TOKEN) return salida({ ok: false, error: 'token' });
     if (d.accion === 'foto') return salida(leerFotos(d.fotos));
     if (d.accion === 'documento') return salida(leerDocumento(d.paginas));
+    if (d.accion === 'ordenCompra') return salida(leerOrdenCompra(d.paginas));
     if (d.accion === 'buscarWeb') { const o = {}; (d.items || []).slice(0, 4).forEach(it => { o[it.k] = imagenesWeb(it.q, Math.min(Number(it.n) || 6, 8)); }); return salida({ ok: true, fotos: o }); }
     if (d.accion === 'porDescripcion') { const o = {}; (d.items || []).slice(0, 25).forEach(it => { o[it.k] = fotoPorDescripcion(it.q); }); return salida({ ok: true, fotos: o }); }
     if (d.accion === 'imagenes') {   // foto de producto en la tienda de Convenio Marco (por el código entre paréntesis)
@@ -1851,6 +1857,20 @@ function leerDocumento(paginas) {   // guia de despacho o factura: empresa, N° 
   if (a < 0 || b < a) return { ok: false, error: 'respuesta_ilegible' };
   const o = JSON.parse(t.slice(a, b + 1)); o.ok = true; return o;
 }
+function leerOrdenCompra(paginas) {   // orden de compra de Mercado Publico escaneada o fotografiada (API de Claude)
+  const clave = PropertiesService.getScriptProperties().getProperty('ANTHROPIC_API_KEY');
+  if (!clave) return { ok: false, error: 'sin_clave' };
+  const content = [];
+  (paginas || []).slice(0, 6).forEach(f => content.push({ type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: String(f) } }));
+  if (!content.length) return { ok: false, error: 'sin_paginas' };
+  content.push({ type: 'text', text: 'Eres un asistente de abastecimiento de un servicio de salud en Chile. Lee esta Orden de Compra de Mercado Publico escaneada o fotografiada (puede tener varias paginas). Responde SOLO con un objeto JSON (sin texto adicional) con estas claves: numeroOC (el N° de la Orden de Compra, ej. 1298355-995-AG26; NO uses el numero de cotizacion -COT), proveedor (razon social junto a SEÑOR (ES)), rutProveedor (RUT del proveedor bajo SEÑOR (ES), ej. 76.506.381-7; NO uses el RUT del demandante 71.293.900-1), emitida (Fecha Envio OC en formato AAAA-MM-DD), emitidaHora (hora HH:MM de Fecha Envio OC; vacio si no aparece), fechaEntrega (FECHA ENTREGA PRODUCTOS en formato AAAA-MM-DD; vacio si no aparece), estadoMP (Estado, ej. Aceptada), unidadCompra (Unidad de Compra), direccionDespacho (DIRECCION DE DESPACHO completa), formaPago (FORMA DE PAGO), emailFactura (EMAIL ENVIO FACTURA si existe), fuenteFinanciamiento (Fuente Financiamiento), memos (arreglo de strings con los numeros de MEMO en Observaciones, ej. ["41"] de MEMO N°41), descripcion (texto descriptivo tras el MEMO en Observaciones, ej. COMPRA DE INSUMOS MEDICOS - MINSAL 2026 SAR), contraparte (CONTRAPARTE TECNICA si aparece), contacto (CONTACTO si aparece), horario (HORARIO si aparece), convenioMarco (true si es Convenio Marco o termina en -CM, si no false), totalNeto (numero entero del Neto/Subtotal sin puntos ni $), iva (numero entero del 19% IVA), total (numero entero del Total), lineas (arreglo con un objeto por cada fila de producto de todas las paginas: descripcion (texto completo de la columna Especificaciones Comprador; si viene vacia usa la columna Producto; si trae codigo entre parentesis al inicio en Convenio Marco conservalo), cantidad (numero entero de Cantidad), unidad (Caja, Unidad, Paquete, etc.), valorNeto (numero del Precio Unitario neto sin puntos de miles), totalLinea (numero del Valor Total de la linea sin puntos de miles)). No inventes datos: deja vacio lo que no se vea.' });
+  const r = UrlFetchApp.fetch('https://api.anthropic.com/v1/messages', { method: 'post', contentType: 'application/json', muteHttpExceptions: true, headers: { 'x-api-key': clave, 'anthropic-version': '2023-06-01' }, payload: JSON.stringify({ model: 'claude-sonnet-5-5', max_tokens: 4500, messages: [{ role: 'user', content: content }] }) });
+  const j = JSON.parse(r.getContentText());
+  if (r.getResponseCode() !== 200) return { ok: false, error: 'api:' + ((j.error && j.error.message) || r.getResponseCode()) };
+  const t = (j.content || []).map(x => x.text || '').join(''), a = t.indexOf('{'), b = t.lastIndexOf('}');
+  if (a < 0 || b < a) return { ok: false, error: 'respuesta_ilegible' };
+  const o = JSON.parse(t.slice(a, b + 1)); o.ok = true; return o;
+}
 function normT(s) { return String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' '); }
 function fotoPorDescripcion(desc) {   // busca por descripcion en todas las tiendas y elige el resultado mas parecido (siempre queda "por confirmar")
   const PAR = { de: 1, del: 1, la: 1, el: 1, los: 1, las: 1, con: 1, para: 1, por: 1, igual: 1, o: 1, y: 1, a: 1, en: 1, superior: 1, un: 1, una: 1, unidades: 1, unidad: 1, formato: 1 };
@@ -1906,7 +1926,7 @@ function imagenesWeb(q, n) {   // busca la descripcion en imagenes de internet (
         if (!el) return; await cargarConfig(); const c = configCorreo;
         el.innerHTML = `<div class="cfg-scr">
           <h3>Script de Google (Apps Script)</h3>
-          <p class="cierre-hint">Un solo script hace todo esto: <b>envía los correos</b> (actas, recepciones, órdenes), <b>lee fotos de cajas y guías/facturas</b> (lote y vencimiento), <b>busca fotos</b> de productos en Convenio Marco y <b>en internet</b> (caja y producto).</p>
+          <p class="cierre-hint">Un solo script hace todo esto: <b>envía los correos</b> (actas, recepciones, órdenes), <b>lee órdenes de compra escaneadas/fotos, fotos de cajas y guías/facturas</b>, <b>busca fotos</b> de productos en Convenio Marco y <b>en internet</b> (caja y producto).</p>
           <ol class="cfg-pasos"><li>Copia el código con el botón de abajo.</li><li>Abre <a href="https://script.google.com" target="_blank" rel="noopener">script.google.com</a>, entra a tu proyecto, borra el código anterior y pega este.</li><li>En la línea <code>const TOKEN = …</code> deja <b>la misma clave</b> que tienes abajo.</li><li><b>Implementar → Administrar implementaciones → Editar (lápiz) → Versión: Nueva versión → Implementar</b>. Así la URL no cambia.</li><li>Vuelve aquí y aprieta <b>Probar conexión</b>.</li></ol>
           <div class="cfg-fila"><button type="button" class="btn btn-primary btn-sm" id="c-copiar"><i class="ph-bold ph-copy"></i> Copiar código del script</button><button type="button" class="btn btn-secondary btn-sm" id="c-ver">Ver código</button><button type="button" class="btn btn-secondary btn-sm" id="c-probar"><i class="ph-bold ph-plugs-connected"></i> Probar conexión</button></div>
           <div id="c-diag"></div>
@@ -1952,4 +1972,5 @@ function imagenesWeb(q, n) {   // busca la descripcion en imagenes de internet (
     });
 
     window.SAR_SeguimientoOC = { buscarFotosFaltantes, enHorarioCorreo, vaciarCola, abrirCuando, anularRecepcion, eliminarArchivosCategoria, eliminarArchivosActa, formCatalogo, registrarCatalogo, guardarArchivo, abrir, pendientesDe, estadoEntregas, pendientesDeRecepcion, armarOCdesdeRevision, mezclarIngreso, aplicarRecepcion, recepcionConStock, _setOcActual: (o) => { ocActual = o; }, sumarHabiles, habilesEntre, estadoPlazo, estadoLinea, totalesPorCentro, discrepancias, parsearCuadro, armarCorreo, resumenTexto, setFeriadosExtra, emailValido, enviarCorreo, cargarConfig, configurado: () => !!(configCorreo.webhookUrl && configCorreo.token), _setConfig: (c) => { configCorreo = { ...configCorreo, ...c }; } };
+    if (typeof module !== 'undefined') module.exports = window.SAR_SeguimientoOC;
 })(window, document);

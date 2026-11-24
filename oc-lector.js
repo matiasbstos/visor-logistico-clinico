@@ -34,6 +34,22 @@
         return out.sort((a, b) => a.y - b.y);
     }
     const fechaISO = (dmy) => { const m = /(\d{2})-(\d{2})-(\d{4})/.exec(dmy || ''); return m ? `${m[3]}-${m[2]}-${m[1]}` : ''; };
+    const fechaFlexibleISO = (s) => {
+        const t = String(s || '').trim(); let m;
+        if ((m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t))) return `${m[1]}-${m[2]}-${m[3]}`;
+        if ((m = /(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/.exec(t))) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+        return '';
+    };
+    /** Convierte montos chilenos tolerando errores típicos de OCR (ej. "8.900.00", "'195.000", "2.O82.084"). */
+    function montoOCR(s) {
+        let t = String(s == null ? '' : s).trim();
+        if (!t) return 0;
+        t = t.replace(/^['"`]+|['"`]+$/g, '').replace(/[Oo]/g, '0').replace(/[lI¡í]/g, '1').replace(/[^\d.,]/g, '');
+        if (!t) return 0;
+        if (/,\d{1,2}$/.test(t)) return Number(t.replace(/\./g, '').replace(',', '.')) || 0;
+        if (/\.\d{2}$/.test(t) && !/\.\d{3}$/.test(t)) return Number(t.replace(/\.(?=\d{3}\b)/g, '')) || 0;
+        return Number(t.replace(/\./g, '').replace(',', '.')) || 0;
+    }
 
     // ------------------------------------------------------------------
     // Lector: Orden de compra de Mercado Público
@@ -205,7 +221,7 @@
         etiquetas.forEach((e, n) => {
             const ant = etiquetas[n - 1], sig = etiquetas[n + 1];
             let desde;
-            if (ant && e.y0 - ant.y1 < 45) {
+            if (ant && (ant.y1 < yEnc) === (e.y0 < yEnc) && e.y0 - ant.y1 < 45) {
                 desde = (ant.y1 + e.y0) / 2;
             } else if (e.k === 'financiamiento' && e.y0 < yEnc) {
                 const sigSup = sig && sig.y0 < yEnc ? sig : null;
@@ -467,12 +483,275 @@
         ['numeroOC', 'proveedor'].forEach(k => { if (!r[k]) r.avisos.push(`No se encontró: ${k === 'numeroOC' ? 'N° de orden' : 'proveedor'}.`); });
         return r;
     }
+    // ------------------------------------------------------------------
+    // Lector: Orden de compra escaneada / foto (v21.234)
+    // Dos vías complementarias:
+    //   1) IA visual (Apps Script accion "ordenCompra"): para PDF escaneado
+    //      sin texto, escaneo con OCR ruidoso o fotografía directa de la OC.
+    //      Descarta automáticamente hojas en blanco (escaneos a doble cara).
+    //   2) OCR embebido local (OC_MP_OCR): respaldo instantáneo sin red ni script
+    //      cuando el escáner incrustó capa de texto con errores típicos de OCR.
+    // ------------------------------------------------------------------
+    const recorteNota = (t) => limpiar(String(t || '').replace(/\s*(PRESUPUESTO\s+(M[AÁ]XIMO|DISPONIBLE)|\*\s*EL PROVEEDOR).*$/i, ''));
+
+    /** Normaliza y valida el JSON de una OC devuelto por IA visual (puro, testeable). */
+    function normalizarOCEscaneada(j) {
+        const o = j && typeof j === 'object' ? j : {};
+        const r = { tipo: 'OC_MP', origenLectura: 'ESCANEADA_IA', avisos: ['Orden leída desde documento escaneado / foto (IA): revisa cada dato antes de ingresar.'] };
+        const ocMatch = /(\d{3,8}-\d{1,5}-[A-Z]{2}\d{2})/i.exec(String(o.numeroOC || ''));
+        r.numeroOC = ocMatch ? ocMatch[1].toUpperCase() : limpiar(o.numeroOC).toUpperCase();
+        r.proveedor = limpiar(o.proveedor);
+        const rutM = /(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])/.exec(String(o.rutProveedor || ''));
+        r.rutProveedor = rutM ? rutM[1].toUpperCase() : limpiar(o.rutProveedor);
+        r.emitida = fechaFlexibleISO(o.emitida);
+        const hm = /(\d{2}:\d{2})/.exec(String(o.emitidaHora || o.emitida || ''));
+        r.emitidaHora = hm ? hm[1] : '';
+        r.fechaEntrega = fechaFlexibleISO(o.fechaEntrega);
+        r.estadoMP = limpiar(o.estadoMP);
+        r.unidadCompra = limpiar(o.unidadCompra);
+        r.direccionDespacho = limpiar(o.direccionDespacho);
+        r.formaPago = limpiar(o.formaPago);
+        r.emailFactura = limpiar(o.emailFactura);
+        r.fuenteFinanciamiento = limpiar(o.fuenteFinanciamiento);
+        const rawMemos = Array.isArray(o.memos) ? o.memos.map(x => String(x || '').replace(/\D/g, '')).filter(Boolean) : [];
+        if (!rawMemos.length && o.memo) {
+            String(o.memo).split(/\s*[-,/y]\s*/).map(x => x.replace(/\D/g, '')).filter(Boolean).forEach(x => rawMemos.push(x));
+        }
+        if (!rawMemos.length && o.observaciones) {
+            const mm = /MEMO\s*N\s*[°º"'.,]?\s*(\d+(?:\s*[-,/y]\s*\d+)*)(?:\s*-\s*([^\n]+))?/i.exec(String(o.observaciones));
+            if (mm) {
+                mm[1].split(/\s*[-,/y]\s*/).filter(Boolean).forEach(x => rawMemos.push(x));
+                if (!o.descripcion && mm[2]) o.descripcion = mm[2];
+            }
+        }
+        r.memos = [...new Set(rawMemos)];
+        r.memo = r.memos.join('-');
+        r.descripcion = limpiar(o.descripcion);
+        r.contraparte = limpiar(o.contraparte);
+        r.contacto = limpiar(o.contacto);
+        r.horario = limpiar(o.horario);
+        r.convenioMarco = Boolean(o.convenioMarco) || /-CM\d{2}$/i.test(r.numeroOC);
+        r.totalNeto = typeof o.totalNeto === 'number' ? Math.round(o.totalNeto) : montoOCR(o.totalNeto);
+        r.iva = typeof o.iva === 'number' ? Math.round(o.iva) : montoOCR(o.iva);
+        r.total = typeof o.total === 'number' ? Math.round(o.total) : montoOCR(o.total);
+        if (!r.iva && r.total && r.totalNeto) r.iva = r.total - r.totalNeto;
+
+        r.lineas = (Array.isArray(o.lineas) ? o.lineas : []).map(l => {
+            const rawDesc = limpiar(l && (l.descripcion || l.especificaciones || l.producto));
+            const codEnDesc = /^\((\d{4,9})\)\s*/.exec(rawDesc);
+            const desc = recorteNota(rawDesc.replace(/^\(\d{4,9}\)\s*/, ''));
+            // Solo se guarda codigoMP si viene como ID de Convenio Marco entre paréntesis (no el código ONU genérico de 8 dígitos)
+            const codExplicito = l && l.codigoMP && r.convenioMarco ? String(l.codigoMP).replace(/\D/g, '') : '';
+            const codigoMP = codEnDesc ? codEnDesc[1] : (/^\d{4,9}$/.test(codExplicito) ? codExplicito : '');
+            const cantidad = typeof (l && l.cantidad) === 'number' ? Math.round(l.cantidad) : Math.round(montoOCR(l && l.cantidad));
+            const valorNeto = typeof (l && l.valorNeto) === 'number' ? l.valorNeto : montoOCR(l && (l.valorNeto != null ? l.valorNeto : l.precioUnitario));
+            const totalLinea = typeof (l && l.totalLinea) === 'number' ? l.totalLinea : montoOCR(l && (l.totalLinea != null ? l.totalLinea : l.valorTotal));
+            const lic = limpiar(l && l.licitacion);
+            const linea = {
+                descripcion: desc,
+                codigoMP,
+                licitacion: /^\d+-\d+-[A-Z]+\d+$/.test(lic) ? lic : '',
+                cantidad,
+                valorNeto,
+                totalLinea: totalLinea || (cantidad && valorNeto ? Math.round(cantidad * valorNeto) : 0)
+            };
+            if (valorNeto && totalLinea && Math.round(valorNeto * cantidad) !== Math.round(totalLinea)) {
+                r.avisos.push(`Línea "${desc.slice(0, 40)}": cantidad × precio (${Math.round(valorNeto * cantidad).toLocaleString('es-CL')}) no coincide con el valor total (${Math.round(totalLinea).toLocaleString('es-CL')}). Revísala.`);
+            }
+            return linea;
+        }).filter(l => l.descripcion && l.cantidad > 0);
+
+        if (!r.lineas.length) r.avisos.push('No se detectaron productos: ingrésalos a mano.');
+        const suma = r.lineas.reduce((t, l) => t + (l.totalLinea || 0), 0);
+        if (r.totalNeto && suma && Math.abs(suma - r.totalNeto) > 2) {
+            r.avisos.push(`La suma de las líneas (${Math.round(suma).toLocaleString('es-CL')}) no coincide con el neto de la orden (${Math.round(r.totalNeto).toLocaleString('es-CL')}).`);
+        }
+        ['numeroOC', 'proveedor', 'emitida'].forEach(k => {
+            if (!r[k]) r.avisos.push(`No se encontró: ${({ numeroOC: 'N° de orden', proveedor: 'proveedor', emitida: 'fecha de envío' })[k]}.`);
+        });
+        return r;
+    }
+
+    /** Reconoce una OC de Mercado Público con capa de texto OCR ruidosa (ej. "N\": 1298355-995-AG26"). */
+    function reconoceOC_OCR(texto) {
+        const t = String(texto || '');
+        const tieneOC = /\b\d{4,8}-\d{1,5}-(?:AG|CM|SE|LE|LP|TD)\d{2}\b/i.test(t);
+        const tieneMarca = /ORDEN\s+DE\s+COMPRA/i.test(t) || (/SE[ÑN]OR\s*\(?ES\)?/i.test(t) && /DESPACHO|CANTIDAD|UN[ILÑ]DAD|NETO/i.test(t));
+        return tieneOC && tieneMarca;
+    }
+
+    /** Extrae datos y productos desde un PDF escaneado con capa de texto OCR ruidosa (respaldo local). */
+    function extraerOC_OCR(items) {
+        const TOL_OCR = 6;
+        const orden = [...(items || [])].filter(i => limpiar(i.str)).sort((a, b) => a.y - b.y || a.x - b.x);
+        const L = [];
+        for (const it of orden) {
+            const l = L.find(o => Math.abs(o.y - it.y) <= TOL_OCR);
+            if (l) l.items.push(it); else L.push({ y: it.y, items: [it] });
+        }
+        L.forEach(l => { l.items.sort((a, b) => a.x - b.x); l.x = l.items[0].x; l.texto = limpiar(l.items.map(i => i.str).join(' ')); });
+        L.sort((a, b) => a.y - b.y);
+        const T = L.map(l => l.texto), todo = T.join('\n');
+
+        const r = { tipo: 'OC_MP', origenLectura: 'ESCANEADA_OCR', avisos: ['Orden leída desde texto OCR del escáner: revisa tildes, descripciones y montos antes de ingresar.'] };
+        const ocExplicit = /N\s*[°º"'.,o]?\s*[:;|]?\s*(\d{4,8}-\d{1,5}-(?:AG|CM|SE|LE|LP|TD)\d{2})/i.exec(todo);
+        const ocAny = /\b(\d{4,8}-\d{1,5}-(?:AG|CM|SE|LE|LP|TD)\d{2})\b/i.exec(todo);
+        r.numeroOC = (ocExplicit ? ocExplicit[1] : ocAny ? ocAny[1] : '').toUpperCase();
+
+        // Proveedor (en la misma línea de SEÑOR(ES) o en la siguiente)
+        const iProv = T.findIndex(t => /SE[ÑN]OR\s*\(?ES\)?/i.test(t));
+        if (iProv >= 0) {
+            let prov = limpiar(T[iProv].replace(/^.*SE[ÑN]OR\s*\(?ES\)?\s*[:;|]?/i, ''));
+            if (!prov && T[iProv + 1] && !/^RUT\b/i.test(T[iProv + 1])) prov = limpiar(T[iProv + 1]);
+            r.proveedor = prov.toUpperCase();
+            const rutM = /(\d{1,2}\.\d{3}\.\d{3}-[\dkK])/.exec(T.slice(iProv, iProv + 6).join(' '));
+            r.rutProveedor = rutM ? rutM[1].toUpperCase() : '';
+        } else {
+            r.proveedor = ''; r.rutProveedor = '';
+        }
+
+        const fe = /Fecha\s*Env[ií¡]o\s*OC[^0-9\n]{0,10}(\d{2}[-/]\d{2}[-/]\d{4})(?:[^\d\n]{1,5}(\d{2}:\d{2})(?::\d{2})?)?/i.exec(todo);
+        r.emitida = fe ? fechaFlexibleISO(fe[1]) : '';
+        r.emitidaHora = fe && fe[2] ? fe[2] : '';
+        const fent = /FECHA\s*ENTREGA\s*PRODUCTOS[^0-9\n]{0,10}(\d{2}[-/]\d{2}[-/]\d{4})/i.exec(todo);
+        r.fechaEntrega = fent ? fechaFlexibleISO(fent[1]) : '';
+        const dato = (re) => { const m = re.exec(todo); return m ? limpiar(m[1]) : ''; };
+        r.estadoMP = dato(/Estado\s*[:;|]\s*([^\n]+)/i);
+        r.unidadCompra = dato(/Unidad\s*de\s*Compra\s*[:;|]\s*([^\n]+)/i);
+        const iDir = T.findIndex(t => /DIRECCI[OÓ]N\s*DE\s*DESPACHO/i.test(t));
+        if (iDir >= 0) {
+            let dir = limpiar(T[iDir].replace(/^.*DIRECCI[OÓ]N\s*DE\s*DESPACHO\s*[:;|]?/i, ''));
+            if (T[iDir + 1] && !/^(METODO|FORMA|DIRECCI[OÓ]N|C[OÓ]D|PRODUCTO)/i.test(T[iDir + 1])) dir = limpiar(dir + ' ' + T[iDir + 1]);
+            r.direccionDespacho = dir;
+        } else r.direccionDespacho = '';
+        r.formaPago = dato(/FORMA\s*DE\s*PAGO\s*[:;|]\s*([^\n]+)/i);
+        r.emailFactura = dato(/EMAIL\s*ENV[IÍ¡]O\s*FACTURA\s*[:;|]\s*(\S+@\S+)/i);
+        r.fuenteFinanciamiento = dato(/Fuente\s*Financ[i¡]am[ei]nto\s*[:;|]\s*([^\n]+)/i).replace(/['\s]+/g, '');
+        const mm = /MEMO\s*N\s*[°º"'.,]?\s*([0-9í¡lI]+(?:\s*[-,/y]\s*[0-9í¡lI]+)*)(?:\s*-\s*([^\n]+))?/i.exec(todo);
+        r.memos = mm ? mm[1].replace(/[í¡lI]/g, '1').split(/\s*[-,/y]\s*/).filter(Boolean) : [];
+        r.memo = r.memos.join('-');
+        r.descripcion = mm && mm[2] ? limpiar(mm[2]) : '';
+        r.contraparte = dato(/CONTRAPARTE\s*T[EÉ]CNICA\s*[:;|]\s*([^\n]+)/i);
+        r.contacto = dato(/CONTACTO\s*[:;|]\s*([^\n]+)/i);
+        r.horario = dato(/HORARIO\s*[:;|]\s*([^\n]+)/i);
+        r.convenioMarco = /convenio\s*marco/i.test(todo) || /-CM\d{2}$/i.test(r.numeroOC);
+
+        // Totales (soporta formato en línea "Neto $ 1.749.650" o en bloque apilado OCR "Neto\n...\nTotal $\n1.749.650")
+        const totLinea = (re) => {
+            for (const t of T) {
+                if (re.test(t)) {
+                    const nums = t.match(/['"]?\d[\d.,OolI]{2,}/g);
+                    if (nums && nums.length) return montoOCR(nums[nums.length - 1]);
+                }
+            }
+            return 0;
+        };
+        r.totalNeto = totLinea(/^Neto\b/i) || totLinea(/\bSubtotal\b/i);
+        r.iva = totLinea(/19%\s*IVA/i);
+        r.total = totLinea(/^Total\b/i);
+        if (!r.totalNeto) {
+            const iNeto = T.findIndex(t => /^Neto\b/i.test(t));
+            if (iNeto >= 0) {
+                const numsBloque = T.slice(iNeto, iNeto + 20).map(t => limpiar(t)).filter(t => /^['"]?[\d.,OolI]{1,}$/.test(t) && /\d/.test(t));
+                if (numsBloque.length) {
+                    const grandes = numsBloque.map(montoOCR).filter(v => v > 0);
+                    if (grandes.length) r.totalNeto = grandes[0];
+                    if (grandes.length >= 2) r.total = grandes[grandes.length - 1];
+                }
+            }
+        }
+        if (r.totalNeto && (!r.iva || Math.abs(r.iva - Math.round(r.totalNeto * 0.19)) > Math.max(5, r.totalNeto * 0.02))) {
+            r.iva = Math.round(r.totalNeto * 0.19);
+        }
+        if (r.totalNeto && (!r.total || Math.abs(r.total - (r.totalNeto + r.iva)) > Math.max(5, r.totalNeto * 0.02))) {
+            r.total = r.totalNeto + r.iva;
+        }
+
+        // --- Extracción de filas de productos tolerante a OCR ---
+        const esInicioProducto = (t) => {
+            const m = /^(\d[\d',.]{5,11})\s+(.+)$/.exec(t);
+            if (!m) return false;
+            if (/[.,]\d{2}$/.test(m[1])) return false;                // evita precios tipo "39.000,00" o "8.900.00"
+            const digs = m[1].replace(/\D/g, '');
+            if (digs.length < 7 || digs.length > 9) return false;
+            if (/^\d{1,2}\.\d{3}\.\d{3}/.test(m[1])) return false;    // evita RUT
+            return /[A-Za-zÁÉÍÓÚáéíóúÑñ]{3,}/.test(m[2]);             // una fila de producto siempre trae texto
+        };
+        const esFinTabla = (t) => /^(NOMBRE\s+ORDEN|FECHA\s+ENTREGA|DIRECCI[OÓ]N\s+DE|METODO\s+DE|FORMA\s+DE|D[i¡]sponib|Fuente\s+Financ|Observaciones|Derechos\s+del|Neto\b)/i.test(t);
+        const reCuatroNums = /(\d[\d.,]*)\s+(\d[\d.,]*)\s+(\d[\d.,]*)\s+(['"]?\d[\d.,]*)\s*$/;
+        const reCantUnidad = /\b(\d{1,6})\s+(C["'a-zA-Z]{1,3}ja|Cajas?|U[nñl][i¡l]d\w*|Unid\w*|Paquetes?|Sobres?|Frascos?|Rollos?|Bolsas?|Pares?|Par|Kits?|Litros?|Metros?|Ampollas?|Tubos?|Botellas?|Tarros?|Envases?|Displays?|Sets?|Bl[ií]ster\w*|Gal[oó]n(?:es)?|Bid[oó]n(?:es)?|Resmas?|Packs?|Piezas?)\b/gi;
+
+        const bloques = [];
+        let actual = null;
+        for (const t of T) {
+            if (esFinTabla(t)) { if (actual) { bloques.push(actual); actual = null; } continue; }
+            if (esInicioProducto(t)) {
+                if (actual) bloques.push(actual);
+                actual = [t];
+                if (reCuatroNums.test(t)) { bloques.push(actual); actual = null; }
+                continue;
+            }
+            if (actual) {
+                actual.push(t);
+                if (reCuatroNums.test(t)) { bloques.push(actual); actual = null; }
+            }
+        }
+        if (actual) bloques.push(actual);
+
+        r.lineas = bloques.map(b => {
+            const full = limpiar(b.join(' '));
+            const sinCod = limpiar(full.replace(/^\d[\d',.]{5,11}\s+/, ''));
+            const mNums = reCuatroNums.exec(sinCod);
+            const precio = mNums ? montoOCR(mNums[1]) : 0;
+            const valor = mNums ? montoOCR(mNums[4]) : 0;
+            const cuerpo = mNums ? limpiar(sinCod.slice(0, mNums.index)) : sinCod;
+
+            // Buscar el mejor par "<cantidad> <unidad>": prioriza el que cumple cantidad × precio === valor
+            const matches = [];
+            let mc; reCantUnidad.lastIndex = 0;
+            while ((mc = reCantUnidad.exec(cuerpo)) !== null) {
+                matches.push({ cant: Number(mc[1]), idx: mc.index, fin: mc.index + mc[0].length });
+            }
+            const elegido = matches.find(m => precio > 0 && valor > 0 && Math.round(m.cant * precio) === Math.round(valor)) || matches[0];
+            if (!elegido || !(elegido.cant > 0)) return null;
+
+            const prodCat = limpiar(cuerpo.slice(0, elegido.idx));
+            const comprador = limpiar(cuerpo.slice(elegido.fin));
+            const cod = /^\((\d{4,9})\)\s*/.exec(comprador);
+            const desc = recorteNota(limpiar(comprador.replace(/^\(\d{4,9}\)\s*/, ''))) || prodCat;
+            const linea = {
+                descripcion: desc,
+                codigoMP: cod ? cod[1] : '',
+                licitacion: '',
+                cantidad: elegido.cant,
+                valorNeto: precio,
+                totalLinea: valor || (precio ? Math.round(elegido.cant * precio) : 0)
+            };
+            if (precio && valor && Math.round(precio * elegido.cant) !== Math.round(valor)) {
+                r.avisos.push(`Línea "${desc.slice(0, 40)}": cantidad × precio (${Math.round(precio * elegido.cant).toLocaleString('es-CL')}) no coincide con el valor total (${Math.round(valor).toLocaleString('es-CL')}). Revísala.`);
+            }
+            return linea;
+        }).filter(Boolean);
+
+        if (!r.lineas.length) r.avisos.push('No se detectaron productos en el texto OCR: ingrésalos a mano.');
+        const suma = r.lineas.reduce((t, l) => t + (l.totalLinea || 0), 0);
+        if (r.totalNeto && suma && Math.abs(suma - r.totalNeto) > 2) {
+            r.avisos.push(`La suma de las líneas (${Math.round(suma).toLocaleString('es-CL')}) no coincide con el neto de la orden (${Math.round(r.totalNeto).toLocaleString('es-CL')}).`);
+        }
+        ['numeroOC', 'proveedor', 'emitida'].forEach(k => {
+            if (!r[k]) r.avisos.push(`No se encontró: ${({ numeroOC: 'N° de orden', proveedor: 'proveedor', emitida: 'fecha de envío' })[k]}.`);
+        });
+        return r;
+    }
+
     /** Dice qué parece ser un texto que no se reconoció (para un mensaje útil). */
     function parecidoA(texto) {
         const t = String(texto || '');
-        if (/RECEPCI[OÓ]N\s+CONFORME/i.test(t)) return 'una Recepción conforme (se sube en la propia orden, no al ingresarla)';
+        if (/RECEPCI[OÓ]N\s+CONFORME/i.test(t) && !/FORMA\s+DE\s+PAGO.*RECEPCI[OÓ]N\s+CONFORME/i.test(t)) return 'una Recepción conforme (se sube en la propia orden, no al ingresarla)';
         if (/GU[IÍ]A\s+DE\s+DESPACHO/i.test(t)) return 'una guía de despacho (se sube al recibir la mercadería)';
-        if (/FACTURA/i.test(t)) return 'una factura';
+        // Evitar falso positivo por "DIRECCION DE ENVIO FACTURA" o "contra la recepción conforme de la factura" dentro de una OC
+        const sinRefOC = t.replace(/(?:DIRECCI[OÓ]N|EMAIL)\s+DE?\s*ENV[IÍ¡]O\s+FAC[TF]URA|CONFORME\s+DE\s+LA\s+FACTURA/gi, '');
+        if (/FACTURA/i.test(sinRefOC)) return 'una factura';
         if (/ACTA\s+DE\s+ENTREGA/i.test(t)) return 'un acta de entrega';
         return '';
     }
@@ -483,7 +762,11 @@
         throw new Error('No reconozco este Excel. Busco un cuadro de distribución (columnas "MEMO N° … CDP N° …") o una orden de compra (tabla Producto / Cantidad / Precio).');
     }
     const slug = (t) => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-    const LECTORES = { OC_MP: { nombre: 'Orden de compra (Mercado Público)', reconoce: reconoceOC, extraer: extraerOC }, DIST_OC: { nombre: 'Cuadro de distribución de la orden', reconoce: reconoceDistribucion, extraer: extraerDistribucionAuto } };
+    const LECTORES = {
+        OC_MP: { nombre: 'Orden de compra (Mercado Público)', reconoce: reconoceOC, extraer: extraerOC },
+        DIST_OC: { nombre: 'Cuadro de distribución de la orden', reconoce: reconoceDistribucion, extraer: extraerDistribucionAuto },
+        OC_MP_OCR: { nombre: 'Orden de compra escaneada (OCR)', reconoce: reconoceOC_OCR, extraer: extraerOC_OCR }
+    };
     function detectar(items) { const txt = lineas(items).map(l => l.texto).join('\n'); return Object.keys(LECTORES).find(k => LECTORES[k].reconoce(txt)) || null; }
     function leer(items) {
         const k = detectar(items);
@@ -492,7 +775,7 @@
     }
 
     // ------------------------------------------------------------------
-    // Navegador: carga de pdf.js y extracción de elementos con posición
+    // Navegador: carga de pdf.js, extracción de texto y render de escaneos
     // ------------------------------------------------------------------
     let pdfjsP = null;
     function cargarPdfJs() {
@@ -507,9 +790,9 @@
     }
     async function itemsDePDF(buffer) {
         const lib = await cargarPdfJs();
-        const pdf = await lib.getDocument({ data: buffer }).promise;
+        const pdf = await lib.getDocument({ data: buffer.slice(0) }).promise;
         const out = []; let offset = 0;
-        for (let p = 1; p <= Math.min(pdf.numPages, 6); p++) {
+        for (let p = 1; p <= Math.min(pdf.numPages, 12); p++) {
             const page = await pdf.getPage(p), vp = page.getViewport({ scale: 1 }), tc = await page.getTextContent();
             tc.items.forEach(i => { if (i.str && i.str.trim()) out.push({ str: i.str, x: i.transform[4], y: offset + (vp.height - i.transform[5]), w: Number(i.width) || 0, h: Math.abs(i.transform[3] || i.height || 0) }); });
             offset += vp.height + 20;
@@ -517,16 +800,152 @@
         return out;
     }
     const esExcel = (f) => /\.(xlsx|xls|xlsm)$/i.test(f.name || '') || /spreadsheet|excel/i.test(f.type || '');
+    const esImagen = (f) => /^image\//i.test(f.type || '') || /\.(jpe?g|png|webp|bmp|gif|avif)$/i.test(f.name || '');
+
+    /** Detecta si una página renderizada en canvas tiene contenido real (descarta hojas en blanco de escaneos doble cara). */
+    function paginaConContenido(canvas) {
+        try {
+            const w = canvas.width, h = canvas.height;
+            if (!w || !h) return false;
+            const mx = Math.floor(w * 0.04), my = Math.floor(h * 0.04);
+            const rw = Math.max(1, w - mx * 2), rh = Math.max(1, h - my * 2);
+            const data = canvas.getContext('2d').getImageData(mx, my, rw, rh).data;
+            let oscuros = 0, total = 0;
+            for (let i = 0; i < data.length; i += 32) { // muestrea 1 de cada 8 píxeles (4 canales × 8)
+                const lum = (data[i] * 3 + data[i + 1] * 6 + data[i + 2]) / 10;
+                if (lum < 225) oscuros++;
+                total++;
+            }
+            return total > 0 && (oscuros / total) >= 0.0015;
+        } catch (e) { return true; }
+    }
+
+    /** Convierte una foto o PDF escaneado en páginas JPEG base64 (descartando hojas en blanco; máx. 6 útiles de hasta 12). */
+    async function paginasDeArchivo(file, bufferOpt) {
+        const aJpeg = (c) => c.toDataURL('image/jpeg', 0.85).split(',')[1];
+        if (esImagen(file)) {
+            const url = URL.createObjectURL(file);
+            try {
+                return [await new Promise((ok, mal) => {
+                    const im = new Image();
+                    im.onload = () => {
+                        const k = Math.min(1, 1800 / Math.max(im.naturalWidth, im.naturalHeight));
+                        const c = document.createElement('canvas');
+                        c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k);
+                        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+                        ok(aJpeg(c));
+                    };
+                    im.onerror = () => mal(new Error('No se pudo abrir la imagen.'));
+                    im.src = url;
+                })];
+            } finally { URL.revokeObjectURL(url); }
+        }
+        const lib = await cargarPdfJs();
+        const data = bufferOpt ? bufferOpt.slice(0) : await file.arrayBuffer();
+        const pdf = await lib.getDocument({ data }).promise;
+        const out = []; let primera = null;
+        for (let p = 1; p <= Math.min(pdf.numPages, 12) && out.length < 6; p++) {
+            const pg = await pdf.getPage(p), vp = pg.getViewport({ scale: 1.6 });
+            const c = document.createElement('canvas');
+            c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+            await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+            const jpg = aJpeg(c);
+            if (!primera) primera = jpg;
+            if (paginaConContenido(c)) out.push(jpg);
+        }
+        return out.length ? out : (primera ? [primera] : []);
+    }
+
+    /** Lee una OC escaneada o fotografiada enviando sus páginas con contenido al Apps Script (accion: "ordenCompra"). */
+    async function leerOCEscaneada(file, cfg, onProgreso, bufferOpt) {
+        if (!cfg || !cfg.webhookUrl || !cfg.token) throw new Error('SIN_SCRIPT');
+        if (onProgreso) onProgreso('Preparando páginas del documento escaneado (omitiendo hojas en blanco)…');
+        const pags = await paginasDeArchivo(file, bufferOpt);
+        if (!pags.length) throw new Error('No se encontraron páginas legibles en el archivo.');
+        if (onProgreso) onProgreso(`Leyendo ${pags.length} página${pags.length === 1 ? '' : 's'} de la orden escaneada con IA…`);
+        const r = await fetch(cfg.webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify({ token: cfg.token, accion: 'ordenCompra', paginas: pags })
+        });
+        const j = await r.json();
+        if (!j.ok) {
+            throw new Error(j.error === 'sin_clave' ? 'SIN_CLAVE'
+                : (j.error === 'token' ? 'El token del script no coincide.'
+                : (j.error === 'accion' || j.error === undefined || /destinatarios/i.test(String(j.error)) ? 'SCRIPT_VIEJO' : String(j.error))));
+        }
+        return normalizarOCEscaneada(j);
+    }
+
     async function filasDeExcel(file) {
         if (typeof XLSX === 'undefined') throw new Error('No cargó la librería de Excel.');
         const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' });
         for (const n of wb.SheetNames) { const filas = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: null }); try { return leerHoja(filas); } catch (e) { /* prueba la hoja siguiente */ } }
         throw new Error('No reconozco este Excel. Busco un cuadro de distribución (columnas "MEMO N° … CDP N° …") o una orden de compra (tabla Producto / Cantidad / Precio).');
     }
-    /** PDF o Excel: devuelve la orden (OC_MP) o el cuadro (DIST_OC), según lo que sea el archivo. */
-    async function leerArchivo(file) { return esExcel(file) ? filasDeExcel(file) : leer(await itemsDePDF(await file.arrayBuffer())); }
+
+    /** PDF (digital o escaneado), foto o Excel: devuelve la orden (OC_MP) o el cuadro (DIST_OC). */
+    async function leerArchivo(file, opts) {
+        const cfg = opts && opts.configCorreo;
+        const onProgreso = opts && typeof opts.onProgreso === 'function' ? opts.onProgreso : null;
+        if (esExcel(file)) return filasDeExcel(file);
+        if (esImagen(file)) {
+            try { return await leerOCEscaneada(file, cfg, onProgreso); }
+            catch (e) {
+                if (e.message === 'SIN_SCRIPT') throw new Error('Para leer fotos de órdenes de compra, conecta primero el Script de Google en Configuración → Script y correo (o ingresa los datos a mano).');
+                if (e.message === 'SCRIPT_VIEJO') throw new Error('El Script de Google aún no incluye lectura de órdenes escaneadas: copia la versión nueva en Configuración → Script y correo y publícala.');
+                if (e.message === 'SIN_CLAVE') throw new Error('Falta configurar la clave de lectura (ANTHROPIC_API_KEY) en el Script de Google.');
+                throw e;
+            }
+        }
+        const buffer = await file.arrayBuffer();
+        const items = await itemsDePDF(buffer);
+        const txt = lineas(items).map(l => l.texto).join('\n');
+
+        // 1) Intento rápido: PDF digital (Mercado Público o Cuadro de distribución)
+        if (reconoceDistribucion(txt)) return extraerDistribucionAuto(items);
+        if (reconoceOC(txt)) {
+            const digital = extraerOC(items);
+            if (digital.lineas && digital.lineas.length > 0) return digital;
+        }
+
+        // Si trae texto digital claro de otro documento (Recepción conforme, Guía, Acta, Factura) y NO de una OC, avisar al tiro
+        const tieneOCR = reconoceOC_OCR(txt);
+        const esOtroDoc = txt.length > 80 && !tieneOCR && !/ORDEN\s+DE\s+COMPRA/i.test(txt) && parecidoA(txt);
+        if (esOtroDoc) {
+            throw new Error(`Este archivo parece ${esOtroDoc}. Aquí va la orden de compra de Mercado Público (o su cuadro de distribución).`);
+        }
+
+        // 2) PDF escaneado (sin capa de texto o con OCR ruidoso): prioridad IA visual (si el Script está conectado)
+        if (cfg && cfg.webhookUrl && cfg.token) {
+            try {
+                return await leerOCEscaneada(file, cfg, onProgreso, buffer);
+            } catch (errIA) {
+                // Si el script aún es viejo o no tiene clave, pero el escáner dejó capa OCR, usamos el lector OCR local
+                if (tieneOCR) {
+                    const ocr = extraerOC_OCR(items);
+                    if (errIA.message === 'SCRIPT_VIEJO') {
+                        ocr.avisos.unshift('Se leyó con el OCR del escáner. Actualiza el Script de Google (Configuración → Script y correo) para lectura visual sin errores de OCR.');
+                    }
+                    return ocr;
+                }
+                if (errIA.message === 'SCRIPT_VIEJO') throw new Error('Este PDF es un escaneo (imagen). Para leerlo automáticamente, pega la versión nueva del Script de Google en Configuración → Script y correo y crea una nueva implementación.');
+                if (errIA.message === 'SIN_CLAVE') throw new Error('Este PDF es un escaneo (imagen), pero falta la clave ANTHROPIC_API_KEY en el Script de Google. Puedes completar los datos a mano.');
+                throw new Error('No se pudo leer la orden escaneada: ' + (errIA.message || errIA) + '. Puedes ingresar los datos a mano.');
+            }
+        }
+
+        // 3) Sin Apps Script configurado: si el PDF escaneado trae capa OCR reconocible, usar lector local OC_MP_OCR
+        if (tieneOCR) return extraerOC_OCR(items);
+
+        // 4) PDF escaneado puro (sin texto) y sin Apps Script configurado
+        if (items.length < 15) {
+            throw new Error('Este PDF es un documento escaneado (imagen sin texto). Conecta el Script de Google en Configuración → Script y correo para leerlo automáticamente, o ingresa los datos a mano.');
+        }
+        return leer(items);
+    }
     async function leerDistribucion(file) { const r = await leerArchivo(file); if (r.tipo === 'OC_MP') throw new Error('Ese archivo es una orden de compra: súbelo en el primer recuadro (el cuadro va aquí).'); if (r.tipo !== 'DIST_OC') throw new Error('Ese archivo no es un cuadro de distribución (busco columnas "MEMO N° …", FINANCIAMIENTO y CDP).'); return r; }
 
-    window.SAR_Lector = { cargarPdfJs, leerHoja, extraerDistribucionExcel, extraerOCExcel, esExcel, leer, leerArchivo, leerDistribucion, extraerDistribucion, extraerDistribucionB, unirDistribucion, detectar, extraerOC, extraerCorreo, lineas, LECTORES };
+    window.SAR_Lector = { cargarPdfJs, leerHoja, extraerDistribucionExcel, extraerOCExcel, esExcel, esImagen, leer, leerArchivo, leerDistribucion, leerOCEscaneada, normalizarOCEscaneada, reconoceOC_OCR, extraerOC_OCR, paginaConContenido, paginasDeArchivo, montoOCR, fechaFlexibleISO, extraerDistribucion, extraerDistribucionB, unirDistribucion, detectar, extraerOC, extraerCorreo, lineas, LECTORES };
     if (typeof module !== 'undefined') module.exports = window.SAR_Lector;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

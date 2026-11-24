@@ -155,6 +155,70 @@ t('bultos: estado de impresión por etiqueta y por orden, y lo que falta etiquet
   const oc2 = { recepciones: [{ fecha: '2026-11-15', ingresoAStock: true, detalle: [{ insumoName: 'Guante', cantidad: 100, lote: 'L1' }, { insumoName: 'Guante', cantidad: 200, lote: 'L2', vence: '2028-01-01' }] }] };
   assert.deepStrictEqual(B.faltantesOC(oc2, [b({ lote: 'L1' })]).map(x => x.lote + ':' + x.total + ':' + x.vence), ['L2:200:2028-01-01']);   /* no mezcla lotes */
   assert.deepStrictEqual(B.faltantesOC(oc, [], '2026-11-14').map(x => x.nombre), ['Guante']); });
+t('OC escaneada: montoOCR, normalizarOCEscaneada (IA) y descartar hojas en blanco (v21.234)', () => {
+  const L = require('../oc-lector.js');
+  assert.strictEqual(L.montoOCR('16.000,00'), 16000);
+  assert.strictEqual(L.montoOCR('8.900.00'), 8900);
+  assert.strictEqual(L.montoOCR("'195.000"), 195000);
+  assert.strictEqual(L.montoOCR('955,00'), 955);
+  const ia = L.normalizarOCEscaneada({
+    numeroOC: '1298355-995-AG26', proveedor: 'IMPORTCHILE.COM SPA', rutProveedor: '76.506.381-7',
+    emitida: '17-11-2026', emitidaHora: '16:41', fechaEntrega: '26-11-2026', estadoMP: 'Aceptada',
+    direccionDespacho: 'REAL AUDIENCIA N°980, POB. CONDE MANSO DE VELASCO, Melipilla',
+    formaPago: '30 días contra la recepción conforme de la factura', memos: ['41'],
+    descripcion: 'COMPRA DE INSUMOS MEDICOS - MINSAL 2026 SAR', totalNeto: 1749650, iva: 332434, total: 2082084,
+    lineas: [
+      { descripcion: 'Tubo al vacío, citrato 3.2%, 4.5 ml tapa celeste, caja 100 tubos.', cantidad: 20, valorNeto: 16000, totalLinea: 320000 },
+      { descripcion: 'frasco desechable de aspiración 1000 ml', cantidad: 100, valorNeto: 8900, totalLinea: 890000 },
+      { descripcion: 'Parche neumotórax ventilado', cantidad: 7, valorNeto: 18000, totalLinea: 126000 },
+      { descripcion: 'Mascarilla alta concentración pediátrica', cantidad: 30, valorNeto: 955, totalLinea: 28650 },
+      { descripcion: 'pinza de extracción cuerpo extraño', cantidad: 10, valorNeto: 19000, totalLinea: 190000 },
+      { descripcion: 'Pack de parche neumotórax hyfin combo pack', cantidad: 5, valorNeto: 39000, totalLinea: 195000 }
+    ]
+  });
+  assert.strictEqual(ia.tipo, 'OC_MP'); assert.strictEqual(ia.numeroOC, '1298355-995-AG26'); assert.strictEqual(ia.emitida, '2026-11-17');
+  assert.strictEqual(ia.rutProveedor, '76.506.381-7'); assert.deepStrictEqual(ia.memos, ['41']); assert.strictEqual(ia.lineas.length, 6);
+  assert.strictEqual(ia.avisos.length, 1); /* solo el aviso informativo de revisión, 0 errores aritméticos */
+  const cm = L.normalizarOCEscaneada({ numeroOC: '1298355-911-CM26', proveedor: 'X', emitida: '2026-11-10', totalNeto: 5000, lineas: [{ descripcion: '(4623804) SABANILLA', cantidad: 5, valorNeto: 1000, totalLinea: 5000 }] });
+  assert.strictEqual(cm.convenioMarco, true); assert.strictEqual(cm.lineas[0].codigoMP, '4623804'); assert.strictEqual(cm.lineas[0].descripcion, 'SABANILLA');
+  /* Hoja en blanco vs hoja con tinta */
+  const mkCanvas = (oscuro) => ({ width: 100, height: 100, getContext: () => ({ getImageData: () => ({ data: Uint8ClampedArray.from({ length: 100 * 100 * 4 }, (_, k) => (k % 4 === 3 ? 255 : oscuro ? 40 : 255)) }) }) });
+  assert.strictEqual(L.paginaConContenido(mkCanvas(false)), false);
+  assert.strictEqual(L.paginaConContenido(mkCanvas(true)), true);
+});
+t('OC escaneada con capa OCR ruidosa (1298355-995-AG26, 6 ítems en 2 hojas) se lee completa (v21.234)', () => {
+  const L = require('../oc-lector.js');
+  const raw = [
+    'Rut ;', 'D¡rección Demandante : 71.293.900-t', 'ORDEN DE COMPRA', 'Demandante: DIRECCION DE SALUD', 'UnidaddeCompra: SALUD',
+    "Fecha Envio OC- | 17-11-2026 '16:41:43", 'Estado: Aceptada', 'N": 1298355-995-AG26', 'sEñoR (ES) :', 'lMPoRTcHlLE coM sPA', 'RUT :', '76.506.381-7',
+    '41104107 Tubos o', 'conteñedores de sangre', '20 C"ja Tubo alvaclo, citrato 3.2%, 4.5 mltapa celeste, ca¡a 100 tubos', '16.000,00 0,00 0,00 320.000',
+    "42172',103 Kils de reanimación", '100 Unidad frasco desechable de aspiración 1000 ml', '8.900.00 0,00 0,00 890.000',
+    '42271615 Neumolacos 7 Uñidad Parche neumotórax veñtilado, Similar a halo vent', '18.000,00 0,00 0,00 126.000',
+    '42271704 Mascarillas de oxígeno 30 Unidad Mascar¡lla alta concentración pediátrica', '955,00 0,00 0,00 28.650',
+    '42291402 AbrazadeÉs 10 Unidad p¡nza de extracción cuerpo extraño', '19.000,00 0,00 0,00 190.000',
+    'NOMBRE ORDEN DE COMPRA : Orden de Compra generada por ¡nvitac¡ón a compra ág,l; 1298355-1283-COT26',
+    'FECHA ENTREGA PRODUCTOS | 26-11-2026', 'DIRECCION DE DESPACHO : REAL AUDIENCIA N\'980, POB. CONDE', 'MANSO DE VETASCO',
+    "422716'15 Neumolacos 5 Paquete Pack de parche neumotórax hyfin combo pack, 1 bolsa transparente", "39.000,00 0,00 0,00 '195.000",
+    "MEMO N'4í - COMPRA DE INSUMOS MEDICOS - MINSAL 2026 SAR", 'Neto', 'Dcto.', 'Total $', '1.749.650', '0', '2.Oa2.084'
+  ];
+  const items = raw.map((str, i) => ({ str, x: 10, y: i * 15 }));
+  assert.strictEqual(L.detectar(items), 'OC_MP_OCR');
+  const r = L.leer(items);
+  assert.strictEqual(r.numeroOC, '1298355-995-AG26');
+  assert.strictEqual(r.proveedor, 'LMPORTCHLLE COM SPA');
+  assert.strictEqual(r.rutProveedor, '76.506.381-7');
+  assert.strictEqual(r.emitida, '2026-11-17');
+  assert.strictEqual(r.emitidaHora, '16:41');
+  assert.strictEqual(r.fechaEntrega, '2026-11-26');
+  assert.deepStrictEqual(r.memos, ['41']);
+  assert.strictEqual(r.descripcion, 'COMPRA DE INSUMOS MEDICOS - MINSAL 2026 SAR');
+  assert.strictEqual(r.totalNeto, 1749650);
+  assert.strictEqual(r.lineas.length, 6);
+  assert.deepStrictEqual(r.lineas.map(x => [x.cantidad, x.valorNeto, x.totalLinea]), [
+    [20, 16000, 320000], [100, 8900, 890000], [7, 18000, 126000], [30, 955, 28650], [10, 19000, 190000], [5, 39000, 195000]
+  ]);
+  assert.ok(r.lineas.every(x => x.codigoMP === '')); /* Compra Ágil: el código ONU no es ID de producto */
+});
 console.log(`\n${n} ok, ${mal} con falla`); process.exit(mal ? 1 : 0); });
 
 // ---- Bodega transitoria (v21.107)

@@ -331,4 +331,5 @@
     }
 
     window.SAR_RecepcionConforme = { cargarPDFLib, cargarLogo, cargarFirma, bajar, fechaCorta, CONTRAPARTE_BASE, FIRMA_BASE, editar, regenerar, abrir, nombreAdjunto, nombreActa, lineasActa, validar, armarCorreo, generarActaPDF, DESTINATARIOS_BASE };
+    if (typeof module !== 'undefined') module.exports = window.SAR_RecepcionConforme;
 })(window, document);

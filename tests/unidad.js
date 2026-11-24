@@ -366,3 +366,33 @@ t('cuadro de distribución PDF vertical con 2 memos SAR y FINANCIAMIENTO arriba 
   assert.strictEqual(d.columnas[3].memo, '59'); assert.strictEqual(d.columnas[3].centro, 'POSTA BOLLENAR'); assert.strictEqual(d.columnas[3].financiamiento, 'PERCAPITA');
   assert.strictEqual(d.columnas[4].memo, '33'); assert.strictEqual(d.columnas[4].centro, 'CESFAM POMAIRE'); assert.strictEqual(d.columnas[4].financiamiento, 'PERCAPITA');
 });
+t('v21.252: reparto de 2 memos pegados en col 1, recepción multi-memo unificada y lineasActa con col SAR sin centro', () => {
+  global.window = global.window || global; global.document = global.document || { body: { dataset: {} }, addEventListener() {} };
+  const L = require('../oc-lector.js');
+  // Caso extremo: "MEMO N°9 SAR" con x dentro de col 1 y w > 1.15*paso (se pegaría en col 1)
+  const items = [
+    { str: 'MEMO N°36', x: 285, y: 23, w: 30 }, { str: 'MEMO N°9 SAR', x: 300, y: 27, w: 56 }, { str: 'SAR', x: 294, y: 31, w: 12 },
+    { str: 'FINANCIAMIENTO', x: 232, y: 46.5, w: 42 },
+    { str: 'MINSAL - 2026', x: 282, y: 43, w: 36 }, { str: 'SAR', x: 294, y: 50, w: 12 },
+    { str: 'MINSAL - 2026', x: 326, y: 43, w: 36 }, { str: 'SAR', x: 338, y: 50, w: 12 },
+    { str: 'CDP', x: 248, y: 59, w: 12 }, { str: '3550', x: 292, y: 59, w: 16 }, { str: '2667', x: 336, y: 59, w: 16 },
+    { str: 'ID', x: 32, y: 69, w: 8 }, { str: 'DESCRIPCION', x: 100, y: 69, w: 40 }, { str: 'VALOR NETO', x: 236, y: 69, w: 34 },
+    { str: 'CANTIDAD', x: 288, y: 69, w: 24 }, { str: 'CANTIDAD', x: 332, y: 69, w: 24 },
+    { str: 'CANTIDAD', x: 376, y: 65, w: 24 }, { str: 'TOTAL', x: 380, y: 72, w: 18 },
+    { str: '2229693', x: 28, y: 84, w: 24 }, { str: 'CATETER FOLEY 20 FR', x: 70, y: 84, w: 80 }, { str: '$ 2,870', x: 242, y: 84, w: 24 }, { str: '5', x: 298, y: 84, w: 5 }, { str: '30', x: 341, y: 84, w: 8 }, { str: '35', x: 385, y: 84, w: 8 },
+    { str: 'NETO', x: 245, y: 102, w: 16 }, { str: '$ 14,350', x: 286, y: 102, w: 28 }, { str: '$ 86,100', x: 330, y: 102, w: 28 }
+  ];
+  const d = L.extraerDistribucion(items);
+  assert.deepStrictEqual(d.avisos, []);
+  assert.strictEqual(d.columnas[0].memo, '36'); assert.strictEqual(d.columnas[0].centro, 'SAR');
+  assert.strictEqual(d.columnas[1].memo, '9'); assert.strictEqual(d.columnas[1].centro, 'SAR');
+  // aplicarRecepcion unificada (multi-columna)
+  const S = require('../seguimiento-oc.js');
+  const oc = { columnas: [{ key: 'sar-36', centro: 'SAR', memo: '36' }, { key: 'col2-2', centro: '', financiamiento: 'MINSAL - 2026 SAR', cdp: '2667' }], lineas: [{ descripcion: 'FOLEY 20FR', dist: { 'sar-36': 5, 'col2-2': 30 }, recibido: {}, ingresado: {}, entregado: {} }] };
+  const ap = S.aplicarRecepcion(oc, 'sar-36', [{ i: 0, columna: 'sar-36', cantidad: 5 }, { i: 0, columna: 'col2-2', cantidad: 30 }], [], null, true);
+  assert.strictEqual(ap.lineas[0].recibido['sar-36'], 5); assert.strictEqual(ap.lineas[0].recibido['col2-2'], 30);
+  // lineasActa suma ambas columnas SAR en un solo consolidado (35 u.)
+  const R = require('../recepcion-conforme.js');
+  const la = R.lineasActa({ ...oc, lineas: ap.lineas }, 'SAR');
+  assert.strictEqual(la.length, 1); assert.strictEqual(la[0].pedido, 35); assert.strictEqual(la[0].recibido, 35);
+});

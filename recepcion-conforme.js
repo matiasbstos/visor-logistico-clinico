@@ -43,7 +43,15 @@
     function nombreActa(oc) { return `RC${String(oc.numeroOC || '').replace(/[^A-Za-z0-9-]+/g, '')}.pdf`; }
     /** Líneas para el acta: lo recibido por el SAR en esta OC. */
     function lineasActa(oc, centro) {
-        const cols = (oc.columnas || []).filter(c => c.centro === centro);
+        const esProp = (c) => {
+            const t = String((c && c.centro) || '').toUpperCase().trim();
+            if (centro !== 'SAR') return t === String(centro || '').toUpperCase().trim();
+            if (t === 'SAR' || (/(^|[^A-Z])SAR([^A-Z]|$)/.test(t) && !/CESFAM|POSTA|COSAM|CECOSF/i.test(t))) return true;
+            return !t && /(^|[^A-Z])SAR([^A-Z]|$)/i.test(String((c && c.financiamiento) || ''));
+        };
+        const all = oc.columnas || [];
+        const colsProp = all.filter(esProp);
+        const cols = colsProp.length ? colsProp : all;
         const out = [];
         (oc.lineas || []).forEach(l => {
             const p = cols.reduce((t, c) => t + num(l.dist && l.dist[c.key]), 0), r = cols.reduce((t, c) => t + num(l.recibido && l.recibido[c.key]), 0);

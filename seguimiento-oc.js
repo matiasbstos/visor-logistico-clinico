@@ -1181,7 +1181,7 @@
         let rev = { lineas: [], aceptarHoras: 48, entregaDias: 2, origen: 'MANUAL' };
         const campo = (id, et, v, tipo) => `<label>${et}<input type="${tipo || 'text'}" id="${id}" value="${esc(v == null ? '' : v)}"></label>`;
         const ov = modal('Ingresar orden de compra', `
-            <label>Orden de compra (Mercado Público): PDF (digital o escaneado), foto o Excel<input type="file" id="p-file" accept="application/pdf,image/*,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></label>
+            <label>Orden de compra (Mercado Público) o Factura Electrónica: PDF (digital o escaneado), foto o Excel<input type="file" id="p-file" accept="application/pdf,image/*,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></label>
             <label>Cuadro de distribución (PDF o Excel, opcional): lee memos, CDP, cantidades por centro y montos<input type="file" id="p-dist" accept="application/pdf,.xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"></label>
             <div id="p-dist-est" class="cierre-hint"></div>
             <label class="soc-hist-chk"><input type="checkbox" id="p-hist"> <b>Orden histórica</b>: ya se recibió y procesó antes; se carga solo para trazabilidad (no suma ni descuenta stock)</label>
@@ -1241,7 +1241,8 @@
             catalogoEnSegundoPlano({ ...oc, id });
             prog.paso('Guardando los archivos de la orden…');
             const fOC = (o.querySelector('#p-file') || {}).files, fDist = (o.querySelector('#p-dist') || {}).files;
-            await guardarFile(id, fOC && fOC[0], 'Orden de compra'); await guardarFile(id, fDist && fDist[0], 'Cuadro de distribución');
+            const catDocPrincipal = (rev.origenLectura === 'FACTURA_SII' || rev.origenLectura === 'FACTURA_REUTTER') ? 'Factura' : 'Orden de compra';
+            await guardarFile(id, fOC && fOC[0], catDocPrincipal); await guardarFile(id, fDist && fDist[0], 'Cuadro de distribución');
             if (hist) { const fr = o.querySelector('#p-hist-rc').files[0], fa = o.querySelector('#p-hist-acta').files[0]; if (fr) await guardarFile(id, fr, 'Recepción conforme'); if (fa) await guardarFile(id, fa, 'Acta de entrega'); }
             prog.listo(`Orden ${oc.numeroOC} ingresada`, true); await new Promise(r => setTimeout(r, 1300)); prog.error();
             } catch (e) { prog.error(); throw e; }
@@ -1285,7 +1286,7 @@
                 }
                 const c = window.SAR_Lector.extraerCorreo(q('#p-correo').value);
                 rev = { ...rev, ...r, aceptarHoras: c.aceptarHoras || rev.aceptarHoras || 48, entregaDias: c.entregaDias || rev.entregaDias || 2, contraparte: c.contraparte || r.contraparte, horario: c.horario || r.horario, origen: 'OC_MP' };
-                const modo = r.origenLectura === 'ESCANEADA_IA' ? ' (escaneada · IA)' : (r.origenLectura === 'ESCANEADA_OCR_NAV' ? ' (escaneada · OCR local)' : (r.origenLectura === 'ESCANEADA_OCR' ? ' (escaneada · OCR)' : (r.origenLectura === 'FACTURA_REUTTER' ? ' (Factura REUTTER)' : '')));
+                const modo = r.origenLectura === 'ESCANEADA_IA' ? ' (escaneada · IA)' : (r.origenLectura === 'ESCANEADA_OCR_NAV' ? ' (escaneada · OCR local)' : (r.origenLectura === 'ESCANEADA_OCR' ? ' (escaneada · OCR)' : (r.origenLectura === 'FACTURA_REUTTER' ? ' (Factura REUTTER)' : (r.origenLectura === 'FACTURA_SII' ? ` (Factura Electrónica${r.numeroFactura ? ' N° ' + r.numeroFactura : ''})` : ''))));
                 est.innerHTML = `<strong>Leído${modo}:</strong> ${esc(r.numeroOC || '—')} · ${r.lineas.length} producto(s). Revisa cada dato antes de guardar.`;
                 pintarRev(r.avisos);
                 if (rev.distrib) mostrarDist(rev.distrib);

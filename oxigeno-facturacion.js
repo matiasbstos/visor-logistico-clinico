@@ -16,6 +16,8 @@
     'use strict';
 
     const RECINTO_BASE = 'SAR Arpillerista Elsa Romo Aravena';
+    const CONTRAPARTE_BASE = 'Mariel Quintanilla Lizana';
+    const PDFLIB_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
     const GEMINI_ENDPOINT_DEFAULT = 'https://us-central1-sarinventario.cloudfunctions.net/extraerFacturaOxigeno';
     const TOLERANCIA_REDONDEO = 2;
 
@@ -64,18 +66,32 @@
     // 1. LÓGICA PURA (exportada y verificable en tests/unidad.js sin navegador)
     // =========================================================================
 
-    /** Detecta tipo de servicio (ARRIENDO | RECARGA | MIXTO) a partir de texto e ítems. */
+    /** Detecta tipo de servicio (ARRIENDO | RECARGA | MIXTO) a partir de texto e ítems sin falsos positivos en arriendos de cilindros de O2/Aire. */
     function detectarTipoServicio(texto, items) {
-        const corpus = [
-            String(texto || ''),
-            ...(Array.isArray(items) ? items.map(i => `${i.codigo || ''} ${i.descripcion || ''} ${i.unidad || ''}`) : [])
-        ].join(' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+        const reArr = /\b(RENTAL|RG_RENTAL|ARRIENDO|ARRENDAMIENTO|RENTA|DIA[S]?[-\s]?CILINDRO|MANTENCION\s+CILINDRO|CANON)\b/;
+        const reRec = /\b(RECARGA|CARGA\s+DE\s+OXIGENO|OXIGENO\s+MEDICINAL|OXIGENO\s+LIQUIDO|OXIGENO\s+GASEOSO|OXIGENO\s+\d|M3|METRO[S]?\s+CUBICO[S]?|GAS\s+MEDICINAL|AIRE\s+COMPRIMIDO|VALVULA[S]?\s+(?:ROSETA|PIN))\b/;
+        const norm = (s) => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
 
-        const esArriendo = /\b(RENTAL|ARRIENDO|ARRENDAMIENTO|RENTA|DIA[S]?[-\s]?CILINDRO|MANTENCION\s+CILINDRO|CANON)\b/.test(corpus);
-        const esRecarga = /\b(RECARGA|CARGA\s+DE\s+OXIGENO|OXIGENO\s+MEDICINAL|OXIGENO\s+LIQUIDO|OXIGENO\s+GASEOSO|M3|METRO[S]?\s+CUBICO[S]?|GAS\s+MEDICINAL|AIRE\s+COMPRIMIDO)\b/.test(corpus);
-        if (esArriendo && esRecarga) return 'MIXTO';
-        if (esArriendo) return 'ARRIENDO';
-        if (esRecarga) return 'RECARGA';
+        if (Array.isArray(items) && items.length) {
+            let hayArr = false, hayRec = false;
+            items.forEach((it) => {
+                const l = norm(`${it.codigo || ''} ${it.grupo || ''} ${it.descripcion || ''} ${it.unidad || ''}`);
+                if (reArr.test(l)) hayArr = true;
+                else if (reRec.test(l)) hayRec = true;
+            });
+            if (hayArr && hayRec) return 'MIXTO';
+            if (hayArr) return 'ARRIENDO';
+            if (hayRec) return 'RECARGA';
+        }
+
+        // Sin ítems: si el texto del documento menciona arriendo de cilindros explícitamente, priorizar arriendo salvo que también indique recarga
+        const corpus = norm(texto).replace(/GIRO\s*:[^\n]+/g, '');
+        const esArr = reArr.test(corpus);
+        const esRec = /\b(RECARGA|CARGA\s+DE\s+OXIGENO|OXIGENO\s+\d+\s*M3|VALVULA[S]?\s+(?:ROSETA|PIN))\b/.test(corpus)
+            || (!esArr && reRec.test(corpus));
+        if (esArr && esRec) return 'MIXTO';
+        if (esArr) return 'ARRIENDO';
+        if (esRec) return 'RECARGA';
         return 'ARRIENDO';
     }
 
@@ -191,25 +207,258 @@
         return hoyISO().slice(0, 7);
     }
 
-    /** Normaliza fechas DD/MM/AAAA, DD-MM-AAAA o AAAA-MM-DD a ISO AAAA-MM-DD. */
+    /** Normaliza fechas DD/MM/AAAA, DD-MM-AAAA, DD.MM.AAAA, AAAA-MM-DD o "09 de Noviembre del 2026" a ISO AAAA-MM-DD. */
     function fechaAISO(txt) {
         const s = String(txt || '').trim();
         let m = s.match(/\b(20\d{2})[-/.](\d{1,2})[-/.](\d{1,2})\b/);
         if (m) return `${m[1]}-${pad(m[2])}-${pad(m[3])}`;
         m = s.match(/\b(\d{1,2})[-/.](\d{1,2})[-/.](20\d{2})\b/);
         if (m) return `${m[3]}-${pad(m[2])}-${pad(m[1])}`;
+        const meses = { ENERO: '01', FEBRERO: '02', MARZO: '03', ABRIL: '04', MAYO: '05', JUNIO: '06', JULIO: '07', AGOSTO: '08', SEPTIEMBRE: '09', SETIEMBRE: '09', OCTUBRE: '10', NOVIEMBRE: '11', DICIEMBRE: '12' };
+        const sn = s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+        m = sn.match(/\b(\d{1,2})\s+DE\s+(ENERO|FEBRERO|MARZO|ABRIL|MAYO|JUNIO|JULIO|AGOSTO|SEPTIEMBRE|SETIEMBRE|OCTUBRE|NOVIEMBRE|DICIEMBRE)\s+(?:DE|DEL)\s+(20\d{2})\b/);
+        if (m) return `${m[3]}-${meses[m[2]]}-${pad(m[1])}`;
         return '';
     }
 
-    /** Parser heurístico de texto OCR (respaldo local con Tesseract.js / PDF texto). */
+    /** Modelo 1: Factura Electrónica INDURA S.A. (RUT 76.150.343-K, RG_RENTAL por tramos). */
+    function parsearIndura(raw) {
+        const mFolio = raw.match(/FACTURA\s+ELECTR[OÓ]NICA[\s\S]{0,40}?N[°º.:]?\s*(\d{4,12})/i) || raw.match(/N[°º]\s*(\d{6,10})/);
+        const folio = mFolio ? mFolio[1].replace(/^0+(?=\d)/, '') : '';
+        const mEmis = raw.match(/Fecha\s+de\s+Emisi[oó]n[\s\n:|-]*([0-9./-]{8,10})/i);
+        const mVenc = raw.match(/Fecha\s+(?:de\s+)?Vencimiento[\s\n:|-]*([0-9./-]{8,10})/i);
+        const fechaEmision = mEmis ? fechaAISO(mEmis[1]) : '';
+        const fechaVencimiento = mVenc ? fechaAISO(mVenc[1]) : '';
+        const mOC = raw.match(/O\.?\s*de\s*Compra\s*N[o°º.:]*\s*([A-Z0-9-]{6,25})/i) || raw.match(/\b(\d{5,8}-\d{1,5}-[A-Z]{2}\d{1,2})\b/i);
+        const numeroOC = mOC ? mOC[1].replace(/\s+/g, '').toUpperCase() : '';
+        const mSap = raw.match(/Factura\s+SAP[\s\n:]*(\d{5,15})/i);
+        const facturaSAP = mSap ? mSap[1].trim() : '';
+        const mReemp = raw.match(/Reemplaza\s+Factura\s*[:#]?\s*(\d{4,12})/i);
+        const reemplazaFactura = mReemp ? mReemp[1].replace(/^0+(?=\d)/, '') : '';
+        const mPer = raw.match(/Servicios\s+de\s+Arriendo\s+Per[ií]odo\s*[:#]?\s*([A-Za-zÁÉÍÓÚáéíóú]+\s+20\d{2})/i);
+        const periodoServicio = detectarPeriodoServicio(mPer ? mPer[1] : raw, fechaEmision);
+
+        const montoPor = (re) => { const m = raw.match(re); return m ? Math.round(num(m[1])) : 0; };
+        const neto = montoPor(/SUBTOTAL\s*[:$]?\s*\$?\s*([\d.,]{3,15})/i);
+        const iva = montoPor(/IVA\s*19(?:[.,]00)?\s*%?\s*[:$]?\s*\$?\s*([\d.,]{3,15})/i);
+        const totalBruto = montoPor(/(?:^|\n)\s*TOTAL\s*[:$]?\s*\$?\s*([\d.,]{3,15})/im) || (neto + iva);
+
+        // Extraer bloques RG_RENTAL y sus sublíneas ("Arriendo Entre 2 y 4 meses", "Arriendo Más de 4 meses", etc.)
+        const items = [];
+        const bloquesRC = [];
+        const zonaDetMatch = raw.match(/Valor\s+Total([\s\S]*?)(?:P[aá]gina:|Nombre:|SUBTOTAL)/i);
+        const zonaDet = zonaDetMatch ? zonaDetMatch[1] : raw;
+        const reGrupo = /(?:^|\n)\s*(\d{3,8})\s+(RG_RENTAL[^\n]+)/gi;
+        const posGrupos = [];
+        let mg;
+        while ((mg = reGrupo.exec(zonaDet)) !== null) {
+            posGrupos.push({ codigo: mg[1].trim(), titulo: mg[2].trim(), idx: mg.index, finCab: mg.index + mg[0].length });
+        }
+
+        posGrupos.forEach((g, idx) => {
+            const seg = zonaDet.slice(g.finCab, idx + 1 < posGrupos.length ? posGrupos[idx + 1].idx : zonaDet.length);
+            const sublineas = [];
+            const reSub = /(Arriendo\s+(?:Entre\s+\d+\s+y\s+\d+\s+meses|M[aá]s\s+de\s+\d+\s+meses|Menos\s+de\s+\d+\s+meses|[^\n\d]{4,40}))/gi;
+            let ms;
+            while ((ms = reSub.exec(seg)) !== null) sublineas.push(ms[1].trim());
+            const k = sublineas.length;
+            bloquesRC.push({ titulo: g.titulo, sublineas: sublineas.slice() });
+
+            // Extraer cantidades, valores unitarios y totales del bloque (soporta formato por columnas o por fila)
+            const sinTextos = seg.replace(reSub, ' ').replace(/1\/d[ií]a/gi, ' ').replace(/\bd[ií]as?\b/gi, ' ');
+            const nums = (sinTextos.match(/\d{1,3}(?:\.\d{3})+|\d+/g) || []).map(x => Math.round(num(x))).filter(x => x > 0);
+            if (k > 0) {
+                if (nums.length >= k * 3) {
+                    // Columnas agrupadas (como OCR de Indura): [cant1..cantK, vu1..vuK, tot1..totK]
+                    const esColAgrupada = nums.slice(0, k).every((c, j) => {
+                        const vu = nums[k + j], tot = nums[2 * k + j];
+                        return Math.abs(c * vu - tot) <= Math.max(5, tot * 0.02);
+                    });
+                    for (let j = 0; j < k; j++) {
+                        const cant = esColAgrupada ? nums[j] : nums[j * 3];
+                        const vu = esColAgrupada ? nums[k + j] : nums[j * 3 + 1];
+                        const vt = esColAgrupada ? nums[2 * k + j] : nums[j * 3 + 2];
+                        items.push({ codigo: g.codigo, grupo: g.titulo, sublinea: sublineas[j], descripcion: `${g.titulo} — ${sublineas[j]}`, cantidad: cant || 1, unidad: 'dias', valorUnitario: vu || 0, valorTotal: vt || 0 });
+                    }
+                } else {
+                    sublineas.forEach(sl => items.push({ codigo: g.codigo, grupo: g.titulo, sublinea: sl, descripcion: `${g.titulo} — ${sl}`, cantidad: 1, unidad: 'dias', valorUnitario: 0, valorTotal: 0 }));
+                }
+            }
+        });
+
+        if (!items.length && (neto || totalBruto)) {
+            items.push({ codigo: 'RENTA', descripcion: 'Arriendo cilindros oxígeno medicinal Indura', cantidad: 1, unidad: 'GL', valorUnitario: neto || totalBruto, valorTotal: neto || totalBruto });
+        }
+
+        return {
+            origenLectura: 'MODELO_INDURA',
+            tipoDocumento: 'FACTURA',
+            razonSocial: 'Indura S.A.',
+            rutEmisor: '76.150.343-K',
+            contactoEmail: 'pagoscl@airproducts.com',
+            cuentaBancaria: 'Banco Santander · Cta. Cte. 001525144147',
+            folio,
+            fechaEmision,
+            fechaVencimiento,
+            numeroOC,
+            facturaSAP,
+            reemplazaFactura,
+            periodoServicio,
+            tipoServicio: 'ARRIENDO',
+            items,
+            bloquesRC,
+            neto,
+            iva,
+            totalBruto
+        };
+    }
+
+    /** Modelo 2: Factura Electrónica COMERCIAL VR LIMITADA (RUT 76.866.699-7, arriendo mensual cilindros 9m3 / 10m3). */
+    function parsearComercialVR(raw) {
+        const mFolio = raw.match(/Folio\s*N[°º.:]?\s*(\d{2,12})/i);
+        const folio = mFolio ? mFolio[1].replace(/^0+(?=\d)/, '') : '';
+        const mEmis = raw.match(/Fecha\s+Documento\s*[:|-]?\s*([0-9./-]{8,10})/i);
+        const mVenc = raw.match(/Fecha\s+de\s+Vencimiento\s*[:|-]?\s*([0-9./-]{8,10})/i);
+        const fechaEmision = mEmis ? fechaAISO(mEmis[1]) : '';
+        const fechaVencimiento = mVenc ? fechaAISO(mVenc[1]) : '';
+        const mOC = raw.match(/801\s*[-–]?\s*Orden\s+de\s+Compra\s+([A-Z0-9-]{6,25})/i) || raw.match(/\b(\d{5,8}-\d{1,5}-[A-Z]{2}\d{1,2})\b/i);
+        const numeroOC = mOC ? mOC[1].replace(/\s+/g, '').toUpperCase() : '';
+
+        const montoPor = (re) => { const m = raw.match(re); return m ? Math.round(num(m[1])) : 0; };
+        const neto = montoPor(/Afecto\s*\$?\s*([\d.,]{3,15})/i) || montoPor(/Neto\s*\$?\s*([\d.,]{3,15})/i);
+        const iva = montoPor(/19%\s*IVA\s*\$?\s*([\d.,]{3,15})/i) || montoPor(/IVA\s*19%?\s*\$?\s*([\d.,]{3,15})/i);
+        const totalBruto = montoPor(/(?:^|\n)\s*Total\s*\$?\s*([\d.,]{3,15})/im) || (neto + iva);
+
+        // Unir palabras partidas por salto de línea (ej. "MENSU\nAL" -> "MENSUAL")
+        const limpio = raw.replace(/MENSU\s*\n\s*AL/gi, 'MENSUAL');
+        const items = [];
+        const bloquesRC = [];
+        const reItem = /(?:^|\n)\s*\d+\s+(VR\d+)\s+([^\n]+?)\s+(\d+)\s+(UN|GL|CL|M3)\s+\$?\s*([\d.,]+)\s+\$?\s*[\d.,]+\s+\$?\s*([\d.,]+)/gi;
+        let mi;
+        while ((mi = reItem.exec(limpio)) !== null) {
+            const desc = mi[2].replace(/\s+/g, ' ').trim();
+            const cant = Math.round(num(mi[3])) || 1;
+            const uni = mi[4].trim();
+            const vu = Math.round(num(mi[5]));
+            const vt = Math.round(num(mi[6]));
+            items.push({ codigo: mi[1].trim(), descripcion: desc, cantidad: cant, unidad: uni, valorUnitario: vu, valorTotal: vt });
+            bloquesRC.push({ titulo: `${desc} (CANTIDAD: ${cant} ${uni})`, sublineas: [] });
+        }
+        if (!items.length && (neto || totalBruto)) {
+            items.push({ codigo: '', descripcion: 'Arriendo mensual de cilindros de gases medicinales', cantidad: 1, unidad: 'GL', valorUnitario: neto || totalBruto, valorTotal: neto || totalBruto });
+        }
+
+        return {
+            origenLectura: 'MODELO_COMERCIAL_VR',
+            tipoDocumento: 'FACTURA',
+            razonSocial: 'COMERCIAL VR LIMITADA',
+            rutEmisor: '76.866.699-7',
+            contactoEmail: 'ventas@comercialvr.cl',
+            cuentaBancaria: '',
+            folio,
+            fechaEmision,
+            fechaVencimiento,
+            numeroOC,
+            facturaSAP: '',
+            reemplazaFactura: '',
+            periodoServicio: detectarPeriodoServicio(raw, fechaEmision),
+            tipoServicio: detectarTipoServicio(raw, items),
+            items,
+            bloquesRC,
+            neto,
+            iva,
+            totalBruto
+        };
+    }
+
+    /** Modelo 3: Guía de Despacho / Factura Electrónica WELDING SPA (RUT 77.115.711-4, recarga oxígeno 1m3 + válvulas). */
+    function parsearWelding(raw) {
+        const esGuia = /(?:GUIA|CUIA|GU[IÍ]A)\s+DE\s+DE[S§]PACHO/i.test(raw);
+        const mFolio = raw.match(/(?:GUIA|CUIA|FACTURA)[\s\S]{0,60}?N[°ºeE.:]?\s*(\d{2,10})/i) || raw.match(/\bN[°ºe]\s*(\d{2,10})\b/);
+        const folio = mFolio ? mFolio[1].replace(/^0+(?=\d)/, '') : '';
+        const mEmis = raw.match(/Fecha\s+Emisi[oó]n\s*[:|-]?\s*([^\n]+)/i);
+        const fechaEmision = mEmis ? fechaAISO(mEmis[1]) : '';
+        const mOC = raw.match(/Orden\s+(?:de\s+)?Compra[^\d\n]{0,12}(\d{5,8}\s*-\s*\d{1,5}\s*-\s*[A-Za-z]{2}\d{2})/i) || raw.match(/\b(\d{5,8}-\d{1,5}-[A-Za-z]{2}\d{2})\b/);
+        let numeroOC = mOC ? mOC[1].replace(/\s+/g, '').toUpperCase() : '';
+        // Corrige ruido OCR típico en Welding ("AE26" -> "AG26")
+        if (/-\d+-AE\d{2}$/.test(numeroOC)) numeroOC = numeroOC.replace(/-AE(\d{2})$/, '-AG$1');
+
+        const montoPor = (re) => { const m = raw.match(re); return m ? Math.round(num(m[1])) : 0; };
+        let neto = montoPor(/MONTO\s+NETO\s*\$?\s*([\d.,]{3,15})/i);
+        let iva = montoPor(/I\.?V\.?A\.?\s*19%?\s*\$?\s*([\d.,]{3,15})/i);
+        let totalBruto = montoPor(/(?:^|\n)\s*TOTAL\s*\$?\s*([\d.,]{3,15})/im);
+
+        // En escaneos OCR de Welding, los montos pueden venir apilados después de "TOTAL $" (ej. 180.000 / 34.200 / 0 / 214.200)
+        if (!neto && !totalBruto) {
+            const idxTot = raw.search(/TOTAL\s*\$/i);
+            const cola = idxTot >= 0 ? raw.slice(idxTot) : raw;
+            const nums = (cola.match(/\b\d{1,3}(?:\.\d{3})+\b/g) || []).map(x => Math.round(num(x)));
+            for (let i = 0; i + 2 < nums.length; i++) {
+                if (Math.abs((nums[i] + nums[i + 1]) - nums[i + 2]) <= 5) {
+                    neto = nums[i]; iva = nums[i + 1]; totalBruto = nums[i + 2]; break;
+                }
+            }
+        }
+        if (!totalBruto && (neto || iva)) totalBruto = neto + iva;
+
+        // Extraer línea principal (ej. "12 CL 15.000 180.000") y desglose de válvulas
+        const mLinea = raw.match(/(\d{1,4})\s*(CL|UN|M3)\s+([\d.,]{3,10})\s+([\d.,]{3,12})/i);
+        const cant = mLinea ? Math.round(num(mLinea[1])) : 1;
+        const uni = mLinea ? mLinea[2].toUpperCase() : 'CL';
+        const vu = mLinea ? Math.round(num(mLinea[3])) : (neto || totalBruto);
+        const vt = mLinea ? Math.round(num(mLinea[4])) : (neto || totalBruto);
+        const descBase = /OXIGENO\s*,?\s*1\s*M3/i.test(raw) ? 'OXIGENO 1M3' : 'RECARGA OXIGENO MEDICINAL';
+
+        const sublineas = [];
+        const reValv = /(\d+\s+VALVULA[S]?\s+(?:ROSETA|PIN)[^\n]*)/gi;
+        let mv;
+        while ((mv = reValv.exec(raw)) !== null) {
+            const limpia = mv[1].replace(/O,4I!I3|0,4M3/gi, '0.4M3').replace(/\s+/g, ' ').trim();
+            if (!sublineas.includes(limpia)) sublineas.push(limpia);
+        }
+
+        const items = [{ codigo: '', descripcion: descBase, cantidad: cant, unidad: uni, valorUnitario: vu, valorTotal: vt }];
+        const bloquesRC = [{ titulo: `${descBase} (CANTIDAD: ${cant} ${uni})`, sublineas }];
+
+        return {
+            origenLectura: 'MODELO_WELDING',
+            tipoDocumento: esGuia ? 'GUIA_DESPACHO' : 'FACTURA',
+            razonSocial: 'WELDING SPA',
+            rutEmisor: '77.115.711-4',
+            contactoEmail: '0cristian.valenzuela0@gmail.com',
+            cuentaBancaria: '',
+            folio,
+            fechaEmision,
+            fechaVencimiento: '',
+            numeroOC,
+            facturaSAP: '',
+            reemplazaFactura: '',
+            periodoServicio: detectarPeriodoServicio(raw, fechaEmision),
+            tipoServicio: 'RECARGA',
+            items,
+            bloquesRC,
+            neto,
+            iva,
+            totalBruto
+        };
+    }
+
+    /** Parser heurístico de texto OCR / PDF texto con modelos dedicados para Indura, Comercial VR y Welding SpA. */
     function parsearTextoFacturaOcr(texto) {
         const raw = String(texto || '').replace(/\r\n/g, '\n');
+
+        // 1) Modelos locales dedicados para los 3 proveedores reales de oxígeno
+        if (/INDURA|76\.?150\.?343-?K|RG_RENTAL/i.test(raw)) return parsearIndura(raw);
+        if (/COMERCIAL\s+VR|76\.?866\.?699-?7|\bVR00\d{3,}/i.test(raw)) return parsearComercialVR(raw);
+        if (/WELDING|77\.?115\.?711-?4|LAS\s+FRUTILLAS\s+244/i.test(raw)) return parsearWelding(raw);
+
+        // 2) Parser genérico de respaldo
+        const esGuia = /(?:GU[IÍ]A|CUIA)\s+DE\s+DE[S§]PACHO/i.test(raw);
         const mRut = raw.match(/R\.?U\.?T\.?\s*[:#-]?\s*(\d{1,2}\.?\d{3}\.?\d{3}-[\dkK])/i) || raw.match(/\b(\d{2}\.\d{3}\.\d{3}-[\dkK])\b/);
         const rutEmisor = mRut ? fmtRut(mRut[1]) : '';
 
         let razonSocial = '';
-        if (/INDURA/i.test(raw)) razonSocial = 'INDURA S.A.';
-        else if (/LINDE/i.test(raw)) razonSocial = 'LINDE GAS CHILE S.A.';
+        if (/LINDE/i.test(raw)) razonSocial = 'LINDE GAS CHILE S.A.';
         else if (/AIR\s*LIQUIDE/i.test(raw)) razonSocial = 'AIR LIQUIDE CHILE S.A.';
         else if (/MESSER/i.test(raw)) razonSocial = 'MESSER CHILE S.A.';
         else {
@@ -217,20 +466,20 @@
             if (l0) razonSocial = l0.slice(0, 80);
         }
 
-        const mFolio = raw.match(/(?:FACTURA\s+ELECTR[OÓ]NICA[\s\S]{0,40}?N[°º.:]?\s*|FOLIO\s*(?:N[°º.:]?)?\s*)(\d{4,12})/i);
+        const mFolio = raw.match(/(?:FACTURA\s+ELECTR[OÓ]NICA|GU[IÍ]A\s+DE\s+DESPACHO)[\s\S]{0,40}?N[°º.:]?\s*(\d{2,12})/i) || raw.match(/FOLIO\s*(?:N[°º.:]?)?\s*(\d{2,12})/i);
         const folio = mFolio ? mFolio[1].replace(/^0+(?=\d)/, '') : '';
 
-        const mOC = raw.match(/\b(\d{5,8}\s*-\s*\d{1,5}\s*-\s*[A-Z]{2}\d{2})\b/i) || raw.match(/(?:ORDEN\s+DE\s+COMPRA|O\.?\s*C\.?)\s*[:#N°º.-]*\s*([A-Z0-9-]{5,25})/i);
+        const mOC = raw.match(/\b(\d{5,8}\s*-\s*\d{1,5}\s*-\s*[A-Z]{2}\d{1,2})\b/i) || raw.match(/(?:ORDEN\s+DE\s+COMPRA|O\.?\s*C\.?)\s*[:#N°º.-]*\s*([A-Z0-9-]{5,25})/i);
         const numeroOC = mOC ? mOC[1].replace(/\s+/g, '').toUpperCase() : '';
 
-        const mSap = raw.match(/(?:FACTURA\s*SAP|DOC\.?\s*SAP|SAP\s*N[°º.:]?)\s*[:#-]?\s*([A-Z0-9-]{4,20})/i);
+        const mSap = raw.match(/(?:FACTURA\s*SAP|DOC\.?\s*SAP|SAP\s*N[°º.:]?)[\s\n:#-]*([A-Z0-9-]{4,20})/i);
         const facturaSAP = mSap ? mSap[1].trim() : '';
 
         const mReemp = raw.match(/(?:REEMPLAZA|ANULA|REFACTURA)\s*(?:A\s*)?(?:FACT(?:URA)?\.?\s*(?:N[°º.:]?\s*)?)?(\d{4,12})/i);
         const reemplazaFactura = mReemp ? mReemp[1].replace(/^0+(?=\d)/, '') : '';
 
-        const mEmis = raw.match(/FECHA\s*(?:DE\s*)?EMISI[OÓ]N\s*[:|-]?\s*([0-9./-]{8,10})/i);
-        const mVenc = raw.match(/FECHA\s*(?:DE\s*)?VENC(?:IMIENTO)?\s*[:|-]?\s*([0-9./-]{8,10})/i);
+        const mEmis = raw.match(/FECHA\s*(?:DE\s*)?(?:EMISI[OÓ]N|DOCUMENTO)[\s\n:|-]*([^\n]{8,30})/i);
+        const mVenc = raw.match(/FECHA\s*(?:DE\s*)?VENC(?:IMIENTO)?[\s\n:|-]*([0-9./-]{8,10})/i);
         const fechaEmision = mEmis ? fechaAISO(mEmis[1]) : '';
         const fechaVencimiento = mVenc ? fechaAISO(mVenc[1]) : '';
 
@@ -238,9 +487,9 @@
             const m = raw.match(re);
             return m ? Math.round(num(m[1])) : 0;
         };
-        const neto = montoPor(/(?:MONTO\s+NETO|VALOR\s+NETO|\bNETO\b)\s*[:$]?\s*\$?\s*([\d.,]{3,15})/i);
-        const iva = montoPor(/(?:I\.?V\.?A\.?\s*(?:19%?)?)\s*[:$]?\s*\$?\s*([\d.,]{3,15})/i);
-        const totalBruto = montoPor(/(?:MONTO\s+TOTAL|TOTAL\s+BRUTO|TOTAL\s+A\s+PAGAR|\bTOTAL\b)\s*[:$]?\s*\$?\s*([\d.,]{3,15})/i) || (neto + iva);
+        const neto = montoPor(/(?:MONTO\s+NETO|VALOR\s+NETO|SUBTOTAL|AFECTO|\bNETO\b)\s*[:$]?\s*\$?\s*([\d.,]{3,15})/i);
+        const iva = montoPor(/(?:19%\s*I\.?V\.?A\.?|I\.?V\.?A\.?\s*(?:19(?:[.,]00)?\s*%?)?)\s*[:$]?\s*\$?\s*([\d.,]{3,15})/i);
+        const totalBruto = montoPor(/(?:MONTO\s+TOTAL|TOTAL\s+BRUTO|TOTAL\s+A\s+PAGAR|(?:^|\n)\s*TOTAL)\s*[:$]?\s*\$?\s*([\d.,]{3,15})/im) || (neto + iva);
 
         const items = [];
         const mDias = raw.match(/(\d{1,5})\s*(?:D[IÍ]AS?[-\s]?CILINDRO|CILINDRO[-\s]?D[IÍ]A)/i);
@@ -254,6 +503,7 @@
 
         return {
             origenLectura: 'OCR_LOCAL',
+            tipoDocumento: esGuia ? 'GUIA_DESPACHO' : 'FACTURA',
             razonSocial,
             rutEmisor,
             folio,
@@ -265,10 +515,54 @@
             periodoServicio: detectarPeriodoServicio(raw, fechaEmision),
             tipoServicio: detectarTipoServicio(raw, items),
             items,
+            bloquesRC: [],
             neto,
             iva,
             totalBruto
         };
+    }
+
+    /** Construye los bloques con viñetas y sublíneas para replicar el detalle de la factura/guía en la Recepción Conforme oficial. */
+    function construirBloquesRC(factura) {
+        if (Array.isArray(factura.bloquesRC) && factura.bloquesRC.length) return factura.bloquesRC;
+        const items = Array.isArray(factura.items) ? factura.items : [];
+        if (!items.length) return [];
+        const grupos = new Map();
+        const sueltos = [];
+        items.forEach((it) => {
+            if (it.grupo) {
+                if (!grupos.has(it.grupo)) grupos.set(it.grupo, []);
+                if (it.sublinea) grupos.get(it.grupo).push(it.sublinea);
+            } else {
+                const cantTxt = num(it.cantidad) > 0 ? ` (CANTIDAD: ${num(it.cantidad).toLocaleString('es-CL')} ${it.unidad || 'UN'})` : '';
+                sueltos.push({ titulo: `${String(it.descripcion || '').trim()}${cantTxt}`, sublineas: [] });
+            }
+        });
+        const out = [];
+        grupos.forEach((subs, tit) => out.push({ titulo: tit, sublineas: subs }));
+        return out.concat(sueltos);
+    }
+
+    /** Convierte bloques RC <-> texto editable en el modal ("• Título" y líneas sangradas "  Sublínea"). */
+    function bloquesRCTexto(bloques) {
+        return (bloques || []).map((b) => {
+            const subs = (b.sublineas || []).map(s => `  ${s}`).join('\n');
+            return `• ${b.titulo}${subs ? '\n' + subs : ''}`;
+        }).join('\n');
+    }
+    function parsearTextoBloquesRC(texto) {
+        const out = [];
+        let cur = null;
+        String(texto || '').split(/\r?\n/).forEach((linea) => {
+            if (!linea.trim()) return;
+            if (/^\s{2,}/.test(linea) && cur) {
+                cur.sublineas.push(linea.trim().replace(/^[-•*]\s*/, ''));
+            } else {
+                cur = { titulo: linea.trim().replace(/^[•*-]\s*/, ''), sublineas: [] };
+                out.push(cur);
+            }
+        });
+        return out;
     }
 
     /** Normaliza la respuesta JSON proveniente de Gemini Vision (Cloud Function). */
@@ -631,6 +925,7 @@
                 proveedorId: datos.proveedorId,
                 presupuestoId: datos.presupuestoId || '',
                 numeroOC: String(datos.numeroOC || (pres ? pres.numeroOC : '')).trim().toUpperCase(),
+                tipoDocumento: datos.tipoDocumento === 'GUIA_DESPACHO' ? 'GUIA_DESPACHO' : 'FACTURA',
                 folio: String(datos.folio).trim(),
                 facturaSAP: String(datos.facturaSAP || '').trim(),
                 reemplazaFactura: folioReemp,
@@ -639,6 +934,7 @@
                 fechaEmision: String(datos.fechaEmision || ''),
                 fechaVencimiento: String(datos.fechaVencimiento || ''),
                 items: Array.isArray(datos.items) ? datos.items : [],
+                bloquesRC: Array.isArray(datos.bloquesRC) ? datos.bloquesRC : [],
                 neto: Math.round(num(datos.neto)),
                 iva: Math.round(num(datos.iva)),
                 totalBruto: Math.round(num(datos.totalBruto)),
@@ -650,7 +946,7 @@
                 archivoUrl: subido.archivoUrl || datos.archivoUrl || '',
                 archivoNombre: subido.archivoNombre || datos.archivoNombre || '',
                 archivoStoragePath: subido.archivoStoragePath || datos.archivoStoragePath || '',
-                recepcionConforme: datos.recepcionConforme || { emitida: false, fecha: '', receptorNombre: '', receptorRut: '', receptorCargo: '', recinto: RECINTO_BASE, observaciones: '', numeroActa: '' },
+                recepcionConforme: datos.recepcionConforme || { emitida: false, tipoRecepcion: 'PARCIAL', fecha: '', contraparte: CONTRAPARTE_BASE, conFirma: true, encabezado: '', bloquesRC: [], receptorNombre: '', receptorRut: '', receptorCargo: '', recinto: RECINTO_BASE, observaciones: '', numeroActa: '' },
                 creadoPor: usuario(),
                 creadoEl: f.serverTimestamp()
             };
@@ -668,13 +964,14 @@
         return { id, avisoStorage: subido.avisoStorage || '', reemplazoMarcado: prevDoc ? prevDoc.folio : '' };
     }
 
-    /** Registra la Recepción Conforme (Ley 19.983) asignando correlativo RCO-AAAA-NNNNN en una sola transacción. */
+    /** Registra la Recepción Conforme (Parcial o Total, formato Corporación + Ley 19.983) asignando correlativo RCO-AAAA-NNNNN. */
     async function registrarRecepcionConforme(facturaId, datosRC) {
         const f = fs(), d = db();
-        if (!String(datosRC.receptorNombre || '').trim()) throw new Error('Ingresa el nombre de quien recibe conforme.');
-        if (!String(datosRC.receptorRut || '').trim()) throw new Error('Ingresa el RUT de quien recibe conforme.');
-        if (!String(datosRC.receptorCargo || '').trim()) throw new Error('Ingresa el cargo de quien recibe conforme.');
+        const contraparte = String(datosRC.contraparte || datosRC.receptorNombre || CONTRAPARTE_BASE).trim();
+        if (!contraparte) throw new Error('Ingresa el nombre de la contraparte técnica o receptor.');
         if (!String(datosRC.fecha || '').trim()) throw new Error('Indica la fecha de recepción conforme.');
+        const bloques = Array.isArray(datosRC.bloquesRC) ? datosRC.bloquesRC : parsearTextoBloquesRC(datosRC.detalleTexto || '');
+        if (!bloques.length) throw new Error('El detalle de lo recibido no puede quedar vacío.');
 
         const anio = new Date().getFullYear();
         const ctrRef = f.doc(f.collection(d, 'Contadores'), `ctr-rco-${anio}`);
@@ -682,7 +979,7 @@
 
         return f.runTransaction(d, async (tx) => {
             const [fSnap, cSnap] = await Promise.all([tx.get(factRef), tx.get(ctrRef)]);
-            if (!fSnap.exists()) throw new Error('La factura ya no existe.');
+            if (!fSnap.exists()) throw new Error('El documento ya no existe.');
             const actual = fSnap.data();
             const rcPrev = actual.recepcionConforme || {};
             let numeroActa = rcPrev.numeroActa || '';
@@ -691,12 +988,18 @@
                 numeroActa = `RCO-${anio}-${pad(ultimo, 5)}`;
                 tx.set(ctrRef, { ultimo, tipo: 'RCO', anio, updatedAt: f.serverTimestamp() }, { merge: true });
             }
+            const parcial = datosRC.tipoRecepcion !== 'TOTAL';
             const rc = {
                 emitida: true,
+                tipoRecepcion: parcial ? 'PARCIAL' : 'TOTAL',
                 fecha: String(datosRC.fecha).slice(0, 10),
-                receptorNombre: String(datosRC.receptorNombre).trim(),
-                receptorRut: fmtRut(datosRC.receptorRut),
-                receptorCargo: String(datosRC.receptorCargo).trim(),
+                contraparte,
+                conFirma: datosRC.conFirma !== false,
+                encabezado: String(datosRC.encabezado || '').trim() || `Que se recibió conforme en forma ${parcial ? 'parcial' : 'total'} el producto, donde se recibió lo siguiente:`,
+                bloquesRC: bloques,
+                receptorNombre: String(datosRC.receptorNombre || contraparte).trim(),
+                receptorRut: datosRC.receptorRut ? fmtRut(datosRC.receptorRut) : '',
+                receptorCargo: String(datosRC.receptorCargo || 'Contraparte Técnica').trim(),
                 recinto: String(datosRC.recinto || RECINTO_BASE).trim() || RECINTO_BASE,
                 observaciones: String(datosRC.observaciones || '').trim(),
                 numeroActa,
@@ -768,7 +1071,19 @@
             let textoDigital = '';
             try {
                 const tc = await page.getTextContent();
-                textoDigital = tc.items.map(i => i.str).join(' ');
+                // Reconstruir saltos de línea reales por coordenada Y para leer tablas y totales exactamente
+                const filas = [];
+                (tc.items || []).forEach((it) => {
+                    const str = String(it.str || '').trim();
+                    if (!str) return;
+                    const y = it.transform ? Math.round(it.transform[5]) : 0;
+                    const x = it.transform ? Math.round(it.transform[4]) : 0;
+                    let fila = filas.find(f => Math.abs(f.y - y) <= 3);
+                    if (!fila) { fila = { y, cols: [] }; filas.push(fila); }
+                    fila.cols.push({ x, str });
+                });
+                filas.sort((a, b) => b.y - a.y);
+                textoDigital = filas.map(f => f.cols.sort((a, b) => a.x - b.x).map(c => c.str).join(' ')).join('\n');
             } catch (_) { /* escaneo sin capa texto */ }
             return { canvas, textoDigital };
         }
@@ -802,11 +1117,20 @@
         const endpoint = window.SAR_OXI_GEMINI_URL || GEMINI_ENDPOINT_DEFAULT;
         const dataUrl = canvasRotado.toDataURL('image/jpeg', 0.88);
 
-        // 1) Intentar Cloud Function con Gemini Vision API
+        // 1) Lectura local instantánea para PDF digitales de Indura, Comercial VR o Welding SpA (sin espera de red)
+        if (textoDigital && textoDigital.trim().length > 80) {
+            avisar('Leyendo capa de texto digital del PDF…');
+            const parsed = parsearTextoFacturaOcr(textoDigital);
+            if (parsed.folio && (parsed.totalBruto > 0 || parsed.neto > 0)) {
+                return { ...parsed, origenLectura: parsed.origenLectura || 'PDF_TEXTO' };
+            }
+        }
+
+        // 2) Intentar Cloud Function con Gemini Vision API (para escaneos/fotos)
         try {
             avisar('Consultando lectura multimodal (Gemini Vision)…');
             const ctrl = new AbortController();
-            const timer = setTimeout(() => ctrl.abort(), 20000);
+            const timer = setTimeout(() => ctrl.abort(), 15000);
             const resp = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -824,15 +1148,6 @@
             // Silencioso: cae al motor local gratuito
         }
 
-        // 2) Respaldo rápido: capa de texto digital del PDF si trae datos suficientes
-        if (textoDigital && textoDigital.trim().length > 80) {
-            avisar('Leyendo capa de texto digital del PDF…');
-            const parsed = parsearTextoFacturaOcr(textoDigital);
-            if (parsed.folio || parsed.totalBruto > 0 || parsed.rutEmisor) {
-                return { ...parsed, origenLectura: 'PDF_TEXTO' };
-            }
-        }
-
         // 3) Respaldo universal local: Tesseract.js v5 en el navegador (sin clave API)
         if (window.SAR_Lector && window.SAR_Lector.cargarTesseract) {
             avisar('Ejecutando OCR local en navegador (Tesseract.js)…');
@@ -848,8 +1163,149 @@
     }
 
     // =========================================================================
-    // 4. ACTA DE RECEPCIÓN CONFORME (LEY 19.983) — PDF Y VISTA IMPRIMIBLE
+    // 4. RECEPCIÓN CONFORME OFICIAL CORPORACIÓN (RC<OC>.pdf) + ACTA LEY 19.983
     // =========================================================================
+
+    let pdfLibPromesa = null;
+    function cargarPDFLib() {
+        if (window.PDFLib) return Promise.resolve(window.PDFLib);
+        if (!pdfLibPromesa) pdfLibPromesa = new Promise((ok, mal) => {
+            const s = document.createElement('script');
+            s.src = PDFLIB_URL;
+            s.onload = () => ok(window.PDFLib);
+            s.onerror = () => { pdfLibPromesa = null; mal(new Error('No se pudo cargar pdf-lib.')); };
+            document.head.appendChild(s);
+        });
+        return pdfLibPromesa;
+    }
+    async function cargarAssetBytes(url) {
+        try { const r = await fetch(url); if (!r.ok) return null; return new Uint8Array(await r.arrayBuffer()); } catch (_) { return null; }
+    }
+
+    /**
+     * Genera el PDF oficial de la Corporación Municipal de Melipilla (idéntico a RC1298355-794-AG25.pdf):
+     * Logo CORPO + "RECEPCIÓN CONFORME PRODUCTO O SERVICIO PARCIAL/TOTAL" + Datos Proveedor +
+     * cuadro con viñetas/sublíneas replicadas desde la factura/guía + firma y timbre de Contraparte Técnica.
+     */
+    async function descargarRCOficialCorporacionPDF(factura, proveedor) {
+        const PDFLib = await cargarPDFLib();
+        const [logoBytes, firmaBytes] = await Promise.all([
+            cargarAssetBytes('assets/logo-corpo-melipilla.jpg'),
+            cargarAssetBytes('assets/firma-contraparte-mariel.png')
+        ]);
+        const rc = factura.recepcionConforme || {};
+        const parcial = rc.tipoRecepcion !== 'TOTAL';
+        const contraparte = rc.contraparte || rc.receptorNombre || CONTRAPARTE_BASE;
+        const bloques = (Array.isArray(rc.bloquesRC) && rc.bloquesRC.length) ? rc.bloquesRC : construirBloquesRC(factura);
+
+        const { PDFDocument, StandardFonts, rgb } = PDFLib;
+        const doc = await PDFDocument.create();
+        const numOC = factura.numeroOC || '';
+        doc.setTitle(`Recepción conforme OC ${numOC || factura.folio}`);
+        doc.setAuthor('Corporación Municipal de Melipilla');
+        doc.setCreator('Visor Logístico SAR');
+
+        const F = await doc.embedFont(StandardFonts.Helvetica);
+        const FB = await doc.embedFont(StandardFonts.HelveticaBold);
+        let logo = null;
+        if (logoBytes) { try { logo = await doc.embedJpg(logoBytes); } catch (_) { try { logo = await doc.embedPng(logoBytes); } catch (_2) { logo = null; } } }
+        let firmaImg = null;
+        if (firmaBytes && rc.conFirma !== false && /quintanilla/i.test(contraparte)) {
+            try { firmaImg = await doc.embedPng(firmaBytes); } catch (_) { firmaImg = null; }
+        }
+
+        const W = 612, H = 792, ML = 84, MR = 548, negro = rgb(0, 0, 0);
+        const seguro = (font, s) => {
+            const set = font.getCharacterSet();
+            return Array.from(String(s == null ? '' : s).replace(/³/g, '3').replace(/²/g, '2').replace(/\s+/g, ' ')).map(c => set.includes(c.codePointAt(0)) ? c : ' ').join('');
+        };
+        let page = doc.addPage([W, H]);
+        const T = (s, x, yy, size, bold) => page.drawText(seguro(bold ? FB : F, s), { x, y: H - yy, size, font: bold ? FB : F, color: negro });
+        const ancho = (s, size, bold) => (bold ? FB : F).widthOfTextAtSize(seguro(bold ? FB : F, s), size);
+        const envolver = (s, size, bold, maxW) => {
+            const out = []; let cur = '';
+            for (const w of String(s || '').split(' ')) {
+                const t = cur ? cur + ' ' + w : w;
+                if (ancho(t, size, bold) <= maxW || !cur) cur = t; else { out.push(cur); cur = w; }
+            }
+            if (cur) out.push(cur);
+            return out;
+        };
+        const centrar = (s, size, bold, yy, x0, x1) => T(s, (x0 + x1 - ancho(s, size, bold)) / 2, yy, size, bold);
+        const caja = (x0, x1, yTop, yBot) => {
+            const t = 0.8;
+            [[x0, yTop, x1, yTop], [x0, yBot, x1, yBot], [x0, yTop, x0, yBot], [x1, yTop, x1, yBot]]
+                .forEach(([a, b, c, e]) => page.drawLine({ start: { x: a, y: H - b }, end: { x: c, y: H - e }, thickness: t, color: negro }));
+        };
+
+        if (logo) { const h = 66, w = logo.width * h / logo.height; page.drawImage(logo, { x: ML, y: H - 62 - h, width: w, height: h }); }
+        const titulo = `RECEPCIÓN CONFORME PRODUCTO O SERVICIO ${parcial ? 'PARCIAL' : 'TOTAL'}`;
+        centrar(titulo, 10.5, true, 100, ML + 90, MR + 20);
+
+        let y = 152;
+        T('DATOS DEL PROVEEDOR', ML, y, 10.5, true); y += 22;
+        const nomEmp = proveedor ? proveedor.razonSocial : '—';
+        envolver(`Nombre de la empresa: ${nomEmp}`, 10.5, true, MR - ML).forEach(t => { T(t, ML, y, 10.5, true); y += 16; });
+        y += 4;
+        T(`RUT: ${proveedor ? proveedor.rut : '—'}`, ML, y, 10.5, true); y += 20;
+        T(`Orden de Compra: ${numOC || '—'}`, ML, y, 10.5, true); y += 22;
+        const docTipoTxt = factura.tipoDocumento === 'GUIA_DESPACHO' ? 'Guía de Despacho' : 'Factura';
+        if (factura.folio) {
+            T(`${docTipoTxt} N°: ${factura.folio}${factura.periodoServicio ? '  ·  Período: ' + fmtPeriodo(factura.periodoServicio) : ''}`, ML, y, 9.5, false);
+            y += 18;
+        }
+        T(`Con fecha ${fechaCL(rc.fecha || hoyISO())}, en calidad de contraparte técnica, certifico lo siguiente:`, ML, y, 10.5, false);
+        y += 20;
+
+        const encab = rc.encabezado || `Que se recibió conforme en forma ${parcial ? 'parcial' : 'total'} el producto, donde se recibió lo siguiente:`;
+        let top = y, cy = y + 18;
+        envolver(encab, 9.5, false, MR - ML - 16).forEach(t => { T(t, ML + 8, cy, 9.5, false); cy += 14; });
+        cy += 4;
+
+        bloques.forEach((b) => {
+            const titLineas = envolver(b.titulo, 10, true, MR - ML - 48);
+            const subLineas = (b.sublineas || []).flatMap(sl => envolver(sl, 10, false, MR - ML - 52));
+            const alto = titLineas.length * 14 + subLineas.length * 14 + 8;
+            if (cy + alto > H - 130) {
+                caja(ML, MR, top, cy + 4);
+                page = doc.addPage([W, H]);
+                top = 60; cy = 78;
+                T(`Recepción conforme OC ${numOC} (continuación)`, ML + 8, cy, 9, true);
+                cy += 18;
+            }
+            page.drawCircle({ x: ML + 26, y: H - cy + 3, size: 2.3, color: negro });
+            titLineas.forEach((t) => { T(t, ML + 38, cy, 10, true); cy += 14; });
+            subLineas.forEach((t) => { T(t, ML + 38, cy, 10, false); cy += 14; });
+            cy += 6;
+        });
+
+        if (rc.observaciones) {
+            envolver(`Observaciones: ${rc.observaciones}`, 9, false, MR - ML - 16).forEach(t => { T(t, ML + 8, cy, 9, false); cy += 12; });
+            cy += 4;
+        }
+        caja(ML, MR, top, Math.max(cy + 12, top + 120));
+
+        let yf = Math.max(cy + 84, top + 190);
+        if (yf > H - 90) { page = doc.addPage([W, H]); yf = 160; }
+        if (firmaImg) {
+            const w = 196, h = w * firmaImg.height / firmaImg.width;
+            page.drawImage(firmaImg, { x: (W - w) / 2, y: H - yf - 4, width: w, height: h });
+        } else {
+            page.drawLine({ start: { x: 190, y: H - yf }, end: { x: 420, y: H - yf }, thickness: 0.8, color: negro });
+        }
+        centrar('Firma contraparte técnica', 10.5, false, yf + 22, 0, W);
+        centrar(`Nombre Contraparte Técnica: ${contraparte}`, 10.5, false, yf + 44, 0, W);
+
+        const bytes = await doc.save();
+        const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+        const a = document.createElement('a');
+        const ocClean = String(numOC || factura.folio || 'Oxigeno').replace(/[^A-Za-z0-9-]+/g, '');
+        a.href = url;
+        a.download = `RC${ocClean}${factura.folio ? '_F' + String(factura.folio).replace(/[^A-Za-z0-9-]+/g, '') : ''}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1500);
+    }
 
     function construirHtmlActaRC(factura, proveedor, presupuesto, estadoPres) {
         const rc = factura.recepcionConforme || {};
@@ -1238,7 +1694,7 @@
                     <button type="button" class="btn btn-outline btn-sm" id="oxf-btn-prov">+ Proveedor</button>
                     <button type="button" class="btn btn-outline btn-sm" id="oxf-btn-pres">+ Presupuesto / OC</button>
                     <button type="button" class="btn btn-outline btn-sm" id="oxf-btn-semilla" title="Carga idempotente de control con Indura S.A. OC 1298355-493-AG25">Cargar control Indura</button>
-                    <button type="button" class="btn btn-primary" id="oxf-btn-nueva">+ Ingresar Factura (OCR / XML)</button>
+                    <button type="button" class="btn btn-primary" id="oxf-btn-nueva">+ Ingresar Factura / Guía (OCR / XML)</button>
                 </div>
             </div>
 
@@ -1320,7 +1776,7 @@
                                 : `<span class="oxf-badge oxf-b-oc">Presupuesto OC</span>`;
                             return `<tr class="${reemp ? 'oxf-tr-reemp' : ''}">
                                 <td>
-                                    <b>${esc(fac.folio)}</b>
+                                    <b>${esc(fac.folio)}</b> <span class="oxf-badge ${fac.tipoDocumento === 'GUIA_DESPACHO' ? 'oxf-b-cc' : 'oxf-b-hist'}">${fac.tipoDocumento === 'GUIA_DESPACHO' ? 'GUÍA' : 'FACT'}</span>
                                     ${fac.facturaSAP ? `<small class="oxf-sub">SAP: ${esc(fac.facturaSAP)}</small>` : ''}
                                     ${reemp ? `<span class="oxf-badge oxf-b-reemp">REEMPLAZADA${fac.reemplazadaPor ? ' por ' + esc(fac.reemplazadaPor) : ''}</span>` : ''}
                                 </td>
@@ -1331,8 +1787,8 @@
                                 <td>${fuenteBadge}${fac.motivoCajaChica ? `<small class="oxf-sub" title="${esc(fac.motivoCajaChica)}">${esc(fac.motivoCajaChica.slice(0, 38))}</small>` : ''}</td>
                                 <td class="num"><b>${clp(fac.totalBruto)}</b><small class="oxf-sub">Neto ${clp(fac.neto)} · IVA ${clp(fac.iva)}</small></td>
                                 <td>${rc.emitida
-                                    ? `<span class="oxf-badge oxf-b-ok">Conforme · ${esc(rc.numeroActa || '')}</span><small class="oxf-sub">${esc(fechaCL(rc.fecha))} · ${esc(rc.receptorNombre || '')}</small>`
-                                    : `<span class="oxf-badge oxf-b-pend">Pendiente Ley 19.983</span>`}</td>
+                                    ? `<span class="oxf-badge oxf-b-ok">RC ${esc(rc.tipoRecepcion === 'TOTAL' ? 'Total' : 'Parcial')} · ${esc(rc.numeroActa || '')}</span><small class="oxf-sub">${esc(fechaCL(rc.fecha))} · ${esc(rc.contraparte || rc.receptorNombre || '')}</small>`
+                                    : `<span class="oxf-badge oxf-b-pend">Pendiente RC</span>`}</td>
                                 <td class="oxf-cell-acc">
                                     ${fac.archivoUrl ? `<a class="btn btn-outline btn-sm" href="${esc(fac.archivoUrl)}" target="_blank" rel="noopener">Ver respaldo</a>` : `<button type="button" class="btn btn-outline btn-sm" disabled title="Sin archivo adjunto en Storage">Sin respaldo</button>`}
                                     <button type="button" class="btn btn-outline btn-sm oxf-btn-rc" data-id="${esc(fac.id)}">${rc.emitida ? 'Editar RC' : 'Recepción Conforme'}</button>
@@ -1505,13 +1961,14 @@
         const presSel = presupuestoActual();
         const provInicial = presSel ? presSel.proveedorId : proveedores[0].id;
 
-        const ov = crearModal('Ingresar Factura de Oxígeno (Lector XML DTE / OCR Multimodal)', `
+        const ov = crearModal('Ingresar Factura o Guía de Oxígeno (Indura / Comercial VR / Welding / XML)', `
             <div class="oxf-dropzone" id="oxf-drop" tabindex="0">
                 <input type="file" id="oxf-file" accept=".xml,.pdf,.jpg,.jpeg,.png,application/xml,text/xml,application/pdf,image/jpeg,image/png" hidden>
-                <strong>Arrastra aquí la factura (.xml DTE SII, .pdf, .jpg o .png) o haz clic para seleccionar</strong>
-                <small>XML DTE se lee al instante en navegador · PDF/imagen permite rotar 90°/180° y extrae con Gemini Vision / OCR local.</small>
+                <strong>Arrastra aquí la factura o guía (.xml DTE, .pdf, .jpg o .png) o haz clic para seleccionar</strong>
+                <small>Reconoce automáticamente Indura S.A., Comercial VR Limitada, Welding SpA y XML DTE · Permite rotar 90°/180°.</small>
                 <div id="oxf-drop-status" class="oxf-drop-status"></div>
             </div>
+            <div id="oxf-prov-nuevo" class="oxf-alert-warn" style="display:none;"></div>
 
             <div id="oxf-prev-wrap" class="oxf-prev-wrap" style="display:none;">
                 <div class="oxf-prev-bar">
@@ -1536,7 +1993,13 @@
                         ${presupuestos.map(b => `<option value="${esc(b.id)}"${presSel && presSel.id === b.id ? ' selected' : ''}>OC ${esc(b.numeroOC)} · ${esc(b.conceptoPermitido)} (${clp(b.montoTope)})</option>`).join('')}
                     </select>
                 </label>
-                <label class="act-l">Folio Factura *<input id="oxf-f-folio" placeholder="Ej: 2074903" autocomplete="off"></label>
+                <label class="act-l">Tipo de Documento
+                    <select id="oxf-f-tipodoc">
+                        <option value="FACTURA">Factura Electrónica</option>
+                        <option value="GUIA_DESPACHO">Guía de Despacho Electrónica</option>
+                    </select>
+                </label>
+                <label class="act-l">Folio Documento *<input id="oxf-f-folio" placeholder="Ej: 2074906, 4321, 882" autocomplete="off"></label>
                 <label class="act-l">N° Orden de Compra<input id="oxf-f-oc" value="${esc(presSel ? presSel.numeroOC : '')}" placeholder="Ej: 1298355-493-AG25"></label>
                 <label class="act-l">Factura SAP (opcional)<input id="oxf-f-sap" placeholder="N° documento SAP"></label>
                 <label class="act-l">Reemplaza Factura N° (opcional)<input id="oxf-f-reemp" placeholder="Si reemplaza folio previo, lo marca REEMPLAZADA"></label>
@@ -1550,9 +2013,9 @@
                 <label class="act-l">Período Servicio (AAAA-MM) *<input id="oxf-f-per" type="month" value="${hoyISO().slice(0, 7)}"></label>
                 <label class="act-l">Fecha Emisión<input id="oxf-f-femis" type="date" value="${hoyISO()}"></label>
                 <label class="act-l">Fecha Vencimiento<input id="oxf-f-fvenc" type="date"></label>
-                <label class="act-l">Monto Neto ($)<input id="oxf-f-neto" type="number" min="0" step="1" value="0"></label>
-                <label class="act-l">IVA ($)<input id="oxf-f-iva" type="number" min="0" step="1" value="0"></label>
-                <label class="act-l">Total Bruto ($) *<input id="oxf-f-total" type="number" min="0" step="1" value="0"></label>
+                <label class="act-l">Monto Neto / Subtotal / Afecto ($)<input id="oxf-f-neto" type="number" min="0" step="1" value="0"></label>
+                <label class="act-l">IVA 19% ($)<input id="oxf-f-iva" type="number" min="0" step="1" value="0"></label>
+                <label class="act-l">Total Bruto (Total Factura) ($) *<input id="oxf-f-total" type="number" min="0" step="1" value="0"></label>
                 <div class="oxf-calc-btn-wrap"><button type="button" class="btn btn-outline btn-sm" id="oxf-calc-iva">Calcular IVA 19%</button></div>
             </div>
 
@@ -1560,7 +2023,7 @@
 
             <div class="oxf-items-sec">
                 <div class="oxf-items-head">
-                    <b>Detalle de Ítems / Cilindros</b>
+                    <b>Detalle de Ítems / Cilindros (se replicará en la Recepción Conforme)</b>
                     <button type="button" class="btn btn-outline btn-sm" id="oxf-add-item">+ Agregar ítem</button>
                 </div>
                 <div id="oxf-items-list"></div>
@@ -1581,10 +2044,11 @@
                 </label>
             </div>
 
+            <label class="soc-toggle" style="margin-top:8px;"><input type="checkbox" id="oxf-f-abrir-rc" checked> Abrir <b>Recepción Conforme (Parcial/Total)</b> inmediatamente al guardar</label>
             <p class="cierre-error" id="oxf-f-err"></p>
             <div class="cierre-acciones">
                 <button type="button" class="btn btn-outline" id="oxf-f-no">Cancelar</button>
-                <button type="button" class="btn btn-primary" id="oxf-f-ok">Guardar Factura</button>
+                <button type="button" class="btn btn-primary" id="oxf-f-ok">Guardar Documento</button>
             </div>`, 'oxf-modal-xl');
 
         const q = (s) => ov.querySelector(s);
@@ -1593,6 +2057,7 @@
         let textoDigitalPdf = '';
         let anguloActual = 0;
         let itemsEstado = [];
+        let bloquesRCEstado = [];
 
         function pintarItems() {
             const box = q('#oxf-items-list');
@@ -1638,14 +2103,46 @@
 
         function aplicarDatosExtraidos(res) {
             if (!res) return;
+            const boxProvNuevo = q('#oxf-prov-nuevo');
+            boxProvNuevo.style.display = 'none';
+            boxProvNuevo.innerHTML = '';
+
+            if (res.tipoDocumento) q('#oxf-f-tipodoc').value = res.tipoDocumento === 'GUIA_DESPACHO' ? 'GUIA_DESPACHO' : 'FACTURA';
+
             if (res.rutEmisor) {
                 const rNorm = normRut(res.rutEmisor);
                 const matchProv = proveedores.find(p => normRut(p.rut) === rNorm);
-                if (matchProv) q('#oxf-f-proveedor').value = matchProv.id;
+                if (matchProv) {
+                    q('#oxf-f-proveedor').value = matchProv.id;
+                } else if (res.razonSocial) {
+                    boxProvNuevo.style.display = 'block';
+                    boxProvNuevo.innerHTML = `Proveedor detectado <b>${esc(res.razonSocial)}</b> (${esc(res.rutEmisor)}) aún no está creado. <button type="button" class="btn btn-primary btn-sm" id="oxf-crear-prov-rap" style="margin-left:8px;">+ Crear proveedor ahora</button>`;
+                    const bRap = boxProvNuevo.querySelector('#oxf-crear-prov-rap');
+                    if (bRap) bRap.addEventListener('click', async () => {
+                        bRap.disabled = true;
+                        try {
+                            const nuevoId = await guardarProveedor({ razonSocial: res.razonSocial, rut: res.rutEmisor, estado: 'ACTIVO', contactoEmail: res.contactoEmail || '', cuentaBancaria: res.cuentaBancaria || '' });
+                            await cargarDatos();
+                            const selP = q('#oxf-f-proveedor');
+                            selP.innerHTML = proveedores.map(p => `<option value="${esc(p.id)}"${p.id === nuevoId ? ' selected' : ''}>${esc(p.razonSocial)} (${esc(p.rut)})</option>`).join('');
+                            selP.value = nuevoId;
+                            boxProvNuevo.style.display = 'none';
+                            toast('Proveedor creado', `${res.razonSocial} (${res.rutEmisor}) agregado.`, 'success');
+                        } catch (e) {
+                            toast('Error', e.message || String(e), 'error');
+                            bRap.disabled = false;
+                        }
+                    });
+                }
             }
             if (res.numeroOC) {
                 q('#oxf-f-oc').value = res.numeroOC;
-                const matchPres = presupuestos.find(b => String(b.numeroOC || '').toUpperCase() === res.numeroOC.toUpperCase());
+                const ocU = res.numeroOC.toUpperCase();
+                // Match exacto o por prefijo (ej. Comercial VR trunca "1298355-641-AG2" para "1298355-641-AG26")
+                const matchPres = presupuestos.find(b => {
+                    const bo = String(b.numeroOC || '').toUpperCase();
+                    return bo === ocU || (ocU.length >= 12 && (bo.startsWith(ocU) || ocU.startsWith(bo)));
+                });
                 if (matchPres) q('#oxf-f-presupuesto').value = matchPres.id;
             }
             if (res.folio) q('#oxf-f-folio').value = res.folio;
@@ -1662,6 +2159,7 @@
                 itemsEstado = res.items.slice();
                 pintarItems();
             }
+            bloquesRCEstado = Array.isArray(res.bloquesRC) ? res.bloquesRC.slice() : [];
             actualizarSimulador();
         }
 
@@ -1842,6 +2340,7 @@
                 proveedorId: provId,
                 presupuestoId: presId,
                 numeroOC: q('#oxf-f-oc').value.trim().toUpperCase(),
+                tipoDocumento: q('#oxf-f-tipodoc').value,
                 folio: q('#oxf-f-folio').value.trim(),
                 facturaSAP: q('#oxf-f-sap').value.trim(),
                 reemplazaFactura: folioReemp,
@@ -1850,6 +2349,7 @@
                 fechaEmision: q('#oxf-f-femis').value,
                 fechaVencimiento: q('#oxf-f-fvenc').value,
                 items: itemsEstado,
+                bloquesRC: bloquesRCEstado,
                 neto,
                 iva,
                 totalBruto,
@@ -1863,6 +2363,7 @@
             if (!val.ok) { errEl.textContent = val.errores.join(' '); return; }
             if (val.advertencias.length && !window.confirm(val.advertencias.join('\n') + '\n\n¿Deseas guardar igualmente?')) return;
 
+            const abrirRCDespues = q('#oxf-f-abrir-rc') && q('#oxf-f-abrir-rc').checked;
             btn.disabled = true;
             try {
                 const res = await guardarFacturaAtomica(payload, archivoActual);
@@ -1870,8 +2371,12 @@
                 pintar();
                 ov.remove();
                 const extra = res.reemplazoMarcado ? ` · Folio ${res.reemplazoMarcado} marcado REEMPLAZADA` : '';
-                toast('Factura registrada', `Folio ${payload.folio} guardado (${clp(payload.totalBruto)})${extra}.`, res.avisoStorage ? 'warning' : 'success');
+                toast('Documento registrado', `Folio ${payload.folio} guardado (${clp(payload.totalBruto)})${extra}.`, res.avisoStorage ? 'warning' : 'success');
                 if (res.avisoStorage) toast('Respaldo Storage', res.avisoStorage, 'warning');
+                if (abrirRCDespues) {
+                    const guardada = facturas.find(x => x.id === res.id);
+                    if (guardada) abrirModalRecepcionConforme(guardada);
+                }
             } catch (e) {
                 errEl.textContent = e.message || String(e);
                 btn.disabled = false;
@@ -1882,34 +2387,64 @@
         actualizarSimulador();
     }
 
-    /** Paso 4: Modal de Recepción Conforme (Ley 19.983). */
+    /** Paso 4: Modal de Recepción Conforme (Parcial / Total, formato oficial Corporación + Ley 19.983). */
     function abrirModalRecepcionConforme(factura) {
         const rc = factura.recepcionConforme || {};
         const pv = proveedores.find(p => p.id === factura.proveedorId);
-        const ov = crearModal(`Recepción Conforme (Ley 19.983) · Factura N° ${factura.folio}`, `
+        const tipoActual = rc.tipoRecepcion === 'TOTAL' ? 'TOTAL' : 'PARCIAL';
+        const encBase = (tp) => `Que se recibió conforme en forma ${tp === 'TOTAL' ? 'total' : 'parcial'} el producto, donde se recibió lo siguiente:`;
+        const bloquesIni = (Array.isArray(rc.bloquesRC) && rc.bloquesRC.length) ? rc.bloquesRC : construirBloquesRC(factura);
+        const docTipoTxt = factura.tipoDocumento === 'GUIA_DESPACHO' ? 'Guía de Despacho' : 'Factura';
+
+        const ov = crearModal(`Recepción Conforme · ${docTipoTxt} N° ${factura.folio}`, `
             <p class="cierre-hint">Proveedor: <b>${esc(pv ? pv.razonSocial : '—')}</b> (${esc(pv ? pv.rut : '—')}) · OC <b>${esc(factura.numeroOC || '—')}</b> · Total <b>${clp(factura.totalBruto)}</b></p>
             <div class="oxf-form-grid">
+                <label class="act-l">Tipo de Recepción Conforme *
+                    <select id="oxf-rc-tipo">
+                        <option value="PARCIAL"${tipoActual === 'PARCIAL' ? ' selected' : ''}>Parcial (RECEPCIÓN CONFORME PRODUCTO O SERVICIO PARCIAL)</option>
+                        <option value="TOTAL"${tipoActual === 'TOTAL' ? ' selected' : ''}>Total (RECEPCIÓN CONFORME PRODUCTO O SERVICIO TOTAL)</option>
+                    </select>
+                </label>
                 <label class="act-l">Fecha de Recepción Conforme *<input id="oxf-rc-fec" type="date" value="${esc(rc.fecha || hoyISO())}"></label>
-                <label class="act-l">Recinto / Establecimiento *<input id="oxf-rc-rec" value="${esc(rc.recinto || RECINTO_BASE)}"></label>
-                <label class="act-l">Nombre Receptor Conforme *<input id="oxf-rc-nom" value="${esc(rc.receptorNombre || '')}" placeholder="Ej: Matías Bustos Huerta"></label>
-                <label class="act-l">RUT Receptor *<input id="oxf-rc-rut" value="${esc(rc.receptorRut || '')}" placeholder="Ej: 12.345.678-9"></label>
-                <label class="act-l oxf-span2">Cargo *<input id="oxf-rc-car" value="${esc(rc.receptorCargo || '')}" placeholder="Ej: Encargado de Insumos / Contraparte Técnica"></label>
-                <label class="act-l oxf-span2">Observaciones de conformidad<textarea id="oxf-rc-obs" rows="3" placeholder="Servicios / cilindros verificados conforme al contrato y guía de despacho…">${esc(rc.observaciones || '')}</textarea></label>
+                <label class="act-l oxf-span2">Encabezado del cuadro (editable)<input id="oxf-rc-enc" value="${esc(rc.encabezado || encBase(tipoActual))}"></label>
+                <label class="act-l oxf-span2">Detalle replicado de la factura/guía (editable — «• » inicia viñeta; 2 espacios al inicio = sublínea)
+                    <textarea id="oxf-rc-det" rows="7" style="font-family:monospace;font-size:.86rem;">${esc(bloquesRCTexto(bloquesIni))}</textarea>
+                </label>
+                <label class="act-l">Contraparte Técnica (firma del acta) *<input id="oxf-rc-ct" value="${esc(rc.contraparte || CONTRAPARTE_BASE)}"></label>
+                <label class="act-l">Recinto / Establecimiento<input id="oxf-rc-rec" value="${esc(rc.recinto || RECINTO_BASE)}"></label>
+                <label class="act-l">RUT Receptor (opcional para acta extendida)<input id="oxf-rc-rut" value="${esc(rc.receptorRut || '')}" placeholder="Ej: 12.345.678-9"></label>
+                <label class="act-l">Cargo Receptor<input id="oxf-rc-car" value="${esc(rc.receptorCargo || 'Directora Técnica / Contraparte Técnica')}"></label>
+                <label class="act-l oxf-span2">Observaciones (opcional)<textarea id="oxf-rc-obs" rows="2" placeholder="Observaciones adicionales…">${esc(rc.observaciones || '')}</textarea></label>
             </div>
+            <label class="soc-toggle"><input type="checkbox" id="oxf-rc-firma"${rc.conFirma !== false ? ' checked' : ''}> Incluir firma y timbre oficial de la Contraparte Técnica en el PDF</label>
             <p class="cierre-error" id="oxf-rc-err"></p>
             <div class="cierre-acciones">
                 <button type="button" class="btn btn-outline" id="oxf-rc-no">Cancelar</button>
-                <button type="button" class="btn btn-primary" id="oxf-rc-ok">Guardar Recepción Conforme</button>
-            </div>`);
+                <button type="button" class="btn btn-primary" id="oxf-rc-ok">Guardar y Generar RC</button>
+            </div>`, 'oxf-modal-xl');
+
+        const selTipo = ov.querySelector('#oxf-rc-tipo');
+        const inpEnc = ov.querySelector('#oxf-rc-enc');
+        selTipo.addEventListener('change', () => {
+            if (/^Que se recibió conforme en forma (parcial|total)/i.test(inpEnc.value.trim())) {
+                inpEnc.value = encBase(selTipo.value);
+            }
+        });
+
         ov.querySelector('#oxf-rc-no').addEventListener('click', () => ov.remove());
         ov.querySelector('#oxf-rc-ok').addEventListener('click', async () => {
             const btn = ov.querySelector('#oxf-rc-ok'); btn.disabled = true;
             ov.querySelector('#oxf-rc-err').textContent = '';
             try {
                 const nuevaRC = await registrarRecepcionConforme(factura.id, {
+                    tipoRecepcion: selTipo.value,
                     fecha: ov.querySelector('#oxf-rc-fec').value,
+                    encabezado: inpEnc.value,
+                    detalleTexto: ov.querySelector('#oxf-rc-det').value,
+                    contraparte: ov.querySelector('#oxf-rc-ct').value,
+                    conFirma: ov.querySelector('#oxf-rc-firma').checked,
                     recinto: ov.querySelector('#oxf-rc-rec').value,
-                    receptorNombre: ov.querySelector('#oxf-rc-nom').value,
+                    receptorNombre: ov.querySelector('#oxf-rc-ct').value,
                     receptorRut: ov.querySelector('#oxf-rc-rut').value,
                     receptorCargo: ov.querySelector('#oxf-rc-car').value,
                     observaciones: ov.querySelector('#oxf-rc-obs').value
@@ -1917,7 +2452,7 @@
                 await cargarDatos();
                 pintar();
                 ov.remove();
-                toast('Recepción Conforme', `Acta ${nuevaRC.numeroActa} registrada para Factura ${factura.folio}.`, 'success');
+                toast('Recepción Conforme', `RC ${nuevaRC.tipoRecepcion} (${nuevaRC.numeroActa}) registrada.`, 'success');
                 const actFac = facturas.find(x => x.id === factura.id);
                 if (actFac) abrirModalVistaActaPDF(actFac);
             } catch (e) {
@@ -1927,7 +2462,7 @@
         });
     }
 
-    /** Vista previa limpia (fondo blanco forzado) + botón Descargar PDF e Imprimir Acta RC. */
+    /** Vista previa limpia (fondo blanco forzado) + Descargar RC Oficial Corporación (PDF) + Acta detallada Ley 19.983. */
     function abrirModalVistaActaPDF(factura) {
         const pv = proveedores.find(p => p.id === factura.proveedorId);
         const pres = presupuestos.find(b => b.id === factura.presupuestoId) || null;
@@ -1935,18 +2470,25 @@
         const htmlHoja = construirHtmlActaRC(factura, pv, pres, estPres);
         const rc = factura.recepcionConforme || {};
 
-        const ov = crearModal(`Acta de Recepción Conforme · Factura ${factura.folio}`, `
-            ${!rc.emitida ? '<div class="oxf-alert-warn">Esta factura aún no tiene Recepción Conforme registrada. Puedes previsualizar el borrador o registrarla primero para asignar correlativo oficial RCO.</div>' : ''}
+        const ov = crearModal(`Recepción Conforme · Folio ${factura.folio}`, `
+            ${!rc.emitida ? '<div class="oxf-alert-warn">Este documento aún no tiene Recepción Conforme emitida. Puedes emitirla primero para fijar Parcial/Total, detalle exacto y correlativo RCO.</div>' : ''}
             <div class="oxf-acta-preview-scroll">${htmlHoja}</div>
             <div class="cierre-acciones">
                 <button type="button" class="btn btn-outline" id="oxf-ap-no">Cerrar</button>
-                <button type="button" class="btn btn-outline" id="oxf-ap-print">Imprimir / Guardar PDF (Navegador)</button>
-                <button type="button" class="btn btn-primary" id="oxf-ap-pdf">Generar Acta de Recepción Conforme (PDF)</button>
+                <button type="button" class="btn btn-outline" id="oxf-ap-print">Imprimir Vista</button>
+                <button type="button" class="btn btn-outline" id="oxf-ap-pdf">Acta Detallada Saldo OC (PDF)</button>
+                <button type="button" class="btn btn-primary" id="oxf-ap-rc-oficial">Descargar RC Oficial Corporación (PDF)</button>
             </div>`, 'oxf-modal-xl');
 
         ov.querySelector('#oxf-ap-no').addEventListener('click', () => ov.remove());
         ov.querySelector('#oxf-ap-print').addEventListener('click', () => imprimirActaRC(htmlHoja, `Acta RC ${rc.numeroActa || factura.folio}`));
         ov.querySelector('#oxf-ap-pdf').addEventListener('click', () => descargarActaRCPDF(factura, pv, pres, estPres));
+        ov.querySelector('#oxf-ap-rc-oficial').addEventListener('click', async () => {
+            const b = ov.querySelector('#oxf-ap-rc-oficial'); b.disabled = true;
+            try { await descargarRCOficialCorporacionPDF(factura, pv); }
+            catch (e) { toast('Error PDF', e.message || String(e), 'error'); }
+            finally { b.disabled = false; }
+        });
     }
 
     async function montar(cont) {
@@ -1969,16 +2511,24 @@
         // Funciones puras para pruebas unitarias
         parsearXmlDte,
         parsearTextoFacturaOcr,
+        parsearIndura,
+        parsearComercialVR,
+        parsearWelding,
+        construirBloquesRC,
+        bloquesRCTexto,
+        parsearTextoBloquesRC,
         normalizarRespuestaIA,
         detectarTipoServicio,
         detectarPeriodoServicio,
+        fechaAISO,
         validarFactura,
         calcularEstadoPresupuesto,
         simularImputacion,
         datosSemillaIndura,
         construirHtmlActaRC,
         fmtRut,
-        RECINTO_BASE
+        RECINTO_BASE,
+        CONTRAPARTE_BASE
     };
 
     if (typeof window !== 'undefined') window.SAR_OxiFacturacion = api;

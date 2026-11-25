@@ -647,3 +647,145 @@ t('v21.260: oxigeno-facturacion — parser XML DTE SII, validaciones y detecció
   const actaHtml = F.construirHtmlActaRC({ ...sem.facturas[0], recepcionConforme: { emitida: true, fecha: '2026-08-05', receptorNombre: 'Juan <script>', receptorRut: '12.345.678-9', receptorCargo: 'Encargado', recinto: F.RECINTO_BASE, numeroActa: 'RCO-2026-00001', observaciones: 'OK' } }, sem.proveedor, sem.presupuesto, F.calcularEstadoPresupuesto(sem.presupuesto, sem.facturas));
   assert.ok(actaHtml.includes('Ley N° 19.983') && actaHtml.includes('RCO-2026-00001') && actaHtml.includes('SAR Arpillerista Elsa Romo Aravena') && !actaHtml.includes('<script>'));
 });
+
+t('v21.262: oxigeno-facturacion — modelos reales Indura S.A., Comercial VR Limitada y Welding SpA + bloques RC', () => {
+  const F = require('../oxigeno-facturacion.js');
+  // 1) Factura real INDURA S.A. N° 2074906 (OC 1298355-493-AG25)
+  const txtIndura = `Indura S.A.
+R.U.T 76.150.343-K
+FACTURA ELECTRÓNICA
+N° 2074906
+Fecha de Emisión
+19.11.2026
+Fecha Vencimiento
+19.12.2026
+O de Compra No: 1298355-493-AG25
+Factura SAP
+437137402
+Código Descripción Cantidad/Unidad Valor Unitario POR UM Valor Total
+1519 RG_RENTAL CILINDRO MEDICAL_=>200B
+Arriendo Entre 2 y 4 meses
+Arriendo Más de 4 meses
+151
+141
+dias
+dias
+517
+517
+1/dia
+1/dia
+78.067
+72.897
+112596 RG_RENTAL CILINDRO_<200B
+Arriendo Entre 2 y 4 meses
+Arriendo Más de 4 meses
+90
+31
+dias
+dias
+517
+517
+1/dia
+1/dia
+46.530
+16.027
+Página: 1 de 1
+SUBTOTAL 213.521
+IVA 19,00 % 40.569
+TOTAL 254.090
+OBSERVACIONES:
+Reemplaza Factura: 2048700
+Servicios de Arriendo Período: Septiembre 2026`;
+  const rInd = F.parsearTextoFacturaOcr(txtIndura);
+  assert.strictEqual(rInd.origenLectura, 'MODELO_INDURA');
+  assert.strictEqual(rInd.tipoDocumento, 'FACTURA');
+  assert.strictEqual(rInd.folio, '2074906');
+  assert.strictEqual(rInd.facturaSAP, '437137402');
+  assert.strictEqual(rInd.reemplazaFactura, '2048700');
+  assert.strictEqual(rInd.numeroOC, '1298355-493-AG25');
+  assert.strictEqual(rInd.fechaEmision, '2026-11-19');
+  assert.strictEqual(rInd.fechaVencimiento, '2026-12-19');
+  assert.strictEqual(rInd.periodoServicio, '2026-09');
+  assert.strictEqual(rInd.tipoServicio, 'ARRIENDO');
+  assert.strictEqual(rInd.neto, 213521);
+  assert.strictEqual(rInd.iva, 40569);
+  assert.strictEqual(rInd.totalBruto, 254090);
+  assert.strictEqual(rInd.items.length, 4);
+  assert.strictEqual(rInd.items[0].cantidad, 151); assert.strictEqual(rInd.items[0].valorTotal, 78067);
+  assert.strictEqual(rInd.items[3].cantidad, 31); assert.strictEqual(rInd.items[3].valorTotal, 16027);
+  assert.strictEqual(rInd.bloquesRC.length, 2);
+  assert.strictEqual(rInd.bloquesRC[0].titulo, 'RG_RENTAL CILINDRO MEDICAL_=>200B');
+  assert.deepStrictEqual(rInd.bloquesRC[0].sublineas, ['Arriendo Entre 2 y 4 meses', 'Arriendo Más de 4 meses']);
+
+  // 2) Factura real COMERCIAL VR LIMITADA Folio 4321 (arriendo mensual cilindros 9m3 y 10m3)
+  const txtVR = `COMERCIAL VR LIMITADA
+R.U.T: 76.866.699-7
+Factura electrónica
+Folio N° 4321
+Comuna Melipilla Fecha Documento 3-11-2026
+Vendedor Eduardo Lopez Fecha de Vencimiento 3-12-2026
+Item Código Detalle Cant P. Unitario Rec/Desc Total
+1 VR001801 ARRIENDO DE CILINDRO DE AIRE 9 M3 / MENSUAL 9 UN $ 25.000 $ 0 $ 225.000
+2 VR001800 ARRIENDO DE CILINDRO DE OXIGENO 10 M3 / MENSU
+AL
+9 UN $ 25.000 $ 0 $ 225.000
+801 - Orden de Compra 1298355-641-AG2 3-11-2026
+Afecto $ 450.000
+19% IVA $ 85.500
+Total $ 535.500`;
+  const rVR = F.parsearTextoFacturaOcr(txtVR);
+  assert.strictEqual(rVR.origenLectura, 'MODELO_COMERCIAL_VR');
+  assert.strictEqual(rVR.folio, '4321');
+  assert.strictEqual(rVR.rutEmisor, '76.866.699-7');
+  assert.strictEqual(rVR.fechaEmision, '2026-11-03');
+  assert.strictEqual(rVR.fechaVencimiento, '2026-12-03');
+  assert.strictEqual(rVR.numeroOC, '1298355-641-AG2');
+  assert.strictEqual(rVR.tipoServicio, 'ARRIENDO');
+  assert.strictEqual(rVR.neto, 450000);
+  assert.strictEqual(rVR.iva, 85500);
+  assert.strictEqual(rVR.totalBruto, 535500);
+  assert.strictEqual(rVR.items.length, 2);
+  assert.strictEqual(rVR.items[1].descripcion, 'ARRIENDO DE CILINDRO DE OXIGENO 10 M3 / MENSUAL');
+
+  // 3) Guía de Despacho Electrónica escaneada WELDING SPA N° 882 (recarga + válvulas, con ruido OCR)
+  const txtWeld = `WELDING SPA
+CALLES LAS FRUTILLAS 244. OUILICURA
+Fecha Emision: 09 de Noviembre del 2026
+CUIA DE DE§PACHO ELECTFONICA
+OXIGENO
+,IM3
+12 CL 15.000 180.000
+Referencias:
+Orden Compra N" 1298355-684-Ae26 del 2026-08-18
+8 VALVULAS ROSETA DE 1M3
+1 VALVULA PIN DE 1M3
+3 VALVULAS PIN DE O,4I!I3
+TOTAL: 12 CILINDROS
+MONTO NETO $
+I.V.A. 19% $
+IMPUESTO ADICIONAL $
+TOTAL $
+Ne882
+180.000
+34.200
+0
+214.200`;
+  const rW = F.parsearTextoFacturaOcr(txtWeld);
+  assert.strictEqual(rW.origenLectura, 'MODELO_WELDING');
+  assert.strictEqual(rW.tipoDocumento, 'GUIA_DESPACHO');
+  assert.strictEqual(rW.folio, '882');
+  assert.strictEqual(rW.fechaEmision, '2026-11-09');
+  assert.strictEqual(rW.numeroOC, '1298355-684-AG26');
+  assert.strictEqual(rW.tipoServicio, 'RECARGA');
+  assert.strictEqual(rW.neto, 180000);
+  assert.strictEqual(rW.iva, 34200);
+  assert.strictEqual(rW.totalBruto, 214200);
+  assert.strictEqual(rW.items[0].cantidad, 12);
+  assert.strictEqual(rW.bloquesRC[0].sublineas.length, 3);
+  assert.ok(rW.bloquesRC[0].sublineas[2].includes('0.4M3'));
+
+  // Round-trip de texto editable para Recepción Conforme
+  const txtBloq = F.bloquesRCTexto(rInd.bloquesRC);
+  const parsedBloq = F.parsearTextoBloquesRC(txtBloq);
+  assert.deepStrictEqual(parsedBloq, rInd.bloquesRC);
+});

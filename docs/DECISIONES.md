@@ -1861,3 +1861,13 @@ Caso del usuario: al subir un PDF escaneado sin clave `ANTHROPIC_API_KEY` en Goo
   - Modal de recepción conforme (recinto por defecto `SAR Arpillerista Elsa Romo Aravena`) con correlativo anual atómico `RCO-AAAA-NNNNN` (`Contadores/ctr-rco-AAAA`, registrado en `nomenclaturas.js`).
   - Vista previa limpia en fondo blanco forzado (`print-color-adjust: exact`) + descarga PDF nativa (`jsPDF` + `autoTable`) e impresión directa.
 - **Semilla de control Indura S.A. (`cargarSemillaIndura`):** carga idempotente de `Indura S.A.` (`76.150.343-K`, `HISTORICO`), OC `1298355-493-AG25` (tope `$1.078.000` Bruto) y folios `2074903` (`$381.443`), `2074909` (`$381.443`) y `2074906` (`$254.090`), cuadrando en **Ejecutado `$1.016.976` (`94,3%`) · Saldo disponible `$61.024`**.
+
+
+### 4.315 Lectores locales Indura S.A., Comercial VR y Welding SpA + Recepción Conforme Oficial Corporación en Oxígeno (v21.262)
+- **Modelos reales en `oxigeno-facturacion.js`:**
+  - **Indura S.A. (`parsearIndura`, RUT `76.150.343-K`):** lee `SUBTOTAL`, `IVA 19,00 %`, `TOTAL`, fechas `DD.MM.AAAA` en línea siguiente, `Factura SAP`, `Reemplaza Factura`, período de arriendo y la tabla jerárquica `RG_RENTAL CILINDRO` + tramos (`Arriendo Entre 2 y 4 meses`, `Arriendo Más de 4 meses`).
+  - **Comercial VR Limitada (`parsearComercialVR`, RUT `76.866.699-7`):** lee `Afecto`, `19% IVA`, `Total`, cilindros de aire 9 m³ y oxígeno 10 m³ mensuales (reconstruyendo cortes `MENSU\nAL`), y clasifica correctamente como `ARRIENDO` (evitando falso `MIXTO`) con emparejamiento por prefijo de OC cuando el ERP del proveedor trunca el último carácter (`1298355-641-AG2`).
+  - **Welding SpA (`parsearWelding`, RUT `77.115.711-4`):** reconoce **Guía de Despacho Electrónica** (`tipoDocumento: 'GUIA_DESPACHO'`), fechas escritas en español (`09 de Noviembre del 2026`), totales en columna apilada tras ruido OCR, `OXIGENO 1M3` y desglose de válvulas (`ROSETA`/`PIN` `1M3`/`0.4M3`).
+- **Recepción Conforme oficial idéntica a `RC1298355-794-AG25.pdf` (`descargarRCOficialCorporacionPDF`):**
+  - El modal de Recepción Conforme pregunta **Parcial / Total**, prellena el detalle replicado de la factura o guía (viñetas y sublíneas editables) y genera con `pdf-lib` el PDF oficial de la **Corporación Municipal de Melipilla** (`assets/logo-corpo-melipilla.jpg` + firma y timbre `assets/firma-contraparte-mariel.png` de `Mariel Quintanilla Lizana`), conservando además el Acta Detallada con saldo OC (Ley 19.983).
+  - En el modal de ingreso de documento se añade selector `Factura / Guía de Despacho`, creación rápida de proveedor detectado y opción para abrir la Recepción Conforme inmediatamente al guardar.

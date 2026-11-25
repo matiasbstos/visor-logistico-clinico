@@ -247,42 +247,89 @@
         // Extraer bloques RG_RENTAL y sus sublíneas ("Arriendo Entre 2 y 4 meses", "Arriendo Más de 4 meses", etc.)
         const items = [];
         const bloquesRC = [];
-        const zonaDetMatch = raw.match(/Valor\s+Total([\s\S]*?)(?:Nombre:|SUBTOTAL)/i);
-        const zonaDet = zonaDetMatch ? zonaDetMatch[1] : raw;
+        const normTituloIndura = (t) => String(t || '')
+            .replace(/RG[_ -]?RENTAL/i, 'RG_RENTAL')
+            .replace(/MEDICAL_?\s*(?:=>|⇒|->|>=|=)\s*200[B8]/i, 'MEDICAL_=>200B')
+            .replace(/CILINDRO_?\s*<\s*200[B8]/i, 'CILINDRO_<200B')
+            .replace(/\s+\d+\s+d[ií]as[\s\S]*$/i, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+        const idxIni = raw.search(/Valor\s+Total/i);
+        const desdeIni = idxIni >= 0 ? raw.slice(idxIni + 11) : raw;
+        const idxFin = desdeIni.search(/(?:^|\n)\s*(?:Nombre\s*:|Firma\s*:|SUBTOTAL|El\s+acuse\s+de\s+recibo)/im);
+        const zonaDet = idxFin >= 0 ? desdeIni.slice(0, idxFin) : desdeIni;
+
         const reGrupo = /(?:^|\n)\s*(?:(\d{3,8})\s+)?(RG[_ -]?RENTAL[^\n]+)/gi;
         const posGrupos = [];
         let mg;
         while ((mg = reGrupo.exec(zonaDet)) !== null) {
-            const tituloLimpio = mg[2].replace(/\s+\d+\s+d[ií]as[\s\S]*$/i, '').trim();
-            posGrupos.push({ codigo: (mg[1] || '').trim(), titulo: tituloLimpio, idx: mg.index, finCab: mg.index + mg[0].length });
+            const tituloLimpio = normTituloIndura(mg[2]);
+            let cod = (mg[1] || '').trim();
+            if (!cod) {
+                const antes = zonaDet.slice(Math.max(0, mg.index - 24), mg.index).match(/\b(\d{4,6})\b\s*$/);
+                if (antes) cod = antes[1];
+                else if (/MEDICAL_=>200B/i.test(tituloLimpio)) cod = '1519';
+                else if (/CILINDRO_<200B/i.test(tituloLimpio)) cod = '112596';
+            }
+            posGrupos.push({ codigo: cod, titulo: tituloLimpio, idx: mg.index, finCab: mg.index + mg[0].length });
         }
+
+        const extraerTripleLinea = (linea) => {
+            const limpia = String(linea || '').replace(/1\s*\/\s*d[ií]a/gi, ' ').replace(/\bd[ií]as?\b/gi, ' ').replace(/[|¦$]/g, ' ');
+            const ns = (limpia.match(/\d{1,3}(?:\.\d{3})+|\d+/g) || []).map(x => Math.round(num(x))).filter(x => x > 0);
+            if (ns.length >= 3) {
+                for (let i = 0; i + 2 < ns.length; i++) {
+                    const c = ns[i], vu = ns[i + 1], vt = ns[i + 2];
+                    if (Math.abs(c * vu - vt) <= Math.max(5, vt * 0.02)) return { c, vu, vt };
+                }
+                return { c: ns[0], vu: ns[1], vt: ns[2] };
+            }
+            if (ns.length === 2) {
+                const vu = ns[0], vt = ns[1];
+                if (vu >= 100 && vt >= vu) {
+                    const cInf = Math.round(vt / vu);
+                    if (cInf > 0 && Math.abs(cInf * vu - vt) <= Math.max(5, vu * 0.05)) return { c: cInf, vu, vt };
+                }
+            }
+            return null;
+        };
 
         posGrupos.forEach((g, idx) => {
             const seg = zonaDet.slice(g.finCab, idx + 1 < posGrupos.length ? posGrupos[idx + 1].idx : zonaDet.length);
             const sublineas = [];
-            const reSub = /(Arriendo\s+(?:Entre\s+\d+\s+y\s+\d+\s+meses|M[aá]s\s+de\s+\d+\s+meses|Menos\s+de\s+\d+\s+meses))/gi;
+            const triplesFila = [];
+            const reSub = /(Arriendo\s+(?:Entre\s+\d+\s+y\s+\d+\s+meses|M[aá]s\s+de\s+\d+\s+meses|Menos\s+de\s+\d+\s+meses))([^\n]*)/gi;
             let ms;
-            while ((ms = reSub.exec(seg)) !== null) sublineas.push(ms[1].replace(/\s+/g, ' ').trim());
+            while ((ms = reSub.exec(seg)) !== null) {
+                sublineas.push(ms[1].replace(/\s+/g, ' ').trim());
+                triplesFila.push(extraerTripleLinea(ms[2]));
+            }
             const k = sublineas.length;
             bloquesRC.push({ titulo: g.titulo, sublineas: sublineas.slice() });
 
-            // Extraer cantidades, valores unitarios y totales del bloque (soporta formato por fila horizontal PDF.js o por columnas OCR)
-            const sinTextos = seg.replace(reSub, ' ').replace(/1\/d[ií]a/gi, ' ').replace(/\bd[ií]as?\b/gi, ' ');
-            const nums = (sinTextos.match(/\d{1,3}(?:\.\d{3})+|\d+/g) || []).map(x => Math.round(num(x))).filter(x => x > 0);
             if (k > 0) {
-                if (nums.length >= k * 3) {
-                    const esColAgrupada = k > 1 && nums.slice(0, k).every((c, j) => {
-                        const vu = nums[k + j], tot = nums[2 * k + j];
-                        return Math.abs(c * vu - tot) <= Math.max(5, tot * 0.02);
-                    });
+                if (triplesFila.some(Boolean)) {
                     for (let j = 0; j < k; j++) {
-                        const cant = esColAgrupada ? nums[j] : nums[j * 3];
-                        const vu = esColAgrupada ? nums[k + j] : nums[j * 3 + 1];
-                        const vt = esColAgrupada ? nums[2 * k + j] : nums[j * 3 + 2];
-                        items.push({ codigo: g.codigo, grupo: g.titulo, sublinea: sublineas[j], descripcion: `${g.titulo} — ${sublineas[j]}`, cantidad: cant || 1, unidad: 'dias', valorUnitario: vu || 0, valorTotal: vt || 0 });
+                        const tr = triplesFila[j];
+                        items.push({ codigo: g.codigo, grupo: g.titulo, sublinea: sublineas[j], descripcion: `${g.titulo} — ${sublineas[j]}`, cantidad: tr ? tr.c : 1, unidad: 'dias', valorUnitario: tr ? tr.vu : 0, valorTotal: tr ? tr.vt : 0 });
                     }
                 } else {
-                    sublineas.forEach(sl => items.push({ codigo: g.codigo, grupo: g.titulo, sublinea: sl, descripcion: `${g.titulo} — ${sl}`, cantidad: 1, unidad: 'dias', valorUnitario: 0, valorTotal: 0 }));
+                    const sinTextos = seg.replace(/Arriendo\s+(?:Entre\s+\d+\s+y\s+\d+\s+meses|M[aá]s\s+de\s+\d+\s+meses|Menos\s+de\s+\d+\s+meses)/gi, ' ').replace(/1\s*\/\s*d[ií]a/gi, ' ').replace(/\bd[ií]as?\b/gi, ' ');
+                    const nums = (sinTextos.match(/\d{1,3}(?:\.\d{3})+|\d+/g) || []).map(x => Math.round(num(x))).filter(x => x > 0);
+                    if (nums.length >= k * 3) {
+                        const esColAgrupada = k > 1 && nums.slice(0, k).every((c, j) => {
+                            const vu = nums[k + j], tot = nums[2 * k + j];
+                            return Math.abs(c * vu - tot) <= Math.max(5, tot * 0.02);
+                        });
+                        for (let j = 0; j < k; j++) {
+                            const cant = esColAgrupada ? nums[j] : nums[j * 3];
+                            const vu = esColAgrupada ? nums[k + j] : nums[j * 3 + 1];
+                            const vt = esColAgrupada ? nums[2 * k + j] : nums[j * 3 + 2];
+                            items.push({ codigo: g.codigo, grupo: g.titulo, sublinea: sublineas[j], descripcion: `${g.titulo} — ${sublineas[j]}`, cantidad: cant || 1, unidad: 'dias', valorUnitario: vu || 0, valorTotal: vt || 0 });
+                        }
+                    } else {
+                        sublineas.forEach(sl => items.push({ codigo: g.codigo, grupo: g.titulo, sublinea: sl, descripcion: `${g.titulo} — ${sl}`, cantidad: 1, unidad: 'dias', valorUnitario: 0, valorTotal: 0 }));
+                    }
                 }
             }
         });
@@ -2579,7 +2626,7 @@
             box.innerHTML = itemsEstado.map((it, i) => `
                 <div class="oxf-item-row" data-i="${i}">
                     <input class="oxf-it-cod" placeholder="Cód." value="${esc(it.codigo || '')}">
-                    <input class="oxf-it-desc" placeholder="Descripción" value="${esc(it.descripcion || '')}">
+                    <input class="oxf-it-desc" placeholder="Descripción" value="${esc(it.descripcion || '')}" title="${esc(it.descripcion || '')}">
                     <input class="oxf-it-cant" type="number" step="any" placeholder="Cant." value="${num(it.cantidad) || 1}">
                     <input class="oxf-it-uni" placeholder="Unid." value="${esc(it.unidad || 'UN')}">
                     <input class="oxf-it-vu" type="number" step="any" placeholder="V. Unit." value="${num(it.valorUnitario)}">

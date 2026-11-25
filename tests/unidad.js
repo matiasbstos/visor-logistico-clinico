@@ -861,3 +861,36 @@ t('v21.266: oxigeno-facturacion — informe contable, búsqueda por correlativo 
   const csv = F.csvContableOxigeno(datos);
   assert.ok(csv.includes('RCO-2026-00007') && csv.includes('1298355-493-AG25') && csv.includes('OXÍGENO — BITÁCORA CONTABLE'));
 });
+
+t('v21.267: oxigeno-facturacion — OCR ruidoso Indura corrige ⇒2008→=>200B, <2008→<200B e infiere cantidad sin invadir SUBTOTAL', () => {
+  const F = require('../oxigeno-facturacion.js');
+  // Simula el ruido real de Tesseract visto en pantalla (sin encabezado "Valor Total", flecha ⇒, 2008, cantidad recortada por borde vertical)
+  const txtRuido = `Indura S.A. R.U.T 76.150.343-K
+FACTURA ELECTRÓNICA N° 2074906
+Fecha de Emisión 19.11.2026
+O de Compra No: 1298355-493-AG25
+Factura SAP 437137402
+RG_RENTAL CILINDRO MEDICAL_⇒2008
+Arriendo Entre 2 y 4 meses |dias 517 1/dia 78.067
+Arriendo Más de 4 meses 141 dias 517 1/dia 72.897
+RG_RENTAL CILINDRO_<2008
+Arriendo Entre 2 y 4 meses |dias 517 1/dia 46.530
+Arriendo Más de 4 meses 31 dias 517 1/dia 16.027
+SUBTOTAL 213.521
+IVA 19,00 % 40.569
+TOTAL 254.090`;
+  const r = F.parsearTextoFacturaOcr(txtRuido);
+  assert.strictEqual(r.items.length, 4);
+  assert.strictEqual(r.items[0].codigo, '1519');
+  assert.strictEqual(r.items[0].grupo, 'RG_RENTAL CILINDRO MEDICAL_=>200B');
+  assert.strictEqual(r.items[0].cantidad, 151); assert.strictEqual(r.items[0].valorUnitario, 517); assert.strictEqual(r.items[0].valorTotal, 78067);
+  assert.strictEqual(r.items[1].cantidad, 141); assert.strictEqual(r.items[1].valorTotal, 72897);
+  assert.strictEqual(r.items[2].codigo, '112596');
+  assert.strictEqual(r.items[2].grupo, 'RG_RENTAL CILINDRO_<200B');
+  assert.strictEqual(r.items[2].cantidad, 90); assert.strictEqual(r.items[2].valorUnitario, 517); assert.strictEqual(r.items[2].valorTotal, 46530);
+  assert.strictEqual(r.items[3].cantidad, 31); assert.strictEqual(r.items[3].valorTotal, 16027);
+  assert.deepStrictEqual(r.bloquesRC, [
+    { titulo: 'RG_RENTAL CILINDRO MEDICAL_=>200B', sublineas: ['Arriendo Entre 2 y 4 meses', 'Arriendo Más de 4 meses'] },
+    { titulo: 'RG_RENTAL CILINDRO_<200B', sublineas: ['Arriendo Entre 2 y 4 meses', 'Arriendo Más de 4 meses'] }
+  ]);
+});

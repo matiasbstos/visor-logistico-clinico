@@ -246,31 +246,31 @@
         // Extraer bloques RG_RENTAL y sus sublíneas ("Arriendo Entre 2 y 4 meses", "Arriendo Más de 4 meses", etc.)
         const items = [];
         const bloquesRC = [];
-        const zonaDetMatch = raw.match(/Valor\s+Total([\s\S]*?)(?:P[aá]gina:|Nombre:|SUBTOTAL)/i);
+        const zonaDetMatch = raw.match(/Valor\s+Total([\s\S]*?)(?:Nombre:|SUBTOTAL)/i);
         const zonaDet = zonaDetMatch ? zonaDetMatch[1] : raw;
-        const reGrupo = /(?:^|\n)\s*(\d{3,8})\s+(RG_RENTAL[^\n]+)/gi;
+        const reGrupo = /(?:^|\n)\s*(?:(\d{3,8})\s+)?(RG[_ -]?RENTAL[^\n]+)/gi;
         const posGrupos = [];
         let mg;
         while ((mg = reGrupo.exec(zonaDet)) !== null) {
-            posGrupos.push({ codigo: mg[1].trim(), titulo: mg[2].trim(), idx: mg.index, finCab: mg.index + mg[0].length });
+            const tituloLimpio = mg[2].replace(/\s+\d+\s+d[ií]as[\s\S]*$/i, '').trim();
+            posGrupos.push({ codigo: (mg[1] || '').trim(), titulo: tituloLimpio, idx: mg.index, finCab: mg.index + mg[0].length });
         }
 
         posGrupos.forEach((g, idx) => {
             const seg = zonaDet.slice(g.finCab, idx + 1 < posGrupos.length ? posGrupos[idx + 1].idx : zonaDet.length);
             const sublineas = [];
-            const reSub = /(Arriendo\s+(?:Entre\s+\d+\s+y\s+\d+\s+meses|M[aá]s\s+de\s+\d+\s+meses|Menos\s+de\s+\d+\s+meses|[^\n\d]{4,40}))/gi;
+            const reSub = /(Arriendo\s+(?:Entre\s+\d+\s+y\s+\d+\s+meses|M[aá]s\s+de\s+\d+\s+meses|Menos\s+de\s+\d+\s+meses))/gi;
             let ms;
-            while ((ms = reSub.exec(seg)) !== null) sublineas.push(ms[1].trim());
+            while ((ms = reSub.exec(seg)) !== null) sublineas.push(ms[1].replace(/\s+/g, ' ').trim());
             const k = sublineas.length;
             bloquesRC.push({ titulo: g.titulo, sublineas: sublineas.slice() });
 
-            // Extraer cantidades, valores unitarios y totales del bloque (soporta formato por columnas o por fila)
+            // Extraer cantidades, valores unitarios y totales del bloque (soporta formato por fila horizontal PDF.js o por columnas OCR)
             const sinTextos = seg.replace(reSub, ' ').replace(/1\/d[ií]a/gi, ' ').replace(/\bd[ií]as?\b/gi, ' ');
             const nums = (sinTextos.match(/\d{1,3}(?:\.\d{3})+|\d+/g) || []).map(x => Math.round(num(x))).filter(x => x > 0);
             if (k > 0) {
                 if (nums.length >= k * 3) {
-                    // Columnas agrupadas (como OCR de Indura): [cant1..cantK, vu1..vuK, tot1..totK]
-                    const esColAgrupada = nums.slice(0, k).every((c, j) => {
+                    const esColAgrupada = k > 1 && nums.slice(0, k).every((c, j) => {
                         const vu = nums[k + j], tot = nums[2 * k + j];
                         return Math.abs(c * vu - tot) <= Math.max(5, tot * 0.02);
                     });
@@ -734,6 +734,10 @@
             archivoNombre: '',
             recepcionConforme: { emitida: false, fecha: '', receptorNombre: '', receptorRut: '', receptorCargo: '', recinto: RECINTO_BASE, observaciones: '', numeroActa: '' }
         };
+        const bloquesInduraBase = [
+            { titulo: 'RG_RENTAL CILINDRO MEDICAL_=>200B', sublineas: ['Arriendo Entre 2 y 4 meses', 'Arriendo Más de 4 meses'] },
+            { titulo: 'RG_RENTAL CILINDRO_<200B', sublineas: ['Arriendo Entre 2 y 4 meses', 'Arriendo Más de 4 meses'] }
+        ];
         const facturas = [
             {
                 ...baseFact,
@@ -743,7 +747,8 @@
                 periodoServicio: '2026-07',
                 fechaEmision: '2026-07-31',
                 fechaVencimiento: '2026-08-30',
-                items: [{ codigo: 'RENTA-CIL', descripcion: 'Arriendo cilindros oxígeno medicinal — Julio 2026 (reemplaza 2051884)', cantidad: 620, unidad: 'días-cilindro', valorUnitario: 517, valorTotal: 320540 }],
+                items: [{ codigo: '1519', grupo: 'RG_RENTAL CILINDRO MEDICAL_=>200B', sublinea: 'Arriendo Entre 2 y 4 meses', descripcion: 'RG_RENTAL CILINDRO MEDICAL_=>200B — Arriendo cilindros (620 días-cilindro)', cantidad: 620, unidad: 'dias', valorUnitario: 517, valorTotal: 320540 }],
+                bloquesRC: bloquesInduraBase,
                 neto: 320540,
                 iva: 60903,
                 totalBruto: 381443,
@@ -757,7 +762,8 @@
                 periodoServicio: '2026-08',
                 fechaEmision: '2026-08-31',
                 fechaVencimiento: '2026-09-30',
-                items: [{ codigo: 'RENTA-CIL', descripcion: 'Arriendo cilindros oxígeno medicinal — Agosto 2026 (reemplaza 2051891)', cantidad: 620, unidad: 'días-cilindro', valorUnitario: 517, valorTotal: 320540 }],
+                items: [{ codigo: '1519', grupo: 'RG_RENTAL CILINDRO MEDICAL_=>200B', sublinea: 'Arriendo Entre 2 y 4 meses', descripcion: 'RG_RENTAL CILINDRO MEDICAL_=>200B — Arriendo cilindros (620 días-cilindro)', cantidad: 620, unidad: 'dias', valorUnitario: 517, valorTotal: 320540 }],
+                bloquesRC: bloquesInduraBase,
                 neto: 320540,
                 iva: 60903,
                 totalBruto: 381443,
@@ -767,11 +773,18 @@
                 ...baseFact,
                 id: 'fact-indura-2074906',
                 folio: '2074906',
+                facturaSAP: '437137402',
                 reemplazaFactura: '2048700',
                 periodoServicio: '2026-09',
-                fechaEmision: '2026-09-30',
-                fechaVencimiento: '2026-10-30',
-                items: [{ codigo: 'RENTA-CIL', descripcion: 'Arriendo cilindros oxígeno medicinal — Septiembre 2026 (reemplaza 2048700)', cantidad: 413, unidad: 'días-cilindro', valorUnitario: 517, valorTotal: 213521 }],
+                fechaEmision: '2026-11-19',
+                fechaVencimiento: '2026-12-19',
+                items: [
+                    { codigo: '1519', grupo: 'RG_RENTAL CILINDRO MEDICAL_=>200B', sublinea: 'Arriendo Entre 2 y 4 meses', descripcion: 'RG_RENTAL CILINDRO MEDICAL_=>200B — Arriendo Entre 2 y 4 meses', cantidad: 151, unidad: 'dias', valorUnitario: 517, valorTotal: 78067 },
+                    { codigo: '1519', grupo: 'RG_RENTAL CILINDRO MEDICAL_=>200B', sublinea: 'Arriendo Más de 4 meses', descripcion: 'RG_RENTAL CILINDRO MEDICAL_=>200B — Arriendo Más de 4 meses', cantidad: 141, unidad: 'dias', valorUnitario: 517, valorTotal: 72897 },
+                    { codigo: '112596', grupo: 'RG_RENTAL CILINDRO_<200B', sublinea: 'Arriendo Entre 2 y 4 meses', descripcion: 'RG_RENTAL CILINDRO_<200B — Arriendo Entre 2 y 4 meses', cantidad: 90, unidad: 'dias', valorUnitario: 517, valorTotal: 46530 },
+                    { codigo: '112596', grupo: 'RG_RENTAL CILINDRO_<200B', sublinea: 'Arriendo Más de 4 meses', descripcion: 'RG_RENTAL CILINDRO_<200B — Arriendo Más de 4 meses', cantidad: 31, unidad: 'dias', valorUnitario: 517, valorTotal: 16027 }
+                ],
+                bloquesRC: bloquesInduraBase,
                 neto: 213521,
                 iva: 40569,
                 totalBruto: 254090,
@@ -858,6 +871,40 @@
             creadoEl: datos.creadoEl || f.serverTimestamp()
         }, { merge: true });
         return id;
+    }
+
+    /** Valida si un proveedor puede eliminarse (bloquea si tiene presupuestos/OC o facturas vinculadas). */
+    function validarEliminacionProveedor(provId, listaPres, listaFact) {
+        const nPres = (listaPres || []).filter(p => p && p.proveedorId === provId).length;
+        const nFact = (listaFact || []).filter(f => f && f.proveedorId === provId).length;
+        if (nPres > 0 || nFact > 0) {
+            return {
+                ok: false,
+                nPres,
+                nFact,
+                mensaje: `No se puede eliminar este proveedor porque tiene ${nPres} presupuesto(s)/OC y ${nFact} documento(s) asociados. Márcalo como «Histórico» o elimina primero sus registros.`
+            };
+        }
+        return { ok: true, nPres: 0, nFact: 0, mensaje: '' };
+    }
+
+    async function eliminarProveedor(id) {
+        const f = fs(), d = db();
+        const check = validarEliminacionProveedor(id, presupuestos, facturas);
+        if (!check.ok) throw new Error(check.mensaje);
+        await f.deleteDoc(f.doc(f.collection(d, 'oxigeno_proveedores'), id));
+    }
+
+    async function eliminarPresupuesto(id) {
+        const f = fs(), d = db();
+        const nFact = facturas.filter(x => x.presupuestoId === id).length;
+        if (nFact > 0) throw new Error(`No se puede eliminar esta OC/presupuesto porque tiene ${nFact} documento(s) asociados. Cámbiala a estado «Cerrado».`);
+        await f.deleteDoc(f.doc(f.collection(d, 'oxigeno_presupuestos'), id));
+    }
+
+    async function eliminarFactura(id) {
+        const f = fs(), d = db();
+        await f.deleteDoc(f.doc(f.collection(d, 'oxigeno_facturas'), id));
     }
 
     /** Sube el respaldo original a Firebase Storage: oxigeno/facturas/{rut}/{folio}.{ext} */
@@ -993,6 +1040,8 @@
                 emitida: true,
                 tipoRecepcion: parcial ? 'PARCIAL' : 'TOTAL',
                 fecha: String(datosRC.fecha).slice(0, 10),
+                tipoDocumento: datosRC.tipoDocumento || actual.tipoDocumento || 'FACTURA',
+                numeroDoc: String(datosRC.numeroDoc != null ? datosRC.numeroDoc : (actual.folio || '')).trim(),
                 contraparte,
                 conFirma: datosRC.conFirma !== false,
                 encabezado: String(datosRC.encabezado || '').trim() || `Que se recibió conforme en forma ${parcial ? 'parcial' : 'total'} el producto, donde se recibió lo siguiente:`,
@@ -1003,10 +1052,14 @@
                 recinto: String(datosRC.recinto || RECINTO_BASE).trim() || RECINTO_BASE,
                 observaciones: String(datosRC.observaciones || '').trim(),
                 numeroActa,
-                registradoPor: usuario(),
-                registradoEl: new Date().toISOString()
+                registradoPor: rcPrev.registradoPor || usuario(),
+                registradoEl: rcPrev.registradoEl || new Date().toISOString(),
+                editadoPor: usuario(),
+                editadoEn: new Date().toISOString()
             };
-            tx.update(factRef, { recepcionConforme: rc });
+            const upd = { recepcionConforme: rc };
+            if (datosRC.tipoDocumento) upd.tipoDocumento = datosRC.tipoDocumento === 'GUIA_DESPACHO' ? 'GUIA_DESPACHO' : 'FACTURA';
+            tx.update(factRef, upd);
             return rc;
         });
     }
@@ -1305,6 +1358,145 @@
         document.body.appendChild(a);
         a.click();
         setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1500);
+    }
+
+    const MIME_DOCX = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+
+    async function cargarLogoPNGWord() {
+        try {
+            const bytes = await cargarAssetBytes('assets/logo-corpo-melipilla.jpg');
+            if (!bytes) return null;
+            const url = URL.createObjectURL(new Blob([bytes]));
+            try {
+                const img = await new Promise((ok, mal) => { const i = new Image(); i.onload = () => ok(i); i.onerror = mal; i.src = url; });
+                const c = document.createElement('canvas');
+                c.width = img.naturalWidth; c.height = img.naturalHeight;
+                c.getContext('2d').drawImage(img, 0, 0);
+                const blob = await new Promise(r => c.toBlob(r, 'image/png'));
+                return { bytes: new Uint8Array(await blob.arrayBuffer()), w: c.width, h: c.height };
+            } finally {
+                URL.revokeObjectURL(url);
+            }
+        } catch (_) { return null; }
+    }
+
+    /** Construye el cuerpo OOXML (Word .docx) del Acta RC Oficial Corporación (mismo motor que Seguimiento de OC). */
+    function construirCuerpoWordRC(factura, proveedor, logo, firma, AD) {
+        const { run, par } = AD;
+        const rc = factura.recepcionConforme || {};
+        const parcial = rc.tipoRecepcion !== 'TOTAL';
+        const contraparte = rc.contraparte || rc.receptorNombre || CONTRAPARTE_BASE;
+        const bloques = (Array.isArray(rc.bloquesRC) && rc.bloquesRC.length) ? rc.bloquesRC : construirBloquesRC(factura);
+        const encabTxt = rc.encabezado || `Que se recibió conforme en forma ${parcial ? 'parcial' : 'total'} el producto, donde se recibió lo siguiente:`;
+        const cont = [];
+
+        if (logo) {
+            const w = Math.round(1.1 * 914400), h = Math.round(w * logo.h / logo.w);
+            cont.push(par(`<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${w}" cy="${h}"/><wp:docPr id="1" name="Logo"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="logo.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdLogo"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${w}" cy="${h}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`, { despues: 120 }));
+        }
+        cont.push(par(run(`RECEPCIÓN CONFORME PRODUCTO O SERVICIO ${parcial ? 'PARCIAL' : 'TOTAL'}`, { b: true, sz: 22 }), { jc: 'center', despues: 340 }));
+        cont.push(par(run('DATOS DEL PROVEEDOR', { b: true, sz: 21 }), { despues: 180 }));
+        cont.push(par(run(`Nombre de la empresa: ${proveedor ? proveedor.razonSocial : '—'}`, { b: true, sz: 21 }), { despues: 110 }));
+        cont.push(par(run(`RUT: ${proveedor ? proveedor.rut : '—'}`, { b: true, sz: 21 }), { despues: 110 }));
+        cont.push(par(run(`Orden de Compra: ${factura.numeroOC || '—'}`, { b: true, sz: 21 }), { despues: 110 }));
+        const docTipoTxt = factura.tipoDocumento === 'GUIA_DESPACHO' ? 'Guía de Despacho' : 'Factura';
+        if (factura.folio) {
+            cont.push(par(run(`${docTipoTxt} N°: ${factura.folio}${factura.periodoServicio ? ' · Período: ' + fmtPeriodo(factura.periodoServicio) : ''}`, { sz: 19 }), { despues: 110 }));
+        }
+        cont.push(par(run(`Con fecha ${fechaCL(rc.fecha || hoyISO())}, en calidad de contraparte técnica, certifico lo siguiente:`, { sz: 21 }), { despues: 160 }));
+
+        const encabP = par(run(encabTxt, { sz: 19 }), { despues: 120 });
+        const bloquesP = bloques.map((b) => {
+            const pTit = par(run(`• ${b.titulo}`, { b: true, sz: 20 }), { ind: { left: 360, hanging: 240 }, despues: (b.sublineas && b.sublineas.length) ? 30 : 80 });
+            const pSubs = (b.sublineas || []).map((sl, i, arr) => par(run(sl, { sz: 20 }), { ind: { left: 360 }, despues: i === arr.length - 1 ? 80 : 30 })).join('');
+            return pTit + pSubs;
+        }).join('');
+        const obsP = rc.observaciones ? par(run(`Observaciones: ${rc.observaciones}`, { sz: 18 }), { antes: 80, despues: 60 }) : '';
+        cont.push(`<w:tbl><w:tblPr><w:tblW w:w="8640" w:type="dxa"/><w:tblBorders>${AD.borde}</w:tblBorders><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="8640"/></w:tblGrid><w:tr>${AD.celda(8640, encabP + bloquesP + obsP)}</w:tr></w:tbl>`);
+        cont.push(par('', { antes: 650, despues: 0 }));
+
+        if (firma) {
+            const w = Math.round(2.4 * 914400), h = Math.round(w * firma.h / firma.w);
+            cont.push(par(`<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${w}" cy="${h}"/><wp:docPr id="2" name="Firma y timbre"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="firma.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdFirma"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${w}" cy="${h}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`, { jc: 'center', despues: 0 }));
+        } else {
+            cont.push(par(run('________________________________', { sz: 21 }), { jc: 'center', despues: 40 }));
+        }
+        cont.push(par(run('Firma contraparte técnica', { sz: 21 }), { jc: 'center', despues: 120 }));
+        cont.push(par(run(`Nombre Contraparte Técnica: ${contraparte}`, { sz: 21 }), { jc: 'center', despues: 0 }));
+        return cont;
+    }
+
+    /** Descarga el Acta RC Oficial Corporación en Word (.docx) con logo y firma/timbre oficial. */
+    async function descargarRCOficialCorporacionWord(factura, proveedor) {
+        const AD = window.SAR_ActaDoc;
+        if (!AD || !AD.empaquetar) throw new Error('El módulo generador de Word (acta-documentos.js) no está disponible.');
+        const rc = factura.recepcionConforme || {};
+        const contraparte = rc.contraparte || rc.receptorNombre || CONTRAPARTE_BASE;
+        const logo = await cargarLogoPNGWord();
+        let firma = null;
+        if (rc.conFirma !== false && /quintanilla/i.test(contraparte)) {
+            try {
+                const b = await cargarAssetBytes('assets/firma-contraparte-mariel.png');
+                if (b && b.length > 24) {
+                    const w = ((b[16] << 24) | (b[17] << 16) | (b[18] << 8) | b[19]) >>> 0;
+                    const h = ((b[20] << 24) | (b[21] << 16) | (b[22] << 8) | b[23]) >>> 0;
+                    if (w && h) firma = { bytes: b, w, h };
+                }
+            } catch (_) { firma = null; }
+        }
+        const bytes = AD.empaquetar(
+            construirCuerpoWordRC(factura, proveedor, logo, firma, AD),
+            logo ? logo.bytes : null,
+            firma ? [{ id: 'rIdFirma', nombre: 'firma.png', bytes: firma.bytes }] : []
+        );
+        const ocClean = String(factura.numeroOC || factura.folio || 'Oxigeno').replace(/[^A-Za-z0-9-]+/g, '');
+        const nombre = `RC${ocClean}${factura.folio ? '_F' + String(factura.folio).replace(/[^A-Za-z0-9-]+/g, '') : ''}.docx`;
+        const url = URL.createObjectURL(new Blob([bytes], { type: MIME_DOCX }));
+        const a = document.createElement('a');
+        a.href = url; a.download = nombre;
+        document.body.appendChild(a); a.click();
+        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
+    }
+
+    /** Vista previa HTML exacta del formato oficial Corporación Municipal de Melipilla (RC1298355-794-AG25.pdf). */
+    function construirHtmlRCOficial(factura, proveedor) {
+        const rc = factura.recepcionConforme || {};
+        const parcial = rc.tipoRecepcion !== 'TOTAL';
+        const contraparte = rc.contraparte || rc.receptorNombre || CONTRAPARTE_BASE;
+        const bloques = (Array.isArray(rc.bloquesRC) && rc.bloquesRC.length) ? rc.bloquesRC : construirBloquesRC(factura);
+        const encab = rc.encabezado || `Que se recibió conforme en forma ${parcial ? 'parcial' : 'total'} el producto, donde se recibió lo siguiente:`;
+        const mostrarFirma = rc.conFirma !== false && /quintanilla/i.test(contraparte);
+
+        return `
+        <div class="oxf-acta-hoja" id="oxf-rc-oficial-hoja" style="padding:36px 46px; font-family:Arial,Helvetica,sans-serif; color:#000 !important;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:18px; margin-bottom:26px;">
+                <img src="assets/logo-corpo-melipilla.jpg" alt="Corporación Municipal de Melipilla" style="height:68px; width:auto;" onerror="this.style.display='none'">
+                <div style="flex:1; text-align:center; font-weight:700; font-size:15px; letter-spacing:.01em; color:#000;">
+                    RECEPCIÓN CONFORME PRODUCTO O SERVICIO ${parcial ? 'PARCIAL' : 'TOTAL'}
+                </div>
+            </div>
+            <div style="font-size:13.5px; line-height:1.9; color:#000; margin-bottom:14px;">
+                <div style="font-weight:700;">DATOS DEL PROVEEDOR</div>
+                <div style="font-weight:700;">Nombre de la empresa: ${esc(proveedor ? proveedor.razonSocial : '—')}</div>
+                <div style="font-weight:700;">RUT: ${esc(proveedor ? proveedor.rut : '—')}</div>
+                <div style="font-weight:700;">Orden de Compra: ${esc(factura.numeroOC || '—')}</div>
+                <div style="margin-top:8px;">Con fecha ${esc(fechaCL(rc.fecha || hoyISO()))}, en calidad de contraparte técnica, certifico lo siguiente:</div>
+            </div>
+            <div style="border:1.2px solid #000; padding:16px 20px; min-height:170px; font-size:13.5px; color:#000; line-height:1.6;">
+                <div style="margin-bottom:12px;">${esc(encab)}</div>
+                <ul style="margin:0; padding-left:28px;">
+                    ${bloques.map(b => `<li style="margin-bottom:8px;"><b>${esc(b.titulo)}</b>${(b.sublineas || []).map(sl => `<div style="font-weight:400;">${esc(sl)}</div>`).join('')}</li>`).join('')}
+                </ul>
+                ${rc.observaciones ? `<div style="margin-top:12px; font-size:12px;"><b>Observaciones:</b> ${esc(rc.observaciones)}</div>` : ''}
+            </div>
+            <div style="margin-top:52px; text-align:center; color:#000;">
+                ${mostrarFirma
+                    ? `<img src="assets/firma-contraparte-mariel.png" alt="Firma Contraparte Técnica" style="max-width:210px; height:auto; display:block; margin:0 auto 2px;" onerror="this.style.display='none'">`
+                    : `<div style="border-top:1px solid #000; width:240px; margin:34px auto 6px;"></div>`}
+                <div style="font-size:13px;">Firma contraparte técnica</div>
+                <div style="font-size:13.5px; margin-top:18px;">Nombre Contraparte Técnica: ${esc(contraparte)}</div>
+            </div>
+        </div>`;
     }
 
     function construirHtmlActaRC(factura, proveedor, presupuesto, estadoPres) {
@@ -1691,7 +1883,7 @@
                     </div>
                 </div>
                 <div class="oxf-acciones">
-                    <button type="button" class="btn btn-outline btn-sm" id="oxf-btn-prov">+ Proveedor</button>
+                    <button type="button" class="btn btn-outline btn-sm" id="oxf-btn-provs">Proveedores (${proveedores.length})</button>
                     <button type="button" class="btn btn-outline btn-sm" id="oxf-btn-pres">+ Presupuesto / OC</button>
                     <button type="button" class="btn btn-outline btn-sm" id="oxf-btn-semilla" title="Carga idempotente de control con Indura S.A. OC 1298355-493-AG25">Cargar control Indura</button>
                     <button type="button" class="btn btn-primary" id="oxf-btn-nueva">+ Ingresar Factura / Guía (OCR / XML)</button>
@@ -1707,7 +1899,10 @@
                         <strong>OC ${esc(pres.numeroOC)}</strong>
                         <span>· ${esc(pres.nombreContrato)}</span>
                     </div>
-                    <small>${esc(provPres ? `${provPres.razonSocial} (${provPres.rut})` : '')} · Tope ${esc(pres.tipoMonto)}${pres.vigenciaDesde ? ` · Vigencia ${esc(fechaCL(pres.vigenciaDesde))} a ${esc(fechaCL(pres.vigenciaHasta))}` : ''}</small>
+                    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <small>${esc(provPres ? `${provPres.razonSocial} (${provPres.rut})` : '')} · Tope ${esc(pres.tipoMonto)}${pres.vigenciaDesde ? ` · Vigencia ${esc(fechaCL(pres.vigenciaDesde))} a ${esc(fechaCL(pres.vigenciaHasta))}` : ''}</small>
+                        <button type="button" class="btn btn-outline btn-sm" id="oxf-btn-edit-pres" data-id="${esc(pres.id)}">Editar OC / Presupuesto</button>
+                    </div>
                 </div>
                 <div class="oxf-kpis">
                     <div class="oxf-kpi">
@@ -1790,9 +1985,12 @@
                                     ? `<span class="oxf-badge oxf-b-ok">RC ${esc(rc.tipoRecepcion === 'TOTAL' ? 'Total' : 'Parcial')} · ${esc(rc.numeroActa || '')}</span><small class="oxf-sub">${esc(fechaCL(rc.fecha))} · ${esc(rc.contraparte || rc.receptorNombre || '')}</small>`
                                     : `<span class="oxf-badge oxf-b-pend">Pendiente RC</span>`}</td>
                                 <td class="oxf-cell-acc">
-                                    ${fac.archivoUrl ? `<a class="btn btn-outline btn-sm" href="${esc(fac.archivoUrl)}" target="_blank" rel="noopener">Ver respaldo</a>` : `<button type="button" class="btn btn-outline btn-sm" disabled title="Sin archivo adjunto en Storage">Sin respaldo</button>`}
-                                    <button type="button" class="btn btn-outline btn-sm oxf-btn-rc" data-id="${esc(fac.id)}">${rc.emitida ? 'Editar RC' : 'Recepción Conforme'}</button>
-                                    <button type="button" class="btn btn-primary btn-sm oxf-btn-pdf" data-id="${esc(fac.id)}"${rc.emitida ? '' : ' title="Vista preliminar / emitir RC primero"'}>Acta PDF</button>
+                                    ${fac.archivoUrl ? `<a class="btn btn-outline btn-sm" href="${esc(fac.archivoUrl)}" target="_blank" rel="noopener">Respaldo</a>` : ''}
+                                    <button type="button" class="btn btn-outline btn-sm oxf-btn-rc" data-id="${esc(fac.id)}">${rc.emitida ? 'Editar acta' : 'Recepción Conforme'}</button>
+                                    <button type="button" class="btn btn-primary btn-sm oxf-btn-rc-pdf" data-id="${esc(fac.id)}" title="Descargar RC oficial en PDF">PDF</button>
+                                    <button type="button" class="btn btn-outline btn-sm oxf-btn-rc-word" data-id="${esc(fac.id)}" title="Descargar RC oficial en Word (.docx)">Word</button>
+                                    <button type="button" class="btn btn-outline btn-sm oxf-btn-pdf" data-id="${esc(fac.id)}" title="Ver vista previa y saldo OC">Ver</button>
+                                    <button type="button" class="btn btn-outline btn-sm oxf-btn-del-fac" data-id="${esc(fac.id)}" title="Eliminar documento">✕</button>
                                 </td>
                             </tr>`;
                         }).join('') : `<tr><td colspan="9" class="oxf-td-vacio">No hay facturas registradas para este filtro.</td></tr>`}
@@ -1821,10 +2019,15 @@
             if (n) { n.focus(); n.setSelectionRange(pos, pos); }
         });
 
-        const bProv = $('#oxf-btn-prov');
-        if (bProv) bProv.addEventListener('click', abrirModalProveedor);
+        const bProvs = $('#oxf-btn-provs');
+        if (bProvs) bProvs.addEventListener('click', abrirModalGestionProveedores);
         const bPres = $('#oxf-btn-pres');
-        if (bPres) bPres.addEventListener('click', abrirModalPresupuesto);
+        if (bPres) bPres.addEventListener('click', () => abrirModalPresupuesto(null));
+        const bEditPres = $('#oxf-btn-edit-pres');
+        if (bEditPres) bEditPres.addEventListener('click', () => {
+            const p = presupuestos.find(x => x.id === bEditPres.dataset.id);
+            if (p) abrirModalPresupuesto(p);
+        });
         const bNueva = $('#oxf-btn-nueva');
         if (bNueva) bNueva.addEventListener('click', abrirModalFactura);
         const bSem = $('#oxf-btn-semilla');
@@ -1846,9 +2049,42 @@
             const fac = facturas.find(x => x.id === b.dataset.id);
             if (fac) abrirModalRecepcionConforme(fac);
         }));
+        $$('.oxf-btn-rc-pdf').forEach(b => b.addEventListener('click', async () => {
+            const fac = facturas.find(x => x.id === b.dataset.id);
+            if (!fac) return;
+            const pv = proveedores.find(p => p.id === fac.proveedorId);
+            b.disabled = true;
+            try { await descargarRCOficialCorporacionPDF(fac, pv); }
+            catch (e) { toast('Error PDF', e.message || String(e), 'error'); }
+            finally { b.disabled = false; }
+        }));
+        $$('.oxf-btn-rc-word').forEach(b => b.addEventListener('click', async () => {
+            const fac = facturas.find(x => x.id === b.dataset.id);
+            if (!fac) return;
+            const pv = proveedores.find(p => p.id === fac.proveedorId);
+            b.disabled = true;
+            try { await descargarRCOficialCorporacionWord(fac, pv); }
+            catch (e) { toast('Error Word', e.message || String(e), 'error'); }
+            finally { b.disabled = false; }
+        }));
         $$('.oxf-btn-pdf').forEach(b => b.addEventListener('click', () => {
             const fac = facturas.find(x => x.id === b.dataset.id);
             if (fac) abrirModalVistaActaPDF(fac);
+        }));
+        $$('.oxf-btn-del-fac').forEach(b => b.addEventListener('click', async () => {
+            const fac = facturas.find(x => x.id === b.dataset.id);
+            if (!fac) return;
+            if (!window.confirm(`¿Eliminar el documento Folio ${fac.folio} (${clp(fac.totalBruto)})? Esta acción recalculará el saldo de la OC.`)) return;
+            b.disabled = true;
+            try {
+                await eliminarFactura(fac.id);
+                await cargarDatos();
+                pintar();
+                toast('Documento eliminado', `Folio ${fac.folio} eliminado.`, 'success');
+            } catch (e) {
+                toast('No se pudo eliminar', e.message || String(e), 'error');
+                b.disabled = false;
+            }
         }));
     }
 
@@ -1864,26 +2100,111 @@
         return ov;
     }
 
-    function abrirModalProveedor() {
-        const ov = crearModal('Registrar Proveedor de Oxígeno', `
+    /** Administrador de Proveedores: listar, crear, editar y eliminar (protegido si tiene OC/facturas). */
+    function abrirModalGestionProveedores() {
+        const filasHtml = () => proveedores.length
+            ? proveedores.map(p => {
+                const nPres = presupuestos.filter(b => b.proveedorId === p.id).length;
+                const nFact = facturas.filter(f => f.proveedorId === p.id).length;
+                return `<tr>
+                    <td><b>${esc(p.razonSocial)}</b><small class="oxf-sub">${esc(p.rut)}${p.contactoEmail ? ' · ' + esc(p.contactoEmail) : ''}</small></td>
+                    <td><span class="oxf-badge ${p.estado === 'HISTORICO' ? 'oxf-b-hist' : 'oxf-b-act'}">${esc(p.estado === 'HISTORICO' ? 'HISTÓRICO' : 'ACTIVO')}</span></td>
+                    <td>${nPres} OC · ${nFact} doc(s)</td>
+                    <td class="oxf-cell-acc">
+                        <button type="button" class="btn btn-outline btn-sm oxf-gp-edit" data-id="${esc(p.id)}">Editar</button>
+                        <button type="button" class="btn btn-outline btn-sm oxf-gp-del" data-id="${esc(p.id)}">Eliminar</button>
+                    </td>
+                </tr>`;
+            }).join('')
+            : `<tr><td colspan="4" class="oxf-td-vacio">No hay proveedores registrados aún.</td></tr>`;
+
+        const ov = crearModal('Proveedores de Oxígeno (Crear / Editar / Eliminar)', `
+            <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+                <button type="button" class="btn btn-primary btn-sm" id="oxf-gp-nuevo">+ Nuevo proveedor</button>
+            </div>
+            <div class="oxf-tabla-wrap">
+                <table class="soc-tabla oxf-tabla">
+                    <thead><tr><th>Proveedor / RUT</th><th>Estado</th><th>Vínculos</th><th>Acciones</th></tr></thead>
+                    <tbody id="oxf-gp-body">${filasHtml()}</tbody>
+                </table>
+            </div>
+            <p class="cierre-error" id="oxf-gp-err"></p>
+            <div class="cierre-acciones"><button type="button" class="btn btn-outline" id="oxf-gp-cerrar">Cerrar</button></div>`, 'oxf-modal-xl');
+
+        ov.querySelector('#oxf-gp-cerrar').addEventListener('click', () => ov.remove());
+        ov.querySelector('#oxf-gp-nuevo').addEventListener('click', () => { ov.remove(); abrirModalProveedor(null); });
+        ov.querySelectorAll('.oxf-gp-edit').forEach(b => b.addEventListener('click', () => {
+            const pv = proveedores.find(x => x.id === b.dataset.id);
+            if (pv) { ov.remove(); abrirModalProveedor(pv); }
+        }));
+        ov.querySelectorAll('.oxf-gp-del').forEach(b => b.addEventListener('click', async () => {
+            const pv = proveedores.find(x => x.id === b.dataset.id);
+            if (!pv) return;
+            const errEl = ov.querySelector('#oxf-gp-err');
+            errEl.textContent = '';
+            const check = validarEliminacionProveedor(pv.id, presupuestos, facturas);
+            if (!check.ok) { errEl.textContent = check.mensaje; return; }
+            if (!window.confirm(`¿Eliminar definitivamente al proveedor "${pv.razonSocial}" (${pv.rut})?`)) return;
+            b.disabled = true;
+            try {
+                await eliminarProveedor(pv.id);
+                if (filtroProv === pv.id) filtroProv = 'TODOS';
+                await cargarDatos();
+                pintar();
+                ov.remove();
+                toast('Proveedor eliminado', `${pv.razonSocial} fue eliminado.`, 'success');
+            } catch (e) {
+                errEl.textContent = e.message || String(e);
+                b.disabled = false;
+            }
+        }));
+    }
+
+    function abrirModalProveedor(provEditar) {
+        const p = provEditar && provEditar.id ? provEditar : null;
+        const ov = crearModal(p ? `Editar Proveedor · ${p.razonSocial}` : 'Registrar Proveedor de Oxígeno', `
             <div class="oxf-form-grid">
-                <label class="act-l">Razón Social *<input id="oxf-p-rs" placeholder="Ej: Linde Gas Chile S.A."></label>
-                <label class="act-l">RUT *<input id="oxf-p-rut" placeholder="Ej: 76.150.343-K"></label>
-                <label class="act-l">Estado<select id="oxf-p-est"><option value="ACTIVO">Activo (Empresa Actual)</option><option value="HISTORICO">Histórico</option></select></label>
-                <label class="act-l">Email contacto<input id="oxf-p-mail" type="email" placeholder="facturacion@proveedor.cl"></label>
-                <label class="act-l oxf-span2">Cuenta bancaria (referencia pagos)<input id="oxf-p-cta" placeholder="Banco · Tipo cuenta · N°"></label>
+                <label class="act-l">Razón Social *<input id="oxf-p-rs" value="${esc(p ? p.razonSocial : '')}" placeholder="Ej: Linde Gas Chile S.A."></label>
+                <label class="act-l">RUT *<input id="oxf-p-rut" value="${esc(p ? p.rut : '')}" placeholder="Ej: 76.150.343-K"></label>
+                <label class="act-l">Estado<select id="oxf-p-est"><option value="ACTIVO"${!p || p.estado !== 'HISTORICO' ? ' selected' : ''}>Activo (Empresa Actual)</option><option value="HISTORICO"${p && p.estado === 'HISTORICO' ? ' selected' : ''}>Histórico</option></select></label>
+                <label class="act-l">Email contacto<input id="oxf-p-mail" type="email" value="${esc(p ? p.contactoEmail || '' : '')}" placeholder="facturacion@proveedor.cl"></label>
+                <label class="act-l oxf-span2">Cuenta bancaria (referencia pagos)<input id="oxf-p-cta" value="${esc(p ? p.cuentaBancaria || '' : '')}" placeholder="Banco · Tipo cuenta · N°"></label>
             </div>
             <p class="cierre-error" id="oxf-p-err"></p>
             <div class="cierre-acciones">
+                ${p ? '<button type="button" class="btn btn-outline" id="oxf-p-del" style="margin-right:auto;color:#b91c1c;border-color:#fca5a5;">Eliminar proveedor</button>' : ''}
                 <button type="button" class="btn btn-outline" id="oxf-p-no">Cancelar</button>
-                <button type="button" class="btn btn-primary" id="oxf-p-ok">Guardar proveedor</button>
+                <button type="button" class="btn btn-primary" id="oxf-p-ok">${p ? 'Guardar cambios' : 'Guardar proveedor'}</button>
             </div>`);
         ov.querySelector('#oxf-p-no').addEventListener('click', () => ov.remove());
+        const bDel = ov.querySelector('#oxf-p-del');
+        if (bDel && p) {
+            bDel.addEventListener('click', async () => {
+                ov.querySelector('#oxf-p-err').textContent = '';
+                const check = validarEliminacionProveedor(p.id, presupuestos, facturas);
+                if (!check.ok) { ov.querySelector('#oxf-p-err').textContent = check.mensaje; return; }
+                if (!window.confirm(`¿Eliminar definitivamente al proveedor "${p.razonSocial}"?`)) return;
+                bDel.disabled = true;
+                try {
+                    await eliminarProveedor(p.id);
+                    if (filtroProv === p.id) filtroProv = 'TODOS';
+                    await cargarDatos();
+                    pintar();
+                    ov.remove();
+                    toast('Proveedor eliminado', `${p.razonSocial} fue eliminado.`, 'success');
+                } catch (e) {
+                    ov.querySelector('#oxf-p-err').textContent = e.message || String(e);
+                    bDel.disabled = false;
+                }
+            });
+        }
         ov.querySelector('#oxf-p-ok').addEventListener('click', async () => {
             const btn = ov.querySelector('#oxf-p-ok'); btn.disabled = true;
             ov.querySelector('#oxf-p-err').textContent = '';
             try {
                 await guardarProveedor({
+                    id: p ? p.id : undefined,
+                    creadoEl: p ? p.creadoEl : undefined,
                     razonSocial: ov.querySelector('#oxf-p-rs').value,
                     rut: ov.querySelector('#oxf-p-rut').value,
                     estado: ov.querySelector('#oxf-p-est').value,
@@ -1893,7 +2214,7 @@
                 await cargarDatos();
                 pintar();
                 ov.remove();
-                toast('Proveedor', 'Proveedor de oxígeno guardado.', 'success');
+                toast('Proveedor', p ? 'Proveedor actualizado.' : 'Proveedor de oxígeno guardado.', 'success');
             } catch (e) {
                 ov.querySelector('#oxf-p-err').textContent = e.message || String(e);
                 btn.disabled = false;
@@ -1901,35 +2222,58 @@
         });
     }
 
-    function abrirModalPresupuesto() {
+    function abrirModalPresupuesto(presEditar) {
+        const b = presEditar && presEditar.id ? presEditar : null;
         if (!proveedores.length) {
             toast('Proveedor requerido', 'Primero registra un proveedor o carga el control Indura.', 'warning');
-            abrirModalProveedor();
+            abrirModalProveedor(null);
             return;
         }
-        const ov = crearModal('Nuevo Presupuesto / Orden de Compra de Oxígeno', `
+        const ov = crearModal(b ? `Editar Presupuesto / OC ${b.numeroOC}` : 'Nuevo Presupuesto / Orden de Compra de Oxígeno', `
             <div class="oxf-form-grid">
-                <label class="act-l">Proveedor *<select id="oxf-b-prov">${proveedores.map(p => `<option value="${esc(p.id)}">${esc(p.razonSocial)} (${esc(p.rut)})</option>`).join('')}</select></label>
-                <label class="act-l">N° Orden de Compra *<input id="oxf-b-oc" placeholder="Ej: 1298355-493-AG25"></label>
-                <label class="act-l oxf-span2">Nombre del Contrato / Bolsa<input id="oxf-b-nom" placeholder="Ej: Arriendo cilindros oxígeno 2026"></label>
-                <label class="act-l">Concepto Permitido<select id="oxf-b-con"><option value="ARRIENDO">Arriendo / Renta</option><option value="RECARGA">Recarga</option><option value="MIXTO">Mixto (Arriendo y Recarga)</option></select></label>
-                <label class="act-l">Tipo de Monto<select id="oxf-b-tm"><option value="BRUTO">Bruto (IVA incluido)</option><option value="NETO">Neto</option></select></label>
-                <label class="act-l">Monto Tope ($) *<input id="oxf-b-tope" type="number" min="1" step="1" placeholder="Ej: 1078000"></label>
-                <label class="act-l">Estado<select id="oxf-b-est"><option value="ACTIVO">Activo</option><option value="CERRADO">Cerrado</option></select></label>
-                <label class="act-l">Vigencia Desde<input id="oxf-b-des" type="date" value="${hoyISO()}"></label>
-                <label class="act-l">Vigencia Hasta<input id="oxf-b-has" type="date"></label>
+                <label class="act-l">Proveedor *<select id="oxf-b-prov">${proveedores.map(p => `<option value="${esc(p.id)}"${b && b.proveedorId === p.id ? ' selected' : ''}>${esc(p.razonSocial)} (${esc(p.rut)})</option>`).join('')}</select></label>
+                <label class="act-l">N° Orden de Compra *<input id="oxf-b-oc" value="${esc(b ? b.numeroOC : '')}" placeholder="Ej: 1298355-493-AG25"></label>
+                <label class="act-l oxf-span2">Nombre del Contrato / Bolsa<input id="oxf-b-nom" value="${esc(b ? b.nombreContrato || '' : '')}" placeholder="Ej: Arriendo cilindros oxígeno 2026"></label>
+                <label class="act-l">Concepto Permitido<select id="oxf-b-con"><option value="ARRIENDO"${!b || b.conceptoPermitido === 'ARRIENDO' ? ' selected' : ''}>Arriendo / Renta</option><option value="RECARGA"${b && b.conceptoPermitido === 'RECARGA' ? ' selected' : ''}>Recarga</option><option value="MIXTO"${b && b.conceptoPermitido === 'MIXTO' ? ' selected' : ''}>Mixto (Arriendo y Recarga)</option></select></label>
+                <label class="act-l">Tipo de Monto<select id="oxf-b-tm"><option value="BRUTO"${!b || b.tipoMonto !== 'NETO' ? ' selected' : ''}>Bruto (IVA incluido)</option><option value="NETO"${b && b.tipoMonto === 'NETO' ? ' selected' : ''}>Neto</option></select></label>
+                <label class="act-l">Monto Tope ($) *<input id="oxf-b-tope" type="number" min="1" step="1" value="${b ? Math.round(num(b.montoTope)) : ''}" placeholder="Ej: 1078000"></label>
+                <label class="act-l">Estado<select id="oxf-b-est"><option value="ACTIVO"${!b || b.estado !== 'CERRADO' ? ' selected' : ''}>Activo</option><option value="CERRADO"${b && b.estado === 'CERRADO' ? ' selected' : ''}>Cerrado</option></select></label>
+                <label class="act-l">Vigencia Desde<input id="oxf-b-des" type="date" value="${esc(b ? b.vigenciaDesde || '' : hoyISO())}"></label>
+                <label class="act-l">Vigencia Hasta<input id="oxf-b-has" type="date" value="${esc(b ? b.vigenciaHasta || '' : '')}"></label>
             </div>
             <p class="cierre-error" id="oxf-b-err"></p>
             <div class="cierre-acciones">
+                ${b ? '<button type="button" class="btn btn-outline" id="oxf-b-del" style="margin-right:auto;color:#b91c1c;border-color:#fca5a5;">Eliminar OC</button>' : ''}
                 <button type="button" class="btn btn-outline" id="oxf-b-no">Cancelar</button>
-                <button type="button" class="btn btn-primary" id="oxf-b-ok">Guardar presupuesto / OC</button>
+                <button type="button" class="btn btn-primary" id="oxf-b-ok">${b ? 'Guardar cambios' : 'Guardar presupuesto / OC'}</button>
             </div>`);
         ov.querySelector('#oxf-b-no').addEventListener('click', () => ov.remove());
+        const bDel = ov.querySelector('#oxf-b-del');
+        if (bDel && b) {
+            bDel.addEventListener('click', async () => {
+                ov.querySelector('#oxf-b-err').textContent = '';
+                if (!window.confirm(`¿Eliminar la OC / presupuesto "${b.numeroOC}"?`)) return;
+                bDel.disabled = true;
+                try {
+                    await eliminarPresupuesto(b.id);
+                    if (filtroPresId === b.id) filtroPresId = '';
+                    await cargarDatos();
+                    pintar();
+                    ov.remove();
+                    toast('Presupuesto eliminado', `OC ${b.numeroOC} eliminada.`, 'success');
+                } catch (e) {
+                    ov.querySelector('#oxf-b-err').textContent = e.message || String(e);
+                    bDel.disabled = false;
+                }
+            });
+        }
         ov.querySelector('#oxf-b-ok').addEventListener('click', async () => {
             const btn = ov.querySelector('#oxf-b-ok'); btn.disabled = true;
             ov.querySelector('#oxf-b-err').textContent = '';
             try {
                 const id = await guardarPresupuesto({
+                    id: b ? b.id : undefined,
+                    creadoEl: b ? b.creadoEl : undefined,
                     proveedorId: ov.querySelector('#oxf-b-prov').value,
                     numeroOC: ov.querySelector('#oxf-b-oc').value,
                     nombreContrato: ov.querySelector('#oxf-b-nom').value,
@@ -1944,7 +2288,7 @@
                 await cargarDatos();
                 pintar();
                 ov.remove();
-                toast('Presupuesto', 'Orden de compra / presupuesto guardado.', 'success');
+                toast('Presupuesto', b ? 'Presupuesto / OC actualizado.' : 'Orden de compra / presupuesto guardado.', 'success');
             } catch (e) {
                 ov.querySelector('#oxf-b-err').textContent = e.message || String(e);
                 btn.disabled = false;
@@ -2078,17 +2422,25 @@
             box.querySelectorAll('.oxf-item-row').forEach((row) => {
                 const idx = Number(row.dataset.i);
                 const sync = () => {
+                    const prev = itemsEstado[idx] || {};
+                    const nuevaDesc = row.querySelector('.oxf-it-desc').value.trim();
                     itemsEstado[idx] = {
+                        ...prev,
                         codigo: row.querySelector('.oxf-it-cod').value.trim(),
-                        descripcion: row.querySelector('.oxf-it-desc').value.trim(),
+                        descripcion: nuevaDesc,
                         cantidad: num(row.querySelector('.oxf-it-cant').value) || 1,
                         unidad: row.querySelector('.oxf-it-uni').value.trim() || 'UN',
                         valorUnitario: num(row.querySelector('.oxf-it-vu').value),
                         valorTotal: Math.round(num(row.querySelector('.oxf-it-vt').value))
                     };
+                    if (prev.descripcion !== nuevaDesc) {
+                        delete itemsEstado[idx].grupo;
+                        delete itemsEstado[idx].sublinea;
+                        bloquesRCEstado = [];
+                    }
                 };
                 row.querySelectorAll('input').forEach(inp => inp.addEventListener('input', sync));
-                row.querySelector('.oxf-it-del').addEventListener('click', () => { itemsEstado.splice(idx, 1); pintarItems(); });
+                row.querySelector('.oxf-it-del').addEventListener('click', () => { itemsEstado.splice(idx, 1); bloquesRCEstado = []; pintarItems(); });
             });
         }
 
@@ -2387,17 +2739,20 @@
         actualizarSimulador();
     }
 
-    /** Paso 4: Modal de Recepción Conforme (Parcial / Total, formato oficial Corporación + Ley 19.983). */
+    /** Paso 4: Modal de Recepción Conforme (Parcial / Total, fecha editable, formato oficial Corporación PDF + Word .docx). */
     function abrirModalRecepcionConforme(factura) {
         const rc = factura.recepcionConforme || {};
         const pv = proveedores.find(p => p.id === factura.proveedorId);
         const tipoActual = rc.tipoRecepcion === 'TOTAL' ? 'TOTAL' : 'PARCIAL';
         const encBase = (tp) => `Que se recibió conforme en forma ${tp === 'TOTAL' ? 'total' : 'parcial'} el producto, donde se recibió lo siguiente:`;
-        const bloquesIni = (Array.isArray(rc.bloquesRC) && rc.bloquesRC.length) ? rc.bloquesRC : construirBloquesRC(factura);
-        const docTipoTxt = factura.tipoDocumento === 'GUIA_DESPACHO' ? 'Guía de Despacho' : 'Factura';
+        const bloquesOriginales = construirBloquesRC(factura);
+        const bloquesIni = (Array.isArray(rc.bloquesRC) && rc.bloquesRC.length) ? rc.bloquesRC : bloquesOriginales;
+        const docTipoActual = rc.tipoDocumento || factura.tipoDocumento || 'FACTURA';
+        const docTipoTxt = docTipoActual === 'GUIA_DESPACHO' ? 'Guía de Despacho' : 'Factura';
+        const fechaProp = rc.fecha || factura.fechaEmision || hoyISO();
 
-        const ov = crearModal(`Recepción Conforme · ${docTipoTxt} N° ${factura.folio}`, `
-            <p class="cierre-hint">Proveedor: <b>${esc(pv ? pv.razonSocial : '—')}</b> (${esc(pv ? pv.rut : '—')}) · OC <b>${esc(factura.numeroOC || '—')}</b> · Total <b>${clp(factura.totalBruto)}</b></p>
+        const ov = crearModal(`${rc.emitida ? 'Editar acta de Recepción Conforme' : 'Recepción Conforme'} · ${docTipoTxt} N° ${factura.folio}`, `
+            <p class="cierre-hint">Proveedor: <b>${esc(pv ? pv.razonSocial : '—')}</b> (${esc(pv ? pv.rut : '—')}) · OC <b>${esc(factura.numeroOC || '—')}</b> · Total <b>${clp(factura.totalBruto)}</b>. Al guardar puedes descargar el acta actualizada en <b>PDF</b> y <b>Word (.docx)</b>.</p>
             <div class="oxf-form-grid">
                 <label class="act-l">Tipo de Recepción Conforme *
                     <select id="oxf-rc-tipo">
@@ -2405,30 +2760,56 @@
                         <option value="TOTAL"${tipoActual === 'TOTAL' ? ' selected' : ''}>Total (RECEPCIÓN CONFORME PRODUCTO O SERVICIO TOTAL)</option>
                     </select>
                 </label>
-                <label class="act-l">Fecha de Recepción Conforme *<input id="oxf-rc-fec" type="date" value="${esc(rc.fecha || hoyISO())}"></label>
+                <label class="act-l">Fecha de Recepción Conforme (editable) *
+                    <input id="oxf-rc-fec" type="date" value="${esc(fechaProp)}">
+                    <span class="oxf-sub" style="margin-top:4px;">
+                        ${factura.fechaEmision ? `<a href="#" id="oxf-rc-f-doc">Usar fecha documento (${esc(fechaCL(factura.fechaEmision))})</a> · ` : ''}
+                        <a href="#" id="oxf-rc-f-hoy">Usar hoy (${esc(fechaCL(hoyISO()))})</a>
+                    </span>
+                </label>
+                <label class="act-l">Documento asociado
+                    <select id="oxf-rc-tdoc">
+                        <option value="FACTURA"${docTipoActual !== 'GUIA_DESPACHO' ? ' selected' : ''}>Factura Electrónica</option>
+                        <option value="GUIA_DESPACHO"${docTipoActual === 'GUIA_DESPACHO' ? ' selected' : ''}>Guía de Despacho Electrónica</option>
+                    </select>
+                </label>
+                <label class="act-l">N° Documento<input id="oxf-rc-ndoc" value="${esc(rc.numeroDoc || factura.folio || '')}"></label>
                 <label class="act-l oxf-span2">Encabezado del cuadro (editable)<input id="oxf-rc-enc" value="${esc(rc.encabezado || encBase(tipoActual))}"></label>
-                <label class="act-l oxf-span2">Detalle replicado de la factura/guía (editable — «• » inicia viñeta; 2 espacios al inicio = sublínea)
-                    <textarea id="oxf-rc-det" rows="7" style="font-family:monospace;font-size:.86rem;">${esc(bloquesRCTexto(bloquesIni))}</textarea>
+                <label class="act-l oxf-span2">
+                    <span style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <span>Detalle replicado de la factura/guía (editable — «• » inicia viñeta; 2 espacios = sublínea)</span>
+                        <button type="button" class="btn btn-outline btn-sm" id="oxf-rc-restaurar">Restaurar descripción de factura</button>
+                    </span>
+                    <textarea id="oxf-rc-det" rows="7" style="font-family:monospace;font-size:.86rem;margin-top:4px;">${esc(bloquesRCTexto(bloquesIni))}</textarea>
                 </label>
                 <label class="act-l">Contraparte Técnica (firma del acta) *<input id="oxf-rc-ct" value="${esc(rc.contraparte || CONTRAPARTE_BASE)}"></label>
                 <label class="act-l">Recinto / Establecimiento<input id="oxf-rc-rec" value="${esc(rc.recinto || RECINTO_BASE)}"></label>
-                <label class="act-l">RUT Receptor (opcional para acta extendida)<input id="oxf-rc-rut" value="${esc(rc.receptorRut || '')}" placeholder="Ej: 12.345.678-9"></label>
+                <label class="act-l">RUT Receptor (opcional acta saldo OC)<input id="oxf-rc-rut" value="${esc(rc.receptorRut || '')}" placeholder="Ej: 12.345.678-9"></label>
                 <label class="act-l">Cargo Receptor<input id="oxf-rc-car" value="${esc(rc.receptorCargo || 'Directora Técnica / Contraparte Técnica')}"></label>
                 <label class="act-l oxf-span2">Observaciones (opcional)<textarea id="oxf-rc-obs" rows="2" placeholder="Observaciones adicionales…">${esc(rc.observaciones || '')}</textarea></label>
             </div>
-            <label class="soc-toggle"><input type="checkbox" id="oxf-rc-firma"${rc.conFirma !== false ? ' checked' : ''}> Incluir firma y timbre oficial de la Contraparte Técnica en el PDF</label>
+            <label class="soc-toggle"><input type="checkbox" id="oxf-rc-firma"${rc.conFirma !== false ? ' checked' : ''}> Incluir firma y timbre oficial de la Contraparte Técnica en PDF y Word</label>
             <p class="cierre-error" id="oxf-rc-err"></p>
             <div class="cierre-acciones">
                 <button type="button" class="btn btn-outline" id="oxf-rc-no">Cancelar</button>
-                <button type="button" class="btn btn-primary" id="oxf-rc-ok">Guardar y Generar RC</button>
+                <button type="button" class="btn btn-primary" id="oxf-rc-ok">Guardar acta (PDF y Word)</button>
             </div>`, 'oxf-modal-xl');
 
         const selTipo = ov.querySelector('#oxf-rc-tipo');
         const inpEnc = ov.querySelector('#oxf-rc-enc');
+        const inpFec = ov.querySelector('#oxf-rc-fec');
         selTipo.addEventListener('change', () => {
             if (/^Que se recibió conforme en forma (parcial|total)/i.test(inpEnc.value.trim())) {
                 inpEnc.value = encBase(selTipo.value);
             }
+        });
+        const aDoc = ov.querySelector('#oxf-rc-f-doc');
+        if (aDoc) aDoc.addEventListener('click', (e) => { e.preventDefault(); inpFec.value = factura.fechaEmision; });
+        const aHoy = ov.querySelector('#oxf-rc-f-hoy');
+        if (aHoy) aHoy.addEventListener('click', (e) => { e.preventDefault(); inpFec.value = hoyISO(); });
+        ov.querySelector('#oxf-rc-restaurar').addEventListener('click', () => {
+            ov.querySelector('#oxf-rc-det').value = bloquesRCTexto(bloquesOriginales);
+            toast('Restaurado', 'Se copió la descripción original de la factura/guía.', 'info');
         });
 
         ov.querySelector('#oxf-rc-no').addEventListener('click', () => ov.remove());
@@ -2438,7 +2819,9 @@
             try {
                 const nuevaRC = await registrarRecepcionConforme(factura.id, {
                     tipoRecepcion: selTipo.value,
-                    fecha: ov.querySelector('#oxf-rc-fec').value,
+                    fecha: inpFec.value,
+                    tipoDocumento: ov.querySelector('#oxf-rc-tdoc').value,
+                    numeroDoc: ov.querySelector('#oxf-rc-ndoc').value,
                     encabezado: inpEnc.value,
                     detalleTexto: ov.querySelector('#oxf-rc-det').value,
                     contraparte: ov.querySelector('#oxf-rc-ct').value,
@@ -2452,7 +2835,7 @@
                 await cargarDatos();
                 pintar();
                 ov.remove();
-                toast('Recepción Conforme', `RC ${nuevaRC.tipoRecepcion} (${nuevaRC.numeroActa}) registrada.`, 'success');
+                toast('Acta actualizada', `RC ${nuevaRC.tipoRecepcion} (${nuevaRC.numeroActa}) lista en PDF y Word.`, 'success');
                 const actFac = facturas.find(x => x.id === factura.id);
                 if (actFac) abrirModalVistaActaPDF(actFac);
             } catch (e) {
@@ -2462,27 +2845,49 @@
         });
     }
 
-    /** Vista previa limpia (fondo blanco forzado) + Descargar RC Oficial Corporación (PDF) + Acta detallada Ley 19.983. */
+    /** Vista previa limpia (fondo blanco forzado) mostrando RC Oficial Corporación (PDF y Word .docx) + Acta detallada Ley 19.983. */
     function abrirModalVistaActaPDF(factura) {
         const pv = proveedores.find(p => p.id === factura.proveedorId);
         const pres = presupuestos.find(b => b.id === factura.presupuestoId) || null;
         const estPres = pres ? calcularEstadoPresupuesto(pres, facturas) : null;
-        const htmlHoja = construirHtmlActaRC(factura, pv, pres, estPres);
+        const htmlOficial = construirHtmlRCOficial(factura, pv);
+        const htmlDetallada = construirHtmlActaRC(factura, pv, pres, estPres);
         const rc = factura.recepcionConforme || {};
+        let vistaActual = 'oficial';
 
         const ov = crearModal(`Recepción Conforme · Folio ${factura.folio}`, `
-            ${!rc.emitida ? '<div class="oxf-alert-warn">Este documento aún no tiene Recepción Conforme emitida. Puedes emitirla primero para fijar Parcial/Total, detalle exacto y correlativo RCO.</div>' : ''}
-            <div class="oxf-acta-preview-scroll">${htmlHoja}</div>
+            ${!rc.emitida ? '<div class="oxf-alert-warn">Este documento aún no tiene Recepción Conforme emitida. Puedes editarla ahora para fijar fecha, Parcial/Total y detalle exacto.</div>' : ''}
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                <div class="oxf-pills">
+                    <button type="button" class="oxf-pill on" data-v="oficial">RC Oficial Corporación (mismo formato)</button>
+                    <button type="button" class="oxf-pill" data-v="detallada">Acta Detallada con Saldo OC (Ley 19.983)</button>
+                </div>
+                <button type="button" class="btn btn-outline btn-sm" id="oxf-ap-editar">Editar acta / fecha</button>
+            </div>
+            <div class="oxf-acta-preview-scroll" id="oxf-ap-cont">${htmlOficial}</div>
             <div class="cierre-acciones">
                 <button type="button" class="btn btn-outline" id="oxf-ap-no">Cerrar</button>
-                <button type="button" class="btn btn-outline" id="oxf-ap-print">Imprimir Vista</button>
-                <button type="button" class="btn btn-outline" id="oxf-ap-pdf">Acta Detallada Saldo OC (PDF)</button>
-                <button type="button" class="btn btn-primary" id="oxf-ap-rc-oficial">Descargar RC Oficial Corporación (PDF)</button>
+                <button type="button" class="btn btn-outline" id="oxf-ap-print">Imprimir</button>
+                <button type="button" class="btn btn-outline" id="oxf-ap-pdf">Saldo OC (PDF)</button>
+                <button type="button" class="btn btn-outline" id="oxf-ap-rc-word">Descargar Word (.docx)</button>
+                <button type="button" class="btn btn-primary" id="oxf-ap-rc-oficial">Descargar PDF Oficial</button>
             </div>`, 'oxf-modal-xl');
 
+        ov.querySelectorAll('.oxf-pill').forEach(b => b.addEventListener('click', () => {
+            vistaActual = b.dataset.v;
+            ov.querySelectorAll('.oxf-pill').forEach(x => x.classList.toggle('on', x.dataset.v === vistaActual));
+            ov.querySelector('#oxf-ap-cont').innerHTML = vistaActual === 'oficial' ? htmlOficial : htmlDetallada;
+        }));
+        ov.querySelector('#oxf-ap-editar').addEventListener('click', () => { ov.remove(); abrirModalRecepcionConforme(factura); });
         ov.querySelector('#oxf-ap-no').addEventListener('click', () => ov.remove());
-        ov.querySelector('#oxf-ap-print').addEventListener('click', () => imprimirActaRC(htmlHoja, `Acta RC ${rc.numeroActa || factura.folio}`));
+        ov.querySelector('#oxf-ap-print').addEventListener('click', () => imprimirActaRC(vistaActual === 'oficial' ? htmlOficial : htmlDetallada, `RC ${factura.numeroOC || factura.folio}`));
         ov.querySelector('#oxf-ap-pdf').addEventListener('click', () => descargarActaRCPDF(factura, pv, pres, estPres));
+        ov.querySelector('#oxf-ap-rc-word').addEventListener('click', async () => {
+            const b = ov.querySelector('#oxf-ap-rc-word'); b.disabled = true;
+            try { await descargarRCOficialCorporacionWord(factura, pv); }
+            catch (e) { toast('Error Word', e.message || String(e), 'error'); }
+            finally { b.disabled = false; }
+        });
         ov.querySelector('#oxf-ap-rc-oficial').addEventListener('click', async () => {
             const b = ov.querySelector('#oxf-ap-rc-oficial'); b.disabled = true;
             try { await descargarRCOficialCorporacionPDF(factura, pv); }
@@ -2522,9 +2927,12 @@
         detectarPeriodoServicio,
         fechaAISO,
         validarFactura,
+        validarEliminacionProveedor,
         calcularEstadoPresupuesto,
         simularImputacion,
         datosSemillaIndura,
+        construirHtmlRCOficial,
+        construirCuerpoWordRC,
         construirHtmlActaRC,
         fmtRut,
         RECINTO_BASE,

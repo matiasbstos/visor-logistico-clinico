@@ -1871,3 +1871,11 @@ Caso del usuario: al subir un PDF escaneado sin clave `ANTHROPIC_API_KEY` en Goo
 - **Recepción Conforme oficial idéntica a `RC1298355-794-AG25.pdf` (`descargarRCOficialCorporacionPDF`):**
   - El modal de Recepción Conforme pregunta **Parcial / Total**, prellena el detalle replicado de la factura o guía (viñetas y sublíneas editables) y genera con `pdf-lib` el PDF oficial de la **Corporación Municipal de Melipilla** (`assets/logo-corpo-melipilla.jpg` + firma y timbre `assets/firma-contraparte-mariel.png` de `Mariel Quintanilla Lizana`), conservando además el Acta Detallada con saldo OC (Ley 19.983).
   - En el modal de ingreso de documento se añade selector `Factura / Guía de Despacho`, creación rápida de proveedor detectado y opción para abrir la Recepción Conforme inmediatamente al guardar.
+
+
+### 4.316 Gestión completa de Proveedores, Presupuestos y Actas RC (PDF + Word `.docx` + fecha editable) en Oxígeno (v21.264)
+- **Proveedores (`abrirModalGestionProveedores`, `abrirModalProveedor`, `eliminarProveedor`, `validarEliminacionProveedor`):** modal administrador para crear, editar y eliminar proveedores; impide borrar proveedores con presupuestos/OC o facturas asociadas (indicando cuántos registros dependen de él y sugiriendo pasarlo a `HISTORICO`).
+- **Presupuestos / OC (`abrirModalPresupuesto`, `eliminarPresupuesto`):** botón **«Editar OC / Presupuesto»** en la tarjeta presupuestaria para modificar tope, tipo de monto, concepto, vigencia, estado (`ACTIVO`/`CERRADO`) o eliminar si no tiene documentos vinculados.
+- **Acta de Recepción Conforme en PDF y Word `.docx` (`construirCuerpoWordRC`, `descargarRCOficialCorporacionWord`):** replica la esencia de `Seguimiento de OC` (`recepciones-conformes.js` + `acta-documentos.js`):
+  - Botones directos **Editar acta**, **PDF**, **Word**, **Ver** y **Eliminar** en cada fila.
+  - **Fecha editable** con atajos rápidos (*Usar fecha del documento* y *Usar hoy*), tipo **Parcial / Total**, documento/N°, contraparte técnica, firma/timbre oficial (`assets/firma-contraparte-mariel.png` + `assets/logo-corpo-melipilla.jpg`), detalle replicado editable con botón **«Restaurar descripción de factura»**, y descarga inmediata en **PDF** y **Word (`.docx`)**.

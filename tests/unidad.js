@@ -789,3 +789,58 @@ Ne882
   const parsedBloq = F.parsearTextoBloquesRC(txtBloq);
   assert.deepStrictEqual(parsedBloq, rInd.bloquesRC);
 });
+
+t('v21.263: oxigeno-facturacion — PDF horizontal Indura replica descripción exacta en vista y PDF RC Oficial', () => {
+  const F = require('../oxigeno-facturacion.js');
+  // Formato horizontal exacto que devuelve PDF.js al reconstruir filas por coordenada Y
+  const txtPdfJs = `Indura S.A. R.U.T 76.150.343-K
+FACTURA ELECTRÓNICA N° 2074906
+Fecha de Emisión 19.11.2026
+Fecha Vencimiento 19.12.2026
+O de Compra No: 1298355-493-AG25 Factura SAP 437137402
+Código Descripción Cantidad/Unidad Valor Unitario POR UM Valor Total
+1519 RG_RENTAL CILINDRO MEDICAL_=>200B
+Arriendo Entre 2 y 4 meses 151 dias 517 1/dia 78.067
+Arriendo Más de 4 meses 141 dias 517 1/dia 72.897
+112596 RG_RENTAL CILINDRO_<200B
+Arriendo Entre 2 y 4 meses 90 dias 517 1/dia 46.530
+Arriendo Más de 4 meses 31 dias 517 1/dia 16.027
+Nombre: SUBTOTAL 213.521
+IVA 19,00 % 40.569
+TOTAL 254.090
+Reemplaza Factura: 2048700
+Servicios de Arriendo Período: Septiembre 2026`;
+  const r = F.parsearTextoFacturaOcr(txtPdfJs);
+  assert.strictEqual(r.items.length, 4);
+  assert.strictEqual(r.items[0].cantidad, 151); assert.strictEqual(r.items[0].valorTotal, 78067);
+  assert.strictEqual(r.items[1].cantidad, 141); assert.strictEqual(r.items[1].valorTotal, 72897);
+  assert.strictEqual(r.items[2].cantidad, 90); assert.strictEqual(r.items[2].valorTotal, 46530);
+  assert.strictEqual(r.items[3].cantidad, 31); assert.strictEqual(r.items[3].valorTotal, 16027);
+  assert.deepStrictEqual(r.bloquesRC, [
+    { titulo: 'RG_RENTAL CILINDRO MEDICAL_=>200B', sublineas: ['Arriendo Entre 2 y 4 meses', 'Arriendo Más de 4 meses'] },
+    { titulo: 'RG_RENTAL CILINDRO_<200B', sublineas: ['Arriendo Entre 2 y 4 meses', 'Arriendo Más de 4 meses'] }
+  ]);
+  const htmlOf = F.construirHtmlRCOficial({ ...r, recepcionConforme: { tipoRecepcion: 'PARCIAL', fecha: '2026-11-25', contraparte: F.CONTRAPARTE_BASE } }, { razonSocial: 'INDURA', rut: '76.150.343-K' });
+  assert.ok(htmlOf.includes('RECEPCIÓN CONFORME PRODUCTO O SERVICIO PARCIAL'));
+  assert.ok(htmlOf.includes('RG_RENTAL CILINDRO MEDICAL_=&gt;200B') && htmlOf.includes('Arriendo Entre 2 y 4 meses') && htmlOf.includes('RG_RENTAL CILINDRO_&lt;200B'));
+});
+
+t('v21.264: oxigeno-facturacion — eliminar proveedor bloquea con vínculos y Word (.docx) replica detalle y fecha editable', () => {
+  const F = require('../oxigeno-facturacion.js');
+  const sem = F.datosSemillaIndura();
+  const blq = F.validarEliminacionProveedor(sem.proveedor.id, [sem.presupuesto], sem.facturas);
+  assert.strictEqual(blq.ok, false);
+  assert.strictEqual(blq.nPres, 1);
+  assert.strictEqual(blq.nFact, 3);
+  const libre = F.validarEliminacionProveedor('prov-sin-uso', [sem.presupuesto], sem.facturas);
+  assert.strictEqual(libre.ok, true);
+  // Cuerpo Word (.docx) usando helpers equivalentes a SAR_ActaDoc
+  const ADMock = { run: (t) => `<r>${t}</r>`, par: (c) => `<p>${c}</p>`, borde: '<b/>', celda: (_, c) => `<tc>${c}</tc>` };
+  const fac = { ...sem.facturas[2], recepcionConforme: { emitida: true, tipoRecepcion: 'PARCIAL', fecha: '2026-11-24', contraparte: 'Mariel Quintanilla Lizana', bloquesRC: sem.facturas[2].bloquesRC } };
+  const xmlWord = F.construirCuerpoWordRC(fac, sem.proveedor, null, null, ADMock).join('\n');
+  assert.ok(xmlWord.includes('RECEPCIÓN CONFORME PRODUCTO O SERVICIO PARCIAL'));
+  assert.ok(xmlWord.includes('24/11/2026'));
+  assert.ok(xmlWord.includes('RG_RENTAL CILINDRO MEDICAL_=>200B'));
+  assert.ok(xmlWord.includes('Arriendo Entre 2 y 4 meses'));
+  assert.ok(xmlWord.includes('Mariel Quintanilla Lizana'));
+});

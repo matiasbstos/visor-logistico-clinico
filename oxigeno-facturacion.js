@@ -236,7 +236,7 @@
         const facturaSAP = mSap ? mSap[1].trim() : '';
         const mReemp = raw.match(/Reemplaza\s+Factura\s*[:#]?\s*(\d{4,12})/i);
         const reemplazaFactura = mReemp ? mReemp[1].replace(/^0+(?=\d)/, '') : '';
-        const mPer = raw.match(/Servicios\s+de\s+Arriendo\s+Per[ií]odo\s*[:#]?\s*([A-Za-zÁÉÍÓÚáéíóú]+\s+20\d{2})/i);
+        const mPer = raw.match(/(?:Servicios\s+de\s+)?Arriendo\s+Per[ií]odo\s*[:#]?\s*([A-Za-zÁÉÍÓÚáéíóú]+\s+20\d{2})/i);
         const periodoServicio = detectarPeriodoServicio(mPer ? mPer[1] : raw, fechaEmision);
 
         const montoPor = (re) => { const m = raw.match(re); return m ? Math.round(num(m[1])) : 0; };
@@ -244,14 +244,15 @@
         const iva = montoPor(/IVA\s*19(?:[.,]00)?\s*%?\s*[:$]?\s*\$?\s*([\d.,]{3,15})/i);
         const totalBruto = montoPor(/(?:^|\n)\s*TOTAL\s*[:$]?\s*\$?\s*([\d.,]{3,15})/im) || (neto + iva);
 
-        // Extraer bloques RG_RENTAL y sus sublíneas ("Arriendo Entre 2 y 4 meses", "Arriendo Más de 4 meses", etc.)
+        // Extraer bloques RG_RENTAL (soporta tanto formato con sublíneas "Arriendo Entre..." como filas planas con EA)
         const items = [];
         const bloquesRC = [];
         const normTituloIndura = (t) => String(t || '')
             .replace(/RG[_ -]?RENTAL/i, 'RG_RENTAL')
             .replace(/MEDICAL_?\s*(?:=>|⇒|→|->|>=|=)\s*200[B8]/i, 'MEDICAL_=>200B')
             .replace(/CILINDRO_?\s*<\s*200[B8]/i, 'CILINDRO_<200B')
-            .replace(/\s+\d+\s+d[ií]as[\s\S]*$/i, '')
+            .replace(/\s+\d+\s*(?:d[ií]as?|EA|UN|CL)[\s\S]*$/i, '')
+            .replace(/\s+\d[\d.,]*\s+1\s*\/\s*(?:d[ií]a|EA|UN)[\s\S]*$/i, '')
             .replace(/\s+/g, ' ')
             .trim();
         const idxIni = raw.search(/Valor\s+Total/i);
@@ -263,7 +264,9 @@
         const posGrupos = [];
         let mg;
         while ((mg = reGrupo.exec(zonaDet)) !== null) {
-            const tituloLimpio = normTituloIndura(mg[2]);
+            const lineaRaw = mg[2];
+            const tituloLimpio = normTituloIndura(lineaRaw);
+            const restoLinea = lineaRaw.replace(/^RG[_ -]?RENTAL[^\d]*(?:=>|⇒|→|->|>=|=|<)?\s*200[B8]\s*/i, '');
             let cod = (mg[1] || '').trim();
             if (!cod) {
                 const antes = zonaDet.slice(Math.max(0, mg.index - 24), mg.index).match(/\b(\d{4,6})\b\s*$/);
@@ -271,11 +274,11 @@
                 else if (/MEDICAL_=>200B/i.test(tituloLimpio)) cod = '1519';
                 else if (/CILINDRO_<200B/i.test(tituloLimpio)) cod = '112596';
             }
-            posGrupos.push({ codigo: cod, titulo: tituloLimpio, idx: mg.index, finCab: mg.index + mg[0].length });
+            posGrupos.push({ codigo: cod, titulo: tituloLimpio, restoLinea, idx: mg.index, finCab: mg.index + mg[0].length });
         }
 
         const extraerTripleLinea = (linea) => {
-            const limpia = String(linea || '').replace(/1\s*\/\s*d[ií]a/gi, ' ').replace(/\bd[ií]as?\b/gi, ' ').replace(/[|¦$]/g, ' ');
+            const limpia = String(linea || '').replace(/1\s*\/\s*(?:d[ií]a|EA|UN|CL)/gi, ' ').replace(/\b(?:d[ií]as?|EA|UN|CL)\b/gi, ' ').replace(/[|¦$]/g, ' ');
             const ns = (limpia.match(/\d{1,3}(?:\.\d{3})+|\d+/g) || []).map(x => Math.round(num(x))).filter(x => x > 0);
             if (ns.length >= 3) {
                 for (let i = 0; i + 2 < ns.length; i++) {
@@ -305,9 +308,9 @@
                 triplesFila.push(extraerTripleLinea(ms[2]));
             }
             const k = sublineas.length;
-            bloquesRC.push({ titulo: g.titulo, sublineas: sublineas.slice() });
 
             if (k > 0) {
+                bloquesRC.push({ titulo: g.titulo, sublineas: sublineas.slice() });
                 if (triplesFila.some(Boolean)) {
                     for (let j = 0; j < k; j++) {
                         const tr = triplesFila[j];
@@ -331,6 +334,14 @@
                         sublineas.forEach(sl => items.push({ codigo: g.codigo, grupo: g.titulo, sublinea: sl, descripcion: `${g.titulo} — ${sl}`, cantidad: 1, unidad: 'dias', valorUnitario: 0, valorTotal: 0 }));
                     }
                 }
+            } else {
+                // Formato plano de Indura (ej. Folio 2074903: "1519 RG_RENTAL CILINDRO MEDICAL_=>200B 175 EA 517 1/EA 90.475")
+                // Replica cada línea tal cual con su cantidad exacta (sin agrupar ni sumar descripciones).
+                const tr = extraerTripleLinea(g.restoLinea) || extraerTripleLinea(seg);
+                const uni = /(?:^|[^A-Za-z])EA\b/i.test(g.restoLinea + ' ' + seg) ? 'EA' : 'dias';
+                const cant = tr ? tr.c : 1;
+                items.push({ codigo: g.codigo, descripcion: g.titulo, cantidad: cant, unidad: uni, valorUnitario: tr ? tr.vu : 0, valorTotal: tr ? tr.vt : 0 });
+                bloquesRC.push({ titulo: `${g.titulo} (CANTIDAD:${cant})`, sublineas: [] });
             }
         });
 

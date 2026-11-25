@@ -918,3 +918,48 @@ t('v21.269: oxigeno-facturacion — derivación voluntaria a Caja Chica (100% o 
   assert.strictEqual(splitOver.impOC, 61024);
   assert.strictEqual(splitOver.impCC, 193066);
 });
+
+t('v21.270: oxigeno-facturacion — Indura Folio 2074903 formato plano EA (5 filas = 620 EA = $320.540 neto)', () => {
+  const F = require('../oxigeno-facturacion.js');
+  const txt2074903 = `Indura S.A. R.U.T 76.150.343-K
+FACTURA ELECTRÓNICA N° 2074903
+Fecha de Emisión
+19.11.2026
+Fecha Vencimiento
+19.12.2026
+O de Compra No: 1298355-493-AG25
+Factura SAP
+437137409
+Código Descripción Cantidad/Unidad Valor Unitario POR UM Valor Total
+1519 RG_RENTAL CILINDRO MEDICAL_=>200B 175 EA 517 1/EA 90.475
+1519 RG_RENTAL CILINDRO MEDICAL_=>200B 166 EA 517 1/EA 85.822
+1519 RG_RENTAL CILINDRO MEDICAL_=>200B 31 EA 517 1/EA 16.027
+112596 RG_RENTAL CILINDRO_<200B 150 EA 517 1/EA 77.550
+112596 RG_RENTAL CILINDRO_<200B 98 EA 517 1/EA 50.666
+Nombre: SUBTOTAL 320.540
+IVA 19,00 % 60.903
+TOTAL 381.443
+OBSERVACIONES:
+Reemplaza Factura: 2051884
+Arriendo Período: Julio 2026`;
+  const r = F.parsearTextoFacturaOcr(txt2074903);
+  assert.strictEqual(r.folio, '2074903');
+  assert.strictEqual(r.facturaSAP, '437137409');
+  assert.strictEqual(r.reemplazaFactura, '2051884');
+  assert.strictEqual(r.periodoServicio, '2026-07');
+  assert.strictEqual(r.neto, 320540);
+  assert.strictEqual(r.iva, 60903);
+  assert.strictEqual(r.totalBruto, 381443);
+  assert.strictEqual(r.items.length, 5);
+  assert.strictEqual(r.items.reduce((s, i) => s + i.cantidad, 0), 620);
+  assert.strictEqual(r.items.reduce((s, i) => s + i.valorTotal, 0), 320540);
+  assert.strictEqual(r.items[0].codigo, '1519'); assert.strictEqual(r.items[0].unidad, 'EA'); assert.strictEqual(r.items[0].cantidad, 175);
+  assert.strictEqual(r.items[4].codigo, '112596'); assert.strictEqual(r.items[4].cantidad, 98); assert.strictEqual(r.items[4].valorTotal, 50666);
+  assert.deepStrictEqual(r.bloquesRC, [
+    { titulo: 'RG_RENTAL CILINDRO MEDICAL_=>200B (CANTIDAD:175)', sublineas: [] },
+    { titulo: 'RG_RENTAL CILINDRO MEDICAL_=>200B (CANTIDAD:166)', sublineas: [] },
+    { titulo: 'RG_RENTAL CILINDRO MEDICAL_=>200B (CANTIDAD:31)', sublineas: [] },
+    { titulo: 'RG_RENTAL CILINDRO_<200B (CANTIDAD:150)', sublineas: [] },
+    { titulo: 'RG_RENTAL CILINDRO_<200B (CANTIDAD:98)', sublineas: [] }
+  ]);
+});

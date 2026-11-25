@@ -894,3 +894,27 @@ TOTAL 254.090`;
     { titulo: 'RG_RENTAL CILINDRO_<200B', sublineas: ['Arriendo Entre 2 y 4 meses', 'Arriendo Más de 4 meses'] }
   ]);
 });
+
+t('v21.269: oxigeno-facturacion — derivación voluntaria a Caja Chica (100% o dividida) aun con saldo a favor en OC', () => {
+  const F = require('../oxigeno-facturacion.js');
+  const simConSaldo = F.simularImputacion(823910, 254090, 0);
+  assert.strictEqual(simConSaldo.haySobregiro, false);
+  // 1) Derivación voluntaria 100% a Caja Chica sin tocar el saldo OC
+  const cc100 = F.calcularDistribucionFinanciamiento(simConSaldo, 'CC_100', null);
+  assert.strictEqual(cc100.fuente, 'CAJA_CHICA');
+  assert.strictEqual(cc100.impOC, 0);
+  assert.strictEqual(cc100.impCC, 254090);
+  assert.strictEqual(cc100.saldoFinalOC, 823910);
+  // 2) División voluntaria (ej. $100.000 a OC y $154.090 a Caja Chica)
+  const split = F.calcularDistribucionFinanciamiento(simConSaldo, 'SPLIT_CC', 100000);
+  assert.strictEqual(split.fuente, 'CAJA_CHICA');
+  assert.strictEqual(split.impOC, 100000);
+  assert.strictEqual(split.impCC, 154090);
+  assert.strictEqual(split.saldoFinalOC, 723910);
+  // 3) En sobregiro, OC_100 queda bloqueado
+  const simOver = F.simularImputacion(61024, 254090, 0);
+  assert.strictEqual(F.calcularDistribucionFinanciamiento(simOver, 'OC_100', null).bloqueado, true);
+  const splitOver = F.calcularDistribucionFinanciamiento(simOver, 'SPLIT_CC', null);
+  assert.strictEqual(splitOver.impOC, 61024);
+  assert.strictEqual(splitOver.impCC, 193066);
+});

@@ -746,6 +746,24 @@
         return { saldoActual: saldo, montoFactura: monto, saldoProyectado, haySobregiro, montoSobregiro, sugeridoOC, sugeridoCajaChica };
     }
 
+    /** Calcula distribución exacta OC vs Caja Chica según modalidad (soporta derivación voluntaria aun con saldo a favor). */
+    function calcularDistribucionFinanciamiento(sim, modo, montoOCManual) {
+        const total = Math.max(0, Math.round(num(sim && sim.montoFactura)));
+        const saldo = Math.round(num(sim && sim.saldoActual));
+        if (modo === 'CC_100') {
+            return { fuente: 'CAJA_CHICA', impOC: 0, impCC: total, saldoFinalOC: saldo, bloqueado: false };
+        }
+        if (modo === 'SPLIT_CC') {
+            const topeOC = Math.max(0, Math.min(total, saldo));
+            const rawOC = montoOCManual != null && montoOCManual !== '' ? Math.round(num(montoOCManual)) : Math.round(num(sim && sim.sugeridoOC));
+            const impOC = Math.max(0, Math.min(topeOC, rawOC));
+            const impCC = Math.max(0, total - impOC);
+            return { fuente: impCC > 0 ? 'CAJA_CHICA' : 'PRESUPUESTO_OC', impOC, impCC, saldoFinalOC: saldo - impOC, bloqueado: false };
+        }
+        const bloqueado = !!(sim && sim.haySobregiro);
+        return { fuente: 'PRESUPUESTO_OC', impOC: total, impCC: 0, saldoFinalOC: saldo - total, bloqueado };
+    }
+
     /** Datos de control reales de Indura S.A. (Paso 5: Semilla / Verificación). */
     function datosSemillaIndura() {
         const proveedor = {
@@ -1028,6 +1046,39 @@
         const pv = fac ? proveedores.find(p => p.id === fac.proveedorId) : null;
         await f.deleteDoc(f.doc(f.collection(d, 'oxigeno_facturas'), id));
         await registrarEventoContable('OXIGENO_FACTURA', fac ? fac.folio : id, `OXÍGENO · ${fac && fac.tipoDocumento === 'GUIA_DESPACHO' ? 'GUÍA' : 'FACTURA'} ${fac ? fac.folio : id}`, `Documento eliminado: Folio ${fac ? fac.folio : id}${fac && fac.recepcionConforme && fac.recepcionConforme.numeroActa ? ' · Acta ' + fac.recepcionConforme.numeroActa : ''} (${fac ? clp(fac.totalBruto) : ''}).`, { proveedor: pv ? pv.razonSocial : '', numeroOC: fac ? fac.numeroOC : '', monto: fac ? fac.totalBruto : 0, accion: 'ELIMINACION' });
+    }
+
+    /** Cambia la fuente de financiamiento (OC ↔ Caja Chica / Mixto) de una factura ya ingresada y lo deja en la bitácora contable. */
+    async function actualizarFinanciamientoFactura(facturaId, datos) {
+        const f = fs(), d = db();
+        const fac = facturas.find(x => x.id === facturaId);
+        if (!fac) throw new Error('El documento ya no existe.');
+        const pres = presupuestos.find(b => b.id === fac.presupuestoId) || null;
+        const pv = proveedores.find(p => p.id === fac.proveedorId);
+
+        if (datos.fuente === 'CAJA_CHICA' && !String(datos.motivoCajaChica || '').trim()) {
+            throw new Error('Indica el motivo o trazabilidad para derivar a Caja Chica.');
+        }
+        if (pres && datos.impOC > 0) {
+            const estSinEsta = calcularEstadoPresupuesto(pres, facturas.filter(x => x.id !== fac.id));
+            if (estSinEsta.saldoDisponible - datos.impOC < 0) {
+                throw new Error(`SOBREGIRO DETECTADO: el saldo disponible en OC ${pres.numeroOC} es ${clp(estSinEsta.saldoDisponible)} y estás intentando imputar ${clp(datos.impOC)}.`);
+            }
+        }
+        await f.updateDoc(f.doc(f.collection(d, 'oxigeno_facturas'), facturaId), {
+            fuenteFinanciamiento: datos.fuente,
+            montoImputadoOC: Math.round(num(datos.impOC)),
+            montoCajaChica: Math.round(num(datos.impCC)),
+            motivoCajaChica: String(datos.motivoCajaChica || '').trim(),
+            actualizadoEl: f.serverTimestamp()
+        });
+        await registrarEventoContable(
+            'OXIGENO_FACTURA',
+            fac.folio,
+            `OXÍGENO · CAMBIO FINANCIAMIENTO ${fac.folio}`,
+            `Cambio de financiamiento Folio ${fac.folio} (${pv ? pv.razonSocial : ''}): ahora ${datos.fuente} (OC ${clp(datos.impOC)} / Caja Chica ${clp(datos.impCC)})${datos.motivoCajaChica ? ' · Motivo: ' + datos.motivoCajaChica : ''}.`,
+            { proveedor: pv ? pv.razonSocial : '', numeroOC: fac.numeroOC || '', monto: fac.totalBruto || 0, accion: 'CAMBIO_FINANCIAMIENTO' }
+        );
     }
 
     let storageNoDisponible = false;
@@ -2144,7 +2195,12 @@
                                 <td>${esc(fmtPeriodo(fac.periodoServicio))}<small class="oxf-sub">${esc(fechaCL(fac.fechaEmision))}</small></td>
                                 <td><span class="oxf-badge oxf-b-tipo">${esc(fac.tipoServicio || 'ARRIENDO')}</span></td>
                                 <td>${fac.reemplazaFactura ? `<code>${esc(fac.reemplazaFactura)}</code>` : '—'}</td>
-                                <td>${fuenteBadge}${fac.motivoCajaChica ? `<small class="oxf-sub" title="${esc(fac.motivoCajaChica)}">${esc(fac.motivoCajaChica.slice(0, 38))}</small>` : ''}</td>
+                                <td>
+                                    <button type="button" class="oxf-btn-fin" data-id="${esc(fac.id)}" title="Clic para cambiar entre Presupuesto OC y Caja Chica" style="background:none;border:0;padding:0;cursor:pointer;text-align:left;">
+                                        ${fuenteBadge} <span style="font-size:.72rem;color:#64748b;">✎</span>
+                                    </button>
+                                    ${fac.motivoCajaChica ? `<small class="oxf-sub" title="${esc(fac.motivoCajaChica)}">${esc(fac.motivoCajaChica.slice(0, 38))}</small>` : ''}
+                                </td>
                                 <td class="num"><b>${clp(fac.totalBruto)}</b><small class="oxf-sub">Neto ${clp(fac.neto)} · IVA ${clp(fac.iva)}</small></td>
                                 <td>${rc.emitida
                                     ? `<span class="oxf-badge oxf-b-ok">RC ${esc(rc.tipoRecepcion === 'TOTAL' ? 'Total' : 'Parcial')} · ${esc(rc.numeroActa || '')}</span><small class="oxf-sub">${esc(fechaCL(rc.fecha))} · ${esc(rc.contraparte || rc.receptorNombre || '')}</small>`
@@ -2211,6 +2267,10 @@
             }
         });
 
+        $$('.oxf-btn-fin').forEach(b => b.addEventListener('click', () => {
+            const fac = facturas.find(x => x.id === b.dataset.id);
+            if (fac) abrirModalCambiarFinanciamiento(fac);
+        }));
         $$('.oxf-btn-rc').forEach(b => b.addEventListener('click', () => {
             const fac = facturas.find(x => x.id === b.dataset.id);
             if (fac) abrirModalRecepcionConforme(fac);
@@ -2523,6 +2583,85 @@
         });
     }
 
+    /** Modal para cambiar financiamiento (Presupuesto OC ↔ Caja Chica / Mixto) de un documento ya registrado. */
+    function abrirModalCambiarFinanciamiento(factura) {
+        const pres = presupuestos.find(b => b.id === factura.presupuestoId) || null;
+        const pv = proveedores.find(p => p.id === factura.proveedorId);
+        const estSin = pres ? calcularEstadoPresupuesto(pres, facturas.filter(x => x.id !== factura.id)) : { saldoDisponible: 0 };
+        const montoComp = pres ? montoComputableFactura(factura, pres) : num(factura.totalBruto);
+        const sim = simularImputacion(estSin.saldoDisponible, montoComp, 0);
+        const modoIni = !pres ? 'CC_100'
+            : (factura.fuenteFinanciamiento === 'CAJA_CHICA'
+                ? (num(factura.montoImputadoOC) > 0 ? 'SPLIT_CC' : 'CC_100')
+                : 'OC_100');
+
+        const ov = crearModal(`Financiamiento · Folio ${factura.folio}`, `
+            <p class="cierre-hint">Proveedor: <b>${esc(pv ? pv.razonSocial : '—')}</b> · OC <b>${esc(factura.numeroOC || 'Sin OC')}</b> · Monto: <b>${clp(montoComp)}</b>${pres ? ` · Saldo OC sin esta factura: <b>${clp(sim.saldoActual)}</b>` : ''}</p>
+            <div class="oxf-cc-box">
+                <label class="act-l">Fuente de Financiamiento
+                    <select id="oxf-cf-modo">
+                        ${pres ? `<option value="OC_100"${modoIni === 'OC_100' ? ' selected' : ''}${sim.haySobregiro ? ' disabled' : ''}>Imputar 100% a Presupuesto OC${sim.haySobregiro ? ' (bloqueado por sobregiro)' : ''}</option>` : ''}
+                        ${pres ? `<option value="SPLIT_CC"${modoIni === 'SPLIT_CC' ? ' selected' : ''}>Dividir: parte a OC y diferencia a Caja Chica</option>` : ''}
+                        <option value="CC_100"${modoIni === 'CC_100' ? ' selected' : ''}>Derivar 100% a Caja Chica (aunque la OC tenga saldo)</option>
+                    </select>
+                </label>
+                <label class="act-l" id="oxf-cf-split-wrap" style="display:none;">Monto a imputar a Presupuesto OC ($)
+                    <input id="oxf-cf-oc" type="number" min="0" max="${Math.max(0, Math.min(montoComp, sim.saldoActual))}" step="1" value="${num(factura.montoImputadoOC) || sim.sugeridoOC}">
+                </label>
+                <div id="oxf-cf-res" class="oxf-sim-card"></div>
+                <label class="act-l" id="oxf-cf-mot-wrap">Motivo / trazabilidad de derivación a Caja Chica *
+                    <input id="oxf-cf-mot" value="${esc(factura.motivoCajaChica || '')}" placeholder="Ej: Cambio voluntario a Caja Chica para reservar saldo OC.">
+                </label>
+            </div>
+            <p class="cierre-error" id="oxf-cf-err"></p>
+            <div class="cierre-acciones">
+                <button type="button" class="btn btn-outline" id="oxf-cf-no">Cancelar</button>
+                <button type="button" class="btn btn-primary" id="oxf-cf-ok">Guardar financiamiento</button>
+            </div>`);
+
+        const q = (s) => ov.querySelector(s);
+        const refrescar = () => {
+            const modo = q('#oxf-cf-modo').value;
+            q('#oxf-cf-split-wrap').style.display = modo === 'SPLIT_CC' ? 'block' : 'none';
+            q('#oxf-cf-mot-wrap').style.display = modo === 'OC_100' ? 'none' : 'block';
+            const dist = calcularDistribucionFinanciamiento(sim, modo, q('#oxf-cf-oc').value);
+            const res = q('#oxf-cf-res');
+            res.className = `oxf-sim-card ${dist.impCC > 0 ? 'oxf-sim-cc' : 'oxf-sim-ok'}`;
+            res.innerHTML = `<div class="oxf-sim-flujo">
+                <div><span>Imputado a OC</span><b>${clp(dist.impOC)}</b></div>
+                <span class="oxf-arrow">+</span>
+                <div><span>Derivado a Caja Chica</span><b>${clp(dist.impCC)}</b></div>
+                <span class="oxf-arrow">→</span>
+                <div><span>Saldo resultante OC</span><b>${clp(dist.saldoFinalOC)}</b></div>
+            </div>`;
+        };
+        q('#oxf-cf-modo').addEventListener('change', refrescar);
+        q('#oxf-cf-oc').addEventListener('input', refrescar);
+        q('#oxf-cf-no').addEventListener('click', () => ov.remove());
+        q('#oxf-cf-ok').addEventListener('click', async () => {
+            const btn = q('#oxf-cf-ok'); btn.disabled = true;
+            q('#oxf-cf-err').textContent = '';
+            try {
+                const modo = q('#oxf-cf-modo').value;
+                const dist = calcularDistribucionFinanciamiento(sim, modo, q('#oxf-cf-oc').value);
+                await actualizarFinanciamientoFactura(factura.id, {
+                    fuente: dist.fuente,
+                    impOC: dist.impOC,
+                    impCC: dist.impCC,
+                    motivoCajaChica: modo === 'OC_100' ? '' : q('#oxf-cf-mot').value.trim()
+                });
+                await cargarDatos();
+                pintar();
+                ov.remove();
+                toast('Financiamiento actualizado', `Folio ${factura.folio}: OC ${clp(dist.impOC)} · Caja Chica ${clp(dist.impCC)}.`, 'success');
+            } catch (e) {
+                q('#oxf-cf-err').textContent = e.message || String(e);
+                btn.disabled = false;
+            }
+        });
+        refrescar();
+    }
+
     /** Paso 2 + Paso 3: Modal de Ingreso de Factura (Drag & Drop XML/PDF/IMG + Rotación + OCR/Gemini + Simulador Anti-Sobregiro). */
     function abrirModalFactura() {
         if (!proveedores.length) {
@@ -2602,16 +2741,19 @@
 
             <div id="oxf-sim-card" class="oxf-sim-card"></div>
 
-            <div id="oxf-cc-box" class="oxf-cc-box" style="display:none;">
-                <label class="act-l">Modalidad de Financiamiento / Derivación a Caja Chica
+            <div id="oxf-cc-box" class="oxf-cc-box">
+                <label class="act-l">Fuente de Financiamiento (puedes cambiar a Caja Chica aunque la OC aún tenga saldo)
                     <select id="oxf-f-modo">
                         <option value="OC_100">Imputar 100% a Presupuesto OC</option>
-                        <option value="SPLIT_CC">Imputar saldo disponible a OC y derivar diferencia a Caja Chica</option>
-                        <option value="CC_100">Derivar 100% de la factura a Caja Chica</option>
+                        <option value="CC_100">Derivar 100% a Caja Chica (sin descontar de la OC)</option>
+                        <option value="SPLIT_CC">Dividir: parte a Presupuesto OC y diferencia a Caja Chica</option>
                     </select>
                 </label>
-                <label class="act-l">Motivo / trazabilidad de derivación a Caja Chica *
-                    <input id="oxf-f-motivo-cc" placeholder="Ej: Sobregiro en OC de arriendo por término de bolsa anual; aprobado por Dirección.">
+                <label class="act-l" id="oxf-f-split-wrap" style="display:none;">Monto a imputar a Presupuesto OC ($) — la diferencia irá a Caja Chica
+                    <input id="oxf-f-split-oc" type="number" min="0" step="1" value="0">
+                </label>
+                <label class="act-l" id="oxf-f-motivo-wrap" style="display:none;">Motivo / trazabilidad de derivación a Caja Chica *
+                    <input id="oxf-f-motivo-cc" placeholder="Ej: Derivación a Caja Chica para resguardar saldo OC o por término de bolsa.">
                 </label>
             </div>
 
@@ -2742,13 +2884,7 @@
             actualizarSimulador();
         }
 
-        function calcularMontosModo(sim, modo) {
-            if (modo === 'CC_100') return { fuente: 'CAJA_CHICA', impOC: 0, impCC: sim.montoFactura };
-            if (modo === 'SPLIT_CC') return { fuente: 'CAJA_CHICA', impOC: sim.sugeridoOC, impCC: sim.sugeridoCajaChica };
-            return { fuente: 'PRESUPUESTO_OC', impOC: sim.montoFactura, impCC: 0 };
-        }
-
-        function actualizarSimulador() {
+        function actualizarSimulador(desdeSplit) {
             const neto = Math.round(num(q('#oxf-f-neto').value));
             const iva = Math.round(num(q('#oxf-f-iva').value));
             const total = Math.round(num(q('#oxf-f-total').value));
@@ -2766,15 +2902,18 @@
             const provId = q('#oxf-f-proveedor').value;
             const folioReemp = q('#oxf-f-reemp').value.trim();
             const simCard = q('#oxf-sim-card');
-            const ccBox = q('#oxf-cc-box');
             const modoSel = q('#oxf-f-modo');
+            const splitWrap = q('#oxf-f-split-wrap');
+            const splitInp = q('#oxf-f-split-oc');
+            const motWrap = q('#oxf-f-motivo-wrap');
             const btnOk = q('#oxf-f-ok');
 
             if (!pres) {
                 simCard.className = 'oxf-sim-card oxf-sim-cc';
-                simCard.innerHTML = `<div><b>Sin OC asociada:</b> Esta factura se registrará 100% bajo <b>Caja Chica</b> (${clp(total)}).</div>`;
-                ccBox.style.display = 'block';
+                simCard.innerHTML = `<div><b>Sin OC asociada:</b> Este documento se registrará 100% bajo <b>Caja Chica</b> (${clp(total)}).</div>`;
                 modoSel.value = 'CC_100';
+                splitWrap.style.display = 'none';
+                motWrap.style.display = 'block';
                 btnOk.disabled = false;
                 return;
             }
@@ -2785,11 +2924,26 @@
             const montoComp = pres.tipoMonto === 'NETO' ? neto : total;
             const sim = simularImputacion(est.saldoDisponible, montoComp, liberado);
 
+            if (sim.haySobregiro && modoSel.value === 'OC_100') {
+                modoSel.value = 'SPLIT_CC';
+            }
+            const modo = modoSel.value;
+            if (modo === 'SPLIT_CC') {
+                splitWrap.style.display = 'block';
+                const maxOC = Math.max(0, Math.min(sim.montoFactura, sim.saldoActual));
+                splitInp.max = maxOC;
+                if (!desdeSplit) {
+                    const actualVal = Math.round(num(splitInp.value));
+                    if (!actualVal || actualVal > maxOC) splitInp.value = sim.haySobregiro ? sim.sugeridoOC : Math.round(maxOC / 2);
+                }
+            } else {
+                splitWrap.style.display = 'none';
+            }
+            motWrap.style.display = modo === 'OC_100' ? 'none' : 'block';
+
+            const dist = calcularDistribucionFinanciamiento(sim, modo, modo === 'SPLIT_CC' ? splitInp.value : null);
+
             if (sim.haySobregiro) {
-                ccBox.style.display = 'block';
-                if (modoSel.value === 'OC_100') modoSel.value = 'SPLIT_CC';
-                const m = calcularMontosModo(sim, modoSel.value);
-                const bloqueado = modoSel.value === 'OC_100';
                 simCard.className = 'oxf-sim-card oxf-sim-danger';
                 simCard.innerHTML = `
                     <div class="oxf-sim-alerta">SOBREGIRO DETECTADO (+${clp(sim.montoSobregiro)} sobre el tope de la OC ${esc(pres.numeroOC)})</div>
@@ -2798,10 +2952,22 @@
                         <span class="oxf-arrow">→</span>
                         <div><span>Monto factura (${esc(pres.tipoMonto)})</span><b>${clp(sim.montoFactura)}</b></div>
                         <span class="oxf-arrow">→</span>
-                        <div><span>Saldo proyectado</span><b style="color:#dc2626">${clp(sim.saldoProyectado)}</b></div>
+                        <div><span>Saldo resultante OC</span><b style="color:${dist.saldoFinalOC < 0 ? '#dc2626' : '#0f172a'}">${clp(dist.saldoFinalOC)}</b></div>
                     </div>
-                    <div class="oxf-sim-plan">Guardado directo 100% contra OC <b>bloqueado</b>. Distribución seleccionada: <b>OC ${clp(m.impOC)}</b> · <b>Caja Chica ${clp(m.impCC)}</b>.</div>`;
-                btnOk.disabled = bloqueado;
+                    <div class="oxf-sim-plan">Guardado directo 100% contra OC <b>bloqueado</b>. Distribución seleccionada: <b>OC ${clp(dist.impOC)}</b> · <b>Caja Chica ${clp(dist.impCC)}</b>.</div>`;
+                btnOk.disabled = dist.bloqueado;
+            } else if (modo === 'CC_100' || modo === 'SPLIT_CC') {
+                simCard.className = 'oxf-sim-card oxf-sim-cc';
+                simCard.innerHTML = `
+                    <div class="oxf-sim-flujo">
+                        <div><span>Saldo actual OC</span><b>${clp(sim.saldoActual)}</b></div>
+                        <span class="oxf-arrow">→</span>
+                        <div><span>Imputado a OC / Caja Chica</span><b>OC ${clp(dist.impOC)} · CC ${clp(dist.impCC)}</b></div>
+                        <span class="oxf-arrow">→</span>
+                        <div><span>Saldo proyectado OC</span><b style="color:#0f172a">${clp(dist.saldoFinalOC)}</b></div>
+                    </div>
+                    <div style="margin-top:6px;font-size:.82rem;color:#92400e;"><b>Derivación voluntaria a Caja Chica activa:</b> puedes derivar este documento a Caja Chica aunque la OC aún tenga saldo disponible.</div>`;
+                btnOk.disabled = false;
             } else {
                 simCard.className = 'oxf-sim-card oxf-sim-ok';
                 simCard.innerHTML = `
@@ -2810,10 +2976,8 @@
                         <span class="oxf-arrow">→</span>
                         <div><span>Monto factura (${esc(pres.tipoMonto)})</span><b>${clp(sim.montoFactura)}</b></div>
                         <span class="oxf-arrow">→</span>
-                        <div><span>Saldo proyectado</span><b style="color:#15803d">${clp(sim.saldoProyectado)}</b></div>
+                        <div><span>Saldo proyectado OC</span><b style="color:#15803d">${clp(sim.saldoProyectado)}</b></div>
                     </div>`;
-                // Permite derivar voluntariamente a Caja Chica si el usuario ya eligió CC, pero por defecto va a OC
-                if (modoSel.value === 'OC_100') ccBox.style.display = 'none';
                 btnOk.disabled = false;
             }
         }
@@ -2884,9 +3048,10 @@
             actualizarSimulador();
         });
         ['#oxf-f-proveedor', '#oxf-f-presupuesto', '#oxf-f-neto', '#oxf-f-iva', '#oxf-f-total', '#oxf-f-reemp', '#oxf-f-modo'].forEach(sel => {
-            q(sel).addEventListener('input', actualizarSimulador);
-            q(sel).addEventListener('change', actualizarSimulador);
+            q(sel).addEventListener('input', () => actualizarSimulador(false));
+            q(sel).addEventListener('change', () => actualizarSimulador(false));
         });
+        q('#oxf-f-split-oc').addEventListener('input', () => actualizarSimulador(true));
         q('#oxf-f-presupuesto').addEventListener('change', () => {
             const p = presupuestos.find(b => b.id === q('#oxf-f-presupuesto').value);
             if (p) { q('#oxf-f-oc').value = p.numeroOC; q('#oxf-f-proveedor').value = p.proveedorId; }
@@ -2912,8 +3077,8 @@
             const liberado = pres && prevDoc && prevDoc.presupuestoId === pres.id ? num(prevDoc.montoImputadoOC) : 0;
             const montoComp = pres && pres.tipoMonto === 'NETO' ? neto : totalBruto;
             const sim = simularImputacion(est.saldoDisponible, montoComp, liberado);
-            const modo = !pres ? 'CC_100' : (sim.haySobregiro ? q('#oxf-f-modo').value : (q('#oxf-f-modo').value === 'CC_100' ? 'CC_100' : 'OC_100'));
-            const dist = calcularMontosModo(sim, modo);
+            const modo = !pres ? 'CC_100' : q('#oxf-f-modo').value;
+            const dist = calcularDistribucionFinanciamiento(sim, modo, modo === 'SPLIT_CC' ? q('#oxf-f-split-oc').value : null);
 
             const payload = {
                 proveedorId: provId,
@@ -3410,6 +3575,7 @@
         validarEliminacionProveedor,
         calcularEstadoPresupuesto,
         simularImputacion,
+        calcularDistribucionFinanciamiento,
         datosSemillaIndura,
         construirHtmlRCOficial,
         construirCuerpoWordRC,

@@ -8278,6 +8278,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    window.confirmarRecepcionBandeja = async function (docId) {
+        try {
+            const docRef = doc(db, 'Bandejas_Turno', docId);
+
+            await runTransaction(db, async (transaction) => {
                 const docSnap = await transaction.get(docRef);
                 if (!docSnap.exists()) {
                     throw new Error("La bandeja no existe o fue eliminada.");

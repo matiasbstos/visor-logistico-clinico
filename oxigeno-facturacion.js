@@ -249,7 +249,7 @@
         const bloquesRC = [];
         const normTituloIndura = (t) => String(t || '')
             .replace(/RG[_ -]?RENTAL/i, 'RG_RENTAL')
-            .replace(/MEDICAL_?\s*(?:=>|⇒|->|>=|=)\s*200[B8]/i, 'MEDICAL_=>200B')
+            .replace(/MEDICAL_?\s*(?:=>|⇒|→|->|>=|=)\s*200[B8]/i, 'MEDICAL_=>200B')
             .replace(/CILINDRO_?\s*<\s*200[B8]/i, 'CILINDRO_<200B')
             .replace(/\s+\d+\s+d[ií]as[\s\S]*$/i, '')
             .replace(/\s+/g, ' ')
@@ -1030,7 +1030,9 @@
         await registrarEventoContable('OXIGENO_FACTURA', fac ? fac.folio : id, `OXÍGENO · ${fac && fac.tipoDocumento === 'GUIA_DESPACHO' ? 'GUÍA' : 'FACTURA'} ${fac ? fac.folio : id}`, `Documento eliminado: Folio ${fac ? fac.folio : id}${fac && fac.recepcionConforme && fac.recepcionConforme.numeroActa ? ' · Acta ' + fac.recepcionConforme.numeroActa : ''} (${fac ? clp(fac.totalBruto) : ''}).`, { proveedor: pv ? pv.razonSocial : '', numeroOC: fac ? fac.numeroOC : '', monto: fac ? fac.totalBruto : 0, accion: 'ELIMINACION' });
     }
 
-    /** Sube el respaldo original a Firebase Storage: oxigeno/facturas/{rut}/{folio}.{ext} */
+    let storageNoDisponible = false;
+
+    /** Sube el respaldo original a Firebase Storage con timeout estricto de 4s (nunca congela el guardado si Storage no está habilitado). */
     async function subirRespaldoStorage(archivo, rut, folio) {
         if (!archivo) return { archivoUrl: '', archivoNombre: '', archivoStoragePath: '' };
         const ext = (String(archivo.name || '').split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
@@ -1038,17 +1040,26 @@
         const folioPath = String(folio || 'sin-folio').replace(/[^A-Za-z0-9_-]/g, '');
         const storagePath = `oxigeno/facturas/${rutPath}/${folioPath}.${ext}`;
         const storage = stg(), sdk = stgSdk();
-        if (!storage || !sdk) {
-            return { archivoUrl: '', archivoNombre: archivo.name || `${folioPath}.${ext}`, archivoStoragePath: storagePath, avisoStorage: 'Firebase Storage no inicializado en cliente.' };
+        if (!storage || !sdk || storageNoDisponible) {
+            return { archivoUrl: '', archivoNombre: archivo.name || `${folioPath}.${ext}`, archivoStoragePath: storagePath, avisoStorage: storageNoDisponible ? 'Documento guardado en Firestore (Firebase Storage no está activado en el proyecto).' : '' };
         }
         try {
+            if (typeof storage.maxUploadRetryTime === 'number') storage.maxUploadRetryTime = 3500;
+            if (typeof storage.maxOperationRetryTime === 'number') storage.maxOperationRetryTime = 3500;
             const sRef = sdk.ref(storage, storagePath);
-            await sdk.uploadBytes(sRef, archivo, { contentType: archivo.type || 'application/octet-stream' });
-            const url = await sdk.getDownloadURL(sRef);
+            const subir = async () => {
+                await sdk.uploadBytes(sRef, archivo, { contentType: archivo.type || 'application/octet-stream' });
+                return await sdk.getDownloadURL(sRef);
+            };
+            const url = await Promise.race([
+                subir(),
+                new Promise((_, fail) => setTimeout(() => fail(new Error('STORAGE_TIMEOUT')), 4000))
+            ]);
             return { archivoUrl: url, archivoNombre: archivo.name || `${folioPath}.${ext}`, archivoStoragePath: storagePath };
         } catch (e) {
-            console.warn('[OxiFact] No se pudo subir respaldo a Storage:', e);
-            return { archivoUrl: '', archivoNombre: archivo.name || `${folioPath}.${ext}`, archivoStoragePath: storagePath, avisoStorage: 'Factura guardada, pero el respaldo no pudo subirse a Storage (revisa reglas/red): ' + (e.message || e) };
+            storageNoDisponible = true;
+            console.warn('[OxiFact] Storage no disponible (se guarda igual en Firestore):', e && e.message);
+            return { archivoUrl: '', archivoNombre: archivo.name || `${folioPath}.${ext}`, archivoStoragePath: storagePath, avisoStorage: 'Documento guardado en Firestore (respaldo en Firebase Storage omitido: bucket no habilitado o sin CORS).' };
         }
     }
 
@@ -1323,26 +1334,28 @@
             }
         }
 
-        // 2) Intentar Cloud Function con Gemini Vision API (para escaneos/fotos)
-        try {
-            avisar('Consultando lectura multimodal (Gemini Vision)…');
-            const ctrl = new AbortController();
-            const timer = setTimeout(() => ctrl.abort(), 15000);
-            const resp = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ imageBase64: dataUrl, mimeType: 'image/jpeg' }),
-                signal: ctrl.signal
-            });
-            clearTimeout(timer);
-            if (resp.ok) {
-                const json = await resp.json();
-                if (json && json.success && json.datos) {
-                    return normalizarRespuestaIA(json.datos);
+        // 2) Intentar Cloud Function con Gemini Vision API solo si está configurada explícitamente (evita demoras/errores de red)
+        if (window.SAR_OXI_GEMINI_URL) {
+            try {
+                avisar('Consultando lectura multimodal (Gemini Vision)…');
+                const ctrl = new AbortController();
+                const timer = setTimeout(() => ctrl.abort(), 15000);
+                const resp = await fetch(window.SAR_OXI_GEMINI_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ imageBase64: dataUrl, mimeType: 'image/jpeg' }),
+                    signal: ctrl.signal
+                });
+                clearTimeout(timer);
+                if (resp.ok) {
+                    const json = await resp.json();
+                    if (json && json.success && json.datos) {
+                        return normalizarRespuestaIA(json.datos);
+                    }
                 }
+            } catch (_) {
+                // Silencioso: cae al motor local gratuito
             }
-        } catch (_) {
-            // Silencioso: cae al motor local gratuito
         }
 
         // 3) Respaldo universal local: Tesseract.js v5 en el navegador (sin clave API)
@@ -2930,15 +2943,16 @@
             if (val.advertencias.length && !window.confirm(val.advertencias.join('\n') + '\n\n¿Deseas guardar igualmente?')) return;
 
             const abrirRCDespues = q('#oxf-f-abrir-rc') && q('#oxf-f-abrir-rc').checked;
+            const txtOrig = btn.textContent;
             btn.disabled = true;
+            btn.textContent = 'Guardando…';
             try {
                 const res = await guardarFacturaAtomica(payload, archivoActual);
                 await cargarDatos();
                 pintar();
                 ov.remove();
                 const extra = res.reemplazoMarcado ? ` · Folio ${res.reemplazoMarcado} marcado REEMPLAZADA` : '';
-                toast('Documento registrado', `Folio ${payload.folio} guardado (${clp(payload.totalBruto)})${extra}.`, res.avisoStorage ? 'warning' : 'success');
-                if (res.avisoStorage) toast('Respaldo Storage', res.avisoStorage, 'warning');
+                toast('Documento registrado', `Folio ${payload.folio} guardado (${clp(payload.totalBruto)})${extra}.`, 'success');
                 if (abrirRCDespues) {
                     const guardada = facturas.find(x => x.id === res.id);
                     if (guardada) abrirModalRecepcionConforme(guardada);
@@ -2946,6 +2960,7 @@
             } catch (e) {
                 errEl.textContent = e.message || String(e);
                 btn.disabled = false;
+                btn.textContent = txtOrig;
             }
         });
 

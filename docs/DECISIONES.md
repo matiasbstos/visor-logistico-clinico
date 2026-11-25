@@ -1831,3 +1831,8 @@ Caso del usuario: cuando la Orden de Compra de Mercado Público llega impresa y 
   - En PDF escaneado con OCR, usa IA visual si el Apps Script está actualizado y cae automáticamente al lector local Reutter OCR si no lo está.
 - **Emparejamiento médico mejorado (`emparejar`)**: expande abreviaturas clínicas frecuentes de proveedores (`SOND FOL` → `sonda foley`, `SILIC` → `silicona`, `2V` → `2 vias`, `C/BALON` → `balon`, separación de `14FR`/`16FR`/`18FR`), logrando 8/8 coincidencias en la factura real `N° 0001075247` (`OC 1298355-1002-CM26`).
 - **`seguimiento-oc.js`**: actualiza las etiquetas de recepción a «N° guía o factura» / «Foto o PDF de la guía o factura» y asegura `cargarConfig()` antes de leer.
+
+### 4.312 Modelo local de Factura Electrónica REUTTER S.A. en «Ingresar orden de compra» (v21.258)
+- **`oc-lector.js` (`reconoceFacturaReutter`, `extraerFacturaReutter`)**: permite cargar una Factura Electrónica REUTTER S.A. (ej. `0001075247.pdf`, escaneada con OCR y rotada 180°) directamente en **Ingresar orden de compra** sin depender del Apps Script. Extrae `numeroOC` (`1298355-1002-CM26`), `proveedor` (`REUTTER S.A.`), `rutProveedor` (`81.210.400-4`), fecha (`FEC. REF` o emisión), dirección de despacho, forma de pago, montos (`totalNeto`, `iva`, `total`) y todas las líneas de producto (calculando el precio unitario neto `Math.round(totalLinea / cantidad)` si el OCR lo omite).
+- **`seguimiento-oc.js`**: muestra el modo `(Factura REUTTER)` al prellenar el formulario para revisión antes de guardar.
+- **`tests/unidad.js`**: agrega prueba unitaria del lector local REUTTER en `oc-lector.js`.

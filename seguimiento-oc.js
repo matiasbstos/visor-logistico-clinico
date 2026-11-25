@@ -1285,7 +1285,7 @@
                 }
                 const c = window.SAR_Lector.extraerCorreo(q('#p-correo').value);
                 rev = { ...rev, ...r, aceptarHoras: c.aceptarHoras || rev.aceptarHoras || 48, entregaDias: c.entregaDias || rev.entregaDias || 2, contraparte: c.contraparte || r.contraparte, horario: c.horario || r.horario, origen: 'OC_MP' };
-                const modo = r.origenLectura === 'ESCANEADA_IA' ? ' (escaneada · IA)' : (r.origenLectura === 'ESCANEADA_OCR' ? ' (escaneada · OCR)' : '');
+                const modo = r.origenLectura === 'ESCANEADA_IA' ? ' (escaneada · IA)' : (r.origenLectura === 'ESCANEADA_OCR' ? ' (escaneada · OCR)' : (r.origenLectura === 'FACTURA_REUTTER' ? ' (Factura REUTTER)' : ''));
                 est.innerHTML = `<strong>Leído${modo}:</strong> ${esc(r.numeroOC || '—')} · ${r.lineas.length} producto(s). Revisa cada dato antes de guardar.`;
                 pintarRev(r.avisos);
                 if (rev.distrib) mostrarDist(rev.distrib);

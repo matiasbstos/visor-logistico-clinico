@@ -763,6 +763,148 @@
         return r;
     }
 
+    // ------------------------------------------------------------------
+    // Lector: Factura Electrónica / Guía REUTTER S.A. → rellena campos de OC (v21.258)
+    // Soporta PDF digital o escaneado con capa OCR (incluso rotado 180°) con sublíneas L:;C:;V:
+    // ------------------------------------------------------------------
+    const RE_SUB_REUTTER = /\bL\s*[:;i¡l]\s*([A-Za-z0-9 ]{4,18}?)\s*[;i¡,]\s*C\s*[:;r¡i]\s*([0-9lIoO]{1,6})\s*[;i¡,r]\s*V\s*[:;r¡i]\s*([^\n]{6,22})/i;
+    function reconoceFacturaReutter(texto) {
+        const t = String(texto || '');
+        const esReutter = /\bREUTTER\b/i.test(t) || /81\.210\.400-4/.test(t) || /reutt[e€]r\.cl/i.test(t);
+        const tieneSub = RE_SUB_REUTTER.test(t);
+        return (esReutter && (/DETALLE|CANTIDAD|PRECIO|FACTU[RH]A/i.test(t) || tieneSub)) || (tieneSub && /SUBTOTAL|MONTO\s*NETO/i.test(t));
+    }
+    function extraerFacturaReutter(items) {
+        const TOL_R = 5;
+        const orden = [...(items || [])].filter(i => limpiar(i.str)).sort((a, b) => a.y - b.y || a.x - b.x);
+        const L = [];
+        for (const it of orden) {
+            const l = L.find(o => Math.abs(o.y - it.y) <= TOL_R);
+            if (l) l.items.push(it); else L.push({ y: it.y, items: [it] });
+        }
+        L.forEach(l => { l.items.sort((a, b) => a.x - b.x); l.x = l.items[0].x; l.texto = limpiar(l.items.map(i => i.str).join(' ')); });
+        L.sort((a, b) => a.y - b.y);
+        const T = L.map(l => l.texto), todo = T.join('\n');
+
+        const mNumDoc = /N\s*[°º'":.]\s*0*(\d{4,10})\b/i.exec(todo);
+        const docNum = mNumDoc ? mNumDoc[1] : '';
+        const r = {
+            tipo: 'OC_MP',
+            origenLectura: 'FACTURA_REUTTER',
+            avisos: [`Datos rellenados desde Factura Electrónica REUTTER S.A.${docNum ? ' N° ' + docNum : ''}: revisa los campos y confirma antes de ingresar.`]
+        };
+
+        // Referencia OC ("oc 18-11-2026 1 298355- 1 002-CM26")
+        const mOC = /\b(\d[\d ]{3,8}-\s*[\d ]{1,6}-(?:AG|CM|SE|LE|LP|TD)\d{2})\b/i.exec(todo);
+        r.numeroOC = mOC ? mOC[1].replace(/\s+/g, '').toUpperCase() : '';
+        r.proveedor = (/\bREUTTER\b/i.test(todo) || /81\.210\.400-4/.test(todo)) ? 'REUTTER S.A.' : '';
+        const mRut = /R\.?U\.?T\.?\s*[:;|]?\s*(81\.210\.400-4|\d{1,2}\.\d{3}\.\d{3}-[\dkK])/i.exec(todo);
+        r.rutProveedor = mRut ? mRut[1].toUpperCase() : (r.proveedor === 'REUTTER S.A.' ? '81.210.400-4' : '');
+
+        // Fecha: prioriza FEC. REF de la OC (ej. "oc 18-11-2026 ..."); respaldo FECHA EMISION ("20/11t2026")
+        const fechaLimpia = (raw) => {
+            if (!raw) return '';
+            const s = String(raw).replace(/[lI¡í|]/g, '1').replace(/[Oo]/g, '0').replace(/\s*[-/.',t]\s*/gi, '-');
+            return fechaFlexibleISO(s);
+        };
+        const lRef = T.find(t => /\bOC\b/i.test(t) && /\d{2}[-/.]\d{2}[-/.]20\d{2}/.test(t));
+        const mRefF = lRef && /(\d{2}[-/.]\d{2}[-/.]20\d{2})/.exec(lRef);
+        const lEmi = T.find(t => /FECHA\s+EMISI[OÓ]N/i.test(t));
+        const mEmiF = lEmi && /FECHA\s+EMISI[OÓ]N[^0-9]{0,12}([0-9lIoO]{1,2}\s*[-/.',t]\s*[0-9lIoO]{1,2}\s*[-/.',t]\s*20\d{2})/i.exec(lEmi);
+        r.emitida = (mRefF && fechaLimpia(mRefF[1])) || (mEmiF && fechaLimpia(mEmiF[1])) || '';
+        r.emitidaHora = '';
+
+        const lDesp = T.find(t => /DESPACHA[DO0]{2}\s+A\b/i.test(t));
+        r.direccionDespacho = lDesp ? limpiar(lDesp.replace(/^.*DESPACHA[DO0]{2}\s+A\s*[:;|]?/i, '').replace(/SANfIAGO/gi, 'SANTIAGO').replace(/l\\\.4ELlPlLLA|MEL\|PTLLA|IVELIPILLA/gi, 'MELIPILLA')) : '';
+        const lPago = T.find(t => /FORMA\s+DE\s+PAGO/i.test(t));
+        r.formaPago = lPago ? limpiar(lPago.replace(/^.*FORMA\s+DE\s+PAGO\s*[:;|]?/i, '').replace(/d[¡i]as/gi, 'días')) : '';
+        r.memo = ''; r.memos = []; r.descripcion = docNum ? `Factura REUTTER S.A. N° ${docNum}` : '';
+        r.contraparte = ''; r.contacto = ''; r.horario = ''; r.emailFactura = '';
+        r.convenioMarco = /-CM\d{2}$/i.test(r.numeroOC);
+
+        // Totales (SUBTOTAL / MONTO NETO, IVA 19%, TOTAL)
+        const numFinalLinea = (re) => {
+            const l = L.find(x => re.test(x.texto));
+            if (!l) return 0;
+            const txtNum = l.items.filter(it => it.x > 500 && /[\d]/.test(it.str)).map(it => it.str).join('');
+            if (txtNum) return montoOCR(txtNum.replace(/\s+/g, ''));
+            const m = /([\d.\s]{3,14})\s*$/.exec(l.texto);
+            return m ? montoOCR(m[1].replace(/\s+/g, '')) : 0;
+        };
+        r.totalNeto = numFinalLinea(/MONTO\s*NETO/i) || numFinalLinea(/\bSUBTOTAL\b/i);
+        r.iva = numFinalLinea(/19%/i);
+        r.total = numFinalLinea(/\bTOTAL\b/i);
+        if (r.totalNeto && !r.iva) r.iva = Math.round(r.totalNeto * 0.19);
+        if (r.totalNeto && (!r.total || Math.abs(r.total - (r.totalNeto + r.iva)) > Math.max(5, r.totalNeto * 0.02))) r.total = r.totalNeto + r.iva;
+
+        // Columnas de tabla (CODIGO | CANTIDAD | DETALLE | CLAS | UN MED | PRECIO UN. | TOTAL)
+        const lEnc = L.find(l => /DETALLE/i.test(l.texto) && /CANTIDAD|PRECIO/i.test(l.texto));
+        const itEnc = (re) => lEnc && lEnc.items.find(i => re.test(limpiar(i.str)));
+        const hCant = itEnc(/CANTIDAD/i), hClas = itEnc(/CLAS/i), hUn = itEnc(/UN\s*MED/i), hPrec = itEnc(/PRECIO/i), hTot = itEnc(/TO[TF]AL/i);
+        const xMinDesc = hCant ? hCant.x + 40 : 116;
+        const xMaxDesc = hClas ? hClas.x - 8 : (hUn ? hUn.x - 16 : (hPrec ? hPrec.x - 50 : 398));
+        const xMinPrec = hPrec ? hPrec.x - 12 : 460;
+        const xMinTot = hTot ? hTot.x - 12 : 535;
+
+        const cleanDesc = (s) => limpiar(String(s || '')
+            .replace(/\bfRANSPARENTE\b/g, 'TRANSPARENTE')
+            .replace(/\blOCM\b/g, '10CM')
+            .replace(/\b1OO\b/g, '100')
+            .replace(/\bORAOUADA\b/gi, 'GRADUADA')
+            .replace(/\bNASOGASTBICA\b/gi, 'NASOGASTRICA'));
+
+        r.lineas = [];
+        for (let i = 0; i < L.length; i++) {
+            const mSub = RE_SUB_REUTTER.exec(L[i].texto);
+            if (!mSub) continue;
+            const cantSub = Number(mSub[2].replace(/[lI¡]/g, '1').replace(/[Oo]/g, '0')) || 0;
+            const prev = i > 0 ? L[i - 1] : null;
+            if (!prev || Math.abs(L[i].y - prev.y) > 24 || RE_SUB_REUTTER.test(prev.texto)) continue;
+
+            let desc = '', cantLinea = 0, precio = 0, totalLinea = 0;
+            if (prev.items.length > 1) {
+                const cantIt = prev.items.find(it => it.x >= (hCant ? hCant.x - 5 : 70) && it.x < xMinDesc);
+                if (cantIt) cantLinea = Number(limpiar(cantIt.str).replace(/^['"]/, '').replace(/[lI¡]/g, '1').replace(/[OoAa]/g, '0').replace(/\D/g, '')) || 0;
+                desc = cleanDesc(prev.items.filter(it => it.x >= xMinDesc && it.x < xMaxDesc).map(it => it.str).join(' '));
+                const pIt = prev.items.filter(it => it.x >= xMinPrec && it.x < xMinTot && /\d/.test(it.str)).map(it => it.str).join('');
+                const tIt = prev.items.filter(it => it.x >= xMinTot && /\d/.test(it.str)).map(it => it.str).join('');
+                precio = pIt ? montoOCR(pIt) : 0;
+                totalLinea = tIt ? montoOCR(tIt) : 0;
+            } else {
+                const numsEnd = /(\d[\d.,]*)\s+(\d[\d.,]*)\s*$/.exec(prev.texto);
+                if (numsEnd) { precio = montoOCR(numsEnd[1]); totalLinea = montoOCR(numsEnd[2]); }
+                const limpio = prev.texto.replace(/^[A-Z0-9]{5,12}\s+/, '').replace(/\s+(?:DM|OM|RM|MT|INF)\s+(?:CJ|UN|PQ|FR)\b.*$/i, '');
+                const mC = /^'?(\d{1,5})\s+(.+)$/.exec(limpio);
+                if (mC) { cantLinea = Number(mC[1]) || 0; desc = cleanDesc(mC[2]); }
+                else desc = cleanDesc(limpio);
+            }
+            const cantidad = cantSub || cantLinea;
+            if (!precio && totalLinea && cantidad > 0) precio = Math.round(totalLinea / cantidad);
+            if (!totalLinea && precio && cantidad > 0) totalLinea = Math.round(precio * cantidad);
+            if (desc && cantidad > 0) {
+                r.lineas.push({
+                    descripcion: desc,
+                    codigoMP: '',
+                    licitacion: '',
+                    cantidad,
+                    valorNeto: precio,
+                    totalLinea,
+                    lote: mSub[1].replace(/\s+/g, '').toUpperCase()
+                });
+            }
+        }
+
+        if (!r.lineas.length) r.avisos.push('No se detectaron productos en la factura Reutter: ingrésalos a mano.');
+        const suma = r.lineas.reduce((t, l) => t + (l.totalLinea || 0), 0);
+        if (r.totalNeto && suma && Math.abs(suma - r.totalNeto) > 10) {
+            r.avisos.push(`La suma de las líneas (${Math.round(suma).toLocaleString('es-CL')}) no coincide con el neto de la factura (${Math.round(r.totalNeto).toLocaleString('es-CL')}).`);
+        }
+        ['numeroOC', 'proveedor', 'emitida'].forEach(k => {
+            if (!r[k]) r.avisos.push(`No se encontró: ${({ numeroOC: 'N° de orden', proveedor: 'proveedor', emitida: 'fecha de envío' })[k]}.`);
+        });
+        return r;
+    }
+
     /** Dice qué parece ser un texto que no se reconoció (para un mensaje útil). */
     function parecidoA(texto) {
         const t = String(texto || '');
@@ -784,7 +926,8 @@
     const LECTORES = {
         OC_MP: { nombre: 'Orden de compra (Mercado Público)', reconoce: reconoceOC, extraer: extraerOC },
         DIST_OC: { nombre: 'Cuadro de distribución de la orden', reconoce: reconoceDistribucion, extraer: extraerDistribucionAuto },
-        OC_MP_OCR: { nombre: 'Orden de compra escaneada (OCR)', reconoce: reconoceOC_OCR, extraer: extraerOC_OCR }
+        OC_MP_OCR: { nombre: 'Orden de compra escaneada (OCR)', reconoce: reconoceOC_OCR, extraer: extraerOC_OCR },
+        FACT_REUTTER: { nombre: 'Factura Electrónica REUTTER S.A.', reconoce: reconoceFacturaReutter, extraer: extraerFacturaReutter }
     };
     function detectar(items) { const txt = lineas(items).map(l => l.texto).join('\n'); return Object.keys(LECTORES).find(k => LECTORES[k].reconoce(txt)) || null; }
     function leer(items) {
@@ -929,11 +1072,15 @@
         const items = await itemsDePDF(buffer);
         const txt = lineas(items).map(l => l.texto).join('\n');
 
-        // 1) Intento rápido: PDF digital (Mercado Público o Cuadro de distribución)
+        // 1) Intento rápido: PDF digital (Mercado Público, Cuadro de distribución o Factura REUTTER S.A.)
         if (reconoceDistribucion(txt)) return extraerDistribucionAuto(items);
         if (reconoceOC(txt)) {
             const digital = extraerOC(items);
             if (digital.lineas && digital.lineas.length > 0) return digital;
+        }
+        if (reconoceFacturaReutter(txt)) {
+            const reutter = extraerFacturaReutter(items);
+            if (reutter.lineas && reutter.lineas.length > 0) return reutter;
         }
 
         // Si trae texto digital claro de otro documento (Recepción conforme, Guía, Acta, Factura) y NO de una OC, avisar al tiro
@@ -973,6 +1120,6 @@
     }
     async function leerDistribucion(file) { const r = await leerArchivo(file); if (r.tipo === 'OC_MP') throw new Error('Ese archivo es una orden de compra: súbelo en el primer recuadro (el cuadro va aquí).'); if (r.tipo !== 'DIST_OC') throw new Error('Ese archivo no es un cuadro de distribución (busco columnas "MEMO N° …", FINANCIAMIENTO y CDP).'); return r; }
 
-    window.SAR_Lector = { cargarPdfJs, leerHoja, extraerDistribucionExcel, extraerOCExcel, esExcel, esImagen, leer, leerArchivo, leerDistribucion, leerOCEscaneada, normalizarOCEscaneada, reconoceOC_OCR, extraerOC_OCR, paginaConContenido, paginasDeArchivo, montoOCR, fechaFlexibleISO, extraerDistribucion, extraerDistribucionB, unirDistribucion, detectar, extraerOC, extraerCorreo, lineas, LECTORES };
+    window.SAR_Lector = { cargarPdfJs, leerHoja, extraerDistribucionExcel, extraerOCExcel, esExcel, esImagen, leer, leerArchivo, leerDistribucion, leerOCEscaneada, normalizarOCEscaneada, reconoceOC_OCR, extraerOC_OCR, reconoceFacturaReutter, extraerFacturaReutter, paginaConContenido, paginasDeArchivo, montoOCR, fechaFlexibleISO, extraerDistribucion, extraerDistribucionB, unirDistribucion, detectar, extraerOC, extraerCorreo, lineas, LECTORES };
     if (typeof module !== 'undefined') module.exports = window.SAR_Lector;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

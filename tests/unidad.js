@@ -515,3 +515,30 @@ t('v21.257: modelo local REUTTER S.A. (Factura/Guía con L:;C:;V:) y emparejamie
   ], r.lineas);
   assert.strictEqual(emp.pares.length, 3); assert.strictEqual(emp.sinPar.length, 0);
 });
+t('v21.258: oc-lector lee Factura Electrónica REUTTER S.A. para rellenar campos de Ingresar OC', () => {
+  const L = require('../oc-lector.js');
+  const items = [
+    { str: 'REUTTER S.A.', x: 10, y: 30 }, { str: 'R.U.T.: 81.210.400-4', x: 428, y: 39 },
+    { str: 'FACTUHA ELECTBONICA', x: 408, y: 65 }, { str: "N'0001075247", x: 445, y: 88 },
+    { str: 'FECHA EMISION | 20/11t2026', x: 388, y: 152 },
+    { str: 'FORMA DE PAGO : OC 30 d¡as', x: 389, y: 187 },
+    { str: 'DESPACHAOO A : REAL AUDIENCIA 980 - SANfIAGO - l\\.4ELlPlLLA', x: 10, y: 211 },
+    { str: 'coDtGo', x: 23, y: 229 }, { str: 'CANTIDAD', x: 75, y: 229 }, { str: 'DETALLE', x: 241, y: 229 }, { str: 'CLAS', x: 402, y: 229 }, { str: 'UN MED', x: 428, y: 229 }, { str: 'PRECIO UN.', x: 469, y: 229 }, { str: 'TOfAL', x: 543, y: 229 },
+    { str: '50', x: 108, y: 244 }, { str: 'APOSITO fRANSPARENTE 6X7 CJ X 1OO', x: 120, y: 244 }, { str: 'CJ', x: 449, y: 244 }, { str: '497.500', x: 563, y: 244 },
+    { str: "L:4600002855;C:50;V:01 -06'2031", x: 120, y: 251 },
+    { str: 'AAVEGA03', x: 9, y: 258 }, { str: "'145", x: 104, y: 258 }, { str: 'VENDA GASA ELASTICA lOCM X 4M X 20 UN', x: 120, y: 258 }, { str: 'DM', x: 413, y: 258 }, { str: 'CJ', x: 449, y: 258 }, { str: '3.135', x: 500, y: 258 }, { str: '454.575', x: 563, y: 258 },
+    { str: 'L:4600002448iC:145iV:01 -1 l -2030', x: 120, y: 266 },
+    { str: 'oc 18-11-2026 1 298355- 1 002-CM26', x: 19, y: 595 },
+    { str: 'MONTONETO $ 952.075', x: 461, y: 607 }
+  ];
+  assert.strictEqual(L.reconoceFacturaReutter(items.map(i => i.str).join('\n')), true);
+  const r = L.extraerFacturaReutter(items);
+  assert.strictEqual(r.tipo, 'OC_MP');
+  assert.strictEqual(r.numeroOC, '1298355-1002-CM26');
+  assert.strictEqual(r.proveedor, 'REUTTER S.A.');
+  assert.strictEqual(r.rutProveedor, '81.210.400-4');
+  assert.strictEqual(r.emitida, '2026-11-18');
+  assert.strictEqual(r.lineas.length, 2);
+  assert.strictEqual(r.lineas[0].cantidad, 50); assert.strictEqual(r.lineas[0].valorNeto, 9950); assert.strictEqual(r.lineas[0].totalLinea, 497500);
+  assert.strictEqual(r.lineas[1].cantidad, 145); assert.strictEqual(r.lineas[1].valorNeto, 3135); assert.strictEqual(r.lineas[1].totalLinea, 454575);
+});

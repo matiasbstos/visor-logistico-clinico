@@ -219,6 +219,42 @@ t('OC escaneada con capa OCR ruidosa (1298355-995-AG26, 6 ítems en 2 hojas) se 
   ]);
   assert.ok(r.lineas.every(x => x.codigoMP === '')); /* Compra Ágil: el código ONU no es ID de producto */
 });
+t('OCR local en navegador (Tesseract.js): convierte words 2D y lee tabla escaneada con inclinación sin clave IA (v21.259)', () => {
+  const L = require('../oc-lector.js');
+  const sc = 2;
+  const w = (text, x, y) => ({ text, bbox: { x0: x * sc, y0: y * sc, x1: (x + text.length * 5) * sc, y1: (y + 10) * sc } });
+  const words = [
+    w('ORDEN', 140, 80), w('DE', 180, 80), w('COMPRA', 200, 80), w('N°:', 300, 80), w('1298355-995-AG26', 325, 80),
+    w('Fecha', 320, 55), w('Envio', 355, 55), w('OC.:', 390, 55), w('17-11-2026', 420, 55), w('16:41:43', 485, 55),
+    w('SEÑOR', 15, 110), w('(ES):', 55, 110), w('IMPORTCHILE.COM', 90, 110), w('SPA', 200, 110),
+    w('RUT:', 15, 125), w('76.506.381-7', 65, 125),
+    // Encabezados de tabla
+    w('Código', 12, 280), w('Producto', 78, 280), w('Cantidad', 140, 280), w('Especificaciones', 192, 280), w('Precio', 376, 280), w('Valor', 520, 280), w('Total', 550, 280),
+    // Fila 1 con inclinación de +10pt hacia la derecha y múltiples líneas en Producto y Especificaciones
+    w('41104107', 12, 315), w('Tubos', 80, 315), w('o', 110, 315), w('20', 150, 317), w('Caja', 165, 317),
+    w('Tubo', 194, 318), w('al', 220, 318), w('vacío,', 235, 318), w('citrato', 268, 318),
+    w('16.000,00', 385, 324), w('0,00', 452, 325), w('0,00', 502, 325), w('320.000', 546, 326),
+    w('contenedores', 80, 329), w('3.2%,', 194, 330), w('4.5', 225, 330), w('ml', 245, 330), w('tapa', 260, 330),
+    w('de', 80, 341), w('celeste,', 194, 342), w('caja', 235, 342), w('100', 260, 342), w('tubos.', 282, 342),
+    // Fila 2
+    w('42172103', 12, 380), w('Kits', 80, 380), w('100', 150, 382), w('Unidad', 170, 382),
+    w('frasco', 194, 383), w('desechable', 230, 383), w('de', 285, 383),
+    w('8.900,00', 385, 389), w('0,00', 452, 390), w('0,00', 502, 390), w('890.000', 546, 391),
+    w('aspiración', 194, 395), w('1000', 245, 395), w('ml', 272, 395),
+    w('Neto', 390, 440), w('$', 450, 440), w('1.210.000', 530, 440)
+  ];
+  const items = L.itemsDeTesseract({ data: { words } }, sc, 0);
+  assert.ok(items.length === words.length);
+  const r = L.extraerOC_OCR(items);
+  assert.strictEqual(r.numeroOC, '1298355-995-AG26');
+  assert.strictEqual(r.proveedor, 'IMPORTCHILE.COM SPA');
+  assert.strictEqual(r.rutProveedor, '76.506.381-7');
+  assert.strictEqual(r.lineas.length, 2);
+  assert.strictEqual(r.lineas[0].descripcion, 'Tubo al vacío, citrato 3.2%, 4.5 ml tapa celeste, caja 100 tubos.');
+  assert.strictEqual(r.lineas[0].cantidad, 20); assert.strictEqual(r.lineas[0].valorNeto, 16000); assert.strictEqual(r.lineas[0].totalLinea, 320000);
+  assert.strictEqual(r.lineas[1].descripcion, 'frasco desechable de aspiración 1000 ml');
+  assert.strictEqual(r.lineas[1].cantidad, 100); assert.strictEqual(r.lineas[1].valorNeto, 8900); assert.strictEqual(r.lineas[1].totalLinea, 890000);
+});
 console.log(`\n${n} ok, ${mal} con falla`); process.exit(mal ? 1 : 0); });
 
 // ---- Bodega transitoria (v21.107)

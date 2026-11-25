@@ -18,6 +18,7 @@
 
     const PDFJS_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js';
     const PDFJS_WORKER = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    const TESSERACT_URL = 'https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js';
     const TOL = 3.5;                       // tolerancia vertical para considerar "la misma línea"
     const monto = (s) => { const t = String(s == null ? '' : s).replace(/[^\d,.-]/g, ''); if (!t) return 0; return Number(t.replace(/\./g, '').replace(',', '.')) || 0; };
     const limpiar = (s) => String(s || '').replace(/\s+/g, ' ').trim();
@@ -699,58 +700,136 @@
         if (actual) bloques.push(actual);
 
         // Detectar coordenadas 2D de columnas si el PDF tiene encabezados de tabla ("Especificaciones" / "Precio")
-        const hEspItem = L.flatMap(l => l.items).find(i => /Espec[i¡]f/i.test(limpiar(i.str)));
-        const hPreItem = L.flatMap(l => l.items).find(i => /Pr?l?ecio|PlEcio/i.test(limpiar(i.str)) && (!hEspItem || i.x > hEspItem.x + 60));
+        const todosItems = L.flatMap(l => l.items);
+        const maxX = todosItems.reduce((m, i) => Math.max(m, i.x || 0), 0);
+        const hProdItem = todosItems.find(i => /^Producto$/i.test(limpiar(i.str)) && i.x > 40 && i.x < 160);
+        const hCantItem = todosItems.find(i => /^Cant[i¡]dad/i.test(limpiar(i.str)) && i.x > 90 && i.x < 230);
+        const hEspItems = todosItems.filter(i => /Espec[i¡]f/i.test(limpiar(i.str)) && i.x > 130 && i.x < 370).sort((a, b) => a.x - b.x);
+        const hEspItem = hEspItems[0] || null;
+        const hPreItem = todosItems.find(i => /^(Pr?l?ecio|PlEcio|Precio)$/i.test(limpiar(i.str)) && i.x > 300 && (!hEspItem || i.x > hEspItem.x + 60));
 
-        r.lineas = bloques.map(b => {
-            const firstText = b[0].texto;
-            const firstHasNums = reCuatroNums.test(firstText);
-            const full = limpiar(b.map(l => l.texto).join(' '));
-            // Si los 4 números están en la 1.ª línea (PDF 2D real), extraer de ahí y anexar continuación de Especificaciones
-            const baseText = firstHasNums ? firstText : full;
-            const sinCod = limpiar(baseText.replace(/^\d[\d',.]{5,11}\s+/, ''));
-            const mNums = reCuatroNums.exec(sinCod);
-            const precio = mNums ? montoOCR(mNums[1]) : 0;
-            const valor = mNums ? montoOCR(mNums[4]) : 0;
-            const cuerpo = mNums ? limpiar(sinCod.slice(0, mNums.index)) : sinCod;
-
-            // Buscar el mejor par "<cantidad> <unidad>": prioriza el que cumple cantidad × precio === valor
-            const matches = [];
-            let mc; reCantUnidad.lastIndex = 0;
-            while ((mc = reCantUnidad.exec(cuerpo)) !== null) {
-                matches.push({ cant: Number(mc[1]), idx: mc.index, fin: mc.index + mc[0].length });
+        // --- Modo 2D tolerante a inclinación del escáner (PDF con OCR o Tesseract en navegador) ---
+        const extraerLineas2D = () => {
+            if (maxX < 350) return [];
+            const anclas = [];
+            for (const l of L) {
+                if (esFinTabla(l.texto)) continue;
+                const izq = l.items.filter(it => it.x < 95).sort((a, b) => a.x - b.x);
+                if (!izq.length) continue;
+                const codTxt = limpiar(izq[0].str);
+                if (/[.,]\d{2}$/.test(codTxt) || /^\d{1,2}\.\d{3}\.\d{3}/.test(codTxt)) continue;
+                const digs = codTxt.replace(/\D/g, '');
+                if (digs.length >= 7 && digs.length <= 9) {
+                    const resto = l.items.filter(it => it.x >= 55).map(it => it.str).join(' ');
+                    if (/[A-Za-zÁÉÍÓÚáéíóúÑñ]{3,}/.test(resto)) anclas.push({ y: izq[0].y, cod: digs });
+                }
             }
-            const elegido = matches.find(m => precio > 0 && valor > 0 && Math.round(m.cant * precio) === Math.round(valor)) || matches[0];
-            if (!elegido || !(elegido.cant > 0)) return null;
+            if (!anclas.length) return [];
+            anclas.sort((a, b) => a.y - b.y);
 
-            const prodCat = limpiar(cuerpo.slice(0, elegido.idx));
-            let comprador = limpiar(cuerpo.slice(elegido.fin));
+            const xProd = hProdItem ? hProdItem.x - 10 : 65;
+            const xCant = hCantItem ? hCantItem.x - 12 : 132;
+            const xEsp = hEspItem ? hEspItem.x - 12 : 182;
+            const xPre = hPreItem ? hPreItem.x - 18 : 358;
+            const lFin = L.find(l => l.y > anclas[anclas.length - 1].y + 8 && esFinTabla(l.texto));
+            const yFinTabla = lFin ? lFin.y - 4 : Infinity;
 
-            // Anexar líneas de continuación de la columna Especificaciones Comprador en PDFs 2D
-            if (firstHasNums && b.length > 1) {
-                const xMinDesc = hEspItem ? hEspItem.x - 14 : 175;
-                const xMaxDesc = hPreItem ? hPreItem.x - 10 : 370;
-                const extraDesc = b.slice(1).map(l =>
-                    limpiar(l.items.filter(it => it.x >= xMinDesc && it.x < xMaxDesc).map(it => it.str).join(' '))
-                ).filter(Boolean).join(' ');
-                if (extraDesc) comprador = limpiar(`${comprador} ${extraDesc}`);
+            const out2D = [];
+            for (let k = 0; k < anclas.length; k++) {
+                const y0 = anclas[k].y - 10;
+                // Evita invadir otra página/sección (NOMBRE ORDEN, Neto, Observaciones) entre dos anclas
+                const finIntermedio = L.find(l => l.y > anclas[k].y + 8 && (k + 1 >= anclas.length || l.y < anclas[k + 1].y - 10) && esFinTabla(l.texto));
+                const y1 = finIntermedio ? finIntermedio.y - 4 : (k + 1 < anclas.length ? anclas[k + 1].y - 8 : yFinTabla);
+                const fila = todosItems.filter(it => it.y >= y0 && it.y < y1);
+                const colTxt = (xa, xb) => limpiar(fila.filter(it => it.x >= xa && it.x < xb).sort((a, b) => a.y - b.y || a.x - b.x).map(it => it.str).join(' '));
+
+                const cantStr = colTxt(xCant, xEsp);
+                const mCant = /\b(\d{1,6})\b/.exec(cantStr);
+                const cantidad = mCant ? Number(mCant[1]) : 0;
+                if (!(cantidad > 0)) continue;
+
+                const prodCat = colTxt(xProd, xCant);
+                const comprador = colTxt(xEsp, xPre);
+                // Números en la banda derecha (>= xPre), agrupados por y cercano al ancla (tolera inclinación hasta ±22 pt)
+                const numItems = fila.filter(it => it.x >= xPre && Math.abs(it.y - anclas[k].y) <= 22 && /\d/.test(it.str)).sort((a, b) => a.x - b.x);
+                const nums = numItems.map(it => limpiar(it.str)).filter(t => /^['"]?[\d.,OolI]+$/.test(t) && /\d/.test(t));
+                const precio = nums.length ? montoOCR(nums[0]) : 0;
+                const valor = nums.length >= 2 ? montoOCR(nums[nums.length - 1]) : (precio ? Math.round(precio * cantidad) : 0);
+
+                const cod = /^\((\d{4,9})\)\s*/.exec(comprador);
+                const desc = recorteNota(limpiar(comprador.replace(/^\(\d{4,9}\)\s*/, ''))) || prodCat;
+                if (!desc) continue;
+                out2D.push({
+                    descripcion: desc,
+                    codigoMP: cod ? cod[1] : '',
+                    licitacion: '',
+                    cantidad,
+                    valorNeto: precio,
+                    totalLinea: valor || (precio ? Math.round(cantidad * precio) : 0)
+                });
             }
+            return out2D;
+        };
 
-            const cod = /^\((\d{4,9})\)\s*/.exec(comprador);
-            const desc = recorteNota(limpiar(comprador.replace(/^\(\d{4,9}\)\s*/, ''))) || prodCat;
-            const linea = {
-                descripcion: desc,
-                codigoMP: cod ? cod[1] : '',
-                licitacion: '',
-                cantidad: elegido.cant,
-                valorNeto: precio,
-                totalLinea: valor || (precio ? Math.round(elegido.cant * precio) : 0)
-            };
-            if (precio && valor && Math.round(precio * elegido.cant) !== Math.round(valor)) {
-                r.avisos.push(`Línea "${desc.slice(0, 40)}": cantidad × precio (${Math.round(precio * elegido.cant).toLocaleString('es-CL')}) no coincide con el valor total (${Math.round(valor).toLocaleString('es-CL')}). Revísala.`);
-            }
-            return linea;
-        }).filter(Boolean);
+        const lineas2D = extraerLineas2D();
+        if (lineas2D.length) {
+            r.lineas = lineas2D;
+            r.lineas.forEach(l => {
+                if (l.valorNeto && l.totalLinea && Math.round(l.valorNeto * l.cantidad) !== Math.round(l.totalLinea)) {
+                    r.avisos.push(`Línea "${l.descripcion.slice(0, 40)}": cantidad × precio (${Math.round(l.valorNeto * l.cantidad).toLocaleString('es-CL')}) no coincide con el valor total (${Math.round(l.totalLinea).toLocaleString('es-CL')}). Revísala.`);
+                }
+            });
+        } else {
+            r.lineas = bloques.map(b => {
+                const firstText = b[0].texto;
+                const firstHasNums = reCuatroNums.test(firstText);
+                const full = limpiar(b.map(l => l.texto).join(' '));
+                // Si los 4 números están en la 1.ª línea (PDF 2D real), extraer de ahí y anexar continuación de Especificaciones
+                const baseText = firstHasNums ? firstText : full;
+                const sinCod = limpiar(baseText.replace(/^\d[\d',.]{5,11}\s+/, ''));
+                const mNums = reCuatroNums.exec(sinCod);
+                const precio = mNums ? montoOCR(mNums[1]) : 0;
+                const valor = mNums ? montoOCR(mNums[4]) : 0;
+                const cuerpo = mNums ? limpiar(sinCod.slice(0, mNums.index)) : sinCod;
+
+                // Buscar el mejor par "<cantidad> <unidad>": prioriza el que cumple cantidad × precio === valor
+                const matches = [];
+                let mc; reCantUnidad.lastIndex = 0;
+                while ((mc = reCantUnidad.exec(cuerpo)) !== null) {
+                    matches.push({ cant: Number(mc[1]), idx: mc.index, fin: mc.index + mc[0].length });
+                }
+                const elegido = matches.find(m => precio > 0 && valor > 0 && Math.round(m.cant * precio) === Math.round(valor)) || matches[0];
+                if (!elegido || !(elegido.cant > 0)) return null;
+
+                const prodCat = limpiar(cuerpo.slice(0, elegido.idx));
+                let comprador = limpiar(cuerpo.slice(elegido.fin));
+
+                // Anexar líneas de continuación de la columna Especificaciones Comprador en PDFs 2D
+                if (firstHasNums && b.length > 1) {
+                    const xMinDesc = hEspItem ? hEspItem.x - 14 : 175;
+                    const xMaxDesc = hPreItem ? hPreItem.x - 10 : 370;
+                    const extraDesc = b.slice(1).map(l =>
+                        limpiar(l.items.filter(it => it.x >= xMinDesc && it.x < xMaxDesc).map(it => it.str).join(' '))
+                    ).filter(Boolean).join(' ');
+                    if (extraDesc) comprador = limpiar(`${comprador} ${extraDesc}`);
+                }
+
+                const cod = /^\((\d{4,9})\)\s*/.exec(comprador);
+                const desc = recorteNota(limpiar(comprador.replace(/^\(\d{4,9}\)\s*/, ''))) || prodCat;
+                const linea = {
+                    descripcion: desc,
+                    codigoMP: cod ? cod[1] : '',
+                    licitacion: '',
+                    cantidad: elegido.cant,
+                    valorNeto: precio,
+                    totalLinea: valor || (precio ? Math.round(elegido.cant * precio) : 0)
+                };
+                if (precio && valor && Math.round(precio * elegido.cant) !== Math.round(valor)) {
+                    r.avisos.push(`Línea "${desc.slice(0, 40)}": cantidad × precio (${Math.round(precio * elegido.cant).toLocaleString('es-CL')}) no coincide con el valor total (${Math.round(valor).toLocaleString('es-CL')}). Revísala.`);
+                }
+                return linea;
+            }).filter(Boolean);
+        }
 
         if (!r.lineas.length) r.avisos.push('No se detectaron productos en el texto OCR: ingrésalos a mano.');
         const suma = r.lineas.reduce((t, l) => t + (l.totalLinea || 0), 0);
@@ -1054,19 +1133,170 @@
         throw new Error('No reconozco este Excel. Busco un cuadro de distribución (columnas "MEMO N° … CDP N° …") o una orden de compra (tabla Producto / Cantidad / Precio).');
     }
 
+    /** Convierte la salida de Tesseract.js (words/lines/text) al mismo formato 2D [{str,x,y,w,h}] de pdf.js (puro). */
+    function itemsDeTesseract(res, scale = 1, offset = 0) {
+        const sc = Number(scale) > 0 ? Number(scale) : 1;
+        const data = res && res.data ? res.data : {};
+        const out = [];
+        if (Array.isArray(data.words) && data.words.length) {
+            data.words.forEach(w => {
+                const str = limpiar(w && w.text);
+                if (!str || !w.bbox) return;
+                out.push({ str, x: w.bbox.x0 / sc, y: offset + (w.bbox.y0 / sc), w: (w.bbox.x1 - w.bbox.x0) / sc, h: (w.bbox.y1 - w.bbox.y0) / sc });
+            });
+            if (out.length) return out;
+        }
+        if (Array.isArray(data.lines) && data.lines.length) {
+            data.lines.forEach(l => {
+                if (Array.isArray(l.words) && l.words.length) {
+                    l.words.forEach(w => {
+                        const str = limpiar(w && w.text);
+                        if (!str || !w.bbox) return;
+                        out.push({ str, x: w.bbox.x0 / sc, y: offset + (w.bbox.y0 / sc), w: (w.bbox.x1 - w.bbox.x0) / sc, h: (w.bbox.y1 - w.bbox.y0) / sc });
+                    });
+                } else {
+                    const str = limpiar(l && l.text);
+                    if (str && l.bbox) out.push({ str, x: l.bbox.x0 / sc, y: offset + (l.bbox.y0 / sc), w: (l.bbox.x1 - l.bbox.x0) / sc, h: (l.bbox.y1 - l.bbox.y0) / sc });
+                }
+            });
+            if (out.length) return out;
+        }
+        if (typeof data.text === 'string' && data.text.trim()) {
+            data.text.split(/\r?\n/).map(limpiar).filter(Boolean).forEach((str, i) => {
+                out.push({ str, x: 10, y: offset + i * 14, w: 0, h: 10 });
+            });
+        }
+        return out;
+    }
+
+    let tesseractP = null;
+    function cargarTesseract() {
+        if (window.Tesseract && typeof window.Tesseract.createWorker === 'function') return Promise.resolve(window.Tesseract);
+        if (!tesseractP) tesseractP = new Promise((ok, mal) => {
+            const s = document.createElement('script'); s.src = TESSERACT_URL;
+            s.onload = () => { if (window.Tesseract) ok(window.Tesseract); else { tesseractP = null; mal(new Error('No se pudo inicializar el motor OCR.')); } };
+            s.onerror = () => { tesseractP = null; mal(new Error('No se pudo cargar el motor OCR local (revisa tu conexión).')); };
+            document.head.appendChild(s);
+        });
+        return tesseractP;
+    }
+
+    function rotarCanvas180(src) {
+        const c = document.createElement('canvas');
+        c.width = src.width; c.height = src.height;
+        const ctx = c.getContext('2d');
+        ctx.translate(c.width, c.height);
+        ctx.rotate(Math.PI);
+        ctx.drawImage(src, 0, 0);
+        return c;
+    }
+
+    /** Renderiza páginas útiles (sin hojas en blanco) como canvases para OCR local en navegador. */
+    async function canvasesDeArchivo(file, bufferOpt, scale = 2.0) {
+        if (esImagen(file)) {
+            const url = URL.createObjectURL(file);
+            try {
+                return [await new Promise((ok, mal) => {
+                    const im = new Image();
+                    im.onload = () => {
+                        const k = Math.min(1, 2000 / Math.max(im.naturalWidth, im.naturalHeight));
+                        const c = document.createElement('canvas');
+                        c.width = Math.round(im.naturalWidth * k); c.height = Math.round(im.naturalHeight * k);
+                        c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+                        const normScale = c.width > 0 ? (c.width / 612) : 1;
+                        ok({ canvas: c, scale: normScale, heightPt: c.height / normScale });
+                    };
+                    im.onerror = () => mal(new Error('No se pudo abrir la imagen.'));
+                    im.src = url;
+                })];
+            } finally { URL.revokeObjectURL(url); }
+        }
+        const lib = await cargarPdfJs();
+        const data = bufferOpt ? bufferOpt.slice(0) : await file.arrayBuffer();
+        const pdf = await lib.getDocument({ data }).promise;
+        const out = []; let primera = null;
+        for (let p = 1; p <= Math.min(pdf.numPages, 12) && out.length < 6; p++) {
+            const pg = await pdf.getPage(p), vp = pg.getViewport({ scale });
+            const c = document.createElement('canvas');
+            c.width = Math.round(vp.width); c.height = Math.round(vp.height);
+            await pg.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise;
+            const entry = { canvas: c, scale, heightPt: vp.height / scale };
+            if (!primera) primera = entry;
+            if (paginaConContenido(c)) out.push(entry);
+        }
+        return out.length ? out : (primera ? [primera] : []);
+    }
+
+    /** Ejecuta OCR local en el navegador con Tesseract.js (100% gratis, sin clave API) sobre escaneos/fotos. */
+    async function leerConOCRBrowser(file, onProgreso, bufferOpt) {
+        if (onProgreso) onProgreso('Preparando páginas del escaneo para OCR local (omitiendo hojas en blanco)…');
+        const pags = await canvasesDeArchivo(file, bufferOpt, 2.0);
+        if (!pags.length) throw new Error('No se encontraron páginas legibles en el archivo.');
+        if (onProgreso) onProgreso('Cargando motor OCR en el navegador…');
+        const T = await cargarTesseract();
+        let pagActual = 0;
+        const worker = await T.createWorker('spa', 1, {
+            logger: (m) => {
+                if (!onProgreso || !m) return;
+                if (m.status === 'loading language traineddata') {
+                    onProgreso('Descargando idioma español para OCR local (solo la primera vez)…');
+                } else if (m.status === 'recognizing text') {
+                    const pct = Math.round((Number(m.progress) || 0) * 100);
+                    onProgreso(`Leyendo página ${pagActual + 1} de ${pags.length} con OCR local (${pct}%)…`);
+                }
+            }
+        });
+        const ocrItems = [];
+        let offset = 0;
+        try {
+            const rePalabrasDoc = /ORDEN|COMPRA|PROVEEDOR|CANTIDAD|PRECIO|TOTAL|NETO|FACTURA|REUTTER|RUT|DESPACHO|SE[ÑN]OR/i;
+            for (let i = 0; i < pags.length; i++) {
+                pagActual = i;
+                if (onProgreso) onProgreso(`Leyendo página ${i + 1} de ${pags.length} con OCR local…`);
+                let res = await worker.recognize(pags[i].canvas);
+                const txtP = (res && res.data && res.data.text) || '';
+                if (!rePalabrasDoc.test(txtP)) {
+                    // Intenta rotar 180° por si la hoja fue escaneada al revés
+                    const res180 = await worker.recognize(rotarCanvas180(pags[i].canvas));
+                    const txt180 = (res180 && res180.data && res180.data.text) || '';
+                    if (rePalabrasDoc.test(txt180) || txt180.length > txtP.length * 1.3) res = res180;
+                }
+                itemsDeTesseract(res, pags[i].scale, offset).forEach(it => ocrItems.push(it));
+                offset += pags[i].heightPt + 20;
+            }
+        } finally {
+            await worker.terminate().catch(() => {});
+        }
+        if (!ocrItems.length) throw new Error('El OCR local no logró detectar texto en este documento. Intenta con una imagen más nítida o ingresa los datos a mano.');
+        const txt = lineas(ocrItems).map(l => l.texto).join('\n');
+        let r = null;
+        if (reconoceFacturaReutter(txt)) {
+            r = extraerFacturaReutter(ocrItems);
+        } else if (reconoceOC_OCR(txt)) {
+            r = extraerOC_OCR(ocrItems);
+        } else if (reconoceOC(txt)) {
+            r = extraerOC(ocrItems);
+        } else {
+            const p = parecidoA(txt);
+            if (p) throw new Error(`Este escaneo parece ${p}. Aquí va la orden de compra de Mercado Público.`);
+            r = extraerOC_OCR(ocrItems);
+        }
+        r.origenLectura = 'ESCANEADA_OCR_NAV';
+        r.avisos = ['Orden leída con OCR local en el navegador (sin clave de IA): revisa cada dato, código y monto antes de ingresar.', ...(r.avisos || []).filter(a => !/^Orden leída desde texto OCR/i.test(a))];
+        return r;
+    }
+
     /** PDF (digital o escaneado), foto o Excel: devuelve la orden (OC_MP) o el cuadro (DIST_OC). */
     async function leerArchivo(file, opts) {
         const cfg = opts && opts.configCorreo;
         const onProgreso = opts && typeof opts.onProgreso === 'function' ? opts.onProgreso : null;
         if (esExcel(file)) return filasDeExcel(file);
         if (esImagen(file)) {
-            try { return await leerOCEscaneada(file, cfg, onProgreso); }
-            catch (e) {
-                if (e.message === 'SIN_SCRIPT') throw new Error('Para leer fotos de órdenes de compra, conecta primero el Script de Google en Configuración → Script y correo (o ingresa los datos a mano).');
-                if (e.message === 'SCRIPT_VIEJO') throw new Error('El Script de Google aún no incluye lectura de órdenes escaneadas: copia la versión nueva en Configuración → Script y correo y publícala.');
-                if (e.message === 'SIN_CLAVE') throw new Error('Falta configurar la clave de lectura (ANTHROPIC_API_KEY) en el Script de Google.');
-                throw e;
+            if (cfg && cfg.webhookUrl && cfg.token) {
+                try { return await leerOCEscaneada(file, cfg, onProgreso); }
+                catch (e) { /* sin clave IA o script viejo: pasa automáticamente a OCR local en el navegador */ }
             }
+            return leerConOCRBrowser(file, onProgreso);
         }
         const buffer = await file.arrayBuffer();
         const items = await itemsDePDF(buffer);
@@ -1090,36 +1320,27 @@
             throw new Error(`Este archivo parece ${esOtroDoc}. Aquí va la orden de compra de Mercado Público (o su cuadro de distribución).`);
         }
 
-        // 2) PDF escaneado (sin capa de texto o con OCR ruidoso): prioridad IA visual (si el Script está conectado)
+        // 2) PDF escaneado: intenta IA visual (Apps Script) si está conectado; si no tiene clave IA, respalda con OCR embebido o OCR local en navegador (Tesseract.js)
         if (cfg && cfg.webhookUrl && cfg.token) {
             try {
                 return await leerOCEscaneada(file, cfg, onProgreso, buffer);
             } catch (errIA) {
-                // Si el script aún es viejo o no tiene clave, pero el escáner dejó capa OCR, usamos el lector OCR local
-                if (tieneOCR) {
-                    const ocr = extraerOC_OCR(items);
-                    if (errIA.message === 'SCRIPT_VIEJO') {
-                        ocr.avisos.unshift('Se leyó con el OCR del escáner. Actualiza el Script de Google (Configuración → Script y correo) para lectura visual sin errores de OCR.');
-                    }
-                    return ocr;
+                if (tieneOCR) return extraerOC_OCR(items);
+                // Sin clave ANTHROPIC_API_KEY, script viejo o fallo remoto: ejecutar OCR local gratuito en el navegador
+                if (items.length < 15 || errIA.message === 'SIN_CLAVE' || errIA.message === 'SCRIPT_VIEJO') {
+                    return leerConOCRBrowser(file, onProgreso, buffer);
                 }
-                if (errIA.message === 'SCRIPT_VIEJO') throw new Error('Este PDF es un escaneo (imagen). Para leerlo automáticamente, pega la versión nueva del Script de Google en Configuración → Script y correo y crea una nueva implementación.');
-                if (errIA.message === 'SIN_CLAVE') throw new Error('Este PDF es un escaneo (imagen), pero falta la clave ANTHROPIC_API_KEY en el Script de Google. Puedes completar los datos a mano.');
                 throw new Error('No se pudo leer la orden escaneada: ' + (errIA.message || errIA) + '. Puedes ingresar los datos a mano.');
             }
         }
 
-        // 3) Sin Apps Script configurado: si el PDF escaneado trae capa OCR reconocible, usar lector local OC_MP_OCR
+        // 3) Sin Apps Script configurado: usar capa OCR embebida si existe, o ejecutar OCR local gratuito en navegador
         if (tieneOCR) return extraerOC_OCR(items);
-
-        // 4) PDF escaneado puro (sin texto) y sin Apps Script configurado
-        if (items.length < 15) {
-            throw new Error('Este PDF es un documento escaneado (imagen sin texto). Conecta el Script de Google en Configuración → Script y correo para leerlo automáticamente, o ingresa los datos a mano.');
-        }
+        if (items.length < 15) return leerConOCRBrowser(file, onProgreso, buffer);
         return leer(items);
     }
     async function leerDistribucion(file) { const r = await leerArchivo(file); if (r.tipo === 'OC_MP') throw new Error('Ese archivo es una orden de compra: súbelo en el primer recuadro (el cuadro va aquí).'); if (r.tipo !== 'DIST_OC') throw new Error('Ese archivo no es un cuadro de distribución (busco columnas "MEMO N° …", FINANCIAMIENTO y CDP).'); return r; }
 
-    window.SAR_Lector = { cargarPdfJs, leerHoja, extraerDistribucionExcel, extraerOCExcel, esExcel, esImagen, leer, leerArchivo, leerDistribucion, leerOCEscaneada, normalizarOCEscaneada, reconoceOC_OCR, extraerOC_OCR, reconoceFacturaReutter, extraerFacturaReutter, paginaConContenido, paginasDeArchivo, montoOCR, fechaFlexibleISO, extraerDistribucion, extraerDistribucionB, unirDistribucion, detectar, extraerOC, extraerCorreo, lineas, LECTORES };
+    window.SAR_Lector = { cargarPdfJs, cargarTesseract, leerHoja, extraerDistribucionExcel, extraerOCExcel, esExcel, esImagen, leer, leerArchivo, leerDistribucion, leerOCEscaneada, leerConOCRBrowser, itemsDeTesseract, normalizarOCEscaneada, reconoceOC_OCR, extraerOC_OCR, reconoceFacturaReutter, extraerFacturaReutter, paginaConContenido, paginasDeArchivo, canvasesDeArchivo, montoOCR, fechaFlexibleISO, extraerDistribucion, extraerDistribucionB, unirDistribucion, detectar, extraerOC, extraerCorreo, lineas, LECTORES };
     if (typeof module !== 'undefined') module.exports = window.SAR_Lector;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

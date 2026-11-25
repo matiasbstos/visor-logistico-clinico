@@ -844,3 +844,20 @@ t('v21.264: oxigeno-facturacion — eliminar proveedor bloquea con vínculos y W
   assert.ok(xmlWord.includes('Arriendo Entre 2 y 4 meses'));
   assert.ok(xmlWord.includes('Mariel Quintanilla Lizana'));
 });
+
+t('v21.266: oxigeno-facturacion — informe contable, búsqueda por correlativo RCO y exportación CSV', () => {
+  const F = require('../oxigeno-facturacion.js');
+  const sem = F.datosSemillaIndura();
+  const facConRC = { ...sem.facturas[2], recepcionConforme: { emitida: true, numeroActa: 'RCO-2026-00007', tipoRecepcion: 'PARCIAL', fecha: '2026-11-25', contraparte: 'Mariel Quintanilla L.' } };
+  const ev = F.construirEventoContable('OXIGENO_RC', 'RCO-2026-00007', 'ACTA RC OXÍGENO · RCO-2026-00007', 'Emisión RC PARCIAL RCO-2026-00007', { correlativo: 'RCO-2026-00007', proveedor: 'Indura S.A.', numeroOC: '1298355-493-AG25', monto: 254090 });
+  const datos = { proveedores: [sem.proveedor], presupuestos: [sem.presupuesto], facturas: [sem.facturas[0], facConRC], movimientos: [{ ...ev, _fechaTxt: '25/11/2026' }] };
+  const rRco = F.filtrarContable(datos, 'RCO-2026-00007');
+  assert.strictEqual(rRco.actas.length, 1);
+  assert.strictEqual(rRco.actas[0].folio, '2074906');
+  assert.strictEqual(rRco.movimientos.length, 1);
+  const rOc = F.filtrarContable(datos, '1298355-493-AG25');
+  assert.strictEqual(rOc.presupuestos.length, 1);
+  assert.strictEqual(rOc.actas.length, 2);
+  const csv = F.csvContableOxigeno(datos);
+  assert.ok(csv.includes('RCO-2026-00007') && csv.includes('1298355-493-AG25') && csv.includes('OXÍGENO — BITÁCORA CONTABLE'));
+});

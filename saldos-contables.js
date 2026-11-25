@@ -95,15 +95,20 @@
         if (!segId) { pintar(); return; }
         segCargando = true; pintar();
         try {
-            const aq = await f.getDocs(f.query(f.collection(db(), 'Actas_Entrega'), f.where('numero', '==', segId), f.limit(1)));
-            if (aq.empty) { seg = { vacio: true }; }
-            else {
-                const acta = aq.docs[0].data(); const ins = {};
-                for (const it of acta.items || []) { try { const sn = await f.getDoc(f.doc(f.collection(db(), 'Insumos'), it.id)); if (sn.exists()) ins[it.id] = sn.data(); } catch (e) { /* sin permiso o borrado */ } }
-                const hq = await f.getDocs(f.query(f.collection(db(), 'Historial_Movimientos'), f.where('actaId', '==', segId), f.limit(200)));
-                const movs = []; hq.forEach(d => { const m = d.data(); const t = m.date && m.date.toDate ? m.date.toDate().getTime() : (Date.parse(m.date) || 0); movs.push({ ...m, _t: t }); });
-                movs.sort((a, b) => a._t - b._t);
-                seg = { acta, ins, movs };
+            if (/^RCO-\d{4}-\d{4,6}$/.test(segId) && window.SAR_OxiFacturacion && window.SAR_OxiFacturacion.buscarActaRCO) {
+                const res = await window.SAR_OxiFacturacion.buscarActaRCO(segId);
+                seg = !res || res.vacio ? { vacio: true } : { rco: res };
+            } else {
+                const aq = await f.getDocs(f.query(f.collection(db(), 'Actas_Entrega'), f.where('numero', '==', segId), f.limit(1)));
+                if (aq.empty) { seg = { vacio: true }; }
+                else {
+                    const acta = aq.docs[0].data(); const ins = {};
+                    for (const it of acta.items || []) { try { const sn = await f.getDoc(f.doc(f.collection(db(), 'Insumos'), it.id)); if (sn.exists()) ins[it.id] = sn.data(); } catch (e) { /* sin permiso o borrado */ } }
+                    const hq = await f.getDocs(f.query(f.collection(db(), 'Historial_Movimientos'), f.where('actaId', '==', segId), f.limit(200)));
+                    const movs = []; hq.forEach(d => { const m = d.data(); const t = m.date && m.date.toDate ? m.date.toDate().getTime() : (Date.parse(m.date) || 0); movs.push({ ...m, _t: t }); });
+                    movs.sort((a, b) => a._t - b._t);
+                    seg = { acta, ins, movs };
+                }
             }
         } catch (e) { toast('Seguimiento', 'No se pudo buscar: ' + e.message, 'error'); seg = null; }
         segCargando = false; pintar();
@@ -122,6 +127,12 @@
         if (segCargando) return '<p class="act-hint">Buscando…</p>';
         if (!seg) return '';
         if (seg.vacio) return `<p class="act-err" style="padding-left:0">No existe el acta ${esc(segId)}.</p>`;
+        if (seg.rco) {
+            const r = seg.rco, f = r.factura, rc = f.recepcionConforme || {}, pv = r.proveedor;
+            return `<div class="seg-cab"><b>${esc(r.correlativo)}</b> · RC ${esc(rc.tipoRecepcion || 'PARCIAL')} · ${esc(pv ? pv.razonSocial : '—')} (${esc(pv ? pv.rut : '—')}) · OC ${esc(f.numeroOC || '—')} · ${esc(f.tipoDocumento === 'GUIA_DESPACHO' ? 'Guía' : 'Factura')} ${esc(f.folio)} · Fecha RC ${esc(rc.fecha || '—')} · Total ${clp(f.totalBruto)}<span class="sal-e sal-e--LISTO">Oxígeno RC</span></div>
+            <h4 class="act-h4">Movimientos contables</h4>
+            ${r.movimientos.length ? `<ul class="seg-mov">${r.movimientos.map(m => `<li><b>${esc(m.type)}</b> · ${esc(m.observacion || '')}<span>${esc(m._fechaTxt || '')} · ${esc(m.user || '')}</span></li>`).join('')}</ul>` : '<p class="act-hint">Sin movimientos adicionales.</p>'}`;
+        }
         const a = seg.acta, its = itemsSeg(), pend = its.reduce((t, x) => t + x.pend, 0);
         const estado = a.estado === 'ANULADA' ? 'ANULADA' : !a.conSobregiro ? 'Entregada con respaldo' : pend > 0 ? `Sobregiro pendiente: ${pend} u.` : 'Cuadrada';
         return `<div class="seg-cab"><b>${esc(a.numero)}</b> · ${esc(a.centro)} · ${esc(a.fecha)} · ${esc(a.bodegaOrigen)} · ${esc(a.creadoPor || '')}<span class="sal-e sal-e--${a.estado === 'ANULADA' ? 'SIN_RESPALDO' : pend > 0 ? 'PROVISIONAL' : 'LISTO'}">${esc(estado)}</span></div>
@@ -163,9 +174,9 @@
         const h = document.getElementById('seg-root'); if (!h) return;
         h.innerHTML = `
         <h3 class="act-h">Seguimiento de un acta</h3>
-        <p class="act-hint">Escribe el ID del acta (ej. <b>AE-2026-0001</b>) para ver todo su movimiento: entrega, sobregiro, cuadres y anulación.</p>
-        <div class="sal-barra"><input id="seg-q" type="search" placeholder="AE-2026-0001" value="${esc(segId)}" autocomplete="off" style="max-width:220px"><button type="button" class="btn btn-primary" id="seg-b">Buscar</button>${seg && seg.acta ? '<button type="button" class="btn btn-outline" id="seg-csv">Descargar seguimiento (Excel)</button>' : ''}</div>
-`;
+        <p class="act-hint">Escribe el ID del acta (ej. <b>AE-2026-0001</b> o <b>RCO-2026-00001</b> de oxígeno) para ver todo su movimiento.</p>
+        <div class="sal-barra"><input id="seg-q" type="search" placeholder="AE-2026-0001 o RCO-2026-00001" value="${esc(segId)}" autocomplete="off" style="max-width:260px"><button type="button" class="btn btn-primary" id="seg-b">Buscar</button>${seg && seg.acta ? '<button type="button" class="btn btn-outline" id="seg-csv">Descargar seguimiento (Excel)</button>' : ''}</div>
+        ${segHtml()}`;
         const sq = h.querySelector('#seg-q'); const go = () => { segId = sq.value.trim().toUpperCase(); seguir(); };
         h.querySelector('#seg-b').addEventListener('click', go); sq.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
         const sc = h.querySelector('#seg-csv'); if (sc) sc.addEventListener('click', descargarSeg);
@@ -244,7 +255,7 @@
         <p class="act-hint">Toca el nombre de un insumo para ver toda su historia (contable) con el detalle de cada movimiento.</p>
         <div class="sal-tabla"><div class="sal-fila sal-cab"><span>Insumo</span><span>Disponible</span><span>En sistema</span><span>Sobregiro</span><span>Bodega</span><span>Estado</span><span></span></div>
         ${vis.slice(0, 400).map(x => `<div class="sal-fila"><span class="sal-n"><button type="button" class="sal-ver" data-n="${esc(x.nombre)}" data-c="${esc(x.codigo || '')}">${esc(x.nombre)}</button><small>${x.codigo ? 'ID ' + esc(x.codigo) + ' · ' : (x.provisional ? 'sin ID · ' : '')}${x.actas.length ? esc(actasTxt(x)) : ''}</small></span><span><b>${x.disp}</b></span><span>${x.q}</span><span class="${x.sg > 0 ? 'act-sin' : ''}">${x.sg}</span><span>${esc(x.bodega)}</span><span><i class="sal-e sal-e--${x.estado}">${ETIQ[x.estado]}</i></span><span>${x.estado === 'LISTO' ? `<button type="button" class="btn btn-outline sal-q" data-id="${esc(x.id)}">Cuadrar</button>` : ''}${x.provisional && !x.codigo ? `<button type="button" class="btn btn-outline sal-id" data-id="${esc(x.id)}" data-n="${esc(x.nombre)}">Asignar ID</button>` : ''}</span></div>`).join('')}</div>${vis.length > 400 ? '<p class="act-hint">Se muestran 400; el informe Excel incluye todos.</p>' : ''}`}`;
-        const oxiD = '<div id="oxi-aud-d"></div><div id="sol-aud-d" class="sol-aud"></div>', oxiC = '<div id="oxi-aud-c"></div><div id="sol-aud-c" class="sol-aud"></div>';
+        const oxiD = '<div id="oxi-aud-d"></div><div id="sol-aud-d" class="sol-aud"></div>', oxiC = '<div id="oxi-aud-c"></div><div id="oxi-fact-aud"></div><div id="sol-aud-c" class="sol-aud"></div>';
         const conta = `
         <p class="act-hint"><b>Contable</b> es la historia completa de un producto, como un libro: cuándo llegó, a qué bodega, cuándo se movió o salió, ajustes, ediciones y recepciones, cada línea con su motivo y código.</p>
         <div class="sal-barra"><input type="search" id="aud-q" class="form-control" placeholder="Producto o ID de Mercado Público…" value="${esc(contQ)}" autocomplete="off" aria-label="Buscar producto"></div><div id="aud-sug" class="vp-sug"></div>
@@ -252,6 +263,7 @@
         <div id="rec-aud"></div><div id="gob-aud"></div>${oxiC}`;
         r.innerHTML = `<div class="page-header mb-24"><div class="page-title"><h2>Auditoría</h2><p>Dos informes: lo que hay disponible y la historia contable de cada insumo.</p></div></div>${tabs}${tab === 'disp' ? disp + oxiD : conta}`;
         if (window.SAR_OxiCiclos) window.SAR_OxiCiclos[tab === 'disp' ? 'pintarDisponible' : 'pintarContable'](r.querySelector(tab === 'disp' ? '#oxi-aud-d' : '#oxi-aud-c'));
+        if (tab === 'cont' && window.SAR_OxiFacturacion && window.SAR_OxiFacturacion.pintarContable) window.SAR_OxiFacturacion.pintarContable(r.querySelector('#oxi-fact-aud')).catch(() => {});
         if (window.SAR_Solicitudes && window.SAR_Solicitudes.pintarAuditoria) window.SAR_Solicitudes.pintarAuditoria(r.querySelector(tab === 'disp' ? '#sol-aud-d' : '#sol-aud-c'), tab === 'disp' ? 'disp' : 'cont').catch(() => {});
         r.querySelectorAll('.aud-tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; pintar(); }));
         if (tab === 'cont') {

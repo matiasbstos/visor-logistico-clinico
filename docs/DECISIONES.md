@@ -1879,3 +1879,12 @@ Caso del usuario: al subir un PDF escaneado sin clave `ANTHROPIC_API_KEY` en Goo
 - **Acta de Recepción Conforme en PDF y Word `.docx` (`construirCuerpoWordRC`, `descargarRCOficialCorporacionWord`):** replica la esencia de `Seguimiento de OC` (`recepciones-conformes.js` + `acta-documentos.js`):
   - Botones directos **Editar acta**, **PDF**, **Word**, **Ver** y **Eliminar** en cada fila.
   - **Fecha editable** con atajos rápidos (*Usar fecha del documento* y *Usar hoy*), tipo **Parcial / Total**, documento/N°, contraparte técnica, firma/timbre oficial (`assets/firma-contraparte-mariel.png` + `assets/logo-corpo-melipilla.jpg`), detalle replicado editable con botón **«Restaurar descripción de factura»**, y descarga inmediata en **PDF** y **Word (`.docx`)**.
+
+
+### 4.317 Integración contable de Oxígeno (Presupuestos, Proveedores, Actas RCO y buscador de seguimiento) (v21.266)
+- **Gestor completo de Proveedores y Presupuestos (`oxigeno-facturacion.js`):** botones **«Proveedores (N)»** y **«Presupuestos / OC (N)»** para crear, editar y eliminar (con protección de vínculos) ambos catálogos.
+- **Bitácora contable inmutable (`Historial_Movimientos`):** cada creación, edición o eliminación de proveedores (`OXIGENO_PROVEEDOR`), presupuestos/OC (`OXIGENO_PRESUPUESTO`), facturas/guías (`OXIGENO_FACTURA`) y emisión/edición de actas RC con su correlativo `RCO-AAAA-NNNNN` (`OXIGENO_RC`) se registra automáticamente (atómico en `runTransaction` para facturas y actas RC).
+- **Informe Contable y buscador de correlativos (`saldos-contables.js` + `oxigeno-facturacion.js`):**
+  - En **Auditoría → Contable** se integra la sección **Oxígeno — Informe Contable, Presupuestos y Actas RC (RCO)** con **barra de búsqueda** por `RCO-AAAA-NNNNN`, OC, folio, proveedor, RUT o tipo de cambio, acciones directas (**Editar acta**, **PDF**, **Word**) y descarga **Excel CSV contable de oxígeno**.
+  - En **Oxígeno → Facturación y Presupuesto**, la barra de búsqueda busca globalmente por `RCO-…`, folio, OC, proveedor o detalle, junto a filtros **Todos / Actas RC (RCO) / Pendientes RC**.
+  - En **Seguimiento de un acta**, buscar un correlativo `RCO-AAAA-NNNNN` muestra el acta de oxígeno y su trazabilidad contable.

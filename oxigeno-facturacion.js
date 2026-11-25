@@ -16,7 +16,8 @@
     'use strict';
 
     const RECINTO_BASE = 'SAR Arpillerista Elsa Romo Aravena';
-    const CONTRAPARTE_BASE = 'Mariel Quintanilla Lizana';
+    const CONTRAPARTE_BASE = 'Mariel Quintanilla L.';
+    const encabezadoRCBase = (parcial) => `Que se recibió conforme en forma ${parcial ? 'Parcial' : 'Total'} de los productos, donde se recibió lo siguiente:`;
     const PDFLIB_URL = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
     const GEMINI_ENDPOINT_DEFAULT = 'https://us-central1-sarinventario.cloudfunctions.net/extraerFacturaOxigeno';
     const TOLERANCIA_REDONDEO = 2;
@@ -342,7 +343,7 @@
             const vu = Math.round(num(mi[5]));
             const vt = Math.round(num(mi[6]));
             items.push({ codigo: mi[1].trim(), descripcion: desc, cantidad: cant, unidad: uni, valorUnitario: vu, valorTotal: vt });
-            bloquesRC.push({ titulo: `${desc} (CANTIDAD: ${cant} ${uni})`, sublineas: [] });
+            bloquesRC.push({ titulo: `${desc} (CANTIDAD:${cant})`, sublineas: [] });
         }
         if (!items.length && (neto || totalBruto)) {
             items.push({ codigo: '', descripcion: 'Arriendo mensual de cilindros de gases medicinales', cantidad: 1, unidad: 'GL', valorUnitario: neto || totalBruto, valorTotal: neto || totalBruto });
@@ -418,7 +419,7 @@
         }
 
         const items = [{ codigo: '', descripcion: descBase, cantidad: cant, unidad: uni, valorUnitario: vu, valorTotal: vt }];
-        const bloquesRC = [{ titulo: `${descBase} (CANTIDAD: ${cant} ${uni})`, sublineas }];
+        const bloquesRC = [{ titulo: `${descBase} (CANTIDAD:${cant})`, sublineas }];
 
         return {
             origenLectura: 'MODELO_WELDING',
@@ -534,7 +535,7 @@
                 if (!grupos.has(it.grupo)) grupos.set(it.grupo, []);
                 if (it.sublinea) grupos.get(it.grupo).push(it.sublinea);
             } else {
-                const cantTxt = num(it.cantidad) > 0 ? ` (CANTIDAD: ${num(it.cantidad).toLocaleString('es-CL')} ${it.unidad || 'UN'})` : '';
+                const cantTxt = num(it.cantidad) > 0 ? ` (CANTIDAD:${num(it.cantidad).toLocaleString('es-CL')})` : '';
                 sueltos.push({ titulo: `${String(it.descripcion || '').trim()}${cantTxt}`, sublineas: [] });
             }
         });
@@ -804,8 +805,40 @@
     let filtroProv = 'TODOS';       // 'TODOS' | 'ACTIVO' | 'HISTORICO' | proveedorId
     let filtroPresId = '';          // presupuestoId activo seleccionado
     let filtroConcepto = 'TODOS';   // 'TODOS' | 'ARRIENDO' | 'RECARGA'
+    let filtroRC = 'TODOS';         // 'TODOS' | 'CON_RC' | 'SIN_RC'
     let buscador = '';
     let contenedorActivo = null;
+
+    /** Arma el objeto de registro inmutable para Historial_Movimientos (Informe Contable). */
+    function construirEventoContable(tipo, documento, titulo, observacion, extra) {
+        return {
+            type: tipo,
+            insumoName: String(titulo || '').trim(),
+            quantity: num(extra && extra.monto),
+            document: String(documento || '').trim(),
+            actaId: String((extra && extra.correlativo) || documento || '').trim(),
+            batch: 'OXIGENO',
+            origin: String((extra && extra.proveedor) || 'OXIGENO').trim(),
+            dest: String((extra && extra.numeroOC) || '').trim(),
+            user: usuario(),
+            observacion: String(observacion || '').trim(),
+            modulo: 'OXIGENO_FACTURACION',
+            ...(extra || {})
+        };
+    }
+
+    async function registrarEventoContable(tipo, documento, titulo, observacion, extra) {
+        const f = fs(), d = db();
+        if (!f || !d) return;
+        try {
+            await f.setDoc(f.doc(f.collection(d, 'Historial_Movimientos')), {
+                ...construirEventoContable(tipo, documento, titulo, observacion, extra),
+                date: f.serverTimestamp()
+            });
+        } catch (e) {
+            console.warn('[OxiFact] No se pudo registrar evento contable:', e);
+        }
+    }
 
     async function cargarDatos() {
         const f = fs(), d = db();
@@ -832,9 +865,11 @@
         const rutLimpio = fmtRut(datos.rut);
         if (!String(datos.razonSocial || '').trim()) throw new Error('Ingresa la razón social del proveedor.');
         if (!rutLimpio) throw new Error('Ingresa el RUT del proveedor.');
+        const esEdicion = !!datos.id;
+        const prev = esEdicion ? proveedores.find(p => p.id === datos.id) : null;
         const id = datos.id || ('prov-' + slug(`${datos.razonSocial}-${normRut(rutLimpio)}`));
         const ref = f.doc(f.collection(d, 'oxigeno_proveedores'), id);
-        await f.setDoc(ref, {
+        const nuevo = {
             id,
             razonSocial: String(datos.razonSocial).trim(),
             rut: rutLimpio,
@@ -843,7 +878,22 @@
             cuentaBancaria: String(datos.cuentaBancaria || '').trim(),
             actualizadoEl: f.serverTimestamp(),
             creadoEl: datos.creadoEl || f.serverTimestamp()
-        }, { merge: true });
+        };
+        await f.setDoc(ref, nuevo, { merge: true });
+        const cambios = prev ? [
+            prev.razonSocial !== nuevo.razonSocial ? `Razón social: ${prev.razonSocial} → ${nuevo.razonSocial}` : '',
+            prev.rut !== nuevo.rut ? `RUT: ${prev.rut} → ${nuevo.rut}` : '',
+            prev.estado !== nuevo.estado ? `Estado: ${prev.estado} → ${nuevo.estado}` : '',
+            (prev.contactoEmail || '') !== nuevo.contactoEmail ? `Email: ${prev.contactoEmail || '—'} → ${nuevo.contactoEmail || '—'}` : '',
+            (prev.cuentaBancaria || '') !== nuevo.cuentaBancaria ? `Cuenta: ${prev.cuentaBancaria || '—'} → ${nuevo.cuentaBancaria || '—'}` : ''
+        ].filter(Boolean).join('; ') : '';
+        await registrarEventoContable(
+            'OXIGENO_PROVEEDOR',
+            nuevo.rut,
+            `PROVEEDOR OXÍGENO · ${nuevo.razonSocial}`,
+            esEdicion ? `Proveedor editado (${nuevo.rut}): ${cambios || 'datos actualizados'}.` : `Proveedor creado: ${nuevo.razonSocial} (${nuevo.rut}, ${nuevo.estado}).`,
+            { proveedor: nuevo.razonSocial, accion: esEdicion ? 'EDICION' : 'ALTA' }
+        );
         return id;
     }
 
@@ -854,9 +904,12 @@
         if (!numeroOC) throw new Error('Ingresa el N° de Orden de Compra.');
         const montoTope = Math.round(num(datos.montoTope));
         if (montoTope <= 0) throw new Error('El monto tope debe ser mayor a $0.');
+        const esEdicion = !!datos.id;
+        const prev = esEdicion ? presupuestos.find(b => b.id === datos.id) : null;
+        const pv = proveedores.find(p => p.id === datos.proveedorId);
         const id = datos.id || ('pres-' + slug(numeroOC));
         const ref = f.doc(f.collection(d, 'oxigeno_presupuestos'), id);
-        await f.setDoc(ref, {
+        const nuevo = {
             id,
             proveedorId: datos.proveedorId,
             numeroOC,
@@ -869,7 +922,23 @@
             estado: datos.estado === 'CERRADO' ? 'CERRADO' : 'ACTIVO',
             actualizadoEl: f.serverTimestamp(),
             creadoEl: datos.creadoEl || f.serverTimestamp()
-        }, { merge: true });
+        };
+        await f.setDoc(ref, nuevo, { merge: true });
+        const cambios = prev ? [
+            prev.numeroOC !== nuevo.numeroOC ? `OC: ${prev.numeroOC} → ${nuevo.numeroOC}` : '',
+            Math.round(num(prev.montoTope)) !== nuevo.montoTope ? `Tope: ${clp(prev.montoTope)} → ${clp(nuevo.montoTope)}` : '',
+            prev.tipoMonto !== nuevo.tipoMonto ? `Tipo monto: ${prev.tipoMonto} → ${nuevo.tipoMonto}` : '',
+            prev.conceptoPermitido !== nuevo.conceptoPermitido ? `Concepto: ${prev.conceptoPermitido} → ${nuevo.conceptoPermitido}` : '',
+            prev.estado !== nuevo.estado ? `Estado: ${prev.estado} → ${nuevo.estado}` : '',
+            (prev.nombreContrato || '') !== nuevo.nombreContrato ? `Contrato: ${prev.nombreContrato || '—'} → ${nuevo.nombreContrato}` : ''
+        ].filter(Boolean).join('; ') : '';
+        await registrarEventoContable(
+            'OXIGENO_PRESUPUESTO',
+            nuevo.numeroOC,
+            `PRESUPUESTO OXÍGENO · OC ${nuevo.numeroOC}`,
+            esEdicion ? `Presupuesto editado (${nuevo.numeroOC}): ${cambios || 'datos actualizados'}.` : `Presupuesto creado: OC ${nuevo.numeroOC} · ${nuevo.conceptoPermitido} · Tope ${clp(nuevo.montoTope)} (${nuevo.tipoMonto}).`,
+            { proveedor: pv ? pv.razonSocial : '', numeroOC: nuevo.numeroOC, monto: nuevo.montoTope, accion: esEdicion ? 'EDICION' : 'ALTA' }
+        );
         return id;
     }
 
@@ -892,19 +961,26 @@
         const f = fs(), d = db();
         const check = validarEliminacionProveedor(id, presupuestos, facturas);
         if (!check.ok) throw new Error(check.mensaje);
+        const pv = proveedores.find(p => p.id === id);
         await f.deleteDoc(f.doc(f.collection(d, 'oxigeno_proveedores'), id));
+        await registrarEventoContable('OXIGENO_PROVEEDOR', pv ? pv.rut : id, `PROVEEDOR OXÍGENO · ${pv ? pv.razonSocial : id}`, `Proveedor eliminado: ${pv ? pv.razonSocial + ' (' + pv.rut + ')' : id}.`, { proveedor: pv ? pv.razonSocial : '', accion: 'ELIMINACION' });
     }
 
     async function eliminarPresupuesto(id) {
         const f = fs(), d = db();
         const nFact = facturas.filter(x => x.presupuestoId === id).length;
         if (nFact > 0) throw new Error(`No se puede eliminar esta OC/presupuesto porque tiene ${nFact} documento(s) asociados. Cámbiala a estado «Cerrado».`);
+        const b = presupuestos.find(x => x.id === id);
         await f.deleteDoc(f.doc(f.collection(d, 'oxigeno_presupuestos'), id));
+        await registrarEventoContable('OXIGENO_PRESUPUESTO', b ? b.numeroOC : id, `PRESUPUESTO OXÍGENO · OC ${b ? b.numeroOC : id}`, `Presupuesto/OC eliminado: ${b ? b.numeroOC + ' (' + clp(b.montoTope) + ')' : id}.`, { numeroOC: b ? b.numeroOC : '', monto: b ? b.montoTope : 0, accion: 'ELIMINACION' });
     }
 
     async function eliminarFactura(id) {
         const f = fs(), d = db();
+        const fac = facturas.find(x => x.id === id);
+        const pv = fac ? proveedores.find(p => p.id === fac.proveedorId) : null;
         await f.deleteDoc(f.doc(f.collection(d, 'oxigeno_facturas'), id));
+        await registrarEventoContable('OXIGENO_FACTURA', fac ? fac.folio : id, `OXÍGENO · ${fac && fac.tipoDocumento === 'GUIA_DESPACHO' ? 'GUÍA' : 'FACTURA'} ${fac ? fac.folio : id}`, `Documento eliminado: Folio ${fac ? fac.folio : id}${fac && fac.recepcionConforme && fac.recepcionConforme.numeroActa ? ' · Acta ' + fac.recepcionConforme.numeroActa : ''} (${fac ? clp(fac.totalBruto) : ''}).`, { proveedor: pv ? pv.razonSocial : '', numeroOC: fac ? fac.numeroOC : '', monto: fac ? fac.totalBruto : 0, accion: 'ELIMINACION' });
     }
 
     /** Sube el respaldo original a Firebase Storage: oxigeno/facturas/{rut}/{folio}.{ext} */
@@ -999,6 +1075,16 @@
             };
 
             tx.set(factRef, registro);
+            tx.set(f.doc(f.collection(d, 'Historial_Movimientos')), {
+                ...construirEventoContable(
+                    'OXIGENO_FACTURA',
+                    registro.folio,
+                    `OXÍGENO · ${registro.tipoDocumento === 'GUIA_DESPACHO' ? 'GUÍA' : 'FACTURA'} ${registro.folio}`,
+                    `Ingreso ${registro.tipoDocumento === 'GUIA_DESPACHO' ? 'guía' : 'factura'} ${registro.folio} (${prov ? prov.razonSocial : ''}) · OC ${registro.numeroOC || 'S/OC'} · ${registro.tipoServicio} · Total ${clp(registro.totalBruto)} (OC ${clp(registro.montoImputadoOC)} / CC ${clp(registro.montoCajaChica)})${folioReemp ? ' · reemplaza ' + folioReemp : ''}.`,
+                    { proveedor: prov ? prov.razonSocial : '', numeroOC: registro.numeroOC, monto: registro.totalBruto, accion: 'ALTA' }
+                ),
+                date: f.serverTimestamp()
+            });
             if (prevRef && prevSnap && prevSnap.exists()) {
                 tx.update(prevRef, {
                     estado: 'REEMPLAZADA',
@@ -1044,7 +1130,7 @@
                 numeroDoc: String(datosRC.numeroDoc != null ? datosRC.numeroDoc : (actual.folio || '')).trim(),
                 contraparte,
                 conFirma: datosRC.conFirma !== false,
-                encabezado: String(datosRC.encabezado || '').trim() || `Que se recibió conforme en forma ${parcial ? 'parcial' : 'total'} el producto, donde se recibió lo siguiente:`,
+                encabezado: String(datosRC.encabezado || '').trim() || encabezadoRCBase(parcial),
                 bloquesRC: bloques,
                 receptorNombre: String(datosRC.receptorNombre || contraparte).trim(),
                 receptorRut: datosRC.receptorRut ? fmtRut(datosRC.receptorRut) : '',
@@ -1060,6 +1146,17 @@
             const upd = { recepcionConforme: rc };
             if (datosRC.tipoDocumento) upd.tipoDocumento = datosRC.tipoDocumento === 'GUIA_DESPACHO' ? 'GUIA_DESPACHO' : 'FACTURA';
             tx.update(factRef, upd);
+            const pvRC = proveedores.find(p => p.id === actual.proveedorId);
+            tx.set(f.doc(f.collection(d, 'Historial_Movimientos')), {
+                ...construirEventoContable(
+                    'OXIGENO_RC',
+                    rc.numeroActa,
+                    `ACTA RC OXÍGENO · ${rc.numeroActa}`,
+                    `${rcPrev.emitida ? 'Edición' : 'Emisión'} RC ${rc.tipoRecepcion} ${rc.numeroActa} · Fecha ${fechaCL(rc.fecha)} · ${rc.tipoDocumento === 'GUIA_DESPACHO' ? 'Guía' : 'Factura'} ${rc.numeroDoc || actual.folio} · OC ${actual.numeroOC || 'S/OC'} · ${pvRC ? pvRC.razonSocial : ''} · Contraparte: ${rc.contraparte}.`,
+                    { correlativo: rc.numeroActa, proveedor: pvRC ? pvRC.razonSocial : '', numeroOC: actual.numeroOC || '', folio: actual.folio || '', monto: actual.totalBruto || 0, accion: rcPrev.emitida ? 'EDICION' : 'EMISION' }
+                ),
+                date: f.serverTimestamp()
+            });
             return rc;
         });
     }
@@ -1267,7 +1364,7 @@
             try { firmaImg = await doc.embedPng(firmaBytes); } catch (_) { firmaImg = null; }
         }
 
-        const W = 612, H = 792, ML = 84, MR = 548, negro = rgb(0, 0, 0);
+        const W = 612, H = 792, ML = 84, MR = 552, negro = rgb(0, 0, 0);
         const seguro = (font, s) => {
             const set = font.getCharacterSet();
             return Array.from(String(s == null ? '' : s).replace(/³/g, '3').replace(/²/g, '2').replace(/\s+/g, ' ')).map(c => set.includes(c.codePointAt(0)) ? c : ' ').join('');
@@ -1291,54 +1388,51 @@
                 .forEach(([a, b, c, e]) => page.drawLine({ start: { x: a, y: H - b }, end: { x: c, y: H - e }, thickness: t, color: negro }));
         };
 
+        // Geometría exacta del modelo oficial de Seguimiento de OC (recepcion-conforme.js)
         if (logo) { const h = 66, w = logo.width * h / logo.height; page.drawImage(logo, { x: ML, y: H - 62 - h, width: w, height: h }); }
         const titulo = `RECEPCIÓN CONFORME PRODUCTO O SERVICIO ${parcial ? 'PARCIAL' : 'TOTAL'}`;
-        centrar(titulo, 10.5, true, 100, ML + 90, MR + 20);
+        centrar(titulo, 10, true, 100, ML + 90, MR + 20);
 
-        let y = 152;
-        T('DATOS DEL PROVEEDOR', ML, y, 10.5, true); y += 22;
-        const nomEmp = proveedor ? proveedor.razonSocial : '—';
-        envolver(`Nombre de la empresa: ${nomEmp}`, 10.5, true, MR - ML).forEach(t => { T(t, ML, y, 10.5, true); y += 16; });
-        y += 4;
-        T(`RUT: ${proveedor ? proveedor.rut : '—'}`, ML, y, 10.5, true); y += 20;
-        T(`Orden de Compra: ${numOC || '—'}`, ML, y, 10.5, true); y += 22;
-        const docTipoTxt = factura.tipoDocumento === 'GUIA_DESPACHO' ? 'Guía de Despacho' : 'Factura';
-        if (factura.folio) {
-            T(`${docTipoTxt} N°: ${factura.folio}${factura.periodoServicio ? '  ·  Período: ' + fmtPeriodo(factura.periodoServicio) : ''}`, ML, y, 9.5, false);
-            y += 18;
-        }
+        let y = 150;
+        T('DATOS DEL PROVEEDOR', 160, y, 10.5, true); y += 24;
+        const nomEmp = proveedor ? proveedor.razonSocial : '';
+        envolver(`Nombre de la empresa: ${nomEmp}`, 10.5, true, MR - ML + 8).forEach(t => { T(t, ML, y, 10.5, true); y += 15; });
+        y += 7;
+        T(`RUT: ${proveedor ? proveedor.rut : ''}`, ML, y, 10.5, true); y += 22;
+        T(`Orden de Compra: ${numOC}`, ML, y, 10.5, true); y += 22;
         T(`Con fecha ${fechaCL(rc.fecha || hoyISO())}, en calidad de contraparte técnica, certifico lo siguiente:`, ML, y, 10.5, false);
-        y += 20;
+        y += 22;
 
-        const encab = rc.encabezado || `Que se recibió conforme en forma ${parcial ? 'parcial' : 'total'} el producto, donde se recibió lo siguiente:`;
-        let top = y, cy = y + 18;
-        envolver(encab, 9.5, false, MR - ML - 16).forEach(t => { T(t, ML + 8, cy, 9.5, false); cy += 14; });
+        const encab = (rc.encabezado && String(rc.encabezado).trim()) || encabezadoRCBase(parcial);
+        let top = y, cy = y + 16;
+        envolver(encab, 8.5, false, MR - ML - 12).forEach(t => { T(t, ML + 6, cy, 8.5, false); cy += 12; });
         cy += 4;
 
         bloques.forEach((b) => {
-            const titLineas = envolver(b.titulo, 10, true, MR - ML - 48);
-            const subLineas = (b.sublineas || []).flatMap(sl => envolver(sl, 10, false, MR - ML - 52));
-            const alto = titLineas.length * 14 + subLineas.length * 14 + 8;
-            if (cy + alto > H - 130) {
-                caja(ML, MR, top, cy + 4);
+            const tieneSubs = Array.isArray(b.sublineas) && b.sublineas.length > 0;
+            const titLineas = envolver(b.titulo, 10.5, tieneSubs, MR - ML - 44);
+            const subLineas = (b.sublineas || []).flatMap(sl => envolver(sl, 10.5, false, MR - ML - 48));
+            const alto = titLineas.length * 13.5 + subLineas.length * 13.5 + 8;
+            if (cy + alto > H - 120) {
+                caja(ML, MR, top, cy + 2);
                 page = doc.addPage([W, H]);
-                top = 60; cy = 78;
-                T(`Recepción conforme OC ${numOC} (continuación)`, ML + 8, cy, 9, true);
-                cy += 18;
+                top = 60; cy = 76;
+                T(`Recepción conforme OC ${numOC} (continuación)`, ML + 6, cy, 8.5, true);
+                cy += 16;
             }
-            page.drawCircle({ x: ML + 26, y: H - cy + 3, size: 2.3, color: negro });
-            titLineas.forEach((t) => { T(t, ML + 38, cy, 10, true); cy += 14; });
-            subLineas.forEach((t) => { T(t, ML + 38, cy, 10, false); cy += 14; });
-            cy += 6;
+            page.drawCircle({ x: ML + 26, y: H - cy + 3, size: 2.2, color: negro });
+            titLineas.forEach((t) => { T(t, ML + 40, cy, 10.5, tieneSubs); cy += 13.5; });
+            subLineas.forEach((t) => { T(t, ML + 40, cy, 10.5, false); cy += 13.5; });
+            cy += 8;
         });
 
         if (rc.observaciones) {
-            envolver(`Observaciones: ${rc.observaciones}`, 9, false, MR - ML - 16).forEach(t => { T(t, ML + 8, cy, 9, false); cy += 12; });
+            envolver(`Observaciones: ${rc.observaciones}`, 8.5, false, MR - ML - 12).forEach(t => { T(t, ML + 6, cy, 8.5, false); cy += 11; });
             cy += 4;
         }
-        caja(ML, MR, top, Math.max(cy + 12, top + 120));
+        caja(ML, MR, top, cy + 2);
 
-        let yf = Math.max(cy + 84, top + 190);
+        let yf = cy + 80;
         if (yf > H - 90) { page = doc.addPage([W, H]); yf = 160; }
         if (firmaImg) {
             const w = 196, h = w * firmaImg.height / firmaImg.width;
@@ -1346,15 +1440,15 @@
         } else {
             page.drawLine({ start: { x: 190, y: H - yf }, end: { x: 420, y: H - yf }, thickness: 0.8, color: negro });
         }
-        centrar('Firma contraparte técnica', 10.5, false, yf + 22, 0, W);
-        centrar(`Nombre Contraparte Técnica: ${contraparte}`, 10.5, false, yf + 44, 0, W);
+        centrar('Firma contraparte técnica', 10.5, false, yf + 24, 0, W);
+        centrar(`Nombre Contraparte Técnica: ${contraparte}`, 10.5, false, yf + 46, 0, W);
 
         const bytes = await doc.save();
         const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
         const a = document.createElement('a');
         const ocClean = String(numOC || factura.folio || 'Oxigeno').replace(/[^A-Za-z0-9-]+/g, '');
         a.href = url;
-        a.download = `RC${ocClean}${factura.folio ? '_F' + String(factura.folio).replace(/[^A-Za-z0-9-]+/g, '') : ''}.pdf`;
+        a.download = `RC${ocClean}.pdf`;
         document.body.appendChild(a);
         a.click();
         setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 1500);
@@ -1380,40 +1474,37 @@
         } catch (_) { return null; }
     }
 
-    /** Construye el cuerpo OOXML (Word .docx) del Acta RC Oficial Corporación (mismo motor que Seguimiento de OC). */
+    /** Construye el cuerpo OOXML (Word .docx) exacto al modelo oficial de Seguimiento de OC (recepciones-conformes.js). */
     function construirCuerpoWordRC(factura, proveedor, logo, firma, AD) {
         const { run, par } = AD;
         const rc = factura.recepcionConforme || {};
         const parcial = rc.tipoRecepcion !== 'TOTAL';
         const contraparte = rc.contraparte || rc.receptorNombre || CONTRAPARTE_BASE;
         const bloques = (Array.isArray(rc.bloquesRC) && rc.bloquesRC.length) ? rc.bloquesRC : construirBloquesRC(factura);
-        const encabTxt = rc.encabezado || `Que se recibió conforme en forma ${parcial ? 'parcial' : 'total'} el producto, donde se recibió lo siguiente:`;
+        const encabTxt = (rc.encabezado && String(rc.encabezado).trim()) || encabezadoRCBase(parcial);
         const cont = [];
 
         if (logo) {
             const w = Math.round(1.1 * 914400), h = Math.round(w * logo.h / logo.w);
             cont.push(par(`<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${w}" cy="${h}"/><wp:docPr id="1" name="Logo"/><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="logo.png"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="rIdLogo"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${w}" cy="${h}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`, { despues: 120 }));
         }
-        cont.push(par(run(`RECEPCIÓN CONFORME PRODUCTO O SERVICIO ${parcial ? 'PARCIAL' : 'TOTAL'}`, { b: true, sz: 22 }), { jc: 'center', despues: 340 }));
-        cont.push(par(run('DATOS DEL PROVEEDOR', { b: true, sz: 21 }), { despues: 180 }));
-        cont.push(par(run(`Nombre de la empresa: ${proveedor ? proveedor.razonSocial : '—'}`, { b: true, sz: 21 }), { despues: 110 }));
-        cont.push(par(run(`RUT: ${proveedor ? proveedor.rut : '—'}`, { b: true, sz: 21 }), { despues: 110 }));
-        cont.push(par(run(`Orden de Compra: ${factura.numeroOC || '—'}`, { b: true, sz: 21 }), { despues: 110 }));
-        const docTipoTxt = factura.tipoDocumento === 'GUIA_DESPACHO' ? 'Guía de Despacho' : 'Factura';
-        if (factura.folio) {
-            cont.push(par(run(`${docTipoTxt} N°: ${factura.folio}${factura.periodoServicio ? ' · Período: ' + fmtPeriodo(factura.periodoServicio) : ''}`, { sz: 19 }), { despues: 110 }));
-        }
+        cont.push(par(run(`RECEPCIÓN CONFORME PRODUCTO O SERVICIO ${parcial ? 'PARCIAL' : 'TOTAL'}`, { b: true, sz: 22 }), { jc: 'center', despues: 360 }));
+        cont.push(par(run('DATOS DEL PROVEEDOR', { b: true, sz: 21 }), { jc: 'center', despues: 200 }));
+        cont.push(par(run(`Nombre de la empresa: ${proveedor ? proveedor.razonSocial : ''}`, { b: true, sz: 21 }), { despues: 120 }));
+        cont.push(par(run(`RUT: ${proveedor ? proveedor.rut : ''}`, { b: true, sz: 21 }), { despues: 120 }));
+        cont.push(par(run(`Orden de Compra: ${factura.numeroOC || ''}`, { b: true, sz: 21 }), { despues: 120 }));
         cont.push(par(run(`Con fecha ${fechaCL(rc.fecha || hoyISO())}, en calidad de contraparte técnica, certifico lo siguiente:`, { sz: 21 }), { despues: 160 }));
 
-        const encabP = par(run(encabTxt, { sz: 19 }), { despues: 120 });
+        const encabP = par(run(encabTxt, { sz: 17 }), { despues: 60 });
         const bloquesP = bloques.map((b) => {
-            const pTit = par(run(`• ${b.titulo}`, { b: true, sz: 20 }), { ind: { left: 360, hanging: 240 }, despues: (b.sublineas && b.sublineas.length) ? 30 : 80 });
-            const pSubs = (b.sublineas || []).map((sl, i, arr) => par(run(sl, { sz: 20 }), { ind: { left: 360 }, despues: i === arr.length - 1 ? 80 : 30 })).join('');
+            const tieneSubs = Array.isArray(b.sublineas) && b.sublineas.length > 0;
+            const pTit = par(run(`• ${b.titulo}`, { b: tieneSubs, sz: 21 }), { ind: { left: 360, hanging: 240 }, despues: tieneSubs ? 30 : 60 });
+            const pSubs = (b.sublineas || []).map((sl, i, arr) => par(run(sl, { sz: 21 }), { ind: { left: 360 }, despues: i === arr.length - 1 ? 60 : 30 })).join('');
             return pTit + pSubs;
         }).join('');
-        const obsP = rc.observaciones ? par(run(`Observaciones: ${rc.observaciones}`, { sz: 18 }), { antes: 80, despues: 60 }) : '';
+        const obsP = rc.observaciones ? par(run(`Observaciones: ${rc.observaciones}`, { sz: 17 }), { despues: 60 }) : '';
         cont.push(`<w:tbl><w:tblPr><w:tblW w:w="8640" w:type="dxa"/><w:tblBorders>${AD.borde}</w:tblBorders><w:tblLayout w:type="fixed"/></w:tblPr><w:tblGrid><w:gridCol w:w="8640"/></w:tblGrid><w:tr>${AD.celda(8640, encabP + bloquesP + obsP)}</w:tr></w:tbl>`);
-        cont.push(par('', { antes: 650, despues: 0 }));
+        cont.push(par('', { antes: 700, despues: 0 }));
 
         if (firma) {
             const w = Math.round(2.4 * 914400), h = Math.round(w * firma.h / firma.w);
@@ -1450,7 +1541,7 @@
             firma ? [{ id: 'rIdFirma', nombre: 'firma.png', bytes: firma.bytes }] : []
         );
         const ocClean = String(factura.numeroOC || factura.folio || 'Oxigeno').replace(/[^A-Za-z0-9-]+/g, '');
-        const nombre = `RC${ocClean}${factura.folio ? '_F' + String(factura.folio).replace(/[^A-Za-z0-9-]+/g, '') : ''}.docx`;
+        const nombre = `RC${ocClean}.docx`;
         const url = URL.createObjectURL(new Blob([bytes], { type: MIME_DOCX }));
         const a = document.createElement('a');
         a.href = url; a.download = nombre;
@@ -1458,43 +1549,46 @@
         setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 1500);
     }
 
-    /** Vista previa HTML exacta del formato oficial Corporación Municipal de Melipilla (RC1298355-794-AG25.pdf). */
+    /** Vista previa HTML exacta del formato oficial Corporación Municipal de Melipilla (idéntica a Seguimiento de OC). */
     function construirHtmlRCOficial(factura, proveedor) {
         const rc = factura.recepcionConforme || {};
         const parcial = rc.tipoRecepcion !== 'TOTAL';
         const contraparte = rc.contraparte || rc.receptorNombre || CONTRAPARTE_BASE;
         const bloques = (Array.isArray(rc.bloquesRC) && rc.bloquesRC.length) ? rc.bloquesRC : construirBloquesRC(factura);
-        const encab = rc.encabezado || `Que se recibió conforme en forma ${parcial ? 'parcial' : 'total'} el producto, donde se recibió lo siguiente:`;
+        const encab = (rc.encabezado && String(rc.encabezado).trim()) || encabezadoRCBase(parcial);
         const mostrarFirma = rc.conFirma !== false && /quintanilla/i.test(contraparte);
 
         return `
-        <div class="oxf-acta-hoja" id="oxf-rc-oficial-hoja" style="padding:36px 46px; font-family:Arial,Helvetica,sans-serif; color:#000 !important;">
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:18px; margin-bottom:26px;">
-                <img src="assets/logo-corpo-melipilla.jpg" alt="Corporación Municipal de Melipilla" style="height:68px; width:auto;" onerror="this.style.display='none'">
-                <div style="flex:1; text-align:center; font-weight:700; font-size:15px; letter-spacing:.01em; color:#000;">
+        <div class="oxf-acta-hoja" id="oxf-rc-oficial-hoja" style="padding:44px 56px; font-family:Helvetica,Arial,sans-serif; color:#000 !important;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:18px; margin-bottom:22px;">
+                <img src="assets/logo-corpo-melipilla.jpg" alt="Corporación Municipal de Melipilla" style="height:72px; width:auto;" onerror="this.style.display='none'">
+                <div style="flex:1; text-align:center; font-weight:700; font-size:14px; color:#000;">
                     RECEPCIÓN CONFORME PRODUCTO O SERVICIO ${parcial ? 'PARCIAL' : 'TOTAL'}
                 </div>
             </div>
             <div style="font-size:13.5px; line-height:1.9; color:#000; margin-bottom:14px;">
-                <div style="font-weight:700;">DATOS DEL PROVEEDOR</div>
-                <div style="font-weight:700;">Nombre de la empresa: ${esc(proveedor ? proveedor.razonSocial : '—')}</div>
-                <div style="font-weight:700;">RUT: ${esc(proveedor ? proveedor.rut : '—')}</div>
-                <div style="font-weight:700;">Orden de Compra: ${esc(factura.numeroOC || '—')}</div>
-                <div style="margin-top:8px;">Con fecha ${esc(fechaCL(rc.fecha || hoyISO()))}, en calidad de contraparte técnica, certifico lo siguiente:</div>
+                <div style="font-weight:700; padding-left:92px; margin-bottom:6px;">DATOS DEL PROVEEDOR</div>
+                <div style="font-weight:700;">Nombre de la empresa: ${esc(proveedor ? proveedor.razonSocial : '')}</div>
+                <div style="font-weight:700;">RUT: ${esc(proveedor ? proveedor.rut : '')}</div>
+                <div style="font-weight:700;">Orden de Compra: ${esc(factura.numeroOC || '')}</div>
+                <div style="margin-top:6px;">Con fecha ${esc(fechaCL(rc.fecha || hoyISO()))}, en calidad de contraparte técnica, certifico lo siguiente:</div>
             </div>
-            <div style="border:1.2px solid #000; padding:16px 20px; min-height:170px; font-size:13.5px; color:#000; line-height:1.6;">
-                <div style="margin-bottom:12px;">${esc(encab)}</div>
-                <ul style="margin:0; padding-left:28px;">
-                    ${bloques.map(b => `<li style="margin-bottom:8px;"><b>${esc(b.titulo)}</b>${(b.sublineas || []).map(sl => `<div style="font-weight:400;">${esc(sl)}</div>`).join('')}</li>`).join('')}
+            <div style="border:1px solid #000; padding:12px 14px 16px; font-size:13.5px; color:#000; line-height:1.5;">
+                <div style="font-size:11px; margin-bottom:10px;">${esc(encab)}</div>
+                <ul style="margin:0; padding-left:34px;">
+                    ${bloques.map(b => {
+                        const tieneSubs = Array.isArray(b.sublineas) && b.sublineas.length > 0;
+                        return `<li style="margin-bottom:6px;">${tieneSubs ? `<b>${esc(b.titulo)}</b>` : esc(b.titulo)}${(b.sublineas || []).map(sl => `<div style="font-weight:400;">${esc(sl)}</div>`).join('')}</li>`;
+                    }).join('')}
                 </ul>
-                ${rc.observaciones ? `<div style="margin-top:12px; font-size:12px;"><b>Observaciones:</b> ${esc(rc.observaciones)}</div>` : ''}
+                ${rc.observaciones ? `<div style="margin-top:10px; font-size:11px;">Observaciones: ${esc(rc.observaciones)}</div>` : ''}
             </div>
-            <div style="margin-top:52px; text-align:center; color:#000;">
+            <div style="margin-top:46px; text-align:center; color:#000;">
                 ${mostrarFirma
                     ? `<img src="assets/firma-contraparte-mariel.png" alt="Firma Contraparte Técnica" style="max-width:210px; height:auto; display:block; margin:0 auto 2px;" onerror="this.style.display='none'">`
                     : `<div style="border-top:1px solid #000; width:240px; margin:34px auto 6px;"></div>`}
-                <div style="font-size:13px;">Firma contraparte técnica</div>
-                <div style="font-size:13.5px; margin-top:18px;">Nombre Contraparte Técnica: ${esc(contraparte)}</div>
+                <div style="font-size:13.5px;">Firma contraparte técnica</div>
+                <div style="font-size:13.5px; margin-top:16px;">Nombre Contraparte Técnica: ${esc(contraparte)}</div>
             </div>
         </div>`;
     }
@@ -1823,12 +1917,18 @@
         const provIds = new Set(proveedoresFiltrados().map(p => p.id));
         const q = buscador.trim().toLowerCase();
         return facturas.filter(f => {
-            if (pres && f.presupuestoId !== pres.id) return false;
-            if (!pres && filtroProv !== 'TODOS' && !provIds.has(f.proveedorId)) return false;
-            if (filtroConcepto !== 'TODOS' && f.tipoServicio !== filtroConcepto && f.tipoServicio !== 'MIXTO') return false;
-            if (q) {
+            const rc = f.recepcionConforme || {};
+            if (filtroRC === 'CON_RC' && !rc.emitida) return false;
+            if (filtroRC === 'SIN_RC' && rc.emitida) return false;
+            // Si el usuario escribe en el buscador (ej. RCO-2026-00001 o un folio/OC), busca en TODAS las OC para seguimiento rápido
+            if (!q) {
+                if (pres && f.presupuestoId !== pres.id) return false;
+                if (!pres && filtroProv !== 'TODOS' && !provIds.has(f.proveedorId)) return false;
+                if (filtroConcepto !== 'TODOS' && f.tipoServicio !== filtroConcepto && f.tipoServicio !== 'MIXTO') return false;
+            } else {
                 const prov = proveedores.find(p => p.id === f.proveedorId);
-                const hay = `${f.folio} ${f.numeroOC} ${f.facturaSAP || ''} ${f.reemplazaFactura || ''} ${f.periodoServicio} ${f.tipoServicio} ${prov ? prov.razonSocial + ' ' + prov.rut : ''}`.toLowerCase();
+                const detTxt = (f.items || []).map(i => i.descripcion || '').join(' ') + ' ' + (rc.bloquesRC || []).map(b => `${b.titulo} ${(b.sublineas || []).join(' ')}`).join(' ');
+                const hay = `${rc.numeroActa || ''} ${f.folio} ${f.numeroOC} ${f.facturaSAP || ''} ${f.reemplazaFactura || ''} ${f.periodoServicio} ${f.tipoServicio} ${rc.contraparte || ''} ${rc.fecha || ''} ${prov ? prov.razonSocial + ' ' + prov.rut : ''} ${detTxt}`.toLowerCase();
                 if (!hay.includes(q)) return false;
             }
             return true;
@@ -1884,7 +1984,7 @@
                 </div>
                 <div class="oxf-acciones">
                     <button type="button" class="btn btn-outline btn-sm" id="oxf-btn-provs">Proveedores (${proveedores.length})</button>
-                    <button type="button" class="btn btn-outline btn-sm" id="oxf-btn-pres">+ Presupuesto / OC</button>
+                    <button type="button" class="btn btn-outline btn-sm" id="oxf-btn-press">Presupuestos / OC (${presupuestos.length})</button>
                     <button type="button" class="btn btn-outline btn-sm" id="oxf-btn-semilla" title="Carga idempotente de control con Indura S.A. OC 1298355-493-AG25">Cargar control Indura</button>
                     <button type="button" class="btn btn-primary" id="oxf-btn-nueva">+ Ingresar Factura / Guía (OCR / XML)</button>
                 </div>
@@ -1940,8 +2040,13 @@
             </div>`}
 
             <div class="oxf-tabla-head">
-                <input id="oxf-buscar" type="search" placeholder="Buscar folio, SAP, reemplaza, período o proveedor…" value="${esc(buscador)}" autocomplete="off">
-                <span class="oxf-count">${filas.length} factura(s)</span>
+                <input id="oxf-buscar" type="search" placeholder="Buscar por correlativo RCO-2026-…, folio, OC, proveedor, RUT o detalle…" value="${esc(buscador)}" autocomplete="off">
+                <div class="oxf-pills" role="group" aria-label="Seguimiento de actas RC">
+                    <button type="button" class="oxf-pill oxf-pill-rc${filtroRC === 'TODOS' ? ' on' : ''}" data-rc="TODOS">Todos (${facturas.length})</button>
+                    <button type="button" class="oxf-pill oxf-pill-rc${filtroRC === 'CON_RC' ? ' on' : ''}" data-rc="CON_RC">Actas RC / RCO (${facturas.filter(x => x.recepcionConforme && x.recepcionConforme.emitida).length})</button>
+                    <button type="button" class="oxf-pill oxf-pill-rc${filtroRC === 'SIN_RC' ? ' on' : ''}" data-rc="SIN_RC">Pendientes RC</button>
+                </div>
+                <span class="oxf-count">${filas.length} registro(s)${buscador.trim() ? ' (búsqueda global)' : ''}</span>
             </div>
 
             <div class="oxf-tabla-wrap">
@@ -2009,7 +2114,8 @@
         if (selProv) selProv.addEventListener('change', () => { filtroProv = selProv.value; filtroPresId = ''; pintar(); });
         const selPres = $('#oxf-f-pres');
         if (selPres) selPres.addEventListener('change', () => { filtroPresId = selPres.value; pintar(); });
-        $$('.oxf-pill').forEach(b => b.addEventListener('click', () => { filtroConcepto = b.dataset.c; pintar(); }));
+        $$('.oxf-pill:not(.oxf-pill-rc)').forEach(b => b.addEventListener('click', () => { filtroConcepto = b.dataset.c; pintar(); }));
+        $$('.oxf-pill-rc').forEach(b => b.addEventListener('click', () => { filtroRC = b.dataset.rc; pintar(); }));
         const inpB = $('#oxf-buscar');
         if (inpB) inpB.addEventListener('input', (e) => {
             buscador = e.target.value;
@@ -2021,8 +2127,8 @@
 
         const bProvs = $('#oxf-btn-provs');
         if (bProvs) bProvs.addEventListener('click', abrirModalGestionProveedores);
-        const bPres = $('#oxf-btn-pres');
-        if (bPres) bPres.addEventListener('click', () => abrirModalPresupuesto(null));
+        const bPress = $('#oxf-btn-press');
+        if (bPress) bPress.addEventListener('click', abrirModalGestionPresupuestos);
         const bEditPres = $('#oxf-btn-edit-pres');
         if (bEditPres) bEditPres.addEventListener('click', () => {
             const p = presupuestos.find(x => x.id === bEditPres.dataset.id);
@@ -2220,6 +2326,67 @@
                 btn.disabled = false;
             }
         });
+    }
+
+    /** Administrador de Presupuestos / OC: listar todos, crear, editar, cerrar y eliminar (protegido si tiene documentos). */
+    function abrirModalGestionPresupuestos() {
+        const filasHtml = presupuestos.length
+            ? presupuestos.map(b => {
+                const pv = proveedores.find(p => p.id === b.proveedorId);
+                const est = calcularEstadoPresupuesto(b, facturas);
+                return `<tr>
+                    <td><b>OC ${esc(b.numeroOC)}</b><small class="oxf-sub">${esc(b.nombreContrato || '')}</small></td>
+                    <td>${esc(pv ? pv.razonSocial : '—')}<small class="oxf-sub">${esc(pv ? pv.rut : '')}</small></td>
+                    <td><span class="oxf-badge oxf-b-tipo">${esc(b.conceptoPermitido)}</span> <span class="oxf-badge ${b.estado === 'CERRADO' ? 'oxf-b-hist' : 'oxf-b-act'}">${esc(b.estado)}</span></td>
+                    <td class="num"><b>${clp(est.presupuestoBase)}</b><small class="oxf-sub">Ejec: ${clp(est.ejecutadoOC)} (${esc(est.porcentajeTexto)}) · Saldo: ${clp(est.saldoDisponible)}</small></td>
+                    <td class="oxf-cell-acc">
+                        <button type="button" class="btn btn-outline btn-sm oxf-gb-ver" data-id="${esc(b.id)}">Seleccionar</button>
+                        <button type="button" class="btn btn-outline btn-sm oxf-gb-edit" data-id="${esc(b.id)}">Editar</button>
+                        <button type="button" class="btn btn-outline btn-sm oxf-gb-del" data-id="${esc(b.id)}">Eliminar</button>
+                    </td>
+                </tr>`;
+            }).join('')
+            : `<tr><td colspan="5" class="oxf-td-vacio">No hay presupuestos / OC registrados aún.</td></tr>`;
+
+        const ov = crearModal('Presupuestos / Órdenes de Compra de Oxígeno (Crear / Editar / Eliminar)', `
+            <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+                <button type="button" class="btn btn-primary btn-sm" id="oxf-gb-nuevo">+ Nuevo presupuesto / OC</button>
+            </div>
+            <div class="oxf-tabla-wrap">
+                <table class="soc-tabla oxf-tabla">
+                    <thead><tr><th>Orden de Compra / Contrato</th><th>Proveedor</th><th>Concepto / Estado</th><th class="num">Tope / Ejecución</th><th>Acciones</th></tr></thead>
+                    <tbody>${filasHtml}</tbody>
+                </table>
+            </div>
+            <p class="cierre-error" id="oxf-gb-err"></p>
+            <div class="cierre-acciones"><button type="button" class="btn btn-outline" id="oxf-gb-cerrar">Cerrar</button></div>`, 'oxf-modal-xl');
+
+        ov.querySelector('#oxf-gb-cerrar').addEventListener('click', () => ov.remove());
+        ov.querySelector('#oxf-gb-nuevo').addEventListener('click', () => { ov.remove(); abrirModalPresupuesto(null); });
+        ov.querySelectorAll('.oxf-gb-ver').forEach(b => b.addEventListener('click', () => { filtroProv = 'TODOS'; filtroConcepto = 'TODOS'; filtroPresId = b.dataset.id; ov.remove(); pintar(); }));
+        ov.querySelectorAll('.oxf-gb-edit').forEach(b => b.addEventListener('click', () => {
+            const p = presupuestos.find(x => x.id === b.dataset.id);
+            if (p) { ov.remove(); abrirModalPresupuesto(p); }
+        }));
+        ov.querySelectorAll('.oxf-gb-del').forEach(b => b.addEventListener('click', async () => {
+            const p = presupuestos.find(x => x.id === b.dataset.id);
+            if (!p) return;
+            const errEl = ov.querySelector('#oxf-gb-err');
+            errEl.textContent = '';
+            if (!window.confirm(`¿Eliminar el presupuesto / OC "${p.numeroOC}"?`)) return;
+            b.disabled = true;
+            try {
+                await eliminarPresupuesto(p.id);
+                if (filtroPresId === p.id) filtroPresId = '';
+                await cargarDatos();
+                pintar();
+                ov.remove();
+                toast('Presupuesto eliminado', `OC ${p.numeroOC} eliminada.`, 'success');
+            } catch (e) {
+                errEl.textContent = e.message || String(e);
+                b.disabled = false;
+            }
+        }));
     }
 
     function abrirModalPresupuesto(presEditar) {
@@ -2744,7 +2911,7 @@
         const rc = factura.recepcionConforme || {};
         const pv = proveedores.find(p => p.id === factura.proveedorId);
         const tipoActual = rc.tipoRecepcion === 'TOTAL' ? 'TOTAL' : 'PARCIAL';
-        const encBase = (tp) => `Que se recibió conforme en forma ${tp === 'TOTAL' ? 'total' : 'parcial'} el producto, donde se recibió lo siguiente:`;
+        const encBase = (tp) => encabezadoRCBase(tp !== 'TOTAL');
         const bloquesOriginales = construirBloquesRC(factura);
         const bloquesIni = (Array.isArray(rc.bloquesRC) && rc.bloquesRC.length) ? rc.bloquesRC : bloquesOriginales;
         const docTipoActual = rc.tipoDocumento || factura.tipoDocumento || 'FACTURA';
@@ -2896,6 +3063,251 @@
         });
     }
 
+    // =========================================================================
+    // 6. INFORME CONTABLE Y SEGUIMIENTO POR CORRELATIVO RCO-AAAA-NNNNN
+    // =========================================================================
+
+    const TIPOS_CONTABLES_OXI = {
+        OXIGENO_PROVEEDOR: 'Proveedor oxígeno',
+        OXIGENO_PRESUPUESTO: 'Presupuesto / OC oxígeno',
+        OXIGENO_FACTURA: 'Factura / Guía oxígeno',
+        OXIGENO_RC: 'Acta RC oxígeno (RCO)'
+    };
+
+    /** Filtra presupuestos, actas/facturas y bitácora contable de oxígeno por cualquier término (RCO, OC, folio, proveedor, RUT, acción). */
+    function filtrarContable(datos, consulta) {
+        const q = String(consulta || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+        const provs = (datos && datos.proveedores) || [];
+        const press = (datos && datos.presupuestos) || [];
+        const facts = (datos && datos.facturas) || [];
+        const movs = (datos && datos.movimientos) || [];
+        const provDe = (id) => provs.find(p => p.id === id);
+        const norm = (s) => String(s == null ? '' : s).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+        const actas = facts.filter(f => {
+            if (!q) return true;
+            const pv = provDe(f.proveedorId);
+            const rc = f.recepcionConforme || {};
+            const txt = norm([rc.numeroActa, f.folio, f.numeroOC, f.facturaSAP, f.reemplazaFactura, f.periodoServicio, f.tipoServicio, f.fuenteFinanciamiento, rc.tipoRecepcion, rc.fecha, rc.contraparte, pv && pv.razonSocial, pv && pv.rut, ...(f.items || []).map(i => i.descripcion)].join(' '));
+            return txt.includes(q);
+        });
+        const presupuestosFil = press.filter(b => {
+            if (!q) return true;
+            const pv = provDe(b.proveedorId);
+            const txt = norm([b.numeroOC, b.nombreContrato, b.conceptoPermitido, b.tipoMonto, b.estado, pv && pv.razonSocial, pv && pv.rut].join(' '));
+            return txt.includes(q);
+        });
+        const movimientosFil = movs.filter(m => {
+            if (!q) return true;
+            const txt = norm([m.type, TIPOS_CONTABLES_OXI[m.type], m.document, m.actaId, m.insumoName, m.observacion, m.origin, m.dest, m.user, m.accion].join(' '));
+            return txt.includes(q);
+        });
+        return { actas, presupuestos: presupuestosFil, movimientos: movimientosFil };
+    }
+
+    /** Genera CSV contable (Excel) con Presupuestos OC, Actas RC (correlativo RCO) y Bitácora de cambios. */
+    function csvContableOxigeno(datos) {
+        const celda = (v) => { const t = String(v == null ? '' : v); return /[;"\n]/.test(t) ? '"' + t.replace(/"/g, '""') + '"' : t; };
+        const provs = (datos && datos.proveedores) || [];
+        const press = (datos && datos.presupuestos) || [];
+        const facts = (datos && datos.facturas) || [];
+        const movs = (datos && datos.movimientos) || [];
+        const provDe = (id) => provs.find(p => p.id === id);
+
+        const secPres = [
+            ['OXÍGENO — PRESUPUESTOS Y ÓRDENES DE COMPRA'],
+            ['OC', 'Contrato', 'Proveedor', 'RUT', 'Concepto', 'Tipo Monto', 'Tope', 'Ejecutado OC', 'Saldo Disponible', '% Consumido', 'Caja Chica', 'Estado'],
+            ...press.map(b => {
+                const pv = provDe(b.proveedorId);
+                const est = calcularEstadoPresupuesto(b, facts);
+                return [b.numeroOC, b.nombreContrato || '', pv ? pv.razonSocial : '', pv ? pv.rut : '', b.conceptoPermitido, b.tipoMonto, est.presupuestoBase, est.ejecutadoOC, est.saldoDisponible, est.porcentajeTexto, est.totalCajaChica, b.estado];
+            })
+        ];
+        const secActas = [
+            [],
+            ['OXÍGENO — FACTURAS, GUÍAS Y ACTAS DE RECEPCIÓN CONFORME (RCO)'],
+            ['Correlativo RC', 'Tipo RC', 'Fecha RC', 'Contraparte', 'Tipo Doc', 'Folio', 'OC', 'Proveedor', 'RUT', 'Período', 'Servicio', 'Fuente', 'Neto', 'IVA', 'Total Bruto', 'Imputado OC', 'Caja Chica', 'Reemplaza', 'Estado'],
+            ...facts.map(f => {
+                const pv = provDe(f.proveedorId);
+                const rc = f.recepcionConforme || {};
+                return [rc.numeroActa || 'PENDIENTE', rc.emitida ? (rc.tipoRecepcion || 'PARCIAL') : '', rc.fecha || '', rc.contraparte || '', f.tipoDocumento === 'GUIA_DESPACHO' ? 'GUIA' : 'FACTURA', f.folio, f.numeroOC || '', pv ? pv.razonSocial : '', pv ? pv.rut : '', f.periodoServicio || '', f.tipoServicio || '', f.fuenteFinanciamiento || '', num(f.neto), num(f.iva), num(f.totalBruto), num(f.montoImputadoOC), num(f.montoCajaChica), f.reemplazaFactura || '', f.estado || 'VIGENTE'];
+            })
+        ];
+        const secMovs = movs.length ? [
+            [],
+            ['OXÍGENO — BITÁCORA CONTABLE DE CAMBIOS (PROVEEDORES, PRESUPUESTOS, FACTURAS Y ACTAS)'],
+            ['Fecha', 'Tipo', 'Correlativo / Doc', 'Proveedor', 'OC', 'Monto', 'Responsable', 'Detalle'],
+            ...movs.map(m => [m._fechaTxt || '', TIPOS_CONTABLES_OXI[m.type] || m.type, m.actaId || m.document || '', m.origin || '', m.dest || '', num(m.quantity), m.user || '', m.observacion || ''])
+        ] : [];
+        return '\ufeff' + [...secPres, ...secActas, ...secMovs].map(r => r.map(celda).join(';')).join('\r\n');
+    }
+
+    let audQ = '', audMovs = [], audCargando = false, audCargado = false;
+
+    async function cargarDatosContable() {
+        await cargarDatos();
+        const f = fs(), d = db();
+        if (!f || !d) return { proveedores, presupuestos, facturas, movimientos: [] };
+        try {
+            const sn = await f.getDocs(f.query(f.collection(d, 'Historial_Movimientos'), f.where('modulo', '==', 'OXIGENO_FACTURACION'), f.limit(400)));
+            audMovs = [];
+            sn.forEach(doc => {
+                const m = doc.data();
+                const ms = m.date && m.date.toDate ? m.date.toDate().getTime() : (Date.parse(m.date) || 0);
+                audMovs.push({ ...m, _ms: ms, _fechaTxt: ms ? new Date(ms).toLocaleString('es-CL') : '' });
+            });
+            audMovs.sort((a, b) => b._ms - a._ms);
+        } catch (e) {
+            audMovs = [];
+        }
+        audCargado = true;
+        return { proveedores, presupuestos, facturas, movimientos: audMovs };
+    }
+
+    /** Busca un acta RCO-AAAA-NNNNN por su correlativo exacto (usado también en Seguimiento de un acta). */
+    async function buscarActaRCO(correlativo) {
+        const c = String(correlativo || '').trim().toUpperCase();
+        if (!/^RCO-\d{4}-\d{4,6}$/.test(c)) return null;
+        const datos = await cargarDatosContable();
+        const fac = datos.facturas.find(f => f.recepcionConforme && String(f.recepcionConforme.numeroActa || '').toUpperCase() === c);
+        if (!fac) return { vacio: true, correlativo: c };
+        const prov = datos.proveedores.find(p => p.id === fac.proveedorId) || null;
+        const pres = datos.presupuestos.find(b => b.id === fac.presupuestoId) || null;
+        const movs = datos.movimientos.filter(m => String(m.actaId || m.document || '').toUpperCase() === c || String(m.folio || '') === String(fac.folio));
+        return { vacio: false, correlativo: c, factura: fac, proveedor: prov, presupuesto: pres, movimientos: movs };
+    }
+
+    /** Sección embebida en Auditoría → Contable (saldos-contables.js) con barra de búsqueda de RCO, presupuestos y bitácora. */
+    async function pintarContable(el) {
+        if (!el) return;
+        if (!audCargado && !audCargando) {
+            audCargando = true;
+            el.innerHTML = '<h3 class="act-h" style="margin-top:24px;">Oxígeno — Informe Contable, Presupuestos y Actas RC (RCO)</h3><p class="act-hint">Cargando registros contables de oxígeno…</p>';
+            try { await cargarDatosContable(); } finally { audCargando = false; }
+            if (!el.isConnected) return;
+        }
+        const datos = { proveedores, presupuestos, facturas, movimientos: audMovs };
+        const fil = filtrarContable(datos, audQ);
+        const totalEmitidas = facturas.filter(f => f.recepcionConforme && f.recepcionConforme.emitida).length;
+
+        el.innerHTML = `
+        <div class="oxf-aud-sec" style="margin-top:26px;">
+            <h3 class="act-h">Oxígeno — Informe Contable, Presupuestos y Actas RC (RCO)</h3>
+            <p class="act-hint">Cada acta de recepción conforme de oxígeno lleva correlativo propio (<b>RCO-AAAA-NNNNN</b>) y todo cambio en proveedores, presupuestos/OC, facturas o actas queda registrado aquí.</p>
+            <div class="sal-barra">
+                <input id="oxf-aud-q" type="search" class="form-control" placeholder="Buscar RCO-2026-…, OC, folio, proveedor, RUT o cambio…" value="${esc(audQ)}" autocomplete="off" style="max-width:360px">
+                <button type="button" class="btn btn-outline" id="oxf-aud-ref">Actualizar</button>
+                <button type="button" class="btn btn-outline" id="oxf-aud-csv">Descargar Contable Oxígeno (Excel)</button>
+                <span class="oxf-count">${totalEmitidas} acta(s) RCO · ${presupuestos.length} OC · ${audMovs.length} evento(s)</span>
+            </div>
+
+            <h4 class="act-h4" style="margin-top:12px;">Actas de Recepción Conforme (RCO) y Facturas / Guías (${fil.actas.length})</h4>
+            <div class="oxf-tabla-wrap">
+                <table class="soc-tabla oxf-tabla">
+                    <thead><tr><th>Correlativo RC</th><th>Documento / OC</th><th>Proveedor</th><th>Fecha RC / Período</th><th class="num">Total</th><th>Acciones</th></tr></thead>
+                    <tbody>
+                        ${fil.actas.length ? fil.actas.slice(0, 100).map(f => {
+                            const pv = proveedores.find(p => p.id === f.proveedorId);
+                            const rc = f.recepcionConforme || {};
+                            return `<tr>
+                                <td>${rc.emitida ? `<b>${esc(rc.numeroActa)}</b><small class="oxf-sub">RC ${esc(rc.tipoRecepcion === 'TOTAL' ? 'Total' : 'Parcial')} · ${esc(rc.contraparte || '')}</small>` : '<span class="oxf-badge oxf-b-pend">Pendiente RC</span>'}</td>
+                                <td><b>${f.tipoDocumento === 'GUIA_DESPACHO' ? 'Guía' : 'Factura'} ${esc(f.folio)}</b><small class="oxf-sub">OC ${esc(f.numeroOC || '—')}${f.reemplazaFactura ? ' · Reemplaza ' + esc(f.reemplazaFactura) : ''}</small></td>
+                                <td>${esc(pv ? pv.razonSocial : '—')}<small class="oxf-sub">${esc(pv ? pv.rut : '')}</small></td>
+                                <td>${rc.emitida ? esc(fechaCL(rc.fecha)) : '—'}<small class="oxf-sub">${esc(fmtPeriodo(f.periodoServicio))}</small></td>
+                                <td class="num"><b>${clp(f.totalBruto)}</b><small class="oxf-sub">${f.fuenteFinanciamiento === 'CAJA_CHICA' ? 'Caja Chica ' + clp(f.montoCajaChica) : 'OC ' + clp(f.montoImputadoOC)}</small></td>
+                                <td class="oxf-cell-acc">
+                                    <button type="button" class="btn btn-outline btn-sm oxf-aud-ed" data-id="${esc(f.id)}">${rc.emitida ? 'Editar acta' : 'Emitir RC'}</button>
+                                    <button type="button" class="btn btn-primary btn-sm oxf-aud-pdf" data-id="${esc(f.id)}">PDF</button>
+                                    <button type="button" class="btn btn-outline btn-sm oxf-aud-word" data-id="${esc(f.id)}">Word</button>
+                                </td>
+                            </tr>`;
+                        }).join('') : '<tr><td colspan="6" class="oxf-td-vacio">Sin actas o facturas de oxígeno con ese filtro.</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 class="act-h4" style="margin-top:16px;">Estado Contable de Presupuestos / OC de Oxígeno (${fil.presupuestos.length})</h4>
+            <div class="oxf-tabla-wrap">
+                <table class="soc-tabla oxf-tabla">
+                    <thead><tr><th>OC / Contrato</th><th>Proveedor</th><th>Concepto</th><th class="num">Tope</th><th class="num">Ejecutado OC</th><th class="num">Saldo</th><th class="num">Caja Chica</th></tr></thead>
+                    <tbody>
+                        ${fil.presupuestos.length ? fil.presupuestos.map(b => {
+                            const pv = proveedores.find(p => p.id === b.proveedorId);
+                            const est = calcularEstadoPresupuesto(b, facturas);
+                            return `<tr>
+                                <td><b>${esc(b.numeroOC)}</b><small class="oxf-sub">${esc(b.nombreContrato || '')}</small></td>
+                                <td>${esc(pv ? pv.razonSocial : '—')}<small class="oxf-sub">${esc(pv ? pv.rut : '')}</small></td>
+                                <td><span class="oxf-badge oxf-b-tipo">${esc(b.conceptoPermitido)}</span> <span class="oxf-badge ${b.estado === 'CERRADO' ? 'oxf-b-hist' : 'oxf-b-act'}">${esc(b.estado)}</span></td>
+                                <td class="num">${clp(est.presupuestoBase)}</td>
+                                <td class="num"><b>${clp(est.ejecutadoOC)}</b> <small>(${esc(est.porcentajeTexto)})</small></td>
+                                <td class="num">${clp(est.saldoDisponible)}</td>
+                                <td class="num">${clp(est.totalCajaChica)}</td>
+                            </tr>`;
+                        }).join('') : '<tr><td colspan="7" class="oxf-td-vacio">Sin presupuestos de oxígeno con ese filtro.</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+
+            <h4 class="act-h4" style="margin-top:16px;">Bitácora Contable de Cambios de Oxígeno (${fil.movimientos.length})</h4>
+            <div class="oxf-tabla-wrap">
+                <table class="soc-tabla oxf-tabla">
+                    <thead><tr><th>Fecha</th><th>Tipo</th><th>Correlativo / Doc</th><th>Detalle del cambio</th><th>Responsable</th></tr></thead>
+                    <tbody>
+                        ${fil.movimientos.length ? fil.movimientos.slice(0, 120).map(m => `<tr>
+                            <td>${esc(m._fechaTxt || '—')}</td>
+                            <td><span class="oxf-badge oxf-b-hist">${esc(TIPOS_CONTABLES_OXI[m.type] || m.type)}</span></td>
+                            <td><code>${esc(m.actaId || m.document || '—')}</code></td>
+                            <td>${esc(m.observacion || m.insumoName || '')}</td>
+                            <td>${esc(m.user || '')}</td>
+                        </tr>`).join('') : '<tr><td colspan="5" class="oxf-td-vacio">Sin cambios registrados aún en la bitácora contable de oxígeno.</td></tr>'}
+                    </tbody>
+                </table>
+            </div>
+        </div>`;
+
+        const qInp = el.querySelector('#oxf-aud-q');
+        if (qInp) qInp.addEventListener('input', () => {
+            audQ = qInp.value;
+            const pos = qInp.selectionStart;
+            pintarContable(el);
+            const n = el.querySelector('#oxf-aud-q');
+            if (n) { n.focus(); n.setSelectionRange(pos, pos); }
+        });
+        const bRef = el.querySelector('#oxf-aud-ref');
+        if (bRef) bRef.addEventListener('click', async () => { audCargado = false; await pintarContable(el); });
+        const bCsv = el.querySelector('#oxf-aud-csv');
+        if (bCsv) bCsv.addEventListener('click', () => {
+            const blob = new Blob([csvContableOxigeno(datos)], { type: 'text/csv;charset=utf-8' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `Contable_Oxigeno_${hoyISO()}.csv`;
+            document.body.appendChild(a); a.click();
+            setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+        });
+        el.querySelectorAll('.oxf-aud-ed').forEach(b => b.addEventListener('click', () => {
+            const fac = facturas.find(x => x.id === b.dataset.id);
+            if (fac) abrirModalRecepcionConforme(fac);
+        }));
+        el.querySelectorAll('.oxf-aud-pdf').forEach(b => b.addEventListener('click', async () => {
+            const fac = facturas.find(x => x.id === b.dataset.id);
+            if (!fac) return;
+            const pv = proveedores.find(p => p.id === fac.proveedorId);
+            b.disabled = true;
+            try { await descargarRCOficialCorporacionPDF(fac, pv); }
+            catch (e) { toast('Error PDF', e.message || String(e), 'error'); }
+            finally { b.disabled = false; }
+        }));
+        el.querySelectorAll('.oxf-aud-word').forEach(b => b.addEventListener('click', async () => {
+            const fac = facturas.find(x => x.id === b.dataset.id);
+            if (!fac) return;
+            const pv = proveedores.find(p => p.id === fac.proveedorId);
+            b.disabled = true;
+            try { await descargarRCOficialCorporacionWord(fac, pv); }
+            catch (e) { toast('Error Word', e.message || String(e), 'error'); }
+            finally { b.disabled = false; }
+        }));
+    }
+
     async function montar(cont) {
         contenedorActivo = cont;
         if (!cont) return;
@@ -2911,9 +3323,15 @@
     const api = {
         montar,
         pintar,
+        pintarContable,
         cargarDatos,
+        cargarDatosContable,
+        buscarActaRCO,
         cargarSemillaIndura,
         // Funciones puras para pruebas unitarias
+        construirEventoContable,
+        filtrarContable,
+        csvContableOxigeno,
         parsearXmlDte,
         parsearTextoFacturaOcr,
         parsearIndura,

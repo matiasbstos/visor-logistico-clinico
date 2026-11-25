@@ -222,21 +222,22 @@
         return '';
     }
 
-    /** Modelo 1: Factura Electrónica INDURA S.A. (RUT 76.150.343-K, RG_RENTAL por tramos). */
+    /** Modelo 1: Factura Electrónica INDURA S.A. (RUT 76.150.343-K, RG_RENTAL por tramos o filas planas EA). */
     function parsearIndura(raw) {
-        const mFolio = raw.match(/FACTURA\s+ELECTR[OÓ]NICA[\s\S]{0,40}?N[°º.:]?\s*(\d{4,12})/i) || raw.match(/N[°º]\s*(\d{6,10})/);
+        const mFolio = raw.match(/FACTURA\s+ELECTR\s*[OÓ]\s*NICA[\s\S]{0,140}?N\s*[°º.:]?\s*(\d{4,12})/i)
+            || raw.match(/\bN\s*[°º]\s*(\d{6,10})\b/);
         const folio = mFolio ? mFolio[1].replace(/^0+(?=\d)/, '') : '';
-        const mEmis = raw.match(/Fecha\s+de\s+Emisi[oó]n[\s\n:|-]*([0-9./-]{8,10})/i);
-        const mVenc = raw.match(/Fecha\s+(?:de\s+)?Vencimiento[\s\n:|-]*([0-9./-]{8,10})/i);
+        const mEmis = raw.match(/Fecha\s+de\s+Emisi\s*[oó]\s*n[\s\S]{0,60}?(\d{1,2}[./-]\d{1,2}[./-]20\d{2})/i);
+        const mVenc = raw.match(/Fecha\s+(?:de\s+)?Vencimiento[\s\S]{0,60}?(\d{1,2}[./-]\d{1,2}[./-]20\d{2})/i);
         const fechaEmision = mEmis ? fechaAISO(mEmis[1]) : '';
         const fechaVencimiento = mVenc ? fechaAISO(mVenc[1]) : '';
         const mOC = raw.match(/O\.?\s*de\s*Compra\s*N[o°º.:]*\s*([A-Z0-9-]{6,25})/i) || raw.match(/\b(\d{5,8}-\d{1,5}-[A-Z]{2}\d{1,2})\b/i);
         const numeroOC = mOC ? mOC[1].replace(/\s+/g, '').toUpperCase() : '';
-        const mSap = raw.match(/Factura\s+SAP[\s\n:]*(\d{5,15})/i);
+        const mSap = raw.match(/Factura\s+SAP[\s\S]{0,30}?\b(\d{7,15})\b/i) || raw.match(/Factura\s+SAP[\s\n:]*(\d{5,15})/i);
         const facturaSAP = mSap ? mSap[1].trim() : '';
         const mReemp = raw.match(/Reemplaza\s+Factura\s*[:#]?\s*(\d{4,12})/i);
         const reemplazaFactura = mReemp ? mReemp[1].replace(/^0+(?=\d)/, '') : '';
-        const mPer = raw.match(/(?:Servicios\s+de\s+)?Arriendo\s+Per[ií]odo\s*[:#]?\s*([A-Za-zÁÉÍÓÚáéíóú]+\s+20\d{2})/i);
+        const mPer = raw.match(/(?:Servicios\s+de\s+)?Arriendo\s+Per\s*[ií]\s*odo\s*[:#]?\s*([A-Za-zÁÉÍÓÚáéíóú]+\s+20\d{2})/i);
         const periodoServicio = detectarPeriodoServicio(mPer ? mPer[1] : raw, fechaEmision);
 
         const montoPor = (re) => { const m = raw.match(re); return m ? Math.round(num(m[1])) : 0; };
@@ -248,11 +249,13 @@
         const items = [];
         const bloquesRC = [];
         const normTituloIndura = (t) => String(t || '')
-            .replace(/RG[_ -]?RENTAL/i, 'RG_RENTAL')
-            .replace(/MEDICAL_?\s*(?:=>|⇒|→|->|>=|=)\s*200[B8]/i, 'MEDICAL_=>200B')
+            .replace(/^[^\n]*?(?:[A-Z0-9]{1,2}[_\s.-]?RENTAL|RG[_ -]?RENTAL)/i, 'RG_RENTAL')
+            .replace(/^CILINDRO/i, 'RG_RENTAL CILINDRO')
+            .replace(/MEDICAL_?\s*(?:=>|⇒|→|->|>=|>|=)\s*200[B8]/i, 'MEDICAL_=>200B')
             .replace(/CILINDRO_?\s*<\s*200[B8]/i, 'CILINDRO_<200B')
-            .replace(/\s+\d+\s*(?:d[ií]as?|EA|UN|CL)[\s\S]*$/i, '')
-            .replace(/\s+\d[\d.,]*\s+1\s*\/\s*(?:d[ií]a|EA|UN)[\s\S]*$/i, '')
+            .replace(/(MEDICAL_=>200B|CILINDRO_<200B)[\s\S]*$/i, '$1')
+            .replace(/\s+\d+\s*(?:d[ií]as?|EA|ER|FA|UN|CL)[\s\S]*$/i, '')
+            .replace(/\s+\d[\d.,]*\s+1\s*\/\s*(?:d[ií]a|EA|ER|UN)[\s\S]*$/i, '')
             .replace(/\s+/g, ' ')
             .trim();
         const idxIni = raw.search(/Valor\s+Total/i);
@@ -260,13 +263,13 @@
         const idxFin = desdeIni.search(/(?:^|\n)\s*(?:Nombre\s*:|Firma\s*:|SUBTOTAL|El\s+acuse\s+de\s+recibo)/im);
         const zonaDet = idxFin >= 0 ? desdeIni.slice(0, idxFin) : desdeIni;
 
-        const reGrupo = /(?:^|\n)\s*(?:(\d{3,8})\s+)?(RG[_ -]?RENTAL[^\n]+)/gi;
+        const reGrupo = /(?:^|\n)\s*(?:(\d{3,8})\s*[|¦\[\]lI]?\s+)?((?:[A-Z0-9]{1,2}[_\s.-]?RENTAL[^\n]+|[^\n]{0,20}CILINDRO[_\s.-]*(?:MEDICAL[_\s.-]*)?(?:=>|⇒|→|->|>=|>|=|<)\s*200[B8][^\n]*))/gi;
         const posGrupos = [];
         let mg;
         while ((mg = reGrupo.exec(zonaDet)) !== null) {
             const lineaRaw = mg[2];
             const tituloLimpio = normTituloIndura(lineaRaw);
-            const restoLinea = lineaRaw.replace(/^RG[_ -]?RENTAL[^\d]*(?:=>|⇒|→|->|>=|=|<)?\s*200[B8]\s*/i, '');
+            const restoLinea = lineaRaw.replace(/^[\s\S]*?200[B8]\s*/i, '');
             let cod = (mg[1] || '').trim();
             if (!cod) {
                 const antes = zonaDet.slice(Math.max(0, mg.index - 24), mg.index).match(/\b(\d{4,6})\b\s*$/);
@@ -278,7 +281,7 @@
         }
 
         const extraerTripleLinea = (linea) => {
-            const limpia = String(linea || '').replace(/1\s*\/\s*(?:d[ií]a|EA|UN|CL)/gi, ' ').replace(/\b(?:d[ií]as?|EA|UN|CL)\b/gi, ' ').replace(/[|¦$]/g, ' ');
+            const limpia = String(linea || '').replace(/1\s*\/\s*(?:d[ií]a|EA|ER|FA|E4|UN|CL)/gi, ' ').replace(/\b(?:d[ií]as?|EA|ER|FA|E4|UN|CL)\b/gi, ' ').replace(/[|¦$]/g, ' ');
             const ns = (limpia.match(/\d{1,3}(?:\.\d{3})+|\d+/g) || []).map(x => Math.round(num(x))).filter(x => x > 0);
             if (ns.length >= 3) {
                 for (let i = 0; i + 2 < ns.length; i++) {
@@ -338,7 +341,7 @@
                 // Formato plano de Indura (ej. Folio 2074903: "1519 RG_RENTAL CILINDRO MEDICAL_=>200B 175 EA 517 1/EA 90.475")
                 // Replica cada línea tal cual con su cantidad exacta (sin agrupar ni sumar descripciones).
                 const tr = extraerTripleLinea(g.restoLinea) || extraerTripleLinea(seg);
-                const uni = /(?:^|[^A-Za-z])EA\b/i.test(g.restoLinea + ' ' + seg) ? 'EA' : 'dias';
+                const uni = /\bd[ií]as?\b/i.test(g.restoLinea + ' ' + seg) ? 'dias' : 'EA';
                 const cant = tr ? tr.c : 1;
                 items.push({ codigo: g.codigo, descripcion: g.titulo, cantidad: cant, unidad: uni, valorUnitario: tr ? tr.vu : 0, valorTotal: tr ? tr.vt : 0 });
                 bloquesRC.push({ titulo: `${g.titulo} (CANTIDAD:${cant})`, sublineas: [] });
@@ -1333,7 +1336,7 @@
             const buf = await file.arrayBuffer();
             const pdf = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
             const page = await pdf.getPage(1);
-            const vp = page.getViewport({ scale: 1.8 });
+            const vp = page.getViewport({ scale: 2.2 });
             const canvas = document.createElement('canvas');
             canvas.width = Math.round(vp.width);
             canvas.height = Math.round(vp.height);
@@ -1341,19 +1344,35 @@
             let textoDigital = '';
             try {
                 const tc = await page.getTextContent();
-                // Reconstruir saltos de línea reales por coordenada Y para leer tablas y totales exactamente
+                // Reconstruir líneas por coordenada Y y unir fragmentos pegados (tildes/° en PDFs SAP) sin meter espacios falsos
                 const filas = [];
                 (tc.items || []).forEach((it) => {
-                    const str = String(it.str || '').trim();
-                    if (!str) return;
+                    const rawStr = String(it.str || '');
+                    if (!rawStr.trim()) return;
                     const y = it.transform ? Math.round(it.transform[5]) : 0;
-                    const x = it.transform ? Math.round(it.transform[4]) : 0;
+                    const x = it.transform ? it.transform[4] : 0;
+                    const w = Number(it.width) || 0;
                     let fila = filas.find(f => Math.abs(f.y - y) <= 3);
                     if (!fila) { fila = { y, cols: [] }; filas.push(fila); }
-                    fila.cols.push({ x, str });
+                    fila.cols.push({ x, w, str: rawStr });
                 });
                 filas.sort((a, b) => b.y - a.y);
-                textoDigital = filas.map(f => f.cols.sort((a, b) => a.x - b.x).map(c => c.str).join(' ')).join('\n');
+                textoDigital = filas.map(f => {
+                    const cols = f.cols.sort((a, b) => a.x - b.x);
+                    let linea = '';
+                    let finPrev = null;
+                    cols.forEach((c) => {
+                        if (linea === '') {
+                            linea = c.str.trimStart();
+                        } else {
+                            const gap = finPrev != null ? (c.x - finPrev) : 99;
+                            const necesitaEspacio = gap > 1.8 && !linea.endsWith(' ') && !c.str.startsWith(' ');
+                            linea += (necesitaEspacio ? ' ' : '') + c.str;
+                        }
+                        finPrev = c.x + (c.w > 0 ? c.w : c.str.length * 4);
+                    });
+                    return linea.replace(/\s+/g, ' ').trim();
+                }).filter(Boolean).join('\n');
             } catch (_) { /* escaneo sin capa texto */ }
             return { canvas, textoDigital };
         }
@@ -1391,7 +1410,7 @@
         if (textoDigital && textoDigital.trim().length > 80) {
             avisar('Leyendo capa de texto digital del PDF…');
             const parsed = parsearTextoFacturaOcr(textoDigital);
-            if (parsed.folio && (parsed.totalBruto > 0 || parsed.neto > 0)) {
+            if ((parsed.folio || (Array.isArray(parsed.items) && parsed.items.length > 0)) && (parsed.totalBruto > 0 || parsed.neto > 0)) {
                 return { ...parsed, origenLectura: parsed.origenLectura || 'PDF_TEXTO' };
             }
         }

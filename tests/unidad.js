@@ -963,3 +963,62 @@ Arriendo Período: Julio 2026`;
     { titulo: 'RG_RENTAL CILINDRO_<200B (CANTIDAD:98)', sublineas: [] }
   ]);
 });
+
+t('v21.271: oxigeno-facturacion — Indura PDF SAP con tildes partidas y OCR ruidoso (5 filas completas sin basura)', () => {
+  const F = require('../oxigeno-facturacion.js');
+  // A) Texto real de PDF SAP con tildes partidas y encabezados cruzados (Folio 2074903)
+  const txtSap = `R.U.T 76.150.343-K
+Indura S.A.
+FACTURA ELECTR Ó NICA
+Giro:SOC. INVERSION, FABRICACION, COMERCIALIZ.
+GASES ELECTRODOS Y REPRESENTACIONES N ° 2074903
+Fecha de Emisi ó n
+Santiago, Chile P á gina: 1 de 1
+19.11.2026
+DATOS CLIENTE: Fecha Vencimiento
+Cliente: CORP MUNICIPAL MELIPILLA 19.12.2026
+O de Compra No: 1298355-493-AG25 Factura SAP Moneda
+437137409 CLP
+C ó digo Descripci ó n Cantidad/Unidad Valor Unitario POR UM Valor Total
+1519 RG_RENTAL CILINDRO MEDICAL_=>200B 175 EA 517 1/EA 90.475
+1519 RG_RENTAL CILINDRO MEDICAL_=>200B 166 EA 517 1/EA 85.822
+1519 RG_RENTAL CILINDRO MEDICAL_=>200B 31 EA 517 1/EA 16.027
+112596 RG_RENTAL CILINDRO_<200B 150 EA 517 1/EA 77.550
+112596 RG_RENTAL CILINDRO_<200B 98 EA 517 1/EA 50.666
+Nombre: Firma: SUBTOTAL 320.540
+IVA 19,00 % 60.903
+TOTAL 381.443
+Reemplaza Factura: 2051884
+Arriendo Per í odo: Julio 2026`;
+  const rSap = F.parsearTextoFacturaOcr(txtSap);
+  assert.strictEqual(rSap.folio, '2074903');
+  assert.strictEqual(rSap.fechaEmision, '2026-11-19');
+  assert.strictEqual(rSap.fechaVencimiento, '2026-12-19');
+  assert.strictEqual(rSap.facturaSAP, '437137409');
+  assert.strictEqual(rSap.periodoServicio, '2026-07');
+  assert.strictEqual(rSap.items.length, 5);
+  assert.strictEqual(rSap.bloquesRC.length, 5);
+
+  // B) OCR ruidoso (borde "|" en 112596, ">2008", "a 517", "AG_RENTAL", falta "RG_RENTAL" en última fila)
+  const txtOcr = `Indura S.A. R.U.T 76.150.343-K
+FACTURA ELECTRÓNICA N° 2074903
+O de Compra No: 1298355-493-AG25
+Valor Total
+1519 RG_RENTAL CILINDRO MEDICAL_>2008 175 517 90.475
+1519 RG_RENTAL CILINDRO MEDICAL_⇒200B 166 517 85.822
+1519 RG_RENTAL CILINDRO MEDICAL_⇒200B a 517 16.027
+112596 | AG_RENTAL CILINDRO_<2008 150 517 77.550
+112596 | CILINDRO_<2008 98 517 50.666
+SUBTOTAL 320.540
+IVA 19,00 % 60.903
+TOTAL 381.443`;
+  const rOcr = F.parsearTextoFacturaOcr(txtOcr);
+  assert.strictEqual(rOcr.items.length, 5);
+  assert.deepStrictEqual(rOcr.items.map(i => [i.codigo, i.descripcion, i.cantidad, i.unidad, i.valorUnitario, i.valorTotal]), [
+    ['1519', 'RG_RENTAL CILINDRO MEDICAL_=>200B', 175, 'EA', 517, 90475],
+    ['1519', 'RG_RENTAL CILINDRO MEDICAL_=>200B', 166, 'EA', 517, 85822],
+    ['1519', 'RG_RENTAL CILINDRO MEDICAL_=>200B', 31, 'EA', 517, 16027],
+    ['112596', 'RG_RENTAL CILINDRO_<200B', 150, 'EA', 517, 77550],
+    ['112596', 'RG_RENTAL CILINDRO_<200B', 98, 'EA', 517, 50666]
+  ]);
+});

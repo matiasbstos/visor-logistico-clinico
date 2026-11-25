@@ -578,3 +578,72 @@ t('v21.258: oc-lector lee Factura Electrónica REUTTER S.A. para rellenar campos
   assert.strictEqual(r.lineas[0].cantidad, 50); assert.strictEqual(r.lineas[0].valorNeto, 9950); assert.strictEqual(r.lineas[0].totalLinea, 497500);
   assert.strictEqual(r.lineas[1].cantidad, 145); assert.strictEqual(r.lineas[1].valorNeto, 3135); assert.strictEqual(r.lineas[1].totalLinea, 454575);
 });
+
+t('v21.260: oxigeno-facturacion — semilla Indura cuadra $1.016.976 (94,3%) y saldo $61.024', () => {
+  const F = require('../oxigeno-facturacion.js');
+  const sem = F.datosSemillaIndura();
+  assert.strictEqual(sem.proveedor.rut, '76.150.343-K');
+  assert.strictEqual(sem.proveedor.estado, 'HISTORICO');
+  assert.strictEqual(sem.presupuesto.numeroOC, '1298355-493-AG25');
+  assert.strictEqual(sem.presupuesto.montoTope, 1078000);
+  const est = F.calcularEstadoPresupuesto(sem.presupuesto, sem.facturas);
+  assert.strictEqual(est.ejecutadoOC, 1016976);
+  assert.strictEqual(est.saldoDisponible, 61024);
+  assert.strictEqual(est.porcentajeTexto, '94,3%');
+  assert.strictEqual(est.semaforo, 'rojo');
+  assert.strictEqual(est.totalCajaChica, 0);
+  // Factura marcada REEMPLAZADA no debe sumar doble
+  const conReemp = sem.facturas.concat([{ id: 'old', proveedorId: sem.proveedor.id, presupuestoId: sem.presupuesto.id, folio: '2051884', estado: 'REEMPLAZADA', totalBruto: 381443, montoImputadoOC: 381443, montoCajaChica: 0 }]);
+  const est2 = F.calcularEstadoPresupuesto(sem.presupuesto, conReemp);
+  assert.strictEqual(est2.ejecutadoOC, 1016976);
+  assert.strictEqual(est2.saldoDisponible, 61024);
+});
+t('v21.260: oxigeno-facturacion — simulador anti-sobregiro y derivación a Caja Chica', () => {
+  const F = require('../oxigeno-facturacion.js');
+  const ok = F.simularImputacion(61024, 50000, 0);
+  assert.strictEqual(ok.haySobregiro, false);
+  assert.strictEqual(ok.saldoProyectado, 11024);
+  const over = F.simularImputacion(61024, 100000, 0);
+  assert.strictEqual(over.haySobregiro, true);
+  assert.strictEqual(over.saldoProyectado, -38976);
+  assert.strictEqual(over.montoSobregiro, 38976);
+  assert.strictEqual(over.sugeridoOC, 61024);
+  assert.strictEqual(over.sugeridoCajaChica, 38976);
+});
+t('v21.260: oxigeno-facturacion — parser XML DTE SII, validaciones y detección tipo servicio', () => {
+  const F = require('../oxigeno-facturacion.js');
+  const xml = `<?xml version="1.0" encoding="ISO-8859-1"?>
+  <DTE version="1.0"><Documento><Encabezado>
+    <IdDoc><TipoDTE>33</TipoDTE><Folio>2074903</Folio><FchEmis>2026-07-31</FchEmis><FchVenc>2026-08-30</FchVenc></IdDoc>
+    <Emisor><RUTEmisor>76150343-K</RUTEmisor><RznSoc>INDURA S.A.</RznSoc></Emisor>
+    <Totales><MntNeto>320540</MntNeto><IVA>60903</IVA><MntTotal>381443</MntTotal></Totales>
+  </Encabezado>
+  <Detalle><CdgItem><VlrCodigo>RENTA</VlrCodigo></CdgItem><NmbItem>ARRIENDO CILINDROS OXIGENO JULIO 2026</NmbItem><QtyItem>620</QtyItem><UnmdItem>DIAS-CILINDRO</UnmdItem><PrcItem>517</PrcItem><MontoItem>320540</MontoItem></Detalle>
+  <Referencia><TpoDocRef>801</TpoDocRef><FolioRef>1298355-493-AG25</FolioRef><RazonRef>ORDEN DE COMPRA</RazonRef></Referencia>
+  <Referencia><TpoDocRef>33</TpoDocRef><FolioRef>2051884</FolioRef><RazonRef>REEMPLAZA FACTURA ANTERIOR</RazonRef></Referencia>
+  </Documento></DTE>`;
+  const r = F.parsearXmlDte(xml);
+  assert.strictEqual(r.folio, '2074903');
+  assert.strictEqual(r.rutEmisor, '76.150.343-K');
+  assert.strictEqual(r.numeroOC, '1298355-493-AG25');
+  assert.strictEqual(r.reemplazaFactura, '2051884');
+  assert.strictEqual(r.periodoServicio, '2026-07');
+  assert.strictEqual(r.tipoServicio, 'ARRIENDO');
+  assert.strictEqual(r.totalBruto, 381443);
+  assert.strictEqual(r.items.length, 1);
+  assert.strictEqual(F.detectarTipoServicio('RECARGA OXIGENO MEDICINAL 50 M3', []), 'RECARGA');
+  assert.strictEqual(F.detectarTipoServicio('RENTAL CILINDROS + RECARGA OXIGENO M3', []), 'MIXTO');
+  // Validaciones: duplicado bloqueado y tolerancia ±$2
+  const sem = F.datosSemillaIndura();
+  const vDup = F.validarFactura({ proveedorId: sem.proveedor.id, folio: '2074903', periodoServicio: '2026-07', neto: 320540, iva: 60903, totalBruto: 381443 }, sem.facturas);
+  assert.strictEqual(vDup.ok, false);
+  const vTol = F.validarFactura({ proveedorId: sem.proveedor.id, folio: '9999999', periodoServicio: '2026-10', neto: 100000, iva: 19000, totalBruto: 119002 }, sem.facturas);
+  assert.strictEqual(vTol.ok, true);
+  assert.strictEqual(vTol.advertencias.length, 0);
+  const vDes = F.validarFactura({ proveedorId: sem.proveedor.id, folio: '9999998', periodoServicio: '2026-10', neto: 100000, iva: 19000, totalBruto: 119010 }, sem.facturas);
+  assert.strictEqual(vDes.ok, true);
+  assert.strictEqual(vDes.advertencias.length, 1);
+  // HTML Acta RC Ley 19.983 escapa y muestra recinto y ley
+  const actaHtml = F.construirHtmlActaRC({ ...sem.facturas[0], recepcionConforme: { emitida: true, fecha: '2026-08-05', receptorNombre: 'Juan <script>', receptorRut: '12.345.678-9', receptorCargo: 'Encargado', recinto: F.RECINTO_BASE, numeroActa: 'RCO-2026-00001', observaciones: 'OK' } }, sem.proveedor, sem.presupuesto, F.calcularEstadoPresupuesto(sem.presupuesto, sem.facturas));
+  assert.ok(actaHtml.includes('Ley N° 19.983') && actaHtml.includes('RCO-2026-00001') && actaHtml.includes('SAR Arpillerista Elsa Romo Aravena') && !actaHtml.includes('<script>'));
+});

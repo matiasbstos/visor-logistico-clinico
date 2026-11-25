@@ -510,5 +510,22 @@ service cloud.firestore {
       allow update: if false;        // bitácora inmutable
       allow delete: if isSuperAdmin();
     }
+
+    // -----------------------------------------------------
+    // FACTURACIÓN Y PRESUPUESTO DE OXÍGENO (v21.260)
+    // Sin datos de pacientes; respaldos en Storage oxigeno/facturas/{rut}/{folio}.{ext}
+    // -----------------------------------------------------
+    match /oxigeno_proveedores/{id} {
+      allow read, create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+    match /oxigeno_presupuestos/{id} {
+      allow read, create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
+    match /oxigeno_facturas/{id} {
+      allow read, create, update: if isStaff();
+      allow delete: if isAdmin();
+    }
   }
 }

@@ -1842,3 +1842,22 @@ Caso del usuario: al subir un PDF escaneado sin clave `ANTHROPIC_API_KEY` en Goo
 - **`oc-lector.js` (`leerConOCRBrowser`, `itemsDeTesseract`, `canvasesDeArchivo`, `rotarCanvas180`)**: cuando un PDF escaneado (o foto) no tiene capa de texto reconocible y el Apps Script no cuenta con clave `ANTHROPIC_API_KEY` (o no está conectado/actualizado), carga **Tesseract.js v5 bajo demanda** en el navegador (español, gratis, sin clave API, sin enviar el archivo a terceros), descarta hojas en blanco, reintenta rotando 180° si la hoja vino invertida, convierte las palabras a coordenadas 2D (`itemsDeTesseract`) y alimenta los lectores locales (`FACT_REUTTER`, `OC_MP_OCR`, `OC_MP`).
 - **Extracción 2D tolerante a inclinación en `extraerOC_OCR`:** separa columnas por bandas horizontales (`Producto`, `Cantidad`, `Especificaciones Comprador`, `Precio`/`Valor Total`) con tolerancia vertical ampliada (±22 pt) para escaneos levemente inclinados.
 - **`seguimiento-oc.js`**: muestra `(escaneada · OCR local)` en la barra de estado y mantiene la pantalla de revisión obligatoria antes de guardar.
+
+
+### 4.314 Módulo de Facturación, Presupuesto Anti-Sobregiro, Caja Chica y Recepción Conforme (Ley 19.983) para Oxígeno (v21.260)
+- **Modelo de datos en Firestore y Storage (`oxigeno-facturacion.js`, `firestore.rules`, `script.js`):**
+  - Nuevas colecciones: `oxigeno_proveedores`, `oxigeno_presupuestos` (bolsas / OC con tope BRUTO o NETO y concepto `ARRIENDO` / `RECARGA` / `MIXTO`) y `oxigeno_facturas` (folio único por proveedor, `reemplazaFactura`, `fuenteFinanciamiento`, `montoImputadoOC`, `montoCajaChica`, respaldo y objeto `recepcionConforme`).
+  - Se importa `firebase-storage.js` en `script.js` (`window.firebaseStorage`, `window.firebaseStorageSdk`) para subir respaldos a `oxigeno/facturas/{rut}/{folio}.{ext}` con tolerancia a fallos de red/reglas sin perder el registro contable.
+  - Reglas agregadas en `firestore.rules` (`isStaff()` para leer/crear/actualizar, `isAdmin()` para borrar). **Recordatorio:** las reglas desplegadas deben compararse antes de publicar.
+- **Lector automático de facturas (XML DTE SII + OCR Multimodal):**
+  - Arrastrar y soltar `.xml`, `.pdf`, `.jpg` o `.png`. Los XML DTE se parsean directamente en frontend (`parsearXmlDte`).
+  - Las imágenes y PDFs se previsualizan en `<canvas>` con controles de rotación (`-90°`, `+90°`, `180°`) para escaneos invertidos, consultan la nueva Cloud Function `extraerFacturaOxigeno` (Gemini Vision con clave por entorno `GEMINI_API_KEY`) y caen automáticamente a capa de texto PDF o **Tesseract.js OCR local** si la función no está desplegada.
+  - Validaciones atómicas: impide duplicar folio por proveedor, alerta descuadre `Neto + IVA ≠ Total Bruto` (tolerancia ±$2) y marca automáticamente la factura reemplazada como `estado: 'REEMPLAZADA'` dentro de la misma `runTransaction` para evitar doble conteo presupuestario.
+- **Contador anti-sobregiro y Caja Chica:**
+  - Cabecera en la pestaña **Facturación y Presupuesto** de Oxígeno con filtros por proveedor (Activos / Históricos), selector de OC activa y vista separada Arriendo vs. Recargas.
+  - Barra semaforizada (`<75%` verde, `75–90%` ámbar, `>90%` rojo) más indicador separado de Total Derivado a Caja Chica.
+  - Simulador en vivo en el modal de ingreso: al detectar `Saldo proyectado < 0` bloquea el guardado 100% contra la OC y habilita derivar la diferencia o el 100% a Caja Chica con motivo obligatorio.
+- **Recepción Conforme (Art. 5° Ley N° 19.983) y Acta PDF:**
+  - Modal de recepción conforme (recinto por defecto `SAR Arpillerista Elsa Romo Aravena`) con correlativo anual atómico `RCO-AAAA-NNNNN` (`Contadores/ctr-rco-AAAA`, registrado en `nomenclaturas.js`).
+  - Vista previa limpia en fondo blanco forzado (`print-color-adjust: exact`) + descarga PDF nativa (`jsPDF` + `autoTable`) e impresión directa.
+- **Semilla de control Indura S.A. (`cargarSemillaIndura`):** carga idempotente de `Indura S.A.` (`76.150.343-K`, `HISTORICO`), OC `1298355-493-AG25` (tope `$1.078.000` Bruto) y folios `2074903` (`$381.443`), `2074909` (`$381.443`) y `2074906` (`$254.090`), cuadrando en **Ejecutado `$1.016.976` (`94,3%`) · Saldo disponible `$61.024`**.

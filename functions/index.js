@@ -165,3 +165,112 @@ exports.detectarEtiquetaClinica = functions
       res.status(500).json({ success: false, error: error.message });
     }
   });
+
+
+/**
+ * ============================================================================
+ * CLOUD FUNCTION: EXTRACCIÓN MULTIMODAL DE FACTURAS DE OXÍGENO (GEMINI VISION)
+ * ============================================================================
+ * Recibe una imagen o página de PDF en base64 (incluso rotada/escaneada) y
+ * consulta la API de Gemini Vision con respuesta JSON estricta.
+ * La clave se lee únicamente desde variable de entorno GEMINI_API_KEY
+ * (o functions.config().gemini.api_key). Cero credenciales en el repositorio.
+ */
+exports.extraerFacturaOxigeno = functions
+  .region('us-central1')
+  .runWith({ timeoutSeconds: 60, memory: '512MB' })
+  .https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
+    if (req.method === 'OPTIONS') {
+      res.status(204).send('');
+      return;
+    }
+    if (req.method !== 'POST') {
+      res.status(405).json({ success: false, error: 'Método no permitido. Use POST.' });
+      return;
+    }
+
+    try {
+      const apiKey = process.env.GEMINI_API_KEY || (functions.config().gemini && functions.config().gemini.api_key);
+      if (!apiKey) {
+        res.status(503).json({ success: false, error: 'Falta configurar GEMINI_API_KEY en el entorno de Cloud Functions.' });
+        return;
+      }
+
+      const { imageBase64, mimeType } = req.body || {};
+      if (!imageBase64) {
+        res.status(400).json({ success: false, error: 'Falta el parámetro imageBase64.' });
+        return;
+      }
+
+      const cleanBase64 = String(imageBase64).replace(/^data:[^;]+;base64,/, '');
+      const mime = mimeType || 'image/jpeg';
+      const model = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+
+      const prompt = [
+        'Eres un extractor contable experto en Facturas Electrónicas SII Chile para servicios de oxígeno medicinal.',
+        'La imagen puede venir escaneada o rotada (incluso 180°). Lee el documento completo y responde EXCLUSIVAMENTE un objeto JSON válido sin markdown ni texto adicional, con exactamente estas claves:',
+        '{',
+        '  "razonSocial": string,',
+        '  "rutEmisor": string,',
+        '  "folio": string,',
+        '  "fechaEmision": "YYYY-MM-DD",',
+        '  "fechaVencimiento": "YYYY-MM-DD",',
+        '  "numeroOC": string,',
+        '  "facturaSAP": string,',
+        '  "reemplazaFactura": string,',
+        '  "periodoServicio": "YYYY-MM",',
+        '  "tipoServicio": "ARRIENDO" | "RECARGA" | "MIXTO",',
+        '  "items": [{ "codigo": string, "descripcion": string, "cantidad": number, "unidad": string, "valorUnitario": number, "valorTotal": number }],',
+        '  "neto": number,',
+        '  "iva": number,',
+        '  "totalBruto": number',
+        '}',
+        'Reglas: detecta tipoServicio como ARRIENDO si menciona RENTAL/ARRIENDO/RENTA/DIAS-CILINDRO, RECARGA si menciona RECARGA/OXIGENO/M3/GAS, o MIXTO si contiene ambos. Todos los montos en pesos chilenos enteros (sin puntos ni signo $). Si un campo no aparece, usa "" o 0 o [].'
+      ].join('\n');
+
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      const apiResp = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [
+              { text: prompt },
+              { inline_data: { mime_type: mime, data: cleanBase64 } }
+            ]
+          }],
+          generationConfig: {
+            temperature: 0,
+            responseMimeType: 'application/json'
+          }
+        })
+      });
+
+      if (!apiResp.ok) {
+        const errTxt = await apiResp.text();
+        res.status(502).json({ success: false, error: `Gemini API HTTP ${apiResp.status}: ${errTxt.slice(0, 300)}` });
+        return;
+      }
+
+      const payload = await apiResp.json();
+      const rawText = payload && payload.candidates && payload.candidates[0] && payload.candidates[0].content && payload.candidates[0].content.parts && payload.candidates[0].content.parts[0]
+        ? payload.candidates[0].content.parts[0].text
+        : '';
+
+      if (!rawText) {
+        res.status(502).json({ success: false, error: 'Gemini no devolvió contenido JSON.' });
+        return;
+      }
+
+      const cleanJson = rawText.replace(/^```json\s*/i, '').replace(/```$/i, '').trim();
+      const datos = JSON.parse(cleanJson);
+      res.json({ success: true, datos });
+    } catch (error) {
+      console.error('[extraerFacturaOxigeno Error]:', error);
+      res.status(500).json({ success: false, error: error.message || String(error) });
+    }
+  });

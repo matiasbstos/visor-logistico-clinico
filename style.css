@@ -6781,3 +6781,138 @@ body:has(.lv-root .lv) .sp-inst{display:none}
 .lv-ay-l { margin: 0; padding: 12px 16px 16px 36px; line-height: 1.5; font-size: 1rem; }
 .lv-ay-l li { margin: 6px 0; }
 
+
+
+/* ==========================================================================
+   v21.260 — Oxígeno: pestañas y módulo de Facturación, Presupuesto y RC
+   ========================================================================== */
+.oxi-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; border-bottom: 2px solid var(--border-color, #e2e8f0); padding-bottom: 8px; }
+.oxi-tab { background: var(--bg-card, #fff); border: 1px solid var(--border-color, #cbd5e1); border-radius: 10px; padding: 8px 16px; font: inherit; font-weight: 600; color: var(--text-muted, #475569); cursor: pointer; }
+.oxi-tab.on { background: var(--sar-blue, #1a3668); border-color: var(--sar-blue, #1a3668); color: #fff; }
+
+.oxf-wrap { display: flex; flex-direction: column; gap: 16px; }
+.oxf-toolbar { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; background: var(--bg-card, #fff); border: 1px solid var(--border-color, #e2e8f0); border-radius: 12px; padding: 14px; }
+.oxf-filtros { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; flex: 1 1 540px; }
+.oxf-fld { display: flex; flex-direction: column; gap: 4px; font-size: .82rem; color: var(--text-muted, #475569); min-width: 190px; }
+.oxf-fld-grow { flex: 1 1 280px; }
+.oxf-fld select { padding: 8px 10px; border: 1px solid var(--border-color, #cbd5e1); border-radius: 8px; font: inherit; background: var(--bg-card, #fff); color: inherit; }
+.oxf-pills { display: inline-flex; gap: 4px; background: #f1f5f9; padding: 3px; border-radius: 9px; }
+.oxf-pill { border: 0; background: transparent; padding: 6px 11px; border-radius: 7px; font: inherit; font-size: .82rem; font-weight: 600; color: #475569; cursor: pointer; }
+.oxf-pill.on { background: #fff; color: #0f172a; box-shadow: 0 1px 3px rgba(15, 23, 42, .12); }
+.oxf-acciones { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+.oxf-panel-pres { border: 2px solid #16a34a; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 12px; }
+.oxf-pres-meta { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; }
+.oxf-pres-meta small { color: #475569; }
+.oxf-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.oxf-kpi { background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 2px; }
+.oxf-kpi span { font-size: .78rem; color: #64748b; font-weight: 600; }
+.oxf-kpi strong { font-size: 1.35rem; color: #0f172a; font-variant-numeric: tabular-nums; }
+.oxf-kpi small { font-size: .74rem; color: #64748b; }
+.oxf-kpi-cc { border-color: #f59e0b; background: #fffbeb; }
+.oxf-prog-wrap { display: flex; flex-direction: column; gap: 6px; }
+.oxf-prog-lbl { display: flex; justify-content: space-between; font-size: .85rem; }
+.oxf-prog-bar { height: 12px; background: rgba(15, 23, 42, .1); border-radius: 999px; overflow: hidden; }
+.oxf-prog-fill { height: 100%; border-radius: 999px; transition: width .25s ease; }
+.oxf-desglose { font-size: .82rem; color: #334155; }
+
+.oxf-badge { display: inline-block; font-size: .72rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; vertical-align: middle; }
+.oxf-b-hist { background: #e2e8f0; color: #334155; }
+.oxf-b-act { background: #dcfce7; color: #166534; }
+.oxf-b-tipo { background: #e0f2fe; color: #075985; }
+.oxf-b-oc { background: #eff6ff; color: #1d4ed8; }
+.oxf-b-cc { background: #fef3c7; color: #92400e; }
+.oxf-b-ok { background: #dcfce7; color: #166534; }
+.oxf-b-pend { background: #fef3c7; color: #92400e; }
+.oxf-b-reemp { background: #fee2e2; color: #b91c1c; margin-top: 3px; }
+
+.oxf-tabla-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+.oxf-tabla-head input { flex: 1 1 280px; max-width: 440px; padding: 8px 12px; border: 1px solid var(--border-color, #cbd5e1); border-radius: 8px; font: inherit; }
+.oxf-count { font-size: .84rem; color: #64748b; font-weight: 600; }
+.oxf-tabla-wrap { overflow-x: auto; background: var(--bg-card, #fff); border: 1px solid var(--border-color, #e2e8f0); border-radius: 12px; }
+.oxf-tabla { width: 100%; border-collapse: collapse; font-size: .86rem; }
+.oxf-tabla th, .oxf-tabla td { padding: 10px 12px; border-bottom: 1px solid #e2e8f0; text-align: left; vertical-align: top; }
+.oxf-tabla .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.oxf-sub { display: block; font-size: .75rem; color: #64748b; margin-top: 2px; }
+.oxf-cell-acc { display: flex; gap: 6px; flex-wrap: wrap; }
+.oxf-tr-reemp { opacity: .62; background: #f8fafc; }
+.oxf-tr-reemp td.num b { text-decoration: line-through; }
+.oxf-td-vacio { text-align: center !important; padding: 28px !important; color: #64748b; }
+.oxf-empty { background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 12px; padding: 18px; color: #334155; }
+
+.oxf-modal { max-width: 680px; width: 96%; max-height: 92vh; overflow-y: auto; }
+.oxf-modal-xl { max-width: 960px; }
+.oxf-m-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; }
+.oxf-m-head h3 { margin: 0; }
+.oxf-form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 14px; margin: 12px 0; }
+.oxf-span2 { grid-column: span 2; }
+.oxf-calc-btn-wrap { display: flex; align-items: flex-end; padding-bottom: 4px; }
+
+.oxf-dropzone { border: 2px dashed #94a3b8; border-radius: 12px; padding: 18px; text-align: center; background: #f8fafc; cursor: pointer; transition: border-color .15s, background .15s; }
+.oxf-dropzone:hover, .oxf-dropzone.over { border-color: var(--sar-blue, #1a3668); background: #eff6ff; }
+.oxf-dropzone strong { display: block; color: #0f172a; margin-bottom: 4px; }
+.oxf-dropzone small { color: #64748b; }
+.oxf-drop-status { margin-top: 8px; font-size: .84rem; font-weight: 600; color: #1d4ed8; }
+
+.oxf-prev-wrap { margin-top: 12px; border: 1px solid #cbd5e1; border-radius: 10px; padding: 10px; background: #f8fafc; }
+.oxf-prev-bar { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; font-size: .82rem; }
+.oxf-prev-canvas-box { max-height: 300px; overflow: auto; text-align: center; background: #e2e8f0; border-radius: 8px; padding: 8px; }
+.oxf-prev-canvas-box canvas { max-width: 100%; height: auto; background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, .15); }
+
+.oxf-alert-warn { background: #fffbeb; border: 1px solid #f59e0b; color: #92400e; border-radius: 8px; padding: 10px 12px; font-size: .84rem; margin: 8px 0; }
+.oxf-items-sec { margin: 10px 0; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; }
+.oxf-items-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.oxf-item-row { display: grid; grid-template-columns: 90px 1fr 72px 88px 92px 96px auto; gap: 6px; margin-bottom: 6px; align-items: center; }
+
+.oxf-sim-card { border-radius: 12px; padding: 12px 14px; margin: 12px 0; border: 2px solid #cbd5e1; }
+.oxf-sim-ok { background: #f0fdf4; border-color: #16a34a; }
+.oxf-sim-danger { background: #fef2f2; border-color: #dc2626; }
+.oxf-sim-cc { background: #fffbeb; border-color: #f59e0b; }
+.oxf-sim-alerta { color: #b91c1c; font-weight: 800; font-size: .92rem; margin-bottom: 8px; }
+.oxf-sim-flujo { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.oxf-sim-flujo > div { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px 12px; flex: 1 1 150px; text-align: center; }
+.oxf-sim-flujo span { display: block; font-size: .74rem; color: #64748b; }
+.oxf-sim-flujo b { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+.oxf-arrow { font-size: 1.2rem; font-weight: 800; color: #64748b; }
+.oxf-sim-plan { margin-top: 8px; font-size: .84rem; color: #7f1d1d; }
+.oxf-cc-box { background: #fffbeb; border: 1px solid #f59e0b; border-radius: 10px; padding: 12px; margin: 8px 0; display: flex; flex-direction: column; gap: 8px; }
+
+/* Vista previa Acta de Recepción Conforme (fondo blanco forzado, texto slate-900) */
+.oxf-acta-preview-scroll { max-height: 62vh; overflow: auto; background: #cbd5e1; padding: 14px; border-radius: 10px; margin: 10px 0; }
+.oxf-acta-hoja { background: #ffffff !important; color: #0f172a !important; padding: 20px; border-radius: 6px; box-shadow: 0 2px 10px rgba(15, 23, 42, .12); -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+.oxf-acta-head { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 10px; margin-bottom: 14px; gap: 14px; flex-wrap: wrap; }
+.oxf-acta-inst { font-weight: 800; font-size: 15px; color: #0f172a; }
+.oxf-acta-sub { font-size: 12px; color: #334155; }
+.oxf-acta-nro { border: 1.5px solid #0f172a; border-radius: 6px; padding: 8px 14px; text-align: center; background: #f8fafc !important; }
+.oxf-acta-nro span { display: block; font-size: 10px; font-weight: 700; color: #475569; }
+.oxf-acta-nro strong { display: block; font-size: 15px; color: #0f172a; margin: 2px 0; }
+.oxf-acta-nro small { font-size: 10px; color: #475569; }
+.oxf-acta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 14px; }
+.oxf-acta-box { border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px; background: #ffffff !important; }
+.oxf-acta-box h4, .oxf-acta-sec h4, .oxf-acta-ley h4 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .03em; color: #0f172a; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+.oxf-acta-kv { width: 100%; border-collapse: collapse; font-size: 12px; color: #0f172a; }
+.oxf-acta-kv td { padding: 2.5px 4px; vertical-align: top; }
+.oxf-acta-kv td:first-child { color: #475569; width: 42%; }
+.oxf-acta-sec { margin-bottom: 14px; }
+.oxf-acta-tbl { width: 100%; border-collapse: collapse; font-size: 12px; color: #0f172a; }
+.oxf-acta-tbl th, .oxf-acta-tbl td { border: 1px solid #cbd5e1; padding: 6px 8px; }
+.oxf-acta-tbl thead th { background: #0f172a !important; color: #ffffff !important; text-align: left; }
+.oxf-acta-tbl .num { text-align: right; font-variant-numeric: tabular-nums; }
+.oxf-acta-tot td { background: #f1f5f9 !important; font-size: 13px; }
+.oxf-acta-pres { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.oxf-acta-pres > div { border: 1px solid #cbd5e1; border-radius: 6px; padding: 8px; text-align: center; background: #f8fafc !important; }
+.oxf-acta-pres span { display: block; font-size: 10px; color: #475569; }
+.oxf-acta-pres strong { display: block; font-size: 13px; color: #0f172a; margin-top: 2px; }
+.oxf-acta-ley { border: 1px solid #cbd5e1; border-radius: 6px; padding: 10px 12px; background: #ffffff !important; margin-bottom: 20px; font-size: 12px; line-height: 1.5; color: #0f172a; }
+.oxf-acta-ley p { margin: 6px 0 0; text-align: justify; }
+.oxf-acta-firmas { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; align-items: end; margin-top: 34px; }
+.oxf-acta-firma { text-align: center; font-size: 12px; color: #0f172a; }
+.oxf-acta-linea { border-top: 1px solid #0f172a; margin: 0 18px 6px; }
+.oxf-acta-firma b, .oxf-acta-firma span { display: block; }
+.oxf-acta-timbre { border: 1px dashed #94a3b8; border-radius: 6px; height: 86px; display: flex; align-items: center; justify-content: center; color: #64748b; font-size: 11px; }
+
+@media (max-width: 720px) {
+    .oxf-form-grid, .oxf-acta-grid, .oxf-acta-pres, .oxf-acta-firmas { grid-template-columns: 1fr; }
+    .oxf-span2 { grid-column: auto; }
+    .oxf-item-row { grid-template-columns: 1fr 1fr; }
+}

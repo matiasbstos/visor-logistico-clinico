@@ -2,6 +2,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 import { waitForPendingWrites, getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, runTransaction, writeBatch, serverTimestamp, getDoc, setDoc, query, where, orderBy, limit, limitToLast, startAfter, endBefore, startAt, endAt, getDocs as _getDocs, deleteDoc, addDoc, updateDoc, increment, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-storage.js";
 import { generarPlantillaExcel, procesarExcelCargaMasiva, excelSerialDateToJS, exportarInventarioResguardo } from './excelUtils.js';
 const SAR_IdMatch = (n, t) => !!(window.SAR_IdProducto && window.SAR_IdProducto.coincide(n, t));   // búsqueda por ID (id-producto.js)
 
@@ -334,6 +335,7 @@ export const secondaryAuth = getAuth(secondaryApp);
 export const db = initializeFirestore(app, {
     localCache: persistentLocalCache({tabManager: persistentMultipleTabManager()})
 });
+export const storage = getStorage(app);
 /** v21.231: espera a que las escrituras guardadas en el equipo lleguen al servidor (máx. ms). true = todo enviado. */
 window.SAR_enviarPendientes = async (ms) => { try { await Promise.race([waitForPendingWrites(db), new Promise((_, r) => setTimeout(() => r(new Error('tiempo')), ms || 10000))]); return true; } catch (e) { return false; } };
 
@@ -8276,11 +8278,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    window.confirmarRecepcionBandeja = async function (docId) {
-        try {
-            const docRef = doc(db, 'Bandejas_Turno', docId);
-
-            await runTransaction(db, async (transaction) => {
                 const docSnap = await transaction.get(docRef);
                 if (!docSnap.exists()) {
                     throw new Error("La bandeja no existe o fue eliminada.");
@@ -10426,6 +10423,8 @@ document.addEventListener('DOMContentLoaded', () => {
 window.firebaseAuth = { createUserWithEmailAndPassword };
 window.firebaseFirestore = { deleteDoc, setDoc, doc, serverTimestamp, query, collection, orderBy, getDocs, updateDoc, runTransaction, increment, getDoc, where, limit, onSnapshot, startAt, endAt };
 window.firebaseDb = db;
+window.firebaseStorage = storage;
+window.firebaseStorageSdk = { ref: storageRef, uploadBytes, getDownloadURL };
 window.firebaseAuth = auth;
 
 

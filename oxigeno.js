@@ -104,7 +104,7 @@
     // ---------------------------------------------------------------
     // Estado y datos
     // ---------------------------------------------------------------
-    let segHtml = '', segTmr = null, segTok = 0, equipos = [], filtro = 'TODOS', capFiltro = 'TODAS', gasFiltro = 'TODOS', busca = '', sel = new Set(), eventosAbiertos = {};
+    let segHtml = '', segTmr = null, segTok = 0, equipos = [], filtro = 'TODOS', capFiltro = 'TODAS', gasFiltro = 'TODOS', busca = '', sel = new Set(), eventosAbiertos = {}, tabActiva = 'balones';
     let firma = { nombre: 'Matias Bustos Huerta', cargo: 'Encargado de insumos' };
 
     // Opciones propias (gases y capacidades que el usuario agrega): Contadores/oxigeno-opciones
@@ -259,12 +259,41 @@
         const c = {}; equipos.forEach(e => { const k = e.capacidad || 'Sin capacidad'; c[k] = (c[k] || 0) + 1; });
         return Object.entries(c).sort((a, b) => parseFloat(String(a[0]).replace(',', '.')) - parseFloat(String(b[0]).replace(',', '.')) || a[0].localeCompare(b[0], 'es'));
     }
+    function tabsHTML() {
+        return `<div class="oxi-tabs" role="tablist" aria-label="Secciones de Oxígeno">
+            <button type="button" role="tab" aria-selected="${tabActiva === 'balones'}" class="oxi-tab${tabActiva === 'balones' ? ' on' : ''}" data-tab="balones">Balones y Préstamos</button>
+            <button type="button" role="tab" aria-selected="${tabActiva === 'facturacion'}" class="oxi-tab${tabActiva === 'facturacion' ? ' on' : ''}" data-tab="facturacion">Facturación y Presupuesto</button>
+        </div>`;
+    }
+    function enlazarTabs(r) {
+        r.querySelectorAll('.oxi-tab').forEach(b => b.addEventListener('click', () => {
+            const t = b.dataset.tab;
+            if (t === tabActiva) return;
+            tabActiva = t;
+            pintar();
+        }));
+    }
     function pintar() {
         const r = root(); if (!r) return;
+        if (tabActiva === 'facturacion') {
+            r.innerHTML = `
+            <div class="page-header mb-24"><div class="page-title"><h2>Oxígeno medicinal — Facturación y Presupuesto</h2><p>Control de facturas (XML DTE / OCR), presupuesto OC anti-sobregiro, Caja Chica y Recepción Conforme (Ley 19.983).</p></div></div>
+            ${tabsHTML()}
+            <div id="oxi-fact-root"></div>`;
+            enlazarTabs(r);
+            const cont = r.querySelector('#oxi-fact-root');
+            if (window.SAR_OxiFacturacion && window.SAR_OxiFacturacion.montar) {
+                window.SAR_OxiFacturacion.montar(cont);
+            } else if (cont) {
+                cont.innerHTML = '<p class="act-err" style="padding:20px;">El módulo de facturación de oxígeno aún no ha cargado.</p>';
+            }
+            return;
+        }
         const caps = capacidades(), gases = [...new Set(equipos.map(e => normGas(e.gas)))].sort(), rs = resumen(equipos.filter(e => (capFiltro === 'TODAS' || (e.capacidad || 'Sin capacidad') === capFiltro) && (gasFiltro === 'TODOS' || normGas(e.gas) === gasFiltro))), lista = filtrados();
         const chip = (k, t, n, c) => `<button type="button" class="oxi-card${filtro === k ? ' oxi-on' : ''}" data-f="${k}" style="--c:${c}"><b>${n}</b><span>${t}</span></button>`;
         r.innerHTML = `
         <div class="page-header mb-24"><div class="page-title"><h2>Oxígeno portátil</h2><p>Balones con N° de serie: estado, recargas, entregas a centros e incidencias.</p></div></div>
+        ${tabsHTML()}
         <div class="oxi-cards">${chip('TODOS', 'Total', rs.total, '#334155')}${Object.entries(ESTADOS).map(([k, v]) => chip(k, v.txt, rs[k], v.color)).join('')}</div>
         ${gases.length > 1 ? `<div class="oxi-caps" role="group" aria-label="Tipo de gas"><span>Gas:</span><button type="button" class="oxi-cap oxi-gas${gasFiltro === 'TODOS' ? ' oxi-on' : ''}" data-gas="TODOS">Todos</button>${gases.map(g => `<button type="button" class="oxi-cap oxi-gas${gasFiltro === g ? ' oxi-on' : ''}" data-gas="${esc(g)}">${esc(g)} (${equipos.filter(e => normGas(e.gas) === g).length})</button>`).join('')}</div>` : ''}
         ${caps.length > 1 ? `<div class="oxi-caps" role="group" aria-label="Capacidad"><span>Capacidad:</span><button type="button" class="oxi-cap${capFiltro === 'TODAS' ? ' oxi-on' : ''}" data-cap="TODAS">Todas (${equipos.length})</button>${caps.map(([k, n]) => `<button type="button" class="oxi-cap${capFiltro === k ? ' oxi-on' : ''}" data-cap="${esc(k)}">${esc(k)} (${n})</button>`).join('')}</div>` : ''}
@@ -285,6 +314,7 @@
               <button type="button" class="btn btn-outline oxi-hist" data-id="${esc(e.id)}">Historial</button></div>
               <div class="oxi-ev" id="oxi-ev-${esc(e.id)}"${eventosAbiertos[e.id] ? '' : ' style="display:none"'}>${eventosAbiertos[e.id] ? eventosHTML(eventosAbiertos[e.id]) : ''}</div>`;
         }).join('') : '<p class="act-hint">Sin equipos con ese filtro. Usa "+ Agregar balones".</p>'}</div>`;
+        enlazarTabs(r);
         enlazar();
         try { if (window.SAR_OxiPrestamos) window.SAR_OxiPrestamos.pintar(r, equipos, { refrescar: async () => { await cargar(); pintar(); } }); } catch (e) { console.warn('[Oxígeno] préstamos', e); }
     }

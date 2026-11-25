@@ -1888,3 +1888,15 @@ Caso del usuario: al subir un PDF escaneado sin clave `ANTHROPIC_API_KEY` en Goo
   - En **Auditoría → Contable** se integra la sección **Oxígeno — Informe Contable, Presupuestos y Actas RC (RCO)** con **barra de búsqueda** por `RCO-AAAA-NNNNN`, OC, folio, proveedor, RUT o tipo de cambio, acciones directas (**Editar acta**, **PDF**, **Word**) y descarga **Excel CSV contable de oxígeno**.
   - En **Oxígeno → Facturación y Presupuesto**, la barra de búsqueda busca globalmente por `RCO-…`, folio, OC, proveedor o detalle, junto a filtros **Todos / Actas RC (RCO) / Pendientes RC**.
   - En **Seguimiento de un acta**, buscar un correlativo `RCO-AAAA-NNNNN` muestra el acta de oxígeno y su trazabilidad contable.
+
+
+### 4.318 Lector general de Facturas Electrónicas SII / DTE en Ingresar Orden de Compra (v21.272)
+Caso real del usuario (`Factura 152.pdf`, `MICHIS PUBLICIDAD LIMITADA`, OC `1298355-817-AG26`): cuando solo existe la Factura Electrónica (sin PDF de Mercado Público ni cuadro de distribución), antes caía al lector OCR de OC de Mercado Público, tomando al comprador (`CORP MUNICIPAL MELIPILLA`) como proveedor, perdiendo RUT, fecha y productos.
+- **`oc-lector.js` (`reconoceFacturaSII`, `extraerFacturaSII`, `fechaFlexibleISO` con meses en español):**
+  - Nuevo lector general `FACT_SII` compatible con Facturas Electrónicas afectas y exentas (Portal MiPyme SII, Bsale, Defontana, Nubox, Softland, LibreDTE, etc.), tanto digitales como escaneadas (OCR local en navegador).
+  - Descarta automáticamente la página 2 duplicada `CEDIBLE` (Ley 19.983) cuando la página 1 ya contiene totales/timbre, evitando duplicar productos.
+  - Distingue emisor (bloque superior izquierdo + recuadro rojo de RUT, normalizando espacios como `78.199.805- 2` → `78.199.805-2`) de receptor (`SEÑOR(ES):` / `71.293.900-1`).
+  - Prioriza la referencia de `Orden Compra` (ignorando cotizaciones `-COT26`) y su fecha (`del 2026-09-29`), respaldando con `Fecha Emision` en formato largo en español (`11 de Noviembre del 2026` → `2026-11-11`).
+  - Extrae tabla de productos por puntos medios de columnas 2D (soportando encabezados centrados como `Descripcion`, encabezados de 2 líneas como `%Impto Adic.*`, `%Desc.`, descripciones multilínea y orden `Cantidad` antes o después de `Descripción`) con respaldo secuencial 1D.
+  - `reconoceOC` y `reconoceOC_OCR` excluyen documentos encabezados como `FACTURA ELECTRÓNICA` para impedir clasificaciones falsas.
+- **`seguimiento-oc.js`:** etiqueta del selector incluye Factura Electrónica, estado muestra `(Factura Electrónica N° …)` y al guardar adjunta el archivo en la categoría `'Factura'` (en vez de `'Orden de compra'`) cuando proviene de `FACTURA_SII` o `FACTURA_REUTTER`.

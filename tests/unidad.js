@@ -1022,3 +1022,110 @@ TOTAL 381.443`;
     ['112596', 'RG_RENTAL CILINDRO_<200B', 98, 'EA', 517, 50666]
   ]);
 });
+
+t('v21.272: fechaFlexibleISO soporta fechas largas en español y oc-lector lee Factura Electrónica SII (Original + CEDIBLE sin duplicar)', () => {
+  const L = require('../oc-lector.js');
+  assert.strictEqual(L.fechaFlexibleISO('11 de Noviembre del 2026'), '2026-11-11');
+  assert.strictEqual(L.fechaFlexibleISO('9 de enero de 2026'), '2026-01-09');
+  assert.strictEqual(L.fechaFlexibleISO('2026-09-29'), '2026-09-29');
+
+  // Simulación fiel 2D de Factura 152.pdf (2 páginas: Original + copia CEDIBLE Ley 19.983)
+  const pag1 = [
+    { str: 'R.U.T.:78.199.805- 2', x: 415, y: 78 },
+    { str: 'MICHIS PUBLICIDAD LIMITADA', x: 175, y: 88 },
+    { str: 'Giro: SERVICIOS PUBLICITARIOS INTEGRALES Y', x: 175, y: 102 },
+    { str: 'FACTURA ELECTRONICA', x: 398, y: 105 },
+    { str: 'VENTA DE PERSONALIZADOS', x: 175, y: 114 },
+    { str: 'ANTONIO BELLET 193 OF 302 3P 302-', x: 175, y: 126 },
+    { str: 'Nº152', x: 455, y: 132 },
+    { str: 'PROVIDENCIA', x: 175, y: 138 },
+    { str: 'eMail : laboratoriosmichis@gmail.com Telefono :', x: 175, y: 150 },
+    { str: 'S.I.I. - PROVIDENCIA', x: 375, y: 155 },
+    { str: '973453407 TIPO DE VENTA: DEL GIRO', x: 175, y: 162 },
+    { str: 'SEÑOR(ES):', x: 84, y: 184 }, { str: 'CORP MUNICIPAL MELIPILLA PARA LA ED SALUD', x: 138, y: 184 },
+    { str: 'Fecha Emision: 11 de Noviembre del 2026', x: 376, y: 184 },
+    { str: 'R.U.T.:', x: 84, y: 196 }, { str: '71.293.900- 1', x: 138, y: 196 },
+    { str: 'GIRO:', x: 84, y: 208 }, { str: 'FUNDACIONES Y CORPORACIONES; ASOCIAC', x: 138, y: 208 },
+    { str: 'DIRECCION:', x: 84, y: 220 }, { str: 'PASAJE ELEUTERIO RAMIREZ S/N Manuel Rodriguez', x: 138, y: 220 },
+    { str: 'COMUNA', x: 84, y: 232 }, { str: 'MELIPILLA', x: 138, y: 232 }, { str: 'CIUDAD:', x: 245, y: 232 }, { str: 'MELIPILLA', x: 290, y: 232 },
+    { str: 'CONTACTO:', x: 84, y: 244 },
+    { str: 'Codigo', x: 95, y: 282 }, { str: 'Descripcion', x: 212, y: 282 }, { str: 'Cantidad', x: 346, y: 282 },
+    { str: 'Precio', x: 404, y: 282 }, { str: '%Impto', x: 440, y: 279 }, { str: 'Adic.*', x: 440, y: 288 },
+    { str: '%Desc.', x: 472, y: 282 }, { str: 'Valor', x: 522, y: 282 },
+    { str: '-', x: 85, y: 304 }, { str: 'PINES IMPRESOS METALICOS', x: 136, y: 304 },
+    { str: '150', x: 350, y: 304 }, { str: '1.904', x: 414, y: 304 }, { str: '285.600', x: 515, y: 304 },
+    { str: 'Referencias:', x: 84, y: 320 },
+    { str: '- Orden Compra N° 1298355-817-AG26 del 2026-09-29', x: 84, y: 332 },
+    { str: '- Proceso Chilecompra N° 1298355-1071-COT26 del 2026-09-24', x: 84, y: 344 },
+    { str: 'Forma de Pago:Crédito', x: 84, y: 358 },
+    { str: 'MONTO NETO', x: 452, y: 372 }, { str: '$', x: 518, y: 372 }, { str: '285.600', x: 534, y: 372 },
+    { str: 'I.V.A. 19%', x: 468, y: 390 }, { str: '$', x: 518, y: 390 }, { str: '54.264', x: 538, y: 390 },
+    { str: 'IMPUESTO ADICIONAL', x: 420, y: 408 }, { str: '$', x: 518, y: 408 }, { str: '0', x: 556, y: 408 },
+    { str: 'TOTAL', x: 482, y: 426 }, { str: '$', x: 518, y: 426 }, { str: '339.864', x: 534, y: 426 },
+    { str: 'Timbre Electrónico SII', x: 162, y: 455 },
+    { str: 'Res.99 de 2014 Verifique documento: www.sii.cl', x: 115, y: 468 }
+  ];
+  // Página 2 idéntica + pie CEDIBLE (offset +812 pt)
+  const pag2 = pag1.map(it => ({ ...it, y: it.y + 812 })).concat([
+    { str: '" El acuse de recibo que se declara en este acto, de acuerdo a lo dispuesto en la letra b) del Art. 4°, y la letra c) del Art. 5° de la Ley 19.983,', x: 84, y: 1300 },
+    { str: 'CEDIBLE', x: 520, y: 1326 }
+  ]);
+  const items2Pag = pag1.concat(pag2);
+  const txt2Pag = L.lineas(items2Pag).map(l => l.texto).join('\n');
+
+  assert.strictEqual(L.reconoceFacturaSII(txt2Pag), true);
+  assert.strictEqual(L.reconoceOC_OCR(txt2Pag), false, 'Factura SII no debe caer en reconoceOC_OCR');
+  assert.strictEqual(L.detectar(items2Pag), 'FACT_SII');
+
+  const r = L.leer(items2Pag);
+  assert.strictEqual(r.tipo, 'OC_MP');
+  assert.strictEqual(r.origenLectura, 'FACTURA_SII');
+  assert.strictEqual(r.numeroFactura, '152');
+  assert.strictEqual(r.numeroOC, '1298355-817-AG26', 'prioriza Orden Compra y descarta Proceso Chilecompra -COT26');
+  assert.strictEqual(r.proveedor, 'MICHIS PUBLICIDAD LIMITADA', 'emisor, nunca el receptor SEÑOR(ES)');
+  assert.strictEqual(r.rutProveedor, '78.199.805-2', 'RUT del emisor normalizado sin espacio tras guion');
+  assert.strictEqual(r.emitida, '2026-09-29', 'prioriza fecha de la referencia Orden Compra');
+  assert.strictEqual(r.formaPago, 'Crédito');
+  assert.strictEqual(r.direccionDespacho, 'PASAJE ELEUTERIO RAMIREZ S/N Manuel Rodriguez');
+  assert.strictEqual(r.contacto, 'laboratoriosmichis@gmail.com · 973453407');
+  assert.strictEqual(r.totalNeto, 285600);
+  assert.strictEqual(r.iva, 54264);
+  assert.strictEqual(r.total, 339864);
+  assert.strictEqual(r.lineas.length, 1, 'página 2 CEDIBLE descartada: sin duplicar productos');
+  assert.strictEqual(r.lineas[0].descripcion, 'PINES IMPRESOS METALICOS');
+  assert.strictEqual(r.lineas[0].cantidad, 150);
+  assert.strictEqual(r.lineas[0].valorNeto, 1904);
+  assert.strictEqual(r.lineas[0].totalLinea, 285600);
+  assert.strictEqual(r.avisos.length, 0, 'lectura limpia sin avisos de error');
+
+  // Caso 2: Factura Exenta Electrónica multi-ítem con descripción en 2 líneas y sin fecha en referencia OC (respalda con Fecha Emision)
+  const exenta = [
+    { str: 'R.U.T.: 76.543.210-K', x: 420, y: 60 },
+    { str: 'SERVICIOS CLINICOS DEL SUR SPA', x: 50, y: 70 },
+    { str: 'FACTURA NO AFECTA O EXENTA ELECTRONICA', x: 380, y: 90 },
+    { str: 'N° 4820', x: 450, y: 115 },
+    { str: 'S.I.I. - SANTIAGO CENTRO', x: 400, y: 135 },
+    { str: 'SEÑOR(ES): CORP MUNICIPAL MELIPILLA', x: 50, y: 170 },
+    { str: 'Fecha Emision: 15 de Diciembre del 2026', x: 360, y: 170 },
+    { str: 'R.U.T.: 71.293.900-1', x: 50, y: 184 },
+    { str: 'Codigo', x: 50, y: 230 }, { str: 'Detalle', x: 150, y: 230 }, { str: 'Cant.', x: 340, y: 230 }, { str: 'P. Unit.', x: 410, y: 230 }, { str: 'Subtotal', x: 500, y: 230 },
+    { str: 'SRV-01', x: 50, y: 250 }, { str: 'MANTENCION PREVENTIVA EQUIPO', x: 110, y: 250 }, { str: '2', x: 345, y: 250 }, { str: '125.000', x: 410, y: 250 }, { str: '250.000', x: 500, y: 250 },
+    { str: 'DESFIBRILADOR PORTATIL SAR', x: 110, y: 263 },
+    { str: 'SRV-02', x: 50, y: 280 }, { str: 'CALIBRACION ANUAL MONITOR', x: 110, y: 280 }, { str: '1', x: 345, y: 280 }, { str: '80.000', x: 410, y: 280 }, { str: '80.000', x: 500, y: 280 },
+    { str: 'Referencias: OC 1298355-912-SE26', x: 50, y: 315 },
+    { str: 'MONTO EXENTO $ 330.000', x: 420, y: 350 },
+    { str: 'TOTAL $ 330.000', x: 455, y: 370 }
+  ];
+  const rEx = L.leer(exenta);
+  assert.strictEqual(rEx.numeroOC, '1298355-912-SE26');
+  assert.strictEqual(rEx.proveedor, 'SERVICIOS CLINICOS DEL SUR SPA');
+  assert.strictEqual(rEx.rutProveedor, '76.543.210-K');
+  assert.strictEqual(rEx.emitida, '2026-12-15', 'usa Fecha Emision en español cuando la referencia OC no trae fecha');
+  assert.strictEqual(rEx.totalNeto, 330000);
+  assert.strictEqual(rEx.iva, 0);
+  assert.strictEqual(rEx.total, 330000);
+  assert.strictEqual(rEx.lineas.length, 2);
+  assert.strictEqual(rEx.lineas[0].descripcion, 'MANTENCION PREVENTIVA EQUIPO DESFIBRILADOR PORTATIL SAR');
+  assert.strictEqual(rEx.lineas[1].descripcion, 'CALIBRACION ANUAL MONITOR');
+  assert.strictEqual(rEx.avisos.length, 0);
+});

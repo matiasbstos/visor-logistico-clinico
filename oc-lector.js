@@ -35,10 +35,21 @@
         return out.sort((a, b) => a.y - b.y);
     }
     const fechaISO = (dmy) => { const m = /(\d{2})-(\d{2})-(\d{4})/.exec(dmy || ''); return m ? `${m[3]}-${m[2]}-${m[1]}` : ''; };
+    const MESES_ES = {
+        enero: '01', ene: '01', febrero: '02', feb: '02', marzo: '03', mar: '03',
+        abril: '04', abr: '04', mayo: '05', may: '05', junio: '06', jun: '06',
+        julio: '07', jul: '07', agosto: '08', ago: '08', septiembre: '09', setiembre: '09', sep: '09', sept: '09',
+        octubre: '10', oct: '10', noviembre: '11', nov: '11', diciembre: '12', dic: '12'
+    };
     const fechaFlexibleISO = (s) => {
         const t = String(s || '').trim(); let m;
-        if ((m = /^(\d{4})-(\d{2})-(\d{2})/.exec(t))) return `${m[1]}-${m[2]}-${m[3]}`;
+        if ((m = /(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/.exec(t))) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
         if ((m = /(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/.exec(t))) return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+        const norm = t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        if ((m = /(\d{1,2})\s+(?:de\s+)?([a-z]{3,10})\s+(?:del?\s+)?(\d{4})/.exec(norm))) {
+            const mm = MESES_ES[m[2]];
+            if (mm) return `${m[3]}-${mm}-${m[1].padStart(2, '0')}`;
+        }
         return '';
     };
     /** Convierte montos chilenos tolerando errores típicos de OCR (ej. "8.900.00", "'195.000", "2.O82.084"). */
@@ -55,7 +66,11 @@
     // ------------------------------------------------------------------
     // Lector: Orden de compra de Mercado Público
     // ------------------------------------------------------------------
-    function reconoceOC(texto) { return /ORDEN DE COMPRA/i.test(texto) && /N°\s*:?\s*\d+-\d+-[A-Z]{2}\d{2}/.test(texto) && /Cantidad/.test(texto); }
+    function reconoceOC(texto) {
+        const t = String(texto || '');
+        if (/FACTU[RH]A\s+(?:(?:NO\s+AFECTA\s+O\s+)?EXENTA\s+)?ELECT[RB][OÓ]NICA/i.test(t)) return false;
+        return /ORDEN DE COMPRA/i.test(t) && /N°\s*:?\s*\d+-\d+-[A-Z]{2}\d{2}/.test(t) && /Cantidad/.test(t);
+    }
 
     function extraerOC(items) {
         const L = lineas(items), T = L.map(l => l.texto), todo = T.join('\n');
@@ -576,6 +591,7 @@
     /** Reconoce una OC de Mercado Público con capa de texto OCR ruidosa (ej. "N\": 1298355-995-AG26"). */
     function reconoceOC_OCR(texto) {
         const t = String(texto || '');
+        if (/FACTU[RH]A\s+(?:(?:NO\s+AFECTA\s+O\s+)?EXENTA\s+)?ELECT[RB][OÓ]NICA/i.test(t)) return false;
         const tieneOC = /\b\d{4,8}-\d{1,5}-(?:AG|CM|SE|LE|LP|TD)\d{2}\b/i.test(t);
         const tieneMarca = /ORDEN\s+DE\s+COMPRA/i.test(t) || (/SE[ÑN]OR\s*\(?ES\)?/i.test(t) && /DESPACHO|CANTIDAD|UN[ILÑ]DAD|NETO/i.test(t));
         return tieneOC && tieneMarca;
@@ -984,6 +1000,367 @@
         return r;
     }
 
+    // ------------------------------------------------------------------
+    // Lector: Factura Electrónica SII / DTE (estándar chileno: Portal SII,
+    // Bsale, Defontana, Nubox, Softland, LibreDTE, etc.) → rellena campos de OC (v21.272)
+    // ------------------------------------------------------------------
+    const RE_TIT_FACT_SII = /FACTU[RH]A\s+(?:(?:NO\s+AFECTA\s+O\s+)?EXENTA\s+)?ELECT[RB][OÓ]NICA/i;
+    function reconoceFacturaSII(texto) {
+        const t = String(texto || '');
+        if (!RE_TIT_FACT_SII.test(t)) return false;
+        if (reconoceFacturaReutter(t)) return false;
+        const tieneEstructura = /S\.?\s*I\.?\s*I\.?|TIMBRE\s+ELECTR|MONTO\s+(?:NETO|EXENTO)|I\.?\s*V\.?\s*A\.?\s*19|R\.?\s*U\.?\s*T\.?\s*[:;|]?\s*\d{1,2}\.\d{3}\.\d{3}\s*-\s*[\dkK]/i.test(t);
+        const tieneTabla = /DESCRIPCI[OÓ]N|DETALLE|CANTIDAD|CANT\.|PRECIO|VALOR|SUBTOTAL|TOTAL/i.test(t);
+        return tieneEstructura && tieneTabla;
+    }
+
+    function extraerFacturaSII(items) {
+        const TOL_F = 4.5;
+        const agrupar = (arr) => {
+            const ord = [...(arr || [])].filter(i => limpiar(i.str)).sort((a, b) => a.y - b.y || a.x - b.x);
+            const out = [];
+            for (const it of ord) {
+                const l = out.find(o => Math.abs(o.y - it.y) <= TOL_F);
+                if (l) l.items.push(it); else out.push({ y: it.y, items: [it] });
+            }
+            out.forEach(l => { l.items.sort((a, b) => a.x - b.x); l.x = l.items[0].x; l.texto = limpiar(l.items.map(i => i.str).join(' ')); });
+            return out.sort((a, b) => a.y - b.y);
+        };
+
+        // Descartar hoja 2 duplicada "CEDIBLE" (Ley 19.983) cuando la página 1 ya trae totales/timbre
+        let itemsBase = [...(items || [])].filter(i => limpiar(i.str));
+        let L = agrupar(itemsBase);
+        const encFacts = L.filter(l => RE_TIT_FACT_SII.test(l.texto));
+        if (encFacts.length >= 2 && encFacts[1].y - encFacts[0].y > 250) {
+            const p1Foot = L.filter(l => l.y < encFacts[1].y - 80 && /(?:Timbre\s+Electr|Verifique\s+documento|TOTAL\b|I\.?\s*V\.?\s*A\.?\s*19|MONTO\s+(?:NETO|EXENTO))/i.test(l.texto));
+            if (p1Foot.length) {
+                const yFinP1 = p1Foot[p1Foot.length - 1].y;
+                const txtP1 = L.filter(l => l.y <= yFinP1 + 15).map(l => l.texto).join('\n');
+                const txtP2 = L.filter(l => l.y > yFinP1 + 15).map(l => l.texto).join('\n');
+                const f1 = /N\s*[°º"'.,]?\s*0*(\d{1,10})\b/i.exec(txtP1);
+                const f2 = /N\s*[°º"'.,]?\s*0*(\d{1,10})\b/i.exec(txtP2);
+                if (/\bCEDIBLE\b|Ley\s*19\.983/i.test(txtP2) || (f1 && f2 && f1[1] === f2[1])) {
+                    itemsBase = itemsBase.filter(i => i.y <= yFinP1 + 15);
+                    L = agrupar(itemsBase);
+                }
+            }
+        }
+
+        const T = L.map(l => l.texto), todo = T.join('\n');
+        const maxX = itemsBase.reduce((m, i) => Math.max(m, i.x || 0), 0);
+        const esExenta = /FACTU[RH]A\s+(?:NO\s+AFECTA\s+O\s+)?EXENTA/i.test(todo);
+
+        const iSenor = L.findIndex(l => /SE[ÑN]OR\s*\(?ES\)?|RAZ[OÓ]N\s+SOCIAL\s+RECEPTOR|CLIENTE\s*:/i.test(l.texto));
+        const ySenor = iSenor >= 0 ? L[iSenor].y : 220;
+        const itFact = itemsBase.find(i => i.y <= ySenor + 40 && /FACTU[RH]A/i.test(i.str));
+        const itRutTop = itemsBase.find(i => i.y <= ySenor - 5 && i.x > 250 && /R\.?\s*U\.?\s*T\.?/i.test(i.str));
+        const xCaja = (itFact && itFact.x > 250) ? Math.min(itFact.x, itRutTop ? itRutTop.x : itFact.x) - 18 : Infinity;
+
+        // Recuadro rojo superior derecho (RUT emisor, tipo, folio N°, SII)
+        const yFactRef = itFact ? itFact.y : 100;
+        const txtCaja = agrupar(itemsBase.filter(i =>
+            i.y >= yFactRef - 70 && i.y <= yFactRef + 85 && (xCaja < Infinity ? i.x >= xCaja - 25 : true)
+        )).map(l => l.texto).join('\n');
+
+        const mFolio = /(?:N\s*[°º"'.,]|FOLIO\s*[:;|]?)\s*0*(\d{1,10})\b/i.exec(txtCaja)
+            || /(?:N\s*[°º]|FOLIO\s*[:;|]?)\s*0*(\d{1,10})\b/i.exec(T.slice(0, Math.min(18, T.length)).join('\n'));
+        const docNum = mFolio ? mFolio[1] : '';
+
+        // RUTs: identificar RUT receptor (y excluir siempre el RUT de la Corporación) para no confundirlo con el emisor
+        const normRut = (s) => String(s || '').replace(/\s+/g, '').toUpperCase();
+        const rutsComprador = new Set(['71.293.900-1']);
+        if (iSenor >= 0) {
+            const bloqueRec = L.slice(iSenor, iSenor + 6).map(l =>
+                l.items.filter(it => it.x < xCaja).map(it => it.str).join(' ')
+            ).join(' ');
+            const mRec = bloqueRec.match(/\d{1,2}\.\d{3}\.\d{3}\s*-\s*[\dkK]/g) || [];
+            mRec.forEach(x => rutsComprador.add(normRut(x)));
+        }
+        const buscarRutEmisor = (fuente) => {
+            const ms = String(fuente || '').match(/\d{1,2}\.\d{3}\.\d{3}\s*-\s*[\dkK]/g) || [];
+            for (const x of ms) { const n = normRut(x); if (!rutsComprador.has(n)) return n; }
+            return '';
+        };
+        const rutProveedor = buscarRutEmisor(txtCaja) || buscarRutEmisor(todo);
+
+        // Bloque superior izquierdo: razón social del proveedor + correo/teléfono de contacto (excluye "S.I.I. - ..." del recuadro derecho)
+        const LTopIzq = agrupar(itemsBase.filter(i => i.y < ySenor - 3 && i.x < xCaja && !/^S\.?\s*I\.?\s*I\.?\b/i.test(limpiar(i.str))));
+        const topIzqText = LTopIzq.map(l => l.texto).join('\n');
+        const RE_NOISE_TOP = /^(?:R\.?\s*U\.?\s*T\.?|FACTU[RH]A|N\s*[°º]|FOLIO|S\.?\s*I\.?\s*I\.?|FECHA|CEDIBLE|P[AÁ]GINA|GIRO\s*:|CASA\s+MATRIZ|DIRECCI[OÓ]N|SUCURSAL|COMUNA|CIUDAD|E-?MAIL|CORREO|TEL[EÉ]FONO|FONO|WEB|WWW\.|HTTP|TIPO\s+DE\s+VENTA)/i;
+        const RE_STOP_PROV = /^(?:GIRO\b|CASA\s+MATRIZ|DIRECCI[OÓ]N|SUCURSAL|E-?MAIL|CORREO|TEL[EÉ]FONO|FONO|TIPO\s+DE\s+VENTA|AV\.|AVDA\.|CALLE\b|PASAJE\b|PSJE\.)/i;
+        const provPartes = [];
+        let lastProvY = -Infinity;
+        for (const l of LTopIzq) {
+            const txt = l.texto;
+            if (!provPartes.length) {
+                if (RE_NOISE_TOP.test(txt) || /@|www\./i.test(txt) || !/[A-Za-zÁÉÍÓÚáéíóúÑñ]{2,}/.test(txt)) continue;
+                provPartes.push(txt);
+                lastProvY = l.y;
+            } else {
+                if (provPartes.length >= 2 || (l.y - lastProvY) > 16 || RE_STOP_PROV.test(txt) || RE_NOISE_TOP.test(txt) || /@|www\.|\b\d{2,5}\b/i.test(txt)) break;
+                provPartes.push(txt);
+                lastProvY = l.y;
+            }
+        }
+        const proveedor = limpiar(provPartes.join(' '));
+        const mEmailProv = /([A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,})/i.exec(topIzqText);
+        const mTelProv = /(?:Tel[eé]fono|Fono|Cel(?:ular)?)\s*[:;|]?\s*([+\d][\d -]{5,15}\d)/i.exec(topIzqText);
+        const contactoProv = [mEmailProv ? mEmailProv[1].toLowerCase() : '', mTelProv ? limpiar(mTelProv[1]) : ''].filter(Boolean).join(' · ');
+
+        const r = {
+            tipo: 'OC_MP',
+            origenLectura: 'FACTURA_SII',
+            numeroFactura: docNum,
+            avisos: []
+        };
+
+        // Referencia a Orden de Compra (prioriza línea "Orden Compra" / "OC", ignorando "Proceso Chilecompra -COT26")
+        const RE_OC_CODE = /\b(\d[\d ]{3,8}-\s*[\d ]{1,6}-(?:AG|CM|SE|LE|LP|TD|CC|MC|R1|CA|D1|C1|F3|G1|FG)\d{2})\b/i;
+        const lRefOC = L.find(l => /(?:Orden\s*(?:de\s*)?Compra|\bO\.?\s*C\.?\b)/i.test(l.texto) && !/Proceso\s+Chilecompra|Cotizaci[oó]n/i.test(l.texto) && RE_OC_CODE.test(l.texto));
+        let mOC = lRefOC ? RE_OC_CODE.exec(lRefOC.texto) : RE_OC_CODE.exec(todo);
+        if (!mOC) {
+            const lRefGen = L.find(l => /(?:Orden\s*(?:de\s*)?Compra|\bO\.?\s*C\.?\b)/i.test(l.texto) && !/Proceso\s+Chilecompra|Cotizaci[oó]n/i.test(l.texto));
+            if (lRefGen) mOC = /(?:Orden\s*(?:de\s*)?Compra|\bO\.?\s*C\.?)\s*(?:N\s*[°º.]?|#|:)?\s*([A-Z0-9-]{4,24})/i.exec(lRefGen.texto);
+        }
+        r.numeroOC = mOC ? mOC[1].replace(/\s+/g, '').toUpperCase() : '';
+        r.proveedor = proveedor;
+        r.rutProveedor = rutProveedor;
+
+        // Fecha: prioriza fecha de la referencia Orden Compra ("del 2026-09-29"); respaldo Fecha Emisión ("11 de Noviembre del 2026")
+        const fechaRefOC = lRefOC ? fechaFlexibleISO(lRefOC.texto.replace(r.numeroOC, '')) : '';
+        let fechaEmision = '';
+        const iEmi = L.findIndex(l => /Fecha\s*(?:de\s+)?Emisi[oó]n/i.test(l.texto));
+        if (iEmi >= 0) {
+            const tras = L[iEmi].texto.replace(/^.*Fecha\s*(?:de\s+)?Emisi[oó]n\s*[:;|]?/i, '');
+            fechaEmision = fechaFlexibleISO(tras) || (L[iEmi + 1] ? fechaFlexibleISO(L[iEmi + 1].texto) : '');
+        }
+        if (!fechaEmision) {
+            const mLarga = /\b(\d{1,2}\s+de\s+[a-záéíóúñ]{3,10}\s+del?\s+20\d{2})\b/i.exec(todo);
+            if (mLarga) fechaEmision = fechaFlexibleISO(mLarga[1]);
+        }
+        r.emitida = fechaRefOC || fechaEmision || '';
+        r.emitidaHora = '';
+
+        // Forma de pago, dirección de despacho/receptor y contacto
+        const mPago = /(?:Forma|Condici[oó]n)\s*(?:de\s+)?Pago\s*[:;|]?\s*([^\n]+)/i.exec(todo);
+        r.formaPago = mPago ? limpiar(mPago[1].replace(/\s*(?:MONTO|NETO|SUBTOTAL|TOTAL|I\.?V\.?A\.?|VENCIMIENTO|FECHA)\b.*$/i, '')) : '';
+
+        const lDesp = L.find(l => /(?:DESPACHADO\s+A|DIRECCI[OÓ]N\s+(?:DE\s+)?DESPACHO|LUGAR\s+(?:DE\s+)?ENTREGA)/i.test(l.texto));
+        if (lDesp) {
+            r.direccionDespacho = limpiar(lDesp.texto.replace(/^.*(?:DESPACHADO\s+A|DIRECCI[OÓ]N\s+(?:DE\s+)?DESPACHO|LUGAR\s+(?:DE\s+)?ENTREGA)\s*[:;|]?/i, ''));
+        } else {
+            const lDirRec = L.find(l => l.y >= ySenor && /\bDIRECCI[OÓ]N\s*[:;|]/i.test(l.texto));
+            const txtDir = lDirRec ? limpiar(lDirRec.items.filter(it => it.x < xCaja).map(it => it.str).join(' ')) : '';
+            r.direccionDespacho = txtDir ? limpiar(txtDir.replace(/^.*DIRECCI[OÓ]N\s*[:;|]?/i, '').replace(/\s*(?:COMUNA|CIUDAD|FECHA)\s*[:;|]?.*$/i, '')) : '';
+        }
+
+        const lContRec = L.find(l => l.y >= ySenor && /\bCONTACTO\s*[:;|]/i.test(l.texto));
+        const contRec = lContRec ? limpiar(lContRec.items.filter(it => it.x < xCaja).map(it => it.str).join(' ').replace(/^.*CONTACTO\s*[:;|]?/i, '').replace(/\s*(?:FECHA|TIPO\s+DE)\b.*$/i, '')) : '';
+        r.contacto = contRec || contactoProv;
+        r.memo = ''; r.memos = [];
+        r.descripcion = docNum ? `Factura ${esExenta ? 'Exenta ' : ''}Electrónica N° ${docNum}` : '';
+        r.contraparte = ''; r.horario = ''; r.emailFactura = '';
+        r.convenioMarco = /-CM\d{2}$/i.test(r.numeroOC);
+
+        // --- Detección de encabezado de tabla de productos ---
+        const estW = (it) => (it && it.w > 0 ? it.w : limpiar(it ? it.str : '').length * 5.2);
+        const colMatch = (l) => {
+            const its = l.items;
+            const pick = (re, skipSet) => {
+                for (let k = 0; k < its.length; k++) {
+                    if (skipSet && skipSet.has(k)) continue;
+                    const t1 = limpiar(its[k].str);
+                    if (re.test(t1)) return { ...its[k], idx: k, w: estW(its[k]) };
+                    if (k + 1 < its.length && (!skipSet || !skipSet.has(k + 1))) {
+                        const t2 = limpiar(t1 + ' ' + its[k + 1].str);
+                        if (re.test(t2)) return { str: t2, x: its[k].x, y: its[k].y, idx: k, w: (its[k + 1].x - its[k].x) + estW(its[k + 1]) };
+                    }
+                }
+                return null;
+            };
+            const used = new Set();
+            const hCod = pick(/^(?:C[oó]d(?:igo)?\.?|SKU|ID|[IÍ]tem)$/i, used); if (hCod) used.add(hCod.idx);
+            const hDesc = pick(/^(?:Descripci[oó]n|Detalle|Producto|Glosa|Art[ií]culo|Concepto|Servicio)s?$/i, used); if (hDesc) used.add(hDesc.idx);
+            const hCant = pick(/^(?:Cant(?:idad)?\.?|Cantidad\/Unidad)$/i, used); if (hCant) used.add(hCant.idx);
+            const hUnid = pick(/^(?:Unid(?:ad)?\.?|U\.?M\.?|Un\.?\s*Med\.?)$/i, used); if (hUnid) used.add(hUnid.idx);
+            const hPrec = pick(/^(?:Precio(?:\s*Unit(?:ario)?\.?|\s*Neto)?|P\.?\s*Unit\.?|Valor\s*Unit(?:ario)?\.?|V\.?\s*Unit\.?|Unitario)$/i, used); if (hPrec) used.add(hPrec.idx);
+            const hImpto = pick(/^(?:%?\s*Impt?o\.?(?:\s*Adic\.?\*?)?|Imp\.?\s*Adic\.?)$/i, used); if (hImpto) used.add(hImpto.idx);
+            const hDescPct = pick(/^(?:%?\s*Desc(?:uento)?\.?|Dcto\.?)$/i, used); if (hDescPct) used.add(hDescPct.idx);
+            const hVal = pick(/^(?:Valor(?:\s*Total)?|Total(?:\s*L[ií]nea|\s*Neto)?|Sub\s*total|Monto(?:\s*Neto)?)$/i, used); if (hVal) used.add(hVal.idx);
+            const hits = [hDesc, hCant, hPrec, hVal].filter(Boolean).length;
+            return hits >= 2 ? { hCod, hDesc, hCant, hUnid, hPrec, hImpto, hDescPct, hVal } : null;
+        };
+
+        let iEnc = -1, cols = null;
+        for (let i = 0; i < L.length; i++) {
+            const c = colMatch(L[i]);
+            if (c) { iEnc = i; cols = c; break; }
+        }
+        const yEnc = iEnc >= 0 ? L[iEnc].y : ySenor + 40;
+        let yDataStart = yEnc + 4;
+        if (iEnc >= 0 && iEnc + 1 < L.length && L[iEnc + 1].y - L[iEnc].y <= 14) {
+            const cont = L[iEnc + 1];
+            const soloCont = cont.items.every(it => /^(?:Adic\.?\*?|Unit(?:ario)?\.?|Total|Neto|Med\.?|%|U\.?M\.?|Desc\.?)$/i.test(limpiar(it.str)));
+            if (soloCont) yDataStart = cont.y + 4;
+        }
+
+        const RE_FIN_TABLA = /^(?:Referencias?\b|Forma\s+de\s+Pago|Condici[oó]n\s+de\s+Pago|MONTO\s+NETO|MONTO\s+EXENTO|SUBTOTAL\b|NETO\b|I\.?\s*V\.?\s*A\.?\s*19|EXENTO\b|IMPUESTO\s+ADIC|TOTAL\b|SON\s*:|Timbre\s+Electr|Res\.\s*\d+\s+de|Observaciones\s*:|CEDIBLE\b)/i;
+        const lFin = L.find(l => l.y > yDataStart && RE_FIN_TABLA.test(l.texto));
+        const yFin = lFin ? lFin.y - 2 : Infinity;
+        const LTabla = L.filter(l => l.y >= yDataStart && l.y < yFin);
+
+        // --- Totales (MONTO NETO / EXENTO, IVA 19%, TOTAL) ---
+        const totFact = (re, exRe) => {
+            for (const l of L) {
+                if (l.y <= yEnc) continue;
+                if (!re.test(l.texto) || (exRe && exRe.test(l.texto))) continue;
+                const der = maxX > 300 ? l.items.filter(it => it.x >= maxX * 0.42) : l.items;
+                const fuente = (der.length ? der : l.items).map(it => it.str).join(' ').replace(/\b19(?:[.,]00)?\s*%/g, ' ');
+                const nums = fuente.match(/\d[\d.,OolI]*/g);
+                if (nums && nums.length) return montoOCR(nums[nums.length - 1]);
+            }
+            return 0;
+        };
+        const mNeto = totFact(/MONTO\s*NETO|\bNETO\b|\bSUBTOTAL\b|\bAFECTO\b/i, /EXENTO|VALOR\s+NETO/i);
+        const mExento = totFact(/MONTO\s*EXENTO|\bEXENTO\b/i, /FACTURA/i);
+        const mIva = totFact(/I\.?\s*V\.?\s*A\.?/i, /IMPUESTO\s+ADIC/i);
+        const mTotal = totFact(/\bTOTAL\b/i, /SUBTOTAL|VALOR\s+TOTAL|TOTAL\s+L[IÍ]NEA/i);
+
+        if (esExenta || (mExento > 0 && !mNeto)) {
+            r.totalNeto = mExento;
+            r.iva = 0;
+            r.total = mTotal || mExento;
+        } else {
+            r.totalNeto = mNeto + mExento;
+            r.iva = mIva;
+            r.total = mTotal;
+            if (r.totalNeto && !r.iva && r.total > r.totalNeto) r.iva = r.total - r.totalNeto;
+            if (r.totalNeto && !r.total) r.total = r.totalNeto + r.iva;
+        }
+
+        // --- Extracción 2D de filas por puntos medios de columnas ---
+        r.lineas = [];
+        const extraer2D = () => {
+            if (!cols || !cols.hCant || (!cols.hPrec && !cols.hVal) || maxX <= 300) return [];
+            const { hCod, hDesc, hCant, hPrec, hImpto, hDescPct, hVal } = cols;
+            const layoutB = !!(hDesc && hCant.x < hDesc.x);
+            const mkCol = (key, it) => it ? { key, x: it.x, cx: it.x + estW(it) / 2 } : null;
+            const out = [];
+            let pendDesc = '', lastItemY = -Infinity;
+
+            const asignarNumCols = (its, numCols) => {
+                const acc = { cant: '', prec: '', impto: '', descPct: '', val: '' };
+                for (const it of its) {
+                    const s = limpiar(it.str);
+                    if (!/\d/.test(s) || /^%$/.test(s)) continue;
+                    const ix = it.x + estW(it) / 2;
+                    let best = numCols[0], bestD = Infinity;
+                    for (const c of numCols) {
+                        const d = Math.abs(ix - c.cx);
+                        if (d < bestD) { bestD = d; best = c; }
+                    }
+                    if (best) acc[best.key] = acc[best.key] ? `${acc[best.key]} ${s}` : s;
+                }
+                return acc;
+            };
+            const parseNum = (s) => {
+                const m = /(\d[\d.,OolI]*)/.exec(String(s || ''));
+                return m ? montoOCR(m[1]) : 0;
+            };
+
+            const numColsA = [mkCol('cant', hCant), mkCol('prec', hPrec), mkCol('impto', hImpto), mkCol('descPct', hDescPct), mkCol('val', hVal)].filter(Boolean).sort((a, b) => a.cx - b.cx);
+            const numColsB = [mkCol('prec', hPrec), mkCol('impto', hImpto), mkCol('descPct', hDescPct), mkCol('val', hVal)].filter(Boolean).sort((a, b) => a.cx - b.cx);
+            const xCantMin = hCant.x - 16;
+            const xDescMinB = hCant.x + estW(hCant) + 6;
+            const xPrecMinB = (hPrec ? hPrec.x : hVal.x) - 18;
+
+            for (const l of LTabla) {
+                let desc = '', cant = 0, prec = 0, descPct = 0, val = 0;
+                if (!layoutB) {
+                    const izq = l.items.filter(it => it.x < xCantMin);
+                    const der = l.items.filter(it => it.x >= xCantMin);
+                    if (hCod && hCod.x < xCantMin - 40 && izq.length >= 2 && izq[0].x <= hCod.x + 28 && /^(?:-|—|–|\d{1,12}|[A-Z0-9._/-]{1,14})$/i.test(limpiar(izq[0].str))) {
+                        desc = limpiar(izq.slice(1).map(i => i.str).join(' '));
+                    } else {
+                        desc = limpiar(izq.map(i => i.str).join(' ')).replace(/^[-—–]\s+/, '');
+                    }
+                    const nums = asignarNumCols(der, numColsA);
+                    cant = parseNum(nums.cant);
+                    prec = parseNum(nums.prec);
+                    descPct = parseNum(nums.descPct);
+                    val = parseNum(nums.val);
+                } else {
+                    const cantStr = l.items.filter(it => it.x >= xCantMin && it.x < xDescMinB).map(i => i.str).join(' ');
+                    desc = limpiar(l.items.filter(it => it.x >= xDescMinB && it.x < xPrecMinB).map(i => i.str).join(' '));
+                    const der = l.items.filter(it => it.x >= xPrecMinB);
+                    const nums = asignarNumCols(der, numColsB);
+                    cant = parseNum(cantStr);
+                    prec = parseNum(nums.prec);
+                    descPct = parseNum(nums.descPct);
+                    val = parseNum(nums.val);
+                }
+
+                if (cant > 0 || val > 0) {
+                    if (!cant && prec > 0 && val > 0) cant = Math.round((val / prec) * 100) / 100;
+                    if (!prec && val > 0 && cant > 0) prec = Math.round((val / cant) * 100) / 100;
+                    if (!val && prec > 0 && cant > 0) val = Math.round(prec * cant * (descPct > 0 && descPct < 100 ? (1 - descPct / 100) : 1));
+                    const fullDesc = limpiar((pendDesc ? pendDesc + ' ' : '') + desc);
+                    pendDesc = '';
+                    if (fullDesc && cant > 0) {
+                        out.push({ descripcion: fullDesc, codigoMP: '', licitacion: '', cantidad: cant, valorNeto: prec, totalLinea: val, _descPct: descPct });
+                        lastItemY = l.y;
+                    }
+                } else if (desc) {
+                    if (out.length && l.y - lastItemY <= 22) {
+                        out[out.length - 1].descripcion = limpiar(`${out[out.length - 1].descripcion} ${desc}`);
+                        lastItemY = l.y;
+                    } else if (!out.length) {
+                        pendDesc = limpiar(`${pendDesc} ${desc}`);
+                    }
+                }
+            }
+            return out;
+        };
+
+        const extraer1D = () => {
+            const out = [];
+            for (const l of LTabla) {
+                const t = l.texto;
+                let m = /^(.+?)\s+(\d[\d.,]*)\s+(\d[\d.,]*)\s+(\d[\d.,]*)\s*$/.exec(t);
+                let desc = '', cant = 0, prec = 0, val = 0;
+                if (m) {
+                    desc = m[1]; cant = montoOCR(m[2]); prec = montoOCR(m[3]); val = montoOCR(m[4]);
+                } else if ((m = /^(.+?)\s+(\d[\d.,]*)\s+(\d[\d.,]*)\s*$/.exec(t))) {
+                    desc = m[1]; cant = montoOCR(m[2]); val = montoOCR(m[3]); prec = cant > 0 ? Math.round((val / cant) * 100) / 100 : 0;
+                }
+                desc = limpiar(desc.replace(/^(?:[-—–]|(?=[A-Z0-9._/-]*\d)[A-Z0-9._/-]{1,14})\s+/i, ''));
+                if (desc && cant > 0 && /[A-Za-zÁÉÍÓÚáéíóúÑñ]{2,}/.test(desc)) {
+                    out.push({ descripcion: desc, codigoMP: '', licitacion: '', cantidad: cant, valorNeto: prec, totalLinea: val || Math.round(cant * prec) });
+                }
+            }
+            return out;
+        };
+
+        const lineasLeidas = extraer2D();
+        r.lineas = (lineasLeidas.length ? lineasLeidas : extraer1D()).map(l => {
+            const { _descPct, ...limpia } = l;
+            if (!_descPct && limpia.valorNeto && limpia.totalLinea && Math.abs(Math.round(limpia.valorNeto * limpia.cantidad) - Math.round(limpia.totalLinea)) > Math.max(5, limpia.totalLinea * 0.01)) {
+                r.avisos.push(`Línea "${limpia.descripcion.slice(0, 40)}": cantidad × precio (${Math.round(limpia.valorNeto * limpia.cantidad).toLocaleString('es-CL')}) no coincide con el valor (${Math.round(limpia.totalLinea).toLocaleString('es-CL')}). Revísala.`);
+            }
+            return limpia;
+        });
+
+        if (!r.lineas.length) r.avisos.push('No se detectaron productos en la factura: ingrésalos a mano.');
+        const suma = r.lineas.reduce((t, l) => t + (l.totalLinea || 0), 0);
+        if (r.totalNeto && suma && Math.abs(suma - r.totalNeto) > 10) {
+            r.avisos.push(`La suma de las líneas (${Math.round(suma).toLocaleString('es-CL')}) no coincide con el neto de la factura (${Math.round(r.totalNeto).toLocaleString('es-CL')}).`);
+        }
+        ['numeroOC', 'proveedor', 'emitida'].forEach(k => {
+            if (!r[k]) r.avisos.push(`No se encontró: ${({ numeroOC: 'N° de orden', proveedor: 'proveedor', emitida: 'fecha de envío' })[k]}.`);
+        });
+        return r;
+    }
+
     /** Dice qué parece ser un texto que no se reconoció (para un mensaje útil). */
     function parecidoA(texto) {
         const t = String(texto || '');
@@ -1005,8 +1382,9 @@
     const LECTORES = {
         OC_MP: { nombre: 'Orden de compra (Mercado Público)', reconoce: reconoceOC, extraer: extraerOC },
         DIST_OC: { nombre: 'Cuadro de distribución de la orden', reconoce: reconoceDistribucion, extraer: extraerDistribucionAuto },
-        OC_MP_OCR: { nombre: 'Orden de compra escaneada (OCR)', reconoce: reconoceOC_OCR, extraer: extraerOC_OCR },
-        FACT_REUTTER: { nombre: 'Factura Electrónica REUTTER S.A.', reconoce: reconoceFacturaReutter, extraer: extraerFacturaReutter }
+        FACT_REUTTER: { nombre: 'Factura Electrónica REUTTER S.A.', reconoce: reconoceFacturaReutter, extraer: extraerFacturaReutter },
+        FACT_SII: { nombre: 'Factura Electrónica (SII)', reconoce: reconoceFacturaSII, extraer: extraerFacturaSII },
+        OC_MP_OCR: { nombre: 'Orden de compra escaneada (OCR)', reconoce: reconoceOC_OCR, extraer: extraerOC_OCR }
     };
     function detectar(items) { const txt = lineas(items).map(l => l.texto).join('\n'); return Object.keys(LECTORES).find(k => LECTORES[k].reconoce(txt)) || null; }
     function leer(items) {
@@ -1272,6 +1650,8 @@
         let r = null;
         if (reconoceFacturaReutter(txt)) {
             r = extraerFacturaReutter(ocrItems);
+        } else if (reconoceFacturaSII(txt)) {
+            r = extraerFacturaSII(ocrItems);
         } else if (reconoceOC_OCR(txt)) {
             r = extraerOC_OCR(ocrItems);
         } else if (reconoceOC(txt)) {
@@ -1302,7 +1682,7 @@
         const items = await itemsDePDF(buffer);
         const txt = lineas(items).map(l => l.texto).join('\n');
 
-        // 1) Intento rápido: PDF digital (Mercado Público, Cuadro de distribución o Factura REUTTER S.A.)
+        // 1) Intento rápido: PDF digital (Mercado Público, Cuadro de distribución o Factura Electrónica)
         if (reconoceDistribucion(txt)) return extraerDistribucionAuto(items);
         if (reconoceOC(txt)) {
             const digital = extraerOC(items);
@@ -1311,6 +1691,10 @@
         if (reconoceFacturaReutter(txt)) {
             const reutter = extraerFacturaReutter(items);
             if (reutter.lineas && reutter.lineas.length > 0) return reutter;
+        }
+        if (reconoceFacturaSII(txt)) {
+            const factSii = extraerFacturaSII(items);
+            if ((factSii.lineas && factSii.lineas.length > 0) || factSii.numeroOC || factSii.proveedor) return factSii;
         }
 
         // Si trae texto digital claro de otro documento (Recepción conforme, Guía, Acta, Factura) y NO de una OC, avisar al tiro
@@ -1341,6 +1725,6 @@
     }
     async function leerDistribucion(file) { const r = await leerArchivo(file); if (r.tipo === 'OC_MP') throw new Error('Ese archivo es una orden de compra: súbelo en el primer recuadro (el cuadro va aquí).'); if (r.tipo !== 'DIST_OC') throw new Error('Ese archivo no es un cuadro de distribución (busco columnas "MEMO N° …", FINANCIAMIENTO y CDP).'); return r; }
 
-    window.SAR_Lector = { cargarPdfJs, cargarTesseract, leerHoja, extraerDistribucionExcel, extraerOCExcel, esExcel, esImagen, leer, leerArchivo, leerDistribucion, leerOCEscaneada, leerConOCRBrowser, itemsDeTesseract, normalizarOCEscaneada, reconoceOC_OCR, extraerOC_OCR, reconoceFacturaReutter, extraerFacturaReutter, paginaConContenido, paginasDeArchivo, canvasesDeArchivo, montoOCR, fechaFlexibleISO, extraerDistribucion, extraerDistribucionB, unirDistribucion, detectar, extraerOC, extraerCorreo, lineas, LECTORES };
+    window.SAR_Lector = { cargarPdfJs, cargarTesseract, leerHoja, extraerDistribucionExcel, extraerOCExcel, esExcel, esImagen, leer, leerArchivo, leerDistribucion, leerOCEscaneada, leerConOCRBrowser, itemsDeTesseract, normalizarOCEscaneada, reconoceOC_OCR, extraerOC_OCR, reconoceFacturaReutter, extraerFacturaReutter, reconoceFacturaSII, extraerFacturaSII, paginaConContenido, paginasDeArchivo, canvasesDeArchivo, montoOCR, fechaFlexibleISO, extraerDistribucion, extraerDistribucionB, unirDistribucion, detectar, extraerOC, extraerCorreo, lineas, LECTORES };
     if (typeof module !== 'undefined') module.exports = window.SAR_Lector;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

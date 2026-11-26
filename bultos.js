@@ -19,7 +19,14 @@
   const usuario = () => { const a = window.firebaseAuth; return (a && a.currentUser && a.currentUser.email) || ''; };
   const toast = (t, m, k) => { if (typeof window.showToast === 'function') window.showToast(t, m, k || 'info'); };
   const hoyISO = () => new Date().toISOString().slice(0, 10);
-  const fechaCL = (iso) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso || ''); return m ? `${m[3]}-${m[2]}-${m[1]}` : (iso || ''); };
+  const fechaCL = (iso) => {
+    const s = String(iso || '');
+    let m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+    if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+    m = /^(\d{4})-(\d{2})$/.exec(s);
+    if (m) return `${m[2]}/${m[1]}`;
+    return s;
+  };
   const URL_APP = 'https://sarinventario.web.app/';
   /** v21.238: unidades que aporta una etiqueta al total (las cajas interiores ya están dentro de su caja grande) */
   const uds = (b) => b && b.nivel === 'interior' ? 0 : num(b && b.inicial != null ? b.inicial : b && b.contenido);
@@ -87,19 +94,27 @@
       d.setTextColor(0); d.setDrawColor(0);
       const interior = b.nivel === 'interior';
       if (logo) d.addImage(logo.d, 'JPEG', 3, 2.2, 18, 18 / logo.r, 'logo', 'FAST');
-      d.setFont('helvetica', 'bold'); d.setFontSize(7); d.text(interior ? `CAJA ${num(b.padreN)}/${num(b.padreDe)} · INTERIOR` : 'CAJA', 97, 4.4, { align: 'right' });
+      d.setFont('helvetica', 'bold'); d.setFontSize(7);
+      const etqTipo = interior
+        ? `CAJA ${num(b.padreN)}/${num(b.padreDe)} · INTERIOR${b.estado === 'ABIERTA' ? ' · ABIERTA' : ''}`
+        : (b.estado === 'ABIERTA' ? 'CAJA · ABIERTA' : 'CAJA');
+      d.text(etqTipo, 97, 4.4, { align: 'right' });
       d.setFontSize(13); d.text(`${b.n} / ${b.de}`, 97, 9.4, { align: 'right' });
       d.setLineWidth(0.35); d.line(3, 11, 97, 11);
       // descripción grande (como etiqueta de tienda)
       const nomT = String(b.nombre || '').toUpperCase(); let tam = 12; d.setFontSize(tam); let nom = d.splitTextToSize(nomT, 94);
       if (nom.length > 2) { tam = 10; d.setFontSize(tam); nom = d.splitTextToSize(nomT, 94); if (nom.length > 3) { nom = nom.slice(0, 3); nom[2] = nom[2].replace(/\s*\S*$/, '') + '…'; } }
       const paso = tam === 12 ? 4.6 : 3.9; d.text(nom, 3, 16); let y = 16 + nom.length * paso;
-      d.setFontSize(8.5); d.text(`Lote ${b.lote || 'S/L'}`, 3, y); d.text(`Vence ${b.vence ? fechaCL(b.vence) : '—'}`, 97, y, { align: 'right' }); y += 1.5;
+      d.setFontSize(8.5);
+      const izqLote = `Lote ${b.lote || 'S/L'}${b.elaboracion ? ' · Elab ' + fechaCL(b.elaboracion) : ''}`;
+      d.text(izqLote, 3, y); d.text(`Vence ${b.vence ? fechaCL(b.vence) : '—'}`, 97, y, { align: 'right' }); y += 1.5;
       // cantidad grande
       const cant = `${num(b.inicial != null ? b.inicial : b.contenido)} u.`; d.setFontSize(24); d.text(cant, 3, y + 9); const finCant = 3 + d.getTextWidth(cant) + 4;
       d.setFont('helvetica', 'normal'); d.setFontSize(7.5);
       const ajusta = (t, ancho) => { let x = String(t); while (x.length > 4 && d.getTextWidth(x) > ancho) x = x.slice(0, -2); return x === String(t) ? x : x.replace(/\s*$/, '') + '…'; };
-      const det = interior ? [`Va dentro de ${b.padre || 'la caja grande'}`, b.bodega || ''] : [b.subcajas ? `= ${num(b.subcajas)} cajas interiores × ${num(b.porSubcaja)} u.` : `${num(b.porCaja)} u. por caja · ${num(b.de)} caja${num(b.de) === 1 ? '' : 's'}`, `Total en cajas: ${num(b.totalGrupo)} u.${b.bodega ? ' · ' + b.bodega : ''}`];
+      const det = interior
+        ? [`Va dentro de ${b.padre || 'la caja grande'}${b.estado === 'ABIERTA' ? ' (abierta)' : ''}`, b.bodega || '']
+        : [b.estructuraTexto ? `= ${b.estructuraTexto}` : (b.subcajas ? `= ${num(b.subcajas)} cajas interiores × ${num(b.porSubcaja)} u.` : `${num(b.porCaja)} u. por caja · ${num(b.de)} caja${num(b.de) === 1 ? '' : 's'}`), `Total en cajas: ${num(b.totalGrupo)} u.${b.bodega ? ' · ' + b.bodega : ''}`];
       det.filter(Boolean).forEach((t, i) => d.text(ajusta(t, 97 - finCant), 97, y + 4.2 + i * 3.4, { align: 'right' }));
       y += 12;
       if (!interior) { const inf = [b.proveedor, b.oc ? 'OC ' + b.oc : '', b.rec, b.fechaRecepcion ? 'Recibido ' + fechaCL(b.fechaRecepcion) : ''].filter(Boolean).join(' · '); if (inf) { d.setFontSize(7); d.text(ajusta(inf, 94), 3, y); } }

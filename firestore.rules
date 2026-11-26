@@ -344,7 +344,7 @@ service cloud.firestore {
     match /Conteos_Cajas/{folio} {
       function rolConteo() { return isContador() || (getUserRole() is string && getUserRole().lower().trim() == 'operador') || isAdmin(); }
       function camposCaja() {
-        return ['folio', 'bodega', 'bodegaId', 'insumoId', 'nombre', 'nombreNorm', 'nuevo', 'tipo', 'controlado', 'lote', 'vence', 'sinLote',
+        return ['folio', 'bodega', 'bodegaId', 'insumoId', 'nombre', 'nombreNorm', 'nuevo', 'tipo', 'controlado', 'lote', 'elaboracion', 'vence', 'sinLote',
                 'estructura', 'total', 'contadoPor', 'contadoNombre', 'en', 'servidorEn', 'editadoEn', 'estado', 'app',
                 'baseSistema', 'baseSistemaEn', 'deudaSistema', 'huella'];
       }
@@ -364,6 +364,7 @@ service cloud.firestore {
           && d.bodega is string && d.bodega.size() > 0 && d.bodega.size() <= 120
           && d.nombre is string && d.nombre.size() > 0 && d.nombre.size() <= 120
           && d.lote is string && d.lote.size() > 0 && d.lote.size() <= 60
+          && (!('elaboracion' in d) || d.elaboracion == null || d.elaboracion == '' || (d.elaboracion is string && d.elaboracion.matches('^[0-9]{4}-(0[1-9]|1[0-2])(-(0[1-9]|[12][0-9]|3[01]))?$')))
           && d.vence is string && (d.vence == 'N/A' || d.vence.matches('^[0-9]{4}-(0[1-9]|1[0-2])$'))
           && txt(d, 'bodegaId', 120) && txt(d, 'insumoId', 120) && txt(d, 'nombreNorm', 120) && txt(d, 'tipo', 120) && txt(d, 'controlado', 120)
           && txt(d, 'contadoPor', 120) && txt(d, 'contadoNombre', 120) && txt(d, 'en', 120) && txt(d, 'editadoEn', 120) && txt(d, 'app', 120)

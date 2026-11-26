@@ -1129,3 +1129,82 @@ t('v21.272: fechaFlexibleISO soporta fechas largas en español y oc-lector lee F
   assert.strictEqual(rEx.lineas[1].descripcion, 'CALIBRACION ANUAL MONITOR');
   assert.strictEqual(rEx.avisos.length, 0);
 });
+
+t('v21.273: fecha de elaboración opcional en levantamiento-movil y plan/contadores/bultos de etiquetas en tags-conteo', () => {
+  const L = require('../levantamiento-movil.js');
+  const T = require('../tags-conteo.js');
+  // 1) armarDoc con fecha de elaboración opcional (cuando viene se incluye y valida; si está vacía no agrega clave)
+  const drConElab = {
+    folio: 'BUL-2026-002928',
+    bodega: { id: 'bod-sat-vestidor', name: 'Bodega Satélite Vestidor' },
+    prod: { insumoId: 'ins1', nombre: 'GUANTE NITRILO M', nuevo: false, tipo: null, controlado: null },
+    lote: 'L2026A', elaboracion: '2026-05-15', vence: '2028-05', sinLote: false,
+    estructura: { estado: 'ABIERTA', interiores: Array.from({ length: 9 }, () => ({ q: 50, abierta: false })).concat([{ q: 30, abierta: true }]), sueltas: 0 }
+  };
+  const doc1 = L.armarDoc(drConElab, { correo: 'conteo1@cormumel.cl', nombre: 'Conteo 1' }, { base: 500, en: '2026-11-26T12:00:00Z', deuda: 0 });
+  assert.strictEqual(doc1.elaboracion, '2026-05-15');
+  assert.strictEqual(doc1.total, 480);
+  assert.deepStrictEqual(L.validar(doc1), []);
+
+  const docSinElab = L.armarDoc({ ...drConElab, elaboracion: '' }, { correo: 'conteo1@cormumel.cl', nombre: 'Conteo 1' }, { base: 500, en: '2026-11-26T12:00:00Z', deuda: 0 });
+  assert.strictEqual('elaboracion' in docSinElab, false, 'sin fecha de elaboración no agrega clave extra');
+  assert.deepStrictEqual(L.validar(docSinElab), []);
+
+  // 2) planEtiquetasConteo: caja subdividida (9×50 + 1 abierta de 30 = 11 etiquetas) vs sin subdivisión (1 etiqueta)
+  const planSub = T.planEtiquetasConteo(doc1);
+  assert.strictEqual(planSub.subdividida, true);
+  assert.strictEqual(planSub.etiquetasGrande, 1);
+  assert.strictEqual(planSub.etiquetasInteriores, 10);
+  assert.strictEqual(planSub.totalEtiquetas, 11);
+  assert.strictEqual(planSub.detalleInteriores[9].q, 30);
+  assert.strictEqual(planSub.detalleInteriores[9].abierta, true);
+
+  const planSoloGrande = T.planEtiquetasConteo(doc1, { soloGrande: true });
+  assert.strictEqual(planSoloGrande.totalEtiquetas, 1);
+  assert.strictEqual(planSoloGrande.etiquetasInteriores, 0);
+
+  const docSimple = { ...docSinElab, folio: 'BUL-2026-002929', estructura: { estado: 'CERRADA', interiores: [], sueltas: 100 }, total: 100 };
+  const planSimp = T.planEtiquetasConteo(docSimple);
+  assert.strictEqual(planSimp.subdividida, false);
+  assert.strictEqual(planSimp.totalEtiquetas, 1);
+
+  // 3) armarBultosDeConteo: 1 caja grande conservando el correlativo del tag + 10 interiores con sus unidades exactas
+  const foliosHijos = Array.from({ length: 10 }, (_, i) => `BUL-2026-${String(2930 + i).padStart(6, '0')}`);
+  const bultos = T.armarBultosDeConteo(doc1, foliosHijos, { ahora: '2026-11-26T12:30:00Z', por: 'admin@cormumel.cl' });
+  assert.strictEqual(bultos.length, 11);
+  assert.strictEqual(bultos[0].folio, 'BUL-2026-002928');
+  assert.strictEqual(bultos[0].tipo, 'bulto');
+  assert.strictEqual(bultos[0].elaboracion, '2026-05-15');
+  assert.strictEqual(bultos[0].contenido, 480);
+  assert.strictEqual(bultos[0].hijos.length, 10);
+  assert.strictEqual(bultos[1].nivel, 'interior');
+  assert.strictEqual(bultos[1].padre, 'BUL-2026-002928');
+  assert.strictEqual(bultos[1].contenido, 50);
+  assert.strictEqual(bultos[10].contenido, 30);
+  assert.strictEqual(bultos[10].estado, 'ABIERTA');
+
+  // 4) contadoresEtiquetas: suma cajas contadas, subdivididas, grandes, interiores, pendientes y generadas
+  const filas = T.unir(
+    [
+      { folio: 'BUL-2026-002927', tipo: 'tag-conteo', bodega: 'Bodega Satélite Vestidor' },
+      { folio: 'BUL-2026-002928', tipo: 'tag-conteo', bodega: 'Bodega Satélite Vestidor' },
+      { folio: 'BUL-2026-002929', tipo: 'tag-conteo', bodega: 'Bodega Satélite Vestidor' }
+    ],
+    [
+      doc1,
+      { ...docSimple, estado: 'ETIQUETADO', hijos: [] }
+    ]
+  );
+  const kpi = T.contadoresEtiquetas(filas);
+  assert.strictEqual(kpi.sinUsar, 1);
+  assert.strictEqual(kpi.cajasContadas, 2);
+  assert.strictEqual(kpi.cajasSubdivididas, 1);
+  assert.strictEqual(kpi.etiquetasPendientes, 11);
+  assert.strictEqual(kpi.etiquetasGeneradas, 1);
+  assert.strictEqual(kpi.etiquetasTotal, 12);
+  assert.strictEqual(kpi.etiquetasGrandes, 2);
+  assert.strictEqual(kpi.etiquetasInteriores, 10);
+  assert.strictEqual(kpi.unidadesTotal, 580);
+  // Filtrar por bodega incluye también tags sin usar preasignados a esa bodega
+  assert.strictEqual(T.filtrar(filas, { bodega: 'Bodega Satélite Vestidor' }).length, 3);
+});

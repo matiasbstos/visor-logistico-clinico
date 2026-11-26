@@ -1900,3 +1900,16 @@ Caso real del usuario (`Factura 152.pdf`, `MICHIS PUBLICIDAD LIMITADA`, OC `1298
   - Extrae tabla de productos por puntos medios de columnas 2D (soportando encabezados centrados como `Descripcion`, encabezados de 2 líneas como `%Impto Adic.*`, `%Desc.`, descripciones multilínea y orden `Cantidad` antes o después de `Descripción`) con respaldo secuencial 1D.
   - `reconoceOC` y `reconoceOC_OCR` excluyen documentos encabezados como `FACTURA ELECTRÓNICA` para impedir clasificaciones falsas.
 - **`seguimiento-oc.js`:** etiqueta del selector incluye Factura Electrónica, estado muestra `(Factura Electrónica N° …)` y al guardar adjunta el archivo en la categoría `'Factura'` (en vez de `'Orden de compra'`) cuando proviene de `FACTURA_SII` o `FACTURA_REUTTER`.
+
+
+### 4.319 Credencial de contador en Tags de conteo, fecha de elaboración en móvil y etiquetas definitivas con contadores (v21.273)
+- **Credencial de contador en el mismo módulo de Tags (`script.js` + `tags-conteo.js`):**
+  - Se expone `window.SAR_CrearUsuario` (reutilizando `SecondaryApp` vía `getApps()` para evitar fallos al crear más de un usuario por sesión) y se añade la tarjeta **«Credencial de contador (teléfono)»** en **Inventario → Tags de conteo**.
+  - Crea cuentas con rol `contador` (`@cormumel.cl` + clave temporal), permite copiar el acceso, lista los contadores registrados e imprime una **tarjeta credencial PDF 100×60 mm** (Zebra ZD230) con el QR directo a `solicitar.html?modo=contar`.
+- **Fecha de elaboración opcional y subdivisión opcional en el teléfono (`levantamiento-movil.js` + `firestore.rules`):**
+  - En P2 (`Lote y vencimiento`) se agrega el campo opcional **`Fecha de elaboración`** (`elaboracion`, formato `AAAA-MM-DD` o `AAAA-MM`; si se deja vacío no se escribe la clave para mantener compatibilidad). Se propaga a P4, P5, `MISMO PRODUCTO Y LOTE` y `Conteos_Cajas` (regla actualizada en `firestore.rules`).
+  - Se clarifica la pregunta opcional de subdivisión en P3 (`¿Esta caja se subdivide en cajas chicas adentro? (opcional)`).
+- **Bandeja de retorno, contadores de etiquetas y generación de etiquetas definitivas de cajas (`tags-conteo.js` + `bultos.js`):**
+  - Funciones puras `planEtiquetasConteo`, `contadoresEtiquetas` y `armarBultosDeConteo`.
+  - Arriba de la tabla de Tags de conteo se muestran los contadores en vivo: **Cajas contadas** (y cuántas están subdivididas), **Total etiquetas de cajas** (grandes + interiores), **Etiquetas por imprimir**, **Etiquetas ya generadas** y **Unidades contadas**, además del botón masivo para imprimir todas las pendientes en un solo PDF.
+  - Cada fila muestra cuántas etiquetas genera esa caja y cuánto contiene cada una; al pulsar **Etiquetas (N)** se previsualiza cada etiqueta (caja grande con su correlativo `BUL` original + cada caja interior con sus unidades), se ejecuta la transición exigida por reglas (`REGISTRADO → ACEPTADO → ETIQUETADO`), se crean los documentos `bulto` en `Contadores/bulto-…` y se imprime el PDF 100×60 mm (incluyendo `Elab.`, `ABIERTA` y desglose real en `bultos.js`). También permite **Pedir reconteo**, **Reimprimir** y **Ver detalle** de los correlativos generados.

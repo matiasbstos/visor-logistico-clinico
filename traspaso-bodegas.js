@@ -93,6 +93,7 @@
       { const h = await tx.get(refH); if (h.exists()) throw Object.assign(new Error('Ya estaba hecho.'), { ya: true }); }   /* v21.230: siempre (un reintento del SDK tras confirmar no vuelve a mover) */
       const cajasW = marca && Array.isArray(marca.cajas) && marca.cajas.length && window.SAR_Bultos && window.SAR_Bultos.leerCajasTx ? await window.SAR_Bultos.leerCajasTx(tx, F, D, marca.cajas, { ref: marca.numero, destino: marca.destinoCaja || '', soloTraslado: !!marca.soloTraslado }) : null;   /* v21.243: cajas pistoleadas en la misma transacción */
       if (d.status === 'CUARENTENA') throw new Error('En CUARENTENA: no se puede mover.');
+      if (d.levProvisional === true) throw new Error(window.SAR_LevBandeja ? window.SAR_LevBandeja.AVISO_FICHA(d.name) : 'Ficha provisional sin validar: no se puede mover.');   /* 4.307 */
       if (qty > num(d.quantity)) throw new Error('Stock insuficiente.');
       const { lotes, movidos } = sacarLotes(d, sel);
       tx.update(refO, { quantity: num(d.quantity) - qty, batches: lotes, updatedAt: F.serverTimestamp() });
@@ -123,6 +124,7 @@
       const o = await tx.get(refO); if (!o.exists()) throw new Error('El producto ya no existe.'); const m = await leerMarca(tx, F, D, marca);
       const cajasW = marca && Array.isArray(marca.cajas) && marca.cajas.length && window.SAR_Bultos && window.SAR_Bultos.leerCajasTx ? await window.SAR_Bultos.leerCajasTx(tx, F, D, marca.cajas, { ref: marca.numero }) : null;   /* v21.243: cajas pistoleadas en la misma transacción */
       const d = o.data(); if (d.status === 'CUARENTENA') throw new Error('En CUARENTENA: no se puede entregar.');
+      if (d.levProvisional === true) throw new Error(window.SAR_LevBandeja ? window.SAR_LevBandeja.AVISO_FICHA(d.name) : 'Ficha provisional sin validar: no se puede entregar.');   /* 4.307 */
       if (qty > num(d.quantity)) throw new Error('Stock insuficiente.');
       const { lotes, movidos } = sacarLotes(d, sel);
       tx.update(refO, { quantity: num(d.quantity) - qty, batches: lotes, updatedAt: F.serverTimestamp() });

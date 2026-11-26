@@ -17,7 +17,7 @@ const _fueraDeFase = (d) => {
     try {
         const p = (d && d.ref && d.ref.path) || '';
         if (p.startsWith('Bandejas_Turno/')) return true;
-        if (/^Insumos\/[^/]+$/.test(p)) { const x = d.data(); return x.origenOC !== true && x.provisional !== true && !(Number(x.sobregiro) > 0); }
+        if (/^Insumos\/[^/]+$/.test(p)) { const x = d.data(); return x.origenOC !== true && x.origenLev !== true && x.provisional !== true && !(Number(x.sobregiro) > 0); }   /* 4.307: lo que entra por levantamiento (origenLev) también se ve */
     } catch (e) { /* sin ruta: se muestra */ }
     return false;
 };
@@ -2140,6 +2140,7 @@ document.addEventListener('DOMContentLoaded', () => {
             'view-fotos': 'Fotos de productos',
             'view-etiquetas': 'Impresión de etiquetas',
             'view-tags-conteo': 'Tags de conteo',
+            'view-lev-bandeja': 'Levantamientos por aprobar',
             'view-salud-inventario': 'Repetidos y salud del inventario',
             'view-solicitudes-insumos': 'Solicitudes recibidas',
             'view-bitacora-oc': 'Bitácora de órdenes',
@@ -2185,8 +2186,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Control de acceso por rol (espejo de las reglas CSS del menú; la barrera real son las reglas de Firestore)
             const VISTAS_BLOQUEADAS = {
                 enfermero: ['view-movimientos', 'view-historial', 'view-ajustes', 'view-compras', 'view-informes', 'view-bodegas',
-                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-compras-agiles', 'view-ingreso-rapido', 'view-pendientes-entrega', 'view-distribucion-centros', 'view-transitoria', 'view-sustituciones', 'view-solicitudes-insumos', 'view-bultos', 'view-etiquetas', 'view-tags-conteo', 'view-salud-inventario', 'view-bitacora-oc', 'view-duplicados', 'view-actas-entrega', 'view-auditoria', 'view-oxigeno', 'view-errores'],
-                operador: ['view-compras', 'view-usuarios', 'view-configuracion', 'view-errores', 'view-salud-inventario', 'view-tags-conteo']
+                            'view-usuarios', 'view-configuracion', 'view-transferencias', 'view-erp-adquisiciones', 'view-seguimiento-oc', 'view-compras-agiles', 'view-ingreso-rapido', 'view-pendientes-entrega', 'view-distribucion-centros', 'view-transitoria', 'view-sustituciones', 'view-solicitudes-insumos', 'view-bultos', 'view-etiquetas', 'view-tags-conteo', 'view-lev-bandeja', 'view-salud-inventario', 'view-bitacora-oc', 'view-duplicados', 'view-actas-entrega', 'view-auditoria', 'view-oxigeno', 'view-errores'],
+                operador: ['view-compras', 'view-usuarios', 'view-configuracion', 'view-errores', 'view-salud-inventario', 'view-tags-conteo', 'view-lev-bandeja']
             };
             const rolActual = String(document.body.dataset.userRole || '').toLowerCase();
             // Rol «transitoria»: solo puede ver la Bodega transitoria (cualquier otra vista la devuelve ahí)
@@ -2269,6 +2270,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (window.SAR_Bultos) window.SAR_Bultos.abrirEtiquetas();
                 } else if (hash === 'view-tags-conteo') {
                     if (window.SAR_TagsConteo) window.SAR_TagsConteo.abrir();
+                } else if (hash === 'view-lev-bandeja') {
+                    if (window.SAR_LevBandeja) window.SAR_LevBandeja.abrir();
                 } else if (hash === 'view-solicitud-insumos') {
                     if (window.SAR_Solicitudes) window.SAR_Solicitudes.abrirPide();
                 } else if (hash === 'view-solicitudes-insumos') {
@@ -5773,6 +5776,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (dataActual.status === 'CUARENTENA') {
                             throw new Error('El producto está en CUARENTENA.');
                         }
+                        if (dataActual.levProvisional === true) throw new Error(window.SAR_LevBandeja ? window.SAR_LevBandeja.AVISO_FICHA(dataActual.name) : 'Ficha provisional sin validar: no se puede mover.');   /* 4.307 */
                         if (qtyToMove > (Number(dataActual.quantity) || 0)) {
                             throw new Error('Stock insuficiente en la bodega de origen.');
                         }

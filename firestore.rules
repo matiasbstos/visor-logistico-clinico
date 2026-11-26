@@ -120,7 +120,8 @@ service cloud.firestore {
     match /Insumos/{insumoId} {
       allow read: if hasRole() || isContador();
       allow create: if isOperadorOrAdmin();
-      allow update: if isOperadorOrAdmin()
+      // 4.307: una ficha provisional del levantamiento (levProvisional) solo la valida el superadmin
+      allow update: if (isOperadorOrAdmin() && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['levProvisional']) || isSuperAdmin()))
         || (isTransitoria() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ubicacionEstante', 'updatedAt']));
       allow delete: if isAdmin();
     }
@@ -346,11 +347,12 @@ service cloud.firestore {
       function camposCaja() {
         return ['folio', 'bodega', 'bodegaId', 'insumoId', 'nombre', 'nombreNorm', 'nuevo', 'tipo', 'controlado', 'lote', 'elaboracion', 'vence', 'sinLote',
                 'estructura', 'total', 'contadoPor', 'contadoNombre', 'en', 'servidorEn', 'editadoEn', 'estado', 'app',
-                'baseSistema', 'baseSistemaEn', 'deudaSistema', 'huella'];
+                'baseSistema', 'baseSistemaEn', 'deudaSistema', 'baseSL', 'huella'];
       }
       function camposBodega() {
         return ['estado', 'aceptadoPor', 'aceptadoEn', 'aceptadoTotal', 'aceptadoLote', 'aceptadoVence', 'aceptadoInsumoId', 'lev', 'hijos', 'insumoId',
-                'motivoRechazo', 'rechazadoPor', 'rechazadoEn', 'reconteoPedidoPor', 'reconteoEn', 'nota'];
+                'motivoRechazo', 'rechazadoPor', 'rechazadoEn', 'reconteoPedidoPor', 'reconteoEn', 'nota',
+                'contadoCompleto', 'aceptadoPropio'];   // 4.307: bandeja «Levantamientos por aprobar»
       }
       function n6(v) { return v is int && v >= 0 && v <= 1000000; }
       // texto opcional (o null) de hasta n caracteres
@@ -378,7 +380,8 @@ service cloud.firestore {
           && d.estructura.interiores is list && d.estructura.interiores.size() <= 200
           && n6(d.estructura.sueltas)
           && (d.get('baseSistema', null) == null || n6(d.baseSistema))
-          && (!('deudaSistema' in d) || n6(d.deudaSistema));
+          && (!('deudaSistema' in d) || n6(d.deudaSistema))
+          && (d.get('baseSL', null) == null || n6(d.baseSL));
       }
       // sin cambio de estado solo mientras se cuenta; ETIQUETADO y RECHAZADO quedan fijos (salvo agregar lev, abajo)
       function transicion(a, b) {
@@ -395,6 +398,10 @@ service cloud.firestore {
           && txt(n, 'aceptadoLote', 120) && txt(n, 'aceptadoVence', 120) && txt(n, 'aceptadoInsumoId', 120)
           && txt(n, 'nota', 300) && txt(n, 'motivoRechazo', 300)
           && (!('hijos' in n) || (n.hijos is list && n.hijos.size() <= 600))
+          && (!('contadoCompleto' in n) || n.contadoCompleto is bool)
+          // quien contó no acepta su propia caja, salvo el superadmin (queda marcado aceptadoPropio)
+          && (n.estado != 'ACEPTADO' || o.estado == 'ACEPTADO' || o.contadoPor != request.auth.token.email
+              || (isSuperAdmin() && n.get('aceptadoPropio', false) == true))
           // al aceptar, bodega confirma exactamente lo que se contó (si la caja cambió entremedio, se rechaza)
           && (n.estado != 'ACEPTADO' || o.estado == 'ACEPTADO'
               || (n.get('aceptadoTotal', -1) == o.total && n.get('aceptadoLote', '') == o.lote && n.get('aceptadoVence', '') == o.vence
@@ -428,6 +435,15 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lev'])
           && request.resource.data.lev is string && request.resource.data.lev.size() <= 120);
       allow delete: if isSuperAdmin();
+    }
+    // 4.307: registro por lote de cada levantamiento (LEV): base, contado aceptado y aplicado. Solo administradores; no se borra.
+    match /Levantamientos/{lev} {
+      allow read, create, update: if isAdmin();
+      allow delete: if false;
+      match /lotes/{k} {
+        allow read, create, update: if isAdmin();
+        allow delete: if false;
+      }
     }
     match /Config_Correo/{id} {
       allow read: if isStaff();

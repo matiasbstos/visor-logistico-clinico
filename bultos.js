@@ -89,7 +89,9 @@
     const PUNTO = 25.4 / 203, MOD = 5 * PUNTO;
     const barras = (b, y, h) => { if (!(P && P.barras)) return 0; const a = P.barras(digitos(b.folio)), tot = a.reduce((s2, w) => s2 + w, 0), mod = Math.min(MOD, Math.max(1, Math.floor(66 / tot / PUNTO)) * PUNTO), x0 = Math.round((3 + 10 * mod) / PUNTO) * PUNTO;   /* v21.242: cada borde de barra cae justo en un punto de la impresora */ let xx = x0; a.forEach((w, i) => { if (i % 2 === 0) d.rect(xx, y, w * mod, h, 'F'); xx += w * mod; }); return (x0 + xx) / 2; };
     const qr = (b, x0, y0, lado) => { const m = matrizQR(URL_APP + '#bulto=' + b.folio), cel = lado / m.length; m.forEach((fila, r) => fila.forEach((on, c) => { if (on) d.rect(x0 + c * cel, y0 + r * cel, cel + 0.02, cel + 0.02, 'F'); })); };
-    lista.forEach((b, k) => {
+    /* 4.307 (levantamiento): la caja grande sale ×2 (una por cara) con `copias`; `franja` = «ABIERTA – USAR PRIMERO» / «GRANEL» */
+    const pags = []; lista.forEach(b => { for (let c = 0; c < Math.max(1, Math.min(4, Math.floor(num(b.copias)) || 1)); c++) pags.push(b); });
+    pags.forEach((b, k) => {
       if (k) d.addPage([100, 60], 'landscape');
       d.setTextColor(0); d.setDrawColor(0);
       const interior = b.nivel === 'interior';
@@ -100,6 +102,7 @@
         : (b.estado === 'ABIERTA' ? 'CAJA · ABIERTA' : 'CAJA');
       d.text(etqTipo, 97, 4.4, { align: 'right' });
       d.setFontSize(13); d.text(`${b.n} / ${b.de}`, 97, 9.4, { align: 'right' });
+      if (b.franja) { d.setFillColor(0); d.rect(23, 2, 50, 7.4, 'F'); d.setTextColor(255); d.setFontSize(String(b.franja).length > 10 ? 8.5 : 11); d.text(String(b.franja), 48, 7, { align: 'center' }); d.setTextColor(0); d.setFontSize(13); }
       d.setLineWidth(0.35); d.line(3, 11, 97, 11);
       // descripción grande (como etiqueta de tienda)
       const nomT = String(b.nombre || '').toUpperCase(); let tam = 12; d.setFontSize(tam); let nom = d.splitTextToSize(nomT, 94);
@@ -114,7 +117,7 @@
       const ajusta = (t, ancho) => { let x = String(t); while (x.length > 4 && d.getTextWidth(x) > ancho) x = x.slice(0, -2); return x === String(t) ? x : x.replace(/\s*$/, '') + '…'; };
       const det = interior
         ? [`Va dentro de ${b.padre || 'la caja grande'}${b.estado === 'ABIERTA' ? ' (abierta)' : ''}`, b.bodega || '']
-        : [b.estructuraTexto ? `= ${b.estructuraTexto}` : (b.subcajas ? `= ${num(b.subcajas)} cajas interiores × ${num(b.porSubcaja)} u.` : `${num(b.porCaja)} u. por caja · ${num(b.de)} caja${num(b.de) === 1 ? '' : 's'}`), `Total en cajas: ${num(b.totalGrupo)} u.${b.bodega ? ' · ' + b.bodega : ''}`];
+        : b.detalle ? [String(b.detalle), `Total: ${num(b.totalGrupo)} u.${b.bodega ? ' · ' + b.bodega : ''}`] : [b.estructuraTexto ? `= ${b.estructuraTexto}` : (b.subcajas ? `= ${num(b.subcajas)} cajas interiores × ${num(b.porSubcaja)} u.` : `${num(b.porCaja)} u. por caja · ${num(b.de)} caja${num(b.de) === 1 ? '' : 's'}`), `Total en cajas: ${num(b.totalGrupo)} u.${b.bodega ? ' · ' + b.bodega : ''}`];
       det.filter(Boolean).forEach((t, i) => d.text(ajusta(t, 97 - finCant), 97, y + 4.2 + i * 3.4, { align: 'right' }));
       y += 12;
       if (!interior) { const inf = [b.proveedor, b.oc ? 'OC ' + b.oc : '', b.rec, b.fechaRecepcion ? 'Recibido ' + fechaCL(b.fechaRecepcion) : ''].filter(Boolean).join(' · '); if (inf) { d.setFontSize(7); d.text(ajusta(inf, 94), 3, y); } }
@@ -126,7 +129,7 @@
     const blob = d.output('blob'); if (opc && opc.soloBlob) return blob;
     const url = URL.createObjectURL(blob), w = window.open(url, '_blank');
     if (!w) d.save(nom); setTimeout(() => URL.revokeObjectURL(url), 120000);
-    return { bytes: blob.size, paginas: lista.length };
+    return { bytes: blob.size, paginas: pags.length };
   }
 
   // ---------------- datos ----------------

@@ -85,6 +85,7 @@ const urlsToCache = [
   './sync-local.js?v=21.275',
   './bultos.js?v=21.275',
   './tags-conteo.js?v=21.275',
+  './levantamiento-bandeja.js?v=21.275',
   './cola-offline.js?v=21.275',
   './bitacora-oc.js?v=21.275',
   './id-producto.js?v=21.275',

@@ -356,17 +356,19 @@ service cloud.firestore {
       // texto opcional (o null) de hasta n caracteres
       function txt(d, k, n) { return !(k in d) || d[k] == null || (d[k] is string && d[k].size() <= n); }
       function tagReservado() {
-        return get(/databases/$(database)/documents/Contadores/$('bulto-' + folio)).data.get('tipo', '') == 'tag-conteo'
+        return exists(/databases/$(database)/documents/Contadores/$('bulto-' + folio))
+          && get(/databases/$(database)/documents/Contadores/$('bulto-' + folio)).data.get('tipo', '') == 'tag-conteo'
           && get(/databases/$(database)/documents/Contadores/$('bulto-' + folio)).data.get('estado', '') == 'TAG';
       }
       function cajaOk(d) {
         return d.folio == folio && folio.matches('^BUL-[0-9]{4}-[0-9]{6}$')
           && d.bodega is string && d.bodega.size() > 0 && d.bodega.size() <= 120
-          && d.nombre is string && d.nombre.size() > 0 && d.nombre.size() <= 120
+          && d.nombre is string && d.nombre.size() > 0 && d.nombre.size() <= 200
           && d.lote is string && d.lote.size() > 0 && d.lote.size() <= 60
           && (!('elaboracion' in d) || d.elaboracion == null || d.elaboracion == '' || (d.elaboracion is string && d.elaboracion.matches('^[0-9]{4}-(0[1-9]|1[0-2])(-(0[1-9]|[12][0-9]|3[01]))?$')))
           && d.vence is string && (d.vence == 'N/A' || d.vence.matches('^[0-9]{4}-(0[1-9]|1[0-2])$'))
-          && txt(d, 'bodegaId', 120) && txt(d, 'insumoId', 120) && txt(d, 'nombreNorm', 120) && txt(d, 'tipo', 120) && txt(d, 'controlado', 120)
+          && txt(d, 'bodegaId', 120) && txt(d, 'insumoId', 120) && txt(d, 'nombreNorm', 200) && txt(d, 'tipo', 120)
+          && (!('controlado' in d) || d.controlado == null || d.controlado is bool || (d.controlado is string && d.controlado.size() <= 120))
           && txt(d, 'contadoPor', 120) && txt(d, 'contadoNombre', 120) && txt(d, 'en', 120) && txt(d, 'editadoEn', 120) && txt(d, 'app', 120)
           && txt(d, 'baseSistemaEn', 120) && txt(d, 'huella', 120) && txt(d, 'estado', 120)
           && d.nuevo is bool && d.sinLote is bool

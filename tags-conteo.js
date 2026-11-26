@@ -128,6 +128,67 @@
     });
     return out;
   }
+  const norm = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  const slug = (t) => norm(t).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
+  const CAT_POR_TIPO = { medico: 'INSUMOS MEDICOS', medicamento: 'MEDICAMENTOS', aseo: 'ASEO', oficina: 'OFICINA' };
+  /** Agrupa cajas etiquetadas (sin folio LEV previo) por bodega + producto + lote para ingresarlas al stock. */
+  function agruparParaIngreso(conteos) {
+    const porProd = new Map();
+    (conteos || []).forEach(c => {
+      if (!c || c.estado !== 'ETIQUETADO' || c.lev) return;
+      const nombre = String(c.nombre || '').trim().toUpperCase();
+      const bodega = String(c.bodega || '').trim();
+      const bodegaId = String(c.bodegaId || '').trim();
+      if (!nombre || !bodega || !(ent(c.total) > 0)) return;
+      const k = `${norm(bodega)}|${norm(nombre)}`;
+      const g = porProd.get(k) || {
+        bodega, bodegaId, nombre, insumoId: c.insumoId || '',
+        controlado: c.controlado || null,
+        category: CAT_POR_TIPO[c.tipo] || 'General',
+        folios: [], lotes: new Map(), total: 0
+      };
+      if (!g.insumoId && c.insumoId) g.insumoId = c.insumoId;
+      if (!g.bodegaId && bodegaId) g.bodegaId = bodegaId;
+      g.folios.push(c.folio);
+      g.total += ent(c.total);
+      const lote = String(c.lote || 'S/L').trim().toUpperCase() || 'S/L';
+      const vence = c.vence && c.vence !== 'N/A' ? c.vence : 'N/A';
+      const kl = `${lote}|${vence}`;
+      const e = g.lotes.get(kl) || { batch: lote, expirationDate: vence, elaboracion: c.elaboracion || '', quantity: 0 };
+      e.quantity += ent(c.total);
+      if (c.elaboracion && !e.elaboracion) e.elaboracion = c.elaboracion;
+      g.lotes.set(kl, e);
+      porProd.set(k, g);
+    });
+    return [...porProd.values()].map(g => ({ ...g, ingresos: [...g.lotes.values()] }));
+  }
+  /** Mezcla lotes nuevos con los existentes en Insumos: suma lotes iguales y agrega lotes distintos. */
+  function mezclarLotesIngreso(actual, ingresos) {
+    const m = new Map();
+    const prev = actual ? (Array.isArray(actual.batches) && actual.batches.length ? actual.batches : (num(actual.quantity) > 0 ? [{ batch: actual.batch || 'S/L', quantity: num(actual.quantity), expirationDate: actual.expirationDate || 'N/A' }] : [])) : [];
+    prev.forEach(b => {
+      if (!b) return;
+      const q = ent(b.quantity); if (!q) return;
+      const lote = String(b.batch || 'S/L').trim().toUpperCase() || 'S/L';
+      const vence = String(b.expirationDate || 'N/A').trim() || 'N/A';
+      const k = `${lote}|${vence}`;
+      const e = m.get(k) || { ...b, batch: lote, expirationDate: vence, quantity: 0 };
+      e.quantity += q;
+      m.set(k, e);
+    });
+    (ingresos || []).forEach(ing => {
+      const q = ent(ing.quantity); if (!q) return;
+      const lote = String(ing.batch || 'S/L').trim().toUpperCase() || 'S/L';
+      const vence = String(ing.expirationDate || 'N/A').trim() || 'N/A';
+      const k = `${lote}|${vence}`;
+      const e = m.get(k) || { batch: lote, expirationDate: vence, quantity: 0 };
+      e.quantity += q;
+      if (ing.elaboracion && !e.elaboracion) e.elaboracion = ing.elaboracion;
+      m.set(k, e);
+    });
+    const batches = [...m.values()].sort((a, b) => (a.expirationDate === 'N/A' ? 1 : 0) - (b.expirationDate === 'N/A' ? 1 : 0) || String(a.expirationDate).localeCompare(String(b.expirationDate)));
+    return { batches, quantity: batches.reduce((t, b) => t + ent(b.quantity), 0) };
+  }
   /** Arma los documentos bulto [cajaGrande, ...interiores] a partir de un conteo y los folios BUL reservados para las interiores. */
   function armarBultosDeConteo(conteo, foliosHijos, opc) {
     if (!conteo || !conteo.folio) throw new Error('Falta el conteo de la caja.');
@@ -381,6 +442,106 @@
     });
   }
 
+  /** Incorpora al stock de Insumos (y registra Historial_Movimientos en una sola transacción por producto) las cajas etiquetadas sin folio LEV. */
+  async function ingresarStockLevantamiento(conteos) {
+    const grupos = agruparParaIngreso(conteos);
+    if (!grupos.length) throw new Error('No hay cajas etiquetadas pendientes de ingresar al stock.');
+    const f = fs(), por = usuario();
+    const lev = window.SAR_Folio ? await window.SAR_Folio.siguiente('LEV') : `LEV-${new Date().getFullYear()}-${String(Date.now()).slice(-5)}`;
+    let totalUnidades = 0, totalCajas = 0;
+
+    for (let gi = 0; gi < grupos.length; gi++) {
+      const g = grupos[gi];
+      let ref = null;
+      if (g.insumoId) {
+        const snId = await f.getDoc(f.doc(f.collection(db(), 'Insumos'), g.insumoId));
+        if (snId.exists()) {
+          const x = snId.data() || {};
+          if ((g.bodegaId && x.bodegaId === g.bodegaId) || norm(x.location || x.bodegaNombre) === norm(g.bodega)) {
+            ref = f.doc(f.collection(db(), 'Insumos'), snId.id);
+          }
+        }
+      }
+      if (!ref) {
+        const s1 = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('name', '==', g.nombre), f.limit(15)));
+        s1.forEach(d => {
+          const x = d.data() || {};
+          if (!ref && ((g.bodegaId && x.bodegaId === g.bodegaId) || norm(x.location || x.bodegaNombre) === norm(g.bodega))) {
+            ref = f.doc(f.collection(db(), 'Insumos'), d.id);
+          }
+        });
+      }
+      if (!ref) {
+        ref = f.doc(f.collection(db(), 'Insumos'), `inv_${slug(g.nombre)}__${slug(g.bodega)}`);
+      }
+
+      const refsH = g.ingresos.map((_, j) => f.doc(f.collection(db(), 'Historial_Movimientos'), `lev-${lev}-${gi}-${j}`));
+      await f.runTransaction(db(), async (tx) => {
+        const ya = await tx.get(refsH[0]);
+        if (ya.exists()) return;
+        const sn = await tx.get(ref), actual = sn.exists() ? sn.data() : null;
+        const m = mezclarLotesIngreso(actual, g.ingresos);
+        const limite = num(actual && (actual.criticalLimit || actual.stock_minimo)) || 50;
+        const prox = m.batches[0];
+        const base = {
+          origenOC: true,
+          origenIngreso: (actual && actual.origenIngreso) || 'LEVANTAMIENTO',
+          quantity: m.quantity,
+          batches: m.batches,
+          isCritical: m.quantity <= limite,
+          batch: prox ? prox.batch : '',
+          expirationDate: prox ? prox.expirationDate : 'N/A',
+          bodegaNombre: g.bodega,
+          location: g.bodega,
+          ...(g.bodegaId ? { bodegaId: g.bodegaId } : {}),
+          updatedAt: f.serverTimestamp()
+        };
+        if (actual) {
+          tx.update(ref, base);
+        } else {
+          tx.set(ref, {
+            code: 'LEV-' + slug(g.nombre).slice(0, 8).toUpperCase() + '-' + String(gi + 1).padStart(2, '0'),
+            name: g.nombre,
+            name_lowercase: g.nombre.toLowerCase(),
+            category: g.category || 'General',
+            ...(g.controlado ? { controlado: g.controlado } : {}),
+            unitPrice: 0,
+            criticalLimit: 50,
+            ...base
+          });
+        }
+        g.ingresos.forEach((ing, j) => {
+          tx.set(refsH[j], {
+            insumoName: g.nombre,
+            item: g.nombre,
+            quantity: ing.quantity,
+            type: 'INGRESO_LEVANTAMIENTO',
+            batch: ing.batch,
+            expirationDate: ing.expirationDate,
+            ...(ing.elaboracion ? { elaboracion: ing.elaboracion } : {}),
+            destination: g.bodega,
+            dest: g.bodega,
+            ...(g.bodegaId ? { destinoId: g.bodegaId } : {}),
+            destinoNombre: g.bodega,
+            origin: 'Levantamiento con teléfono',
+            user: por,
+            idInsumoDestino: ref.id,
+            observacion: `Ingreso desde levantamiento ${lev} (${g.folios.length} caja${g.folios.length === 1 ? '' : 's'}: ${g.folios.slice(0, 5).map(numero).join(', ')}${g.folios.length > 5 ? '…' : ''})`,
+            date: f.serverTimestamp(),
+            document: `${lev} · Levantamiento`
+          });
+        });
+      });
+
+      // Estampa el folio LEV en cada caja contada (regla firestore.rules: ETIQUETADO + !('lev' in resource.data))
+      await Promise.all(g.folios.map(fo => f.updateDoc(refConteo(fo), { lev }).catch(() => null)));
+      totalUnidades += g.total;
+      totalCajas += g.folios.length;
+    }
+
+    return { lev, productos: grupos.length, cajas: totalCajas, unidades: totalUnidades };
+  }
+
   // ---------------- PDF 100×60 (Tags CONTADO y Credencial de Contador) ----------------
   let logo = null;
   function cargarLogo() {
@@ -587,6 +748,9 @@
     const kpi = contadoresEtiquetas(l);
     const pendFilas = l.filter(x => x.conteo && (x.estado === 'contado' || x.estado === 'incorporado'));
     const porAceptar = pendFilas.filter(x => x.estado === 'contado').length;
+    const listasIngreso = l.filter(x => x.conteo && x.estado === 'etiquetado' && !x.conteo.lev).map(x => x.conteo);
+    const gruposIng = agruparParaIngreso(listasIngreso);
+    const unidIng = gruposIng.reduce((t, g) => t + g.total, 0);
     const el = root.querySelector('#tg-tabla'); if (!el) return;
     el.innerHTML = `
       <div class="tg-kpis">
@@ -597,6 +761,7 @@
         <div class="tg-kpi"><b>${kpi.unidadesTotal.toLocaleString('es-CL')} u.</b><span>Unidades contadas</span><small>en las cajas mostradas</small></div>
       </div>
       ${pendFilas.length ? `<div class="tg-bar-masivo"><span><b>${pendFilas.length} caja${pendFilas.length === 1 ? '' : 's'}</b> recibida${pendFilas.length === 1 ? '' : 's'} del teléfono (${porAceptar} por aceptar · <b>${kpi.etiquetasPendientes} etiqueta${kpi.etiquetasPendientes === 1 ? '' : 's'}</b> por procesar).</span><div class="tg-acc-col"><button type="button" class="btn btn-primary btn-sm" id="tg-imp-pend"><i class="ph-bold ph-printer" aria-hidden="true"></i> Aceptar e imprimir todas (${kpi.etiquetasPendientes} etq.)</button></div></div>` : ''}
+      ${listasIngreso.length ? `<div class="tg-bar-masivo" style="background:#f0fdf4;border-color:#86efac;"><span><b>${listasIngreso.length} caja${listasIngreso.length === 1 ? '' : 's'} etiquetada${listasIngreso.length === 1 ? '' : 's'}</b> listas para ingresar al stock (<b>${gruposIng.length} producto${gruposIng.length === 1 ? '' : 's'}</b> · <b>${unidIng.toLocaleString('es-CL')} u.</b>). Suma lotes iguales y agrega lotes nuevos.</span><button type="button" class="btn btn-primary btn-sm" id="tg-ing-lev"><i class="ph-bold ph-package" aria-hidden="true"></i> Ingresar al stock (LEV)</button></div>` : ''}
       <div class="sal-barra tg-fil"><select id="tg-fb" class="form-control" aria-label="Bodega"><option value="">Todas las bodegas</option>${bods.map(b => `<option${fil.bodega === b ? ' selected' : ''}>${esc(b)}</option>`).join('')}</select>
         <select id="tg-fe" class="form-control" aria-label="Estado"><option value="">Todos los estados</option>${Object.keys(ESTADOS).map(k => `<option value="${k}"${fil.estado === k ? ' selected' : ''}>${ESTADOS[k]} (${cnt[k] || 0})</option>`).join('')}</select>
         <input id="tg-fq" class="form-control" type="search" placeholder="Buscar N° de tag o producto…" value="${esc(fil.q)}" aria-label="Buscar número o producto">
@@ -622,7 +787,7 @@
         } else if (c && x.estado === 'etiquetado') {
           acc = `<div class="tg-acc-col"><button type="button" class="btn btn-secondary btn-sm" data-tg-reimp="${esc(x.folio)}"><i class="ph-bold ph-printer" aria-hidden="true"></i> Reimprimir (${nGen})</button><button type="button" class="btn btn-outline btn-sm" data-tg-ver="${esc(x.folio)}">Detalle</button></div>`;
         }
-        return `<tr><td><b>${esc(numero(x.folio))}</b><small>${esc(x.folio)}</small></td><td>${t && t.primeraImpresion ? esc(hora(t.primeraImpresion)) : (t ? 'Sin imprimir' : '—')}</td><td><span class="tg-est tg-est--${x.estado}">${ESTADOS[x.estado]}</span></td>
+        return `<tr><td><b>${esc(numero(x.folio))}</b><small>${esc(x.folio)}</small></td><td>${t && t.primeraImpresion ? esc(hora(t.primeraImpresion)) : (t ? 'Sin imprimir' : '—')}</td><td><span class="tg-est tg-est--${x.estado}">${ESTADOS[x.estado]}</span>${c && c.lev ? `<small style="color:#166534;font-weight:600;">Ingresado · ${esc(c.lev)}</small>` : ''}</td>
           <td>${esc(bodMostrar)}</td><td>${c ? `${esc(c.nombre)}${c.nuevo ? ' <small>nuevo</small>' : ''}` : ''}</td><td>${c ? `${esc(c.lote)}${elabTxt ? ' · Elab. ' + esc(elabTxt) : ''} · ${esc(mesCL(c.vence))}` : ''}</td><td>${c ? `<b>${num(c.total)}</b> u.` : ''}</td><td>${celdaEtq}</td>
           <td>${c ? `${esc(c.contadoNombre || c.contadoPor || '')}<small>${esc(hora(c.en))}</small>` : ''}</td><td>${acc}</td></tr>`;
       }).join('') || '<tr><td colspan="10" class="err-vacio">Sin tags.</td></tr>'}</tbody></table></div>`;
@@ -631,6 +796,25 @@
     el.querySelector('#tg-fe').onchange = (e) => { fil.estado = e.target.value; tabla(root); };
     el.querySelector('#tg-ref').onclick = () => cargar(root);
     const q = el.querySelector('#tg-fq'); q.oninput = () => { fil.q = q.value; const p = q.selectionStart; tabla(root); const n = root.querySelector('#tg-fq'); if (n) { n.focus(); n.setSelectionRange(p, p); } };
+    const bIng = el.querySelector('#tg-ing-lev');
+    if (bIng) bIng.onclick = async () => {
+      const resumenG = gruposIng.slice(0, 8).map(g => `• ${g.nombre} (${g.bodega}): +${g.total} u. en ${g.ingresos.length} lote(s)`).join('\n') + (gruposIng.length > 8 ? `\n… y ${gruposIng.length - 8} producto(s) más.` : '');
+      const P = window.SAR_Progreso, ok = P && P.confirmar ? await P.confirmar({
+        titulo: `¿Ingresar ${unidIng.toLocaleString('es-CL')} u. al stock?`,
+        texto: `Se incorporarán ${listasIngreso.length} caja(s) etiquetada(s) en ${gruposIng.length} producto(s) (suma lotes iguales y agrega lotes nuevos) con folio LEV:\n\n${resumenG}`,
+        si: 'Ingresar al stock'
+      }) : true;
+      if (!ok) return;
+      bIng.disabled = true; bIng.textContent = 'Ingresando…';
+      try {
+        const res = await ingresarStockLevantamiento(listasIngreso);
+        toast('Stock ingresado', `${res.lev}: +${res.unidades.toLocaleString('es-CL')} u. de ${res.productos} producto(s) (${res.cajas} cajas) sumadas al inventario.`, 'success');
+        await cargar(root);
+      } catch (e) {
+        toast('No se pudo ingresar', esc(e.message || e), 'error');
+        await cargar(root);
+      }
+    };
     el.querySelectorAll('[data-tg-re]').forEach(b => b.onclick = async () => { const x = filas.find(y => y.folio === b.dataset.tgRe); if (!x) return; b.disabled = true; try { await imprimir([x.tag]); toast('Tag', 'Reimpreso.', 'success'); await cargar(root); } catch (e) { toast('No se pudo', esc(e.message || e), 'error'); b.disabled = false; } });
     el.querySelectorAll('[data-tg-etq]').forEach(b => b.onclick = () => { const x = filas.find(y => y.folio === b.dataset.tgEtq); if (x) modalGenerarEtiquetas(x, root); });
     el.querySelectorAll('[data-tg-ver]').forEach(b => b.onclick = () => { const x = filas.find(y => y.folio === b.dataset.tgVer); if (x) modalVerEtiquetas(x, root); });
@@ -812,7 +996,7 @@
     cargar(root);
   }
 
-  const api = { urlTag, URL_CONTEO, abrir, reservar, listar, listarBodegas, crearBodegaRapida, pdf, pdfCredencial, imprimir, unir, filtrar, estadoDe, estructuraCorta, planEtiquetasConteo, contadoresEtiquetas, armarBultosDeConteo, generarBultosParaConteo, leerBultosDeConteo, reimprimirBultosDeConteo, aceptarConteo, rechazarConteo, pedirReconteo, numero, ESTADOS };
+  const api = { urlTag, URL_CONTEO, abrir, reservar, listar, listarBodegas, crearBodegaRapida, pdf, pdfCredencial, imprimir, unir, filtrar, estadoDe, estructuraCorta, planEtiquetasConteo, contadoresEtiquetas, agruparParaIngreso, mezclarLotesIngreso, armarBultosDeConteo, generarBultosParaConteo, leerBultosDeConteo, reimprimirBultosDeConteo, aceptarConteo, rechazarConteo, pedirReconteo, ingresarStockLevantamiento, numero, ESTADOS };
   window.SAR_TagsConteo = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

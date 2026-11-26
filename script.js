@@ -1,5 +1,5 @@
 // Importación de Firebase desde la CDN (Módulo)
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
+import { initializeApp, getApps } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-auth.js";
 import { waitForPendingWrites, getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, collection, runTransaction, writeBatch, serverTimestamp, getDoc, setDoc, query, where, orderBy, limit, limitToLast, startAfter, endBefore, startAt, endAt, getDocs as _getDocs, deleteDoc, addDoc, updateDoc, increment, onSnapshot as _onSnapshot } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-firestore.js";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "https://www.gstatic.com/firebasejs/10.9.0/firebase-storage.js";
@@ -9639,8 +9639,8 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const tempPass = "Cormu" + Math.floor(1000 + Math.random() * 9000) + "*";
 
-                // Auth Secondary App para evitar desloguear al admin
-                const secondaryApp = initializeApp(firebaseConfig, "SecondaryApp");
+                // Auth Secondary App para evitar desloguear al admin (reutiliza si ya existe)
+                const secondaryApp = getApps().find(a => a.name === "SecondaryApp") || initializeApp(firebaseConfig, "SecondaryApp");
                 const secondaryAuth = getAuth(secondaryApp);
                 await createUserWithEmailAndPassword(secondaryAuth, correoCompleto, tempPass);
                 await secondaryAuth.signOut();
@@ -10431,6 +10431,40 @@ window.firebaseDb = db;
 window.firebaseStorage = storage;
 window.firebaseStorageSdk = { ref: storageRef, uploadBytes, getDownloadURL };
 window.firebaseAuth = auth;
+
+/** v21.273: Crea una cuenta de usuario (Auth secundario + perfil en /Usuarios) reutilizable desde Usuarios y Tags de conteo. */
+window.SAR_CrearUsuario = async function ({ nombre, prefijo, rol }) {
+    let p = String(prefijo || '').trim().toLowerCase();
+    if (p.includes('@')) p = p.split('@')[0].trim();
+    p = p.replace(/\.cormumel\.cl$/, '').replace(/[^a-z0-9._-]/g, '').trim();
+    const n = String(nombre || '').trim();
+    const r = String(rol || 'contador').trim().toLowerCase();
+    if (!p) throw new Error('Ingresa un nombre de usuario válido (sin espacios).');
+    if (!n) throw new Error('Ingresa el nombre completo del usuario.');
+    const correoCompleto = p + '@cormumel.cl';
+    const tempPass = 'Cormu' + Math.floor(1000 + Math.random() * 9000) + '*';
+    const secondaryApp = getApps().find(a => a.name === 'SecondaryApp') || initializeApp(firebaseConfig, 'SecondaryApp');
+    const secondaryAuth = getAuth(secondaryApp);
+    let yaExistia = false;
+    try {
+        await createUserWithEmailAndPassword(secondaryAuth, correoCompleto, tempPass);
+        await secondaryAuth.signOut();
+    } catch (err) {
+        if (err && err.code === 'auth/email-already-in-use') {
+            yaExistia = true;
+        } else {
+            throw err;
+        }
+    }
+    await setDoc(doc(db, 'Usuarios', correoCompleto), {
+        nombre: n,
+        email: correoCompleto,
+        rol: r,
+        fechaRegistro: serverTimestamp(),
+        activo: true
+    }, { merge: true });
+    return { nombre: n, email: correoCompleto, password: yaExistia ? '' : tempPass, rol: r, yaExistia };
+};
 
 
 

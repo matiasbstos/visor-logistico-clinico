@@ -206,8 +206,8 @@
       nombre: conteo.nombre || '',
       insumoId: conteo.insumoId || '',
       codigoMP: '',
-      bodega: conteo.bodega || '',
-      bodegaId: conteo.bodegaId || '',
+      bodega: (opc && opc.bodega) || conteo.bodega || '',
+      bodegaId: (opc && opc.bodegaId != null) ? opc.bodegaId : (conteo.bodegaId || ''),
       lote: conteo.lote || 'S/L',
       ...(conteo.elaboracion ? { elaboracion: conteo.elaboracion } : {}),
       vence: conteo.vence && conteo.vence !== 'N/A' ? conteo.vence : '',
@@ -320,14 +320,16 @@
     return lista;
   }
   async function listar() {
-    const f = fs(), [st, sc] = await Promise.all([
+    const f = fs(), [st, sb, sc] = await Promise.all([
       f.getDocs(f.query(f.collection(db(), 'Contadores'), f.where('tipo', '==', 'tag-conteo'), f.limit(5000))),
+      f.getDocs(f.query(f.collection(db(), 'Contadores'), f.where('origen', '==', 'levantamiento'), f.limit(5000))).catch(() => null),
       f.getDocs(f.query(f.collection(db(), 'Conteos_Cajas'), f.limit(5000)))
     ]);
-    const t = [], c = [];
-    st.forEach(x => t.push(x.data()));
+    const tMap = new Map(), c = [];
+    st.forEach(x => { const d = x.data(); if (d && d.folio) tMap.set(d.folio, d); });
+    if (sb) sb.forEach(x => { const d = x.data(); if (d && d.folio && d.nivel !== 'interior') tMap.set(d.folio, d); });
     sc.forEach(x => c.push({ ...x.data(), folio: x.data().folio || x.id }));
-    return { tags: t, conteos: c };
+    return { tags: [...tMap.values()], conteos: c };
   }
   async function listarContadores() {
     try {
@@ -656,11 +658,22 @@
     const c = x.conteo; if (!c) return;
     const planFull = planEtiquetasConteo(c);
     const elabTxt = fechaElabCL(c.elaboracion);
+    const bodActual = (x.tag && x.tag.bodega) || c.bodega || '';
+    const bodActualId = (x.tag && x.tag.bodegaId) || c.bodegaId || '';
+    const matchBod = bodegasLista.find(b => (bodActualId && b.id === bodActualId) || norm(b.name) === norm(bodActual));
+    let selBodId = matchBod ? matchBod.id : '';
+    const optsBod = () => `<option value="">Mantener del conteo (${esc(bodActual || 'Sin bodega')})</option>${bodegasLista.map(b => `<option value="${esc(b.id)}"${selBodId === b.id ? ' selected' : ''}>${esc(b.name)}</option>`).join('')}`;
     const ov = abrirModal(`Etiquetas de caja · Tag N° ${numero(c.folio)}`, `
       <div class="bu-card">
         <div class="bu-n">${esc(c.nombre)}</div>
-        <p class="act-hint" style="margin:4px 0 0;">Bodega: <b>${esc(c.bodega)}</b> · Lote: <b>${esc(c.lote)}</b>${elabTxt ? ` · Elab.: <b>${esc(elabTxt)}</b>` : ''} · Vence: <b>${esc(mesCL(c.vence))}</b></p>
+        <p class="act-hint" style="margin:4px 0 0;">Lote: <b>${esc(c.lote)}</b>${elabTxt ? ` · Elab.: <b>${esc(elabTxt)}</b>` : ''} · Vence: <b>${esc(mesCL(c.vence))}</b></p>
         <p class="bu-q">Total contado: <b>${ent(c.total)} u.</b> · ${esc(estructuraCorta(c.estructura))}</p>
+      </div>
+      <div class="tg-fila" style="margin:4px 0;">
+        <label class="form-label" for="tg-etq-bod" style="flex:1;min-width:210px;margin:0;">Bodega asignada para etiquetas e ingreso
+          <select id="tg-etq-bod" class="form-control" style="width:100%;margin-top:4px;">${optsBod()}</select>
+        </label>
+        <button type="button" class="btn btn-secondary btn-sm" id="tg-etq-bod-new" style="align-self:flex-end;height:38px;">+ Nueva bodega</button>
       </div>
       ${planFull.subdividida ? `<label class="bu-chk"><input type="checkbox" id="tg-inc-int" checked> Imprimir también las <b>${planFull.etiquetasInteriores} etiqueta${planFull.etiquetasInteriores === 1 ? '' : 's'} de cajas interiores</b> (subdivisión)</label>` : ''}
       <div class="bu-prev" id="tg-plan-prev"></div>
@@ -669,6 +682,20 @@
         <button type="button" class="btn btn-secondary" data-tg-cerrar>Cancelar</button>
         <button type="button" class="btn btn-primary" id="tg-gen-go"><i class="ph-bold ph-printer" aria-hidden="true"></i> Generar e imprimir etiquetas</button>
       </div>`);
+    const selB = ov.querySelector('#tg-etq-bod');
+    selB.onchange = (e) => { selBodId = e.target.value; };
+    ov.querySelector('#tg-etq-bod-new').onclick = async () => {
+      const nom = window.prompt('Nombre de la nueva bodega (ej. Bodega Satélite Vestidor):', 'Bodega Satélite Vestidor');
+      if (!nom || !nom.trim()) return;
+      try {
+        const nb = await crearBodegaRapida(nom);
+        bodegasLista = await listarBodegas();
+        selBodId = nb.id;
+        selB.innerHTML = optsBod();
+        pintarBodegaSel(root);
+        toast('Bodega creada', `«${nb.name}» creada y seleccionada.`, 'success');
+      } catch (er) { toast('No se pudo crear', esc(er.message || er), 'error'); }
+    };
     const pintarPlan = () => {
       const chk = ov.querySelector('#tg-inc-int');
       const soloGrande = chk ? !chk.checked : false;
@@ -691,11 +718,15 @@
     ov.querySelector('#tg-gen-go').onclick = async (e) => {
       const b = e.currentTarget;
       const soloGrande = chk ? !chk.checked : false;
+      const bodEleg = bodegasLista.find(y => y.id === selBodId);
       b.disabled = true; b.textContent = 'Generando…';
       try {
-        const bultos = await generarBultosParaConteo(c, { soloGrande });
+        const bultos = await generarBultosParaConteo(c, {
+          soloGrande,
+          ...(bodEleg ? { bodega: bodEleg.name, bodegaId: bodEleg.id } : {})
+        });
         await window.SAR_Bultos.pdf(bultos, `etiquetas-${c.folio}.pdf`);
-        toast('Etiquetas generadas', `${bultos.length} etiqueta${bultos.length === 1 ? '' : 's'} para ${c.nombre} (${ent(c.total)} u.).`, 'success');
+        toast('Etiquetas generadas', `${bultos.length} etiqueta${bultos.length === 1 ? '' : 's'} para ${c.nombre} (${ent(c.total)} u.)${bodEleg ? ' en ' + bodEleg.name : ''}.`, 'success');
         ov.cerrar();
         await cargar(root);
       } catch (er) {
@@ -713,10 +744,11 @@
       const bultos = await leerBultosDeConteo(c);
       const grandes = bultos.filter(b => b.nivel !== 'interior'), ints = bultos.filter(b => b.nivel === 'interior');
       const elabTxt = fechaElabCL(c.elaboracion);
+      const bodVer = (grandes[0] && grandes[0].bodega) || c.bodega || '';
       ov.querySelector('.bu-b').innerHTML = `
         <div class="bu-card">
           <div class="bu-n">${esc(c.nombre)}</div>
-          <p class="act-hint" style="margin:4px 0 0;">Bodega: <b>${esc(c.bodega)}</b> · Lote: <b>${esc(c.lote)}</b>${elabTxt ? ` · Elab.: <b>${esc(elabTxt)}</b>` : ''} · Vence: <b>${esc(mesCL(c.vence))}</b></p>
+          <p class="act-hint" style="margin:4px 0 0;">Bodega: <b>${esc(bodVer)}</b> · Lote: <b>${esc(c.lote)}</b>${elabTxt ? ` · Elab.: <b>${esc(elabTxt)}</b>` : ''} · Vence: <b>${esc(mesCL(c.vence))}</b></p>
           <p class="bu-q"><b>${bultos.length}</b> etiqueta${bultos.length === 1 ? '' : 's'} generadas: <b>${grandes.length} grande</b>${ints.length ? ` + <b>${ints.length} interiores</b>` : ''} · Total <b>${ent(c.total)} u.</b></p>
         </div>
         <ul class="tg-det-list">${bultos.map((b, i) => `<li><span><b>${esc(b.folio)}</b> · ${b.nivel === 'interior' ? `Interior ${b.n}/${b.de}` : 'Caja grande'}${b.estado === 'ABIERTA' ? ' (ABIERTA)' : ''}<small>Impresa ${num(b.impresiones)}×</small></span><b>${ent(b.inicial != null ? b.inicial : b.contenido)} u.</b></li>`).join('')}</ul>
@@ -743,12 +775,16 @@
   }
   function tabla(root) {
     const l = filtrar(filas, fil);
-    const bods = [...new Set(filas.map(x => (x.conteo && x.conteo.bodega) || (x.tag && x.tag.bodega)).filter(Boolean))].sort();
+    const bods = [...new Set(filas.map(x => (x.tag && x.tag.tipo === 'bulto' && x.tag.bodega) || (x.conteo && x.conteo.bodega) || (x.tag && x.tag.bodega)).filter(Boolean))].sort();
     const cnt = {}; filas.forEach(x => { cnt[x.estado] = (cnt[x.estado] || 0) + 1; });
     const kpi = contadoresEtiquetas(l);
     const pendFilas = l.filter(x => x.conteo && (x.estado === 'contado' || x.estado === 'incorporado'));
     const porAceptar = pendFilas.filter(x => x.estado === 'contado').length;
-    const listasIngreso = l.filter(x => x.conteo && x.estado === 'etiquetado' && !x.conteo.lev).map(x => x.conteo);
+    const listasIngreso = l.filter(x => x.conteo && x.estado === 'etiquetado' && !x.conteo.lev).map(x => ({
+      ...x.conteo,
+      bodega: (x.tag && x.tag.tipo === 'bulto' && x.tag.bodega) || x.conteo.bodega,
+      bodegaId: (x.tag && x.tag.tipo === 'bulto' && x.tag.bodegaId) || x.conteo.bodegaId || ''
+    }));
     const gruposIng = agruparParaIngreso(listasIngreso);
     const unidIng = gruposIng.reduce((t, g) => t + g.total, 0);
     const el = root.querySelector('#tg-tabla'); if (!el) return;
@@ -769,51 +805,79 @@
       <p class="act-hint">${l.length} de ${filas.length} tags.</p>
       <div class="sal-tabla"><table class="aud-lib tg-t"><thead><tr><th>N°</th><th>Impreso</th><th>Estado</th><th>Bodega</th><th>Producto</th><th>Lote · Elab. · Vence</th><th>Total</th><th>Etiquetas / Contenido</th><th>Contó</th><th>Acciones</th></tr></thead><tbody>
       ${l.slice(0, 600).map(x => {
-        const c = x.conteo, t = x.tag;
-        const bodMostrar = (c && c.bodega) || (t && t.bodega) || '';
-        const pl = c ? planEtiquetasConteo(c) : null;
-        const elabTxt = c ? fechaElabCL(c.elaboracion) : '';
-        const nGen = c && x.estado === 'etiquetado' ? (1 + (Array.isArray(c.hijos) ? c.hijos.length : 0)) : (pl ? pl.totalEtiquetas : 0);
-        const celdaEtq = c
-          ? `<span class="tg-etq-badge${pl.subdividida ? ' tg-etq-badge--sub' : ''}">${nGen} etq.</span><small>${esc(pl.resumenCorto)}</small>`
-          : '';
-        let acc = '';
-        if (t && x.estado === 'sin') {
-          acc = `<button type="button" class="btn btn-secondary btn-sm" data-tg-re="${esc(x.folio)}">Reimprimir tag</button>`;
-        } else if (c && x.estado === 'contado') {
-          acc = `<div class="tg-acc-col"><button type="button" class="btn btn-primary btn-sm" data-tg-etq="${esc(x.folio)}"><i class="ph-bold ph-printer" aria-hidden="true"></i> Aceptar y etiquetar (${pl.totalEtiquetas})</button><button type="button" class="btn btn-secondary btn-sm" data-tg-acep="${esc(x.folio)}" title="Aceptar conteo sin imprimir todavía">Aceptar</button><button type="button" class="btn btn-secondary btn-sm" data-tg-rec="${esc(x.folio)}" title="Pedir al contador que vuelva a contar esta caja">Reconteo</button><button type="button" class="btn btn-outline btn-sm" data-tg-rech="${esc(x.folio)}" title="Rechazar este conteo">✕</button></div>`;
-        } else if (c && x.estado === 'incorporado') {
-          acc = `<div class="tg-acc-col"><button type="button" class="btn btn-primary btn-sm" data-tg-etq="${esc(x.folio)}"><i class="ph-bold ph-printer" aria-hidden="true"></i> Imprimir etiquetas (${pl.totalEtiquetas})</button></div>`;
-        } else if (c && x.estado === 'etiquetado') {
-          acc = `<div class="tg-acc-col"><button type="button" class="btn btn-secondary btn-sm" data-tg-reimp="${esc(x.folio)}"><i class="ph-bold ph-printer" aria-hidden="true"></i> Reimprimir (${nGen})</button><button type="button" class="btn btn-outline btn-sm" data-tg-ver="${esc(x.folio)}">Detalle</button></div>`;
-        }
-        return `<tr><td><b>${esc(numero(x.folio))}</b><small>${esc(x.folio)}</small></td><td>${t && t.primeraImpresion ? esc(hora(t.primeraImpresion)) : (t ? 'Sin imprimir' : '—')}</td><td><span class="tg-est tg-est--${x.estado}">${ESTADOS[x.estado]}</span>${c && c.lev ? `<small style="color:#166534;font-weight:600;">Ingresado · ${esc(c.lev)}</small>` : ''}</td>
+      const c = x.conteo, t = x.tag;
+      const bodMostrar = (t && t.tipo === 'bulto' && t.bodega) || (c && c.bodega) || (t && t.bodega) || '';
+      const pl = c ? planEtiquetasConteo(c) : null;
+      const elabTxt = c ? fechaElabCL(c.elaboracion) : '';
+      const nGen = c && x.estado === 'etiquetado' ? (1 + (Array.isArray(c.hijos) ? c.hijos.length : 0)) : (pl ? pl.totalEtiquetas : 0);
+      const celdaEtq = c
+        ? `<span class="tg-etq-badge${pl.subdividida ? ' tg-etq-badge--sub' : ''}">${nGen} etq.</span><small>${esc(pl.resumenCorto)}</small>`
+        : '';
+      let acc = '';
+      if (t && x.estado === 'sin') {
+        acc = `<button type="button" class="btn btn-secondary btn-sm" data-tg-re="${esc(x.folio)}">Reimprimir tag</button>`;
+      } else if (c && x.estado === 'contado') {
+        acc = `<div class="tg-acc-col"><button type="button" class="btn btn-primary btn-sm" data-tg-etq="${esc(x.folio)}"><i class="ph-bold ph-printer" aria-hidden="true"></i> Aceptar y etiquetar (${pl.totalEtiquetas})</button><button type="button" class="btn btn-secondary btn-sm" data-tg-acep="${esc(x.folio)}" title="Aceptar conteo sin imprimir todavía">Aceptar</button><button type="button" class="btn btn-secondary btn-sm" data-tg-rec="${esc(x.folio)}" title="Pedir al contador que vuelva a contar esta caja">Reconteo</button><button type="button" class="btn btn-outline btn-sm" data-tg-rech="${esc(x.folio)}" title="Rechazar este conteo">✕</button></div>`;
+      } else if (c && x.estado === 'incorporado') {
+        acc = `<div class="tg-acc-col"><button type="button" class="btn btn-primary btn-sm" data-tg-etq="${esc(x.folio)}"><i class="ph-bold ph-printer" aria-hidden="true"></i> Imprimir etiquetas (${pl.totalEtiquetas})</button></div>`;
+      } else if (c && x.estado === 'etiquetado') {
+        acc = `<div class="tg-acc-col"><button type="button" class="btn btn-secondary btn-sm" data-tg-reimp="${esc(x.folio)}"><i class="ph-bold ph-printer" aria-hidden="true"></i> Reimprimir (${nGen})</button><button type="button" class="btn btn-outline btn-sm" data-tg-ver="${esc(x.folio)}">Detalle</button></div>`;
+      }
+      return `<tr><td><b>${esc(numero(x.folio))}</b><small>${esc(x.folio)}</small></td><td>${t && t.primeraImpresion ? esc(hora(t.primeraImpresion)) : (t ? 'Sin imprimir' : '—')}</td><td><span class="tg-est tg-est--${x.estado}">${ESTADOS[x.estado]}</span>${c && c.lev ? `<small style="color:#166534;font-weight:600;">Ingresado · ${esc(c.lev)}</small>` : ''}</td>
           <td>${esc(bodMostrar)}</td><td>${c ? `${esc(c.nombre)}${c.nuevo ? ' <small>nuevo</small>' : ''}` : ''}</td><td>${c ? `${esc(c.lote)}${elabTxt ? ' · Elab. ' + esc(elabTxt) : ''} · ${esc(mesCL(c.vence))}` : ''}</td><td>${c ? `<b>${num(c.total)}</b> u.` : ''}</td><td>${celdaEtq}</td>
           <td>${c ? `${esc(c.contadoNombre || c.contadoPor || '')}<small>${esc(hora(c.en))}</small>` : ''}</td><td>${acc}</td></tr>`;
-      }).join('') || '<tr><td colspan="10" class="err-vacio">Sin tags.</td></tr>'}</tbody></table></div>`;
+    }).join('') || '<tr><td colspan="10" class="err-vacio">Sin tags.</td></tr>'}</tbody></table></div>`;
 
     el.querySelector('#tg-fb').onchange = (e) => { fil.bodega = e.target.value; tabla(root); };
     el.querySelector('#tg-fe').onchange = (e) => { fil.estado = e.target.value; tabla(root); };
     el.querySelector('#tg-ref').onclick = () => cargar(root);
     const q = el.querySelector('#tg-fq'); q.oninput = () => { fil.q = q.value; const p = q.selectionStart; tabla(root); const n = root.querySelector('#tg-fq'); if (n) { n.focus(); n.setSelectionRange(p, p); } };
     const bIng = el.querySelector('#tg-ing-lev');
-    if (bIng) bIng.onclick = async () => {
-      const resumenG = gruposIng.slice(0, 8).map(g => `• ${g.nombre} (${g.bodega}): +${g.total} u. en ${g.ingresos.length} lote(s)`).join('\n') + (gruposIng.length > 8 ? `\n… y ${gruposIng.length - 8} producto(s) más.` : '');
-      const P = window.SAR_Progreso, ok = P && P.confirmar ? await P.confirmar({
-        titulo: `¿Ingresar ${unidIng.toLocaleString('es-CL')} u. al stock?`,
-        texto: `Se incorporarán ${listasIngreso.length} caja(s) etiquetada(s) en ${gruposIng.length} producto(s) (suma lotes iguales y agrega lotes nuevos) con folio LEV:\n\n${resumenG}`,
-        si: 'Ingresar al stock'
-      }) : true;
-      if (!ok) return;
-      bIng.disabled = true; bIng.textContent = 'Ingresando…';
-      try {
-        const res = await ingresarStockLevantamiento(listasIngreso);
-        toast('Stock ingresado', `${res.lev}: +${res.unidades.toLocaleString('es-CL')} u. de ${res.productos} producto(s) (${res.cajas} cajas) sumadas al inventario.`, 'success');
-        await cargar(root);
-      } catch (e) {
-        toast('No se pudo ingresar', esc(e.message || e), 'error');
-        await cargar(root);
-      }
+    if (bIng) bIng.onclick = () => {
+      let bodDestId = '';
+      const opts = () => `<option value="">Respetar la bodega asignada a cada caja</option>${bodegasLista.map(b => `<option value="${esc(b.id)}"${bodDestId === b.id ? ' selected' : ''}>Enviar todas a: ${esc(b.name)}</option>`).join('')}`;
+      const ov = abrirModal(`Ingresar al stock (LEV) · ${listasIngreso.length} caja(s)`, `
+        <p class="act-hint">Se incorporarán <b>${unidIng.toLocaleString('es-CL')} u.</b> de <b>${gruposIng.length} producto(s)</b> al inventario (suma lotes iguales y agrega lotes nuevos).</p>
+        <div class="tg-fila" style="margin:6px 0;">
+          <label class="form-label" for="tg-lev-bod" style="flex:1;min-width:220px;margin:0;">Bodega de destino
+            <select id="tg-lev-bod" class="form-control" style="width:100%;margin-top:4px;">${opts()}</select>
+          </label>
+          <button type="button" class="btn btn-secondary btn-sm" id="tg-lev-bod-new" style="align-self:flex-end;height:38px;">+ Nueva bodega</button>
+        </div>
+        <ul class="tg-det-list">${gruposIng.map(g => `<li><span><b>${esc(g.nombre)}</b><small>${esc(g.bodega)} · ${g.ingresos.map(i => `${i.batch} (${i.quantity} u.)`).join(', ')}</small></span><b>+${g.total} u.</b></li>`).join('')}</ul>
+        <div class="fp-facc" style="display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;">
+          <button type="button" class="btn btn-secondary" data-tg-cerrar>Cancelar</button>
+          <button type="button" class="btn btn-primary" id="tg-lev-go"><i class="ph-bold ph-package" aria-hidden="true"></i> Confirmar ingreso al stock</button>
+        </div>`);
+      const selL = ov.querySelector('#tg-lev-bod');
+      selL.onchange = (e) => { bodDestId = e.target.value; };
+      ov.querySelector('#tg-lev-bod-new').onclick = async () => {
+        const nom = window.prompt('Nombre de la nueva bodega (ej. Bodega Satélite Vestidor):', 'Bodega Satélite Vestidor');
+        if (!nom || !nom.trim()) return;
+        try {
+          const nb = await crearBodegaRapida(nom);
+          bodegasLista = await listarBodegas();
+          bodDestId = nb.id;
+          selL.innerHTML = opts();
+          pintarBodegaSel(root);
+          toast('Bodega creada', `«${nb.name}» creada y seleccionada.`, 'success');
+        } catch (er) { toast('No se pudo crear', esc(er.message || er), 'error'); }
+      };
+      ov.querySelector('[data-tg-cerrar]').onclick = () => ov.cerrar();
+      ov.querySelector('#tg-lev-go').onclick = async (e) => {
+        const b = e.currentTarget; b.disabled = true; b.textContent = 'Ingresando…';
+        try {
+          const bodEleg = bodegasLista.find(y => y.id === bodDestId);
+          const conteosEnviar = bodEleg ? listasIngreso.map(c => ({ ...c, bodega: bodEleg.name, bodegaId: bodEleg.id })) : listasIngreso;
+          const res = await ingresarStockLevantamiento(conteosEnviar);
+          toast('Stock ingresado', `${res.lev}: +${res.unidades.toLocaleString('es-CL')} u. de ${res.productos} producto(s) (${res.cajas} cajas)${bodEleg ? ' en ' + bodEleg.name : ''}.`, 'success');
+          ov.cerrar();
+          await cargar(root);
+        } catch (er) {
+          toast('No se pudo ingresar', esc(er.message || er), 'error');
+          b.disabled = false; b.textContent = 'Confirmar ingreso al stock';
+        }
+      };
     };
     el.querySelectorAll('[data-tg-re]').forEach(b => b.onclick = async () => { const x = filas.find(y => y.folio === b.dataset.tgRe); if (!x) return; b.disabled = true; try { await imprimir([x.tag]); toast('Tag', 'Reimpreso.', 'success'); await cargar(root); } catch (e) { toast('No se pudo', esc(e.message || e), 'error'); b.disabled = false; } });
     el.querySelectorAll('[data-tg-etq]').forEach(b => b.onclick = () => { const x = filas.find(y => y.folio === b.dataset.tgEtq); if (x) modalGenerarEtiquetas(x, root); });

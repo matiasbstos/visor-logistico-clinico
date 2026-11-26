@@ -1924,3 +1924,10 @@ Caso real del usuario (`Factura 152.pdf`, `MICHIS PUBLICIDAD LIMITADA`, OC `1298
 - **Aceptar e ingresar stock del levantamiento (`tags-conteo.js` + `nomenclaturas.js`):**
   - Acciones explícitas **Aceptar**, **Aceptar y etiquetar (N)**, **Reconteo** y **Rechazar** por tag.
   - Botón **Ingresar al stock (LEV)** (`ingresarStockLevantamiento`, correlativo `LEV-AAAA-NNNNN` registrado en `nomenclaturas.js`): incorpora las cajas `ETIQUETADO` sin `lev` a `Insumos` + `Historial_Movimientos` en una sola `runTransaction` por producto (`origenOC: true`, sumando lotes iguales y agregando lotes nuevos) y estampa `Conteos_Cajas.lev` para impedir dobles ingresos.
+
+
+### 4.321 Asignación de bodega de destino al recibir el conteo en PC y límite de lecturas en reglas (v21.275)
+- **Reglas de `Conteos_Cajas` (`firestore.rules`):** se optimizó `getUserRoleByDoc`, `isContador`, `hasRole`, `rolConteo` y `tagReservado` con variables `let`, bajando de ~22 lecturas a **4 llamadas `get()`/`exists()`** (dentro del límite duro de 10 de Firestore que rechazaba el guardado del tag `002928`).
+- **Asignar bodega al volver el tag (`tags-conteo.js`):**
+  - En el modal **Aceptar y etiquetar (N)** se agrega el selector **«Bodega asignada para etiquetas e ingreso»** (más botón **`+ Nueva bodega`**). La bodega elegida se guarda en cada etiqueta `bulto` (caja grande e interiores) y se muestra en la tabla de Tags de conteo sin requerir cambios adicionales en `firestore.rules`.
+  - Al pulsar **Ingresar al stock (LEV)** se abre una confirmación con selector **«Bodega de destino»** (respetar la bodega de cada caja o enviar todo el lote a una bodega elegida, con **`+ Nueva bodega`**) antes de ejecutar `ingresarStockLevantamiento`.

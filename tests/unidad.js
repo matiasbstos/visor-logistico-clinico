@@ -1170,8 +1170,10 @@ t('v21.273: fecha de elaboración opcional en levantamiento-movil y plan/contado
 
   // 3) armarBultosDeConteo: 1 caja grande conservando el correlativo del tag + 10 interiores con sus unidades exactas
   const foliosHijos = Array.from({ length: 10 }, (_, i) => `BUL-2026-${String(2930 + i).padStart(6, '0')}`);
-  const bultos = T.armarBultosDeConteo(doc1, foliosHijos, { ahora: '2026-11-26T12:30:00Z', por: 'admin@cormumel.cl' });
+  const bultos = T.armarBultosDeConteo(doc1, foliosHijos, { ahora: '2026-11-26T12:30:00Z', por: 'admin@cormumel.cl', bodega: 'Bodega Satélite Vestidor', bodegaId: 'bod-sat-vestidor' });
   assert.strictEqual(bultos.length, 11);
+  assert.strictEqual(bultos[0].bodega, 'Bodega Satélite Vestidor');
+  assert.strictEqual(bultos[1].bodega, 'Bodega Satélite Vestidor');
   assert.strictEqual(bultos[0].folio, 'BUL-2026-002928');
   assert.strictEqual(bultos[0].tipo, 'bulto');
   assert.strictEqual(bultos[0].elaboracion, '2026-05-15');

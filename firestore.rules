@@ -10,17 +10,16 @@ service cloud.firestore {
     }
 
     function getUserRoleByDoc(docId) {
-      return exists(/databases/$(database)/documents/Usuarios/$(docId)) 
-        ? get(/databases/$(database)/documents/Usuarios/$(docId)).data.get('rol', 
-            get(/databases/$(database)/documents/Usuarios/$(docId)).data.get('role', 'sin_acceso')
-          )
-        : 'sin_acceso';
+      let data = get(/databases/$(database)/documents/Usuarios/$(docId)).data;
+      return data.get('rol', data.get('role', 'sin_acceso'));
     }
 
     function getUserRole() {
       return (request.auth != null && 'email' in request.auth.token && exists(/databases/$(database)/documents/Usuarios/$(request.auth.token.email)))
         ? getUserRoleByDoc(request.auth.token.email)
-        : (request.auth != null ? getUserRoleByDoc(request.auth.uid) : 'sin_acceso');
+        : (request.auth != null && exists(/databases/$(database)/documents/Usuarios/$(request.auth.uid))
+            ? getUserRoleByDoc(request.auth.uid)
+            : 'sin_acceso');
     }
 
     function isAdmin() {
@@ -54,7 +53,8 @@ service cloud.firestore {
     // Rol «contador» (v21.249, levantamiento con teléfono): solo lee Insumos y Bodegas y registra SUS Conteos_Cajas.
     // Queda FUERA de hasRole(): hasRole() da escritura en Historial, Bandejas, Metadata y otras colecciones.
     function isContador() {
-      return getUserRole() is string && getUserRole().lower().trim() == 'contador';
+      let r = getUserRole();
+      return r is string && r.lower().trim() == 'contador';
     }
 
     function isOwner(userId) {
@@ -65,7 +65,8 @@ service cloud.firestore {
     // Usuario autenticado que además tiene un rol asignado en /Usuarios.
     // Una cuenta recién registrada, sin perfil, queda como 'sin_acceso'.
     function hasRole() {
-      return isAuthenticated() && getUserRole() != 'sin_acceso' && !isContador();
+      let r = getUserRole();
+      return isAuthenticated() && r != 'sin_acceso' && (!(r is string) || r.lower().trim() != 'contador');
     }
 
     // Correo institucional REAL: dominio anclado tras la arroba y correo verificado.
@@ -342,7 +343,10 @@ service cloud.firestore {
     // No mueve stock. Crea quien cuenta (a su nombre); corrige el autor mientras esté REGISTRADO (o RECONTEO pedido por bodega);
     // bodega (admin) solo cambia el estado y los campos de aceptación/rechazo; una caja ACEPTADA solo pasa a ETIQUETADO.
     match /Conteos_Cajas/{folio} {
-      function rolConteo() { return isContador() || (getUserRole() is string && getUserRole().lower().trim() == 'operador') || isAdmin(); }
+      function rolConteo() {
+        let r = getUserRole();
+        return r is string && r.lower().trim() in ['contador', 'operador', 'admin', 'superadmin', 'administrador', 'global'];
+      }
       function camposCaja() {
         return ['folio', 'bodega', 'bodegaId', 'insumoId', 'nombre', 'nombreNorm', 'nuevo', 'tipo', 'controlado', 'lote', 'elaboracion', 'vence', 'sinLote',
                 'estructura', 'total', 'contadoPor', 'contadoNombre', 'en', 'servidorEn', 'editadoEn', 'estado', 'app',
@@ -355,10 +359,12 @@ service cloud.firestore {
       function n6(v) { return v is int && v >= 0 && v <= 1000000; }
       // texto opcional (o null) de hasta n caracteres
       function txt(d, k, n) { return !(k in d) || d[k] == null || (d[k] is string && d[k].size() <= n); }
+      function tagOk(d) {
+        return d.get('tipo', '') == 'tag-conteo' && d.get('estado', '') == 'TAG';
+      }
       function tagReservado() {
         return exists(/databases/$(database)/documents/Contadores/$('bulto-' + folio))
-          && get(/databases/$(database)/documents/Contadores/$('bulto-' + folio)).data.get('tipo', '') == 'tag-conteo'
-          && get(/databases/$(database)/documents/Contadores/$('bulto-' + folio)).data.get('estado', '') == 'TAG';
+          && tagOk(get(/databases/$(database)/documents/Contadores/$('bulto-' + folio)).data);
       }
       function cajaOk(d) {
         return d.folio == folio && folio.matches('^BUL-[0-9]{4}-[0-9]{6}$')

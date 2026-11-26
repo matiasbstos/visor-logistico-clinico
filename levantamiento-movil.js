@@ -145,8 +145,10 @@
   function armarDoc(dr, u, sis) {
     const est = dr.estructura || { estado: 'CERRADA', interiores: [], sueltas: 0 }, s = sis || {};
     const elab = RE_ELAB.test(String(dr.elaboracion || '')) ? String(dr.elaboracion) : '';
-    const d = { folio: dr.folio, bodega: dr.bodega && dr.bodega.name || '', bodegaId: dr.bodega && dr.bodega.id || '', insumoId: dr.prod && dr.prod.insumoId || null, nombre: String(dr.prod && dr.prod.nombre || '').trim(), nuevo: !!(dr.prod && dr.prod.nuevo), tipo: dr.prod && dr.prod.nuevo ? dr.prod.tipo || '' : null,
-      controlado: dr.prod && dr.prod.controlado || null, lote: dr.sinLote ? 'S/L' : String(dr.lote || '').trim().toUpperCase(), vence: /^\d{4}-(0[1-9]|1[0-2])$/.test(dr.vence || '') ? dr.vence : 'N/A', sinLote: !!dr.sinLote,
+    const ctlRaw = dr.prod && dr.prod.controlado;
+    const ctlVal = typeof ctlRaw === 'string' ? ctlRaw : (ctlRaw === true ? 'controlado' : null);
+    const d = { folio: dr.folio, bodega: dr.bodega && dr.bodega.name || '', bodegaId: dr.bodega && dr.bodega.id || '', insumoId: dr.prod && dr.prod.insumoId || null, nombre: String(dr.prod && dr.prod.nombre || '').trim().slice(0, 120), nuevo: !!(dr.prod && dr.prod.nuevo), tipo: dr.prod && dr.prod.nuevo ? dr.prod.tipo || '' : null,
+      controlado: ctlVal, lote: dr.sinLote ? 'S/L' : String(dr.lote || '').trim().toUpperCase(), vence: /^\d{4}-(0[1-9]|1[0-2])$/.test(dr.vence || '') ? dr.vence : 'N/A', sinLote: !!dr.sinLote,
       estructura: { estado: est.estado, interiores: (est.interiores || []).map(x => ({ q: ent(x.q), abierta: !!x.abierta })), sueltas: ent(est.sueltas) }, total: totalEstructura(est),
       contadoPor: u.correo || '', contadoNombre: u.nombre || '', en: new Date().toISOString(), estado: 'REGISTRADO', app: VERSION,
       baseSistema: s.base == null ? null : ent(s.base), baseSistemaEn: s.en || new Date().toISOString(), deudaSistema: ent(s.deuda) };

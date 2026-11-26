@@ -138,14 +138,14 @@
       controlado: dr.prod && dr.prod.controlado || null, lote: dr.sinLote ? 'S/L' : String(dr.lote || '').trim().toUpperCase(), vence: /^\d{4}-(0[1-9]|1[0-2])$/.test(dr.vence || '') ? dr.vence : 'N/A', sinLote: !!dr.sinLote,
       estructura: { estado: est.estado, interiores: (est.interiores || []).map(x => ({ q: ent(x.q), abierta: !!x.abierta })), sueltas: ent(est.sueltas) }, total: totalEstructura(est),
       contadoPor: u.correo || '', contadoNombre: u.nombre || '', en: new Date().toISOString(), estado: 'REGISTRADO', app: VERSION,
-      baseSistema: s.base == null ? null : ent(s.base), baseSistemaEn: s.en || new Date().toISOString(), deudaSistema: ent(s.deuda) };
-    if (d.controlado) { delete d.baseSistema; delete d.deudaSistema; }   /* Decker: en controlados no se guarda lo que marca el sistema */
+      baseSistema: s.base == null ? null : ent(s.base), baseSistemaEn: s.en || new Date().toISOString(), deudaSistema: ent(s.deuda), baseSL: s.sl == null ? null : ent(s.sl) };   /* 4.307: baseSL = S/L del producto en la bodega al contar (la bandeja lo reclasifica) */
+    if (d.controlado) { delete d.baseSistema; delete d.deudaSistema; delete d.baseSL; }   /* Decker: en controlados no se guarda lo que marca el sistema */
     d.nombreNorm = norm(d.nombre).slice(0, 120); d.huella = huella(d); return d;
   }
   /** Al corregir: solo los campos que cambian (updateDoc). Nunca estado de bodega, autor ni folio. */
   const BORRAR = '__borrar__';   /* marca: el campo se elimina al corregir (controlados) */
-  const EDITABLES = ['bodega', 'bodegaId', 'insumoId', 'nombre', 'nombreNorm', 'nuevo', 'tipo', 'controlado', 'lote', 'vence', 'sinLote', 'estructura', 'total', 'contadoNombre', 'baseSistema', 'baseSistemaEn', 'deudaSistema', 'huella', 'app'];
-  function cambiosDe(antes, d) { const c = {}; EDITABLES.forEach(k => { if (d[k] === undefined) return; if (JSON.stringify(antes ? antes[k] : undefined) !== JSON.stringify(d[k])) c[k] = d[k]; }); if (d.controlado) { c.baseSistema = BORRAR; c.deudaSistema = BORRAR; } c.estado = 'REGISTRADO'; c.editadoEn = new Date().toISOString(); return c; }
+  const EDITABLES = ['bodega', 'bodegaId', 'insumoId', 'nombre', 'nombreNorm', 'nuevo', 'tipo', 'controlado', 'lote', 'vence', 'sinLote', 'estructura', 'total', 'contadoNombre', 'baseSistema', 'baseSistemaEn', 'deudaSistema', 'baseSL', 'huella', 'app'];
+  function cambiosDe(antes, d) { const c = {}; EDITABLES.forEach(k => { if (d[k] === undefined) return; if (JSON.stringify(antes ? antes[k] : undefined) !== JSON.stringify(d[k])) c[k] = d[k]; }); if (d.controlado) { c.baseSistema = BORRAR; c.deudaSistema = BORRAR; c.baseSL = BORRAR; } c.estado = 'REGISTRADO'; c.editadoEn = new Date().toISOString(); return c; }
   /** Cajas del turno: las de este usuario en las últimas 12 horas (un turno de noche cruza la medianoche). */
   const TURNO_MS = 12 * 3600 * 1000;
   function delTurno(cajas, u, ahora) { const t0 = (ahora || Date.now()) - TURNO_MS; return (cajas || []).filter(c => c && c.doc && c.doc.contadoPor === u && new Date(c.doc.en).getTime() >= t0); }
@@ -442,7 +442,8 @@
   /** Lo que marcaba el sistema para el lote de la caja (también en controlados): base, cuándo se leyó y la deuda del producto. */
   function sistemaDe(dr) {
     const p = dr.prod || {}, b = dr.bodega, reg = (insumos || []).find(i => p.insumoId && i.id === p.insumoId && esDeBodega(i, b)) || (p.nuevo ? null : (insumos || []).find(i => esDeBodega(i, b) && norm(i.name) === norm(p.nombre)));
-    return { base: baseDe(reg, dr.sinLote ? 'S/L' : dr.lote, dr.vence || 'N/A'), en: insumosAl || new Date().toISOString(), deuda: reg ? num(reg.sobregiro) : 0 };
+    const sl = reg ? lotesDe(reg).filter(b => window.SAR_Toma && window.SAR_Toma.lote(b.batch) === 'S/L').reduce((t, b) => t + num(b.quantity), 0) : null;
+    return { base: baseDe(reg, dr.sinLote ? 'S/L' : dr.lote, dr.vence || 'N/A'), en: insumosAl || new Date().toISOString(), deuda: reg ? num(reg.sobregiro) : 0, sl };
   }
   /** Escribe una caja: crear = setDoc (solo si no existe en el servidor); corregir = updateDoc con lo que cambia (la regla rechaza si ya fue aceptada). */
   function escribir(c) {

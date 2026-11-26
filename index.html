@@ -266,6 +266,9 @@
                     <a href="#" class="menu-item normal admin-only menu-sub" data-target="view-tags-conteo" data-title="Tags de conteo">
                         <i class="ph-bold ph-tag"></i><span class="menu-label">Tags de conteo</span>
                     </a>
+                    <a href="#" class="menu-item normal admin-only menu-sub" data-target="view-lev-bandeja" data-title="Levantamientos por aprobar">
+                        <i class="ph-bold ph-tray"></i><span class="menu-label">Levantamientos por aprobar <span id="lev-badge" class="home-badge" style="display:none"></span></span>
+                    </a>
                     <a href="#" class="menu-item normal admin-only" data-target="view-bodegas" data-title="Bodegas">
                         <i class="ph-bold ph-buildings"></i><span class="menu-label">Bodegas</span>
                     </a>
@@ -2717,6 +2720,10 @@
 
             <section id="view-tags-conteo" class="view-section" style="display:none;">
                 <div class="dashboard-container" id="tags-root"></div>
+            </section>
+
+            <section id="view-lev-bandeja" class="view-section" style="display:none;">
+                <div class="dashboard-container" id="levb-root"></div>
             </section>
 
             <section id="view-solicitud-insumos" class="view-section" style="display:none;">
@@ -6036,6 +6043,7 @@
     <script src="sync-local.js?v=21.250"></script>
     <script src="bultos.js?v=21.250"></script>
     <script src="tags-conteo.js?v=21.250"></script>
+    <script src="levantamiento-bandeja.js?v=21.250"></script>
     <script src="bitacora-oc.js?v=21.250"></script>
     <script src="id-producto.js?v=21.250"></script>
     <script src="home-compras.js?v=21.250"></script>

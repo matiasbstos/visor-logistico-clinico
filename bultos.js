@@ -169,11 +169,15 @@
     if (enLinea) reservarTramo().catch(() => {});   /* deja folios listos para la próxima vez sin internet */
     return { anio, ini, enLinea };
   }
-  async function crear(g) {
+  async function crear(g, opc) {
     const plan = planCajas(g), cajas = plan.map(p => p.q); if (!cajas.length) throw new Error('Indica el total de unidades y cuántas cajas son (o cuántas vienen por caja).');
     const nFol = plan.reduce((t, p) => t + 1 + p.hijos.length, 0);
     if (cajas.length > 300) throw new Error('Son más de 300 cajas: revisa las unidades por caja.');
     if (nFol > 600) throw new Error(`Serían ${nFol} etiquetas (cajas grandes + interiores): revisa las unidades por caja interior.`);
+    /* v21.252: avance visible (estilo del sistema: SAR_Progreso), salvo que quien llama ya muestre el suyo */
+    const P = window.SAR_Progreso, propio = !(opc && opc.prog) && P && P.iniciar, prog = (opc && opc.prog) || (propio ? P.iniciar(`Creando ${nFol} etiqueta${nFol === 1 ? '' : 's'}`) : null), paso = (t) => { try { if (prog) prog.paso(t); } catch (e) { /* sin avance */ } };
+    try {
+    paso(`Reservando ${nFol} número${nFol === 1 ? '' : 's'} de etiqueta`);
     const f = fs(), { anio, ini, enLinea } = await reservarFolios(nFol);
     const ahora = new Date().toISOString(), fol = (k) => `BUL-${anio}-${String(ini + k).padStart(6, '0')}`, grupo = fol(0);
     const comun = { tipo: 'bulto', grupo, estado: 'CERRADA', nombre: g.nombre, insumoId: g.insumoId || '', codigoMP: g.codigoMP || '', bodega: g.bodega || '', lote: g.lote || 'S/L', vence: g.vence || '', proveedor: g.proveedor || '', oc: g.oc || '', rec: g.rec || '', fechaRecepcion: g.fechaRecepcion || hoyISO(), creadoEn: ahora, creadoPor: usuario(), impresiones: 0, historial: [{ accion: 'CREADO', por: usuario(), en: ahora }], ...(g.origen ? { origen: g.origen } : {}) };
@@ -184,10 +188,12 @@
       lista.push({ ...comun, folio: fp, n: i + 1, de: cajas.length, contenido: p.q, inicial: p.q, porCaja, totalGrupo, ...(hijos.length ? { hijos, subcajas: hijos.length, porSubcaja: Math.floor(num(g.subPor)) } : {}) });
       p.hijos.forEach((q, j) => lista.push({ ...comun, folio: hijos[j], nivel: 'interior', padre: fp, padreN: i + 1, padreDe: cajas.length, n: j + 1, de: hijos.length, contenido: q, inicial: q, porCaja: Math.floor(num(g.subPor)), totalGrupo }));
     });
-    if (enLinea) { for (const b of lista) await f.setDoc(ref(b.folio), b); }
+    if (enLinea) { for (let i = 0; i < lista.length; i += 20) { await Promise.all(lista.slice(i, i + 20).map(b => f.setDoc(ref(b.folio), b))); paso(`Guardando ${Math.min(i + 20, lista.length)} de ${lista.length} etiquetas`); } }   /* de a 20 en paralelo: antes una por una */
     else { lista.forEach(b => { b.sinConexion = true; f.setDoc(ref(b.folio), b).catch(e => console.warn('[Bultos] se subirá al volver internet', b.folio, e)); }); }   /* sin internet: no se espera al servidor; la copia local la sube sola */
     try { sessionStorage.removeItem('etq-pend'); } catch (e) { /* sin almacenamiento */ }
+    if (propio && prog) prog.listo(`${lista.length} etiqueta${lista.length === 1 ? '' : 's'} creada${lista.length === 1 ? '' : 's'}`, { aviso: false, ms: 700 });
     return lista;
+    } catch (e) { if (propio && prog) prog.error(); throw e; }
   }
   async function listar(lim) { const f = fs(), sn = await f.getDocs(f.query(f.collection(db(), 'Contadores'), f.where('tipo', '==', 'bulto'), f.limit(lim || 2000))), l = []; sn.forEach(d => l.push(d.data())); return l.sort((a, b) => String(b.folio).localeCompare(String(a.folio))); }
 
@@ -282,7 +288,12 @@
       pane.querySelector('#bu-gen').onclick = async (e) => {
         leer2(); if (!sel.nombre) { toast('Etiquetas', 'Elige el producto.', 'warning'); return; }
         if (sel.tieneSub && !(num(sel.subPor) > 0)) { toast('Cajas interiores', 'Indica cuántas unidades trae cada caja interior.', 'warning'); return; }
-        const btn = e.currentTarget; btn.disabled = true;
+        const btn = e.currentTarget;
+        if (sel.tieneSub && num(sel.subPor) === 1 && window.SAR_Progreso && window.SAR_Progreso.confirmar) {   /* v21.252: una «caja interior» de 1 unidad = una etiqueta por unidad */
+          const nU = Math.max(0, num(sel.total) - (conteo ? num(sel.sueltas) : 0));
+          if (nU > 10 && !(await window.SAR_Progreso.confirmar({ titulo: `¿${nU} etiquetas, una por unidad?`, texto: 'Marcaste cajas interiores de <b>1 unidad</b>: eso imprime una etiqueta por cada unidad. Si las unidades vienen sueltas dentro de la caja grande, desmarca «cajas interiores».', si: 'Sí, una por unidad', no: 'Revisar' }))) return;
+        }
+        btn.disabled = true;
         try {
           let msgConteo = '';
           if (conteo) {
@@ -581,7 +592,12 @@
     try { sessionStorage.removeItem('etq-pend'); } catch (e) { /* sin almacenamiento */ }
     const mal = r.filter(x => !x).length; if (mal) toast('Impresión no registrada', `${mal} etiqueta(s) se imprimieron pero no se pudo anotar la impresión (revisa la conexión o tu sesión).`, 'warning');
   }
-  async function imprimir(lista, nombre) { if (!lista || !lista.length) return null; const mot = await motivoReimp(lista); if (mot === null) return null; const r = await pdf(lista, nombre); await marcarImpresas(lista, mot); return r; }
+  async function imprimir(lista, nombre) {
+    if (!lista || !lista.length) return null; const mot = await motivoReimp(lista); if (mot === null) return null;
+    const P = window.SAR_Progreso, prog = P && P.iniciar ? P.iniciar(`Preparando ${lista.length} etiqueta${lista.length === 1 ? '' : 's'} para imprimir`, ['Armando el PDF para la Zebra']) : null;   /* v21.252: avance visible */
+    try { const r = await pdf(lista, nombre); if (prog) prog.paso('Marcando como impresas'); await marcarImpresas(lista, mot); if (prog) prog.listo('PDF listo para imprimir', { aviso: false, ms: 700 }); return r; }
+    catch (e) { if (prog) prog.error(); throw e; }
+  }
 
   // ---------------- etiquetas por orden de compra (v21.223) ----------------
   async function leerOCs() { const f = fs(), sn = await f.getDocs(f.query(f.collection(db(), 'Seguimiento_OC'), f.limit(1500))), l = []; sn.forEach(d => l.push({ id: d.id, ...d.data() })); return l; }
@@ -768,7 +784,7 @@
     if (con.length) {
       const bg = window.SAR_Progreso && window.SAR_Progreso.segundoPlano ? window.SAR_Progreso.segundoPlano('Etiquetas de bultos') : null, todas = [];
       try {
-        for (const [k, l] of con.entries()) { if (bg) bg.paso(`${k + 1} de ${con.length}: ${String(l.nombre).slice(0, 40)} (${l.cajas} cajas)`); todas.push(...await crear(l)); }
+        for (const [k, l] of con.entries()) { if (bg) bg.paso(`${k + 1} de ${con.length}: ${String(l.nombre).slice(0, 40)} (${l.cajas} cajas)`); todas.push(...await crear(l, { prog: { paso() {} } })); }   /* el avance lo lleva «k de N» del segundo plano */
         if (bg) bg.listo(`${todas.length} etiqueta(s) creadas: ${todas[0].folio}${todas.length > 1 ? ' a ' + todas[todas.length - 1].folio : ''}`);
         const P = window.SAR_Progreso, ok = P && P.confirmar ? await P.confirmar({ titulo: `${todas.length} etiqueta${todas.length === 1 ? '' : 's'} lista${todas.length === 1 ? '' : 's'}`, texto: `Una por caja de la recepción <b>${esc(o.rec || '')}</b>.`, lineas: con.map(l => `${esc(l.nombre)} · <b>${l.cajas}</b> caja(s) · ${num(l.total)} u.`), si: 'Imprimir ahora', no: 'Después' }) : true;
         if (ok) await imprimir(todas, `bultos-${String(o.rec || '').replace(/[^A-Za-z0-9-]+/g, '_')}.pdf`);

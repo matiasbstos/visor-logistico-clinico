@@ -1207,4 +1207,23 @@ t('v21.273: fecha de elaboración opcional en levantamiento-movil y plan/contado
   assert.strictEqual(kpi.unidadesTotal, 580);
   // Filtrar por bodega incluye también tags sin usar preasignados a esa bodega
   assert.strictEqual(T.filtrar(filas, { bodega: 'Bodega Satélite Vestidor' }).length, 3);
+
+  // 5) v21.274: agruparParaIngreso y mezclarLotesIngreso (suma mismo lote, agrega lote distinto y no duplica los ya ingresados con lev)
+  const cEtiq1 = { ...doc1, folio: 'BUL-2026-002930', estado: 'ETIQUETADO', total: 480, lote: 'L2026A', vence: '2028-05', elaboracion: '2026-05-15' };
+  const cEtiq2 = { ...doc1, folio: 'BUL-2026-002931', estado: 'ETIQUETADO', total: 200, lote: 'L2026A', vence: '2028-05' }; // mismo lote -> suma 680
+  const cEtiq3 = { ...doc1, folio: 'BUL-2026-002932', estado: 'ETIQUETADO', total: 150, lote: 'L2026B', vence: '2028-09' }; // lote distinto -> agrega
+  const cYaIng = { ...doc1, folio: 'BUL-2026-002933', estado: 'ETIQUETADO', lev: 'LEV-2026-00001', total: 100 }; // ya ingresado -> ignorado
+  const grupos = T.agruparParaIngreso([cEtiq1, cEtiq2, cEtiq3, cYaIng, doc1]);
+  assert.strictEqual(grupos.length, 1);
+  assert.strictEqual(grupos[0].folios.length, 3);
+  assert.strictEqual(grupos[0].total, 830);
+  assert.strictEqual(grupos[0].ingresos.length, 2);
+  const mez = T.mezclarLotesIngreso({ quantity: 100, batches: [{ batch: 'L2026A', expirationDate: '2028-05', quantity: 100 }] }, grupos[0].ingresos);
+  assert.strictEqual(mez.quantity, 930);
+  assert.strictEqual(mez.batches.length, 2);
+  assert.strictEqual(mez.batches[0].batch, 'L2026A');
+  assert.strictEqual(mez.batches[0].quantity, 780);
+  assert.strictEqual(mez.batches[0].elaboracion, '2026-05-15');
+  assert.strictEqual(mez.batches[1].batch, 'L2026B');
+  assert.strictEqual(mez.batches[1].quantity, 150);
 });

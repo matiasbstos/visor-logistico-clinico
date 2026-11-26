@@ -1913,3 +1913,14 @@ Caso real del usuario (`Factura 152.pdf`, `MICHIS PUBLICIDAD LIMITADA`, OC `1298
   - Funciones puras `planEtiquetasConteo`, `contadoresEtiquetas` y `armarBultosDeConteo`.
   - Arriba de la tabla de Tags de conteo se muestran los contadores en vivo: **Cajas contadas** (y cuántas están subdivididas), **Total etiquetas de cajas** (grandes + interiores), **Etiquetas por imprimir**, **Etiquetas ya generadas** y **Unidades contadas**, además del botón masivo para imprimir todas las pendientes en un solo PDF.
   - Cada fila muestra cuántas etiquetas genera esa caja y cuánto contiene cada una; al pulsar **Etiquetas (N)** se previsualiza cada etiqueta (caja grande con su correlativo `BUL` original + cada caja interior con sus unidades), se ejecuta la transición exigida por reglas (`REGISTRADO → ACEPTADO → ETIQUETADO`), se crean los documentos `bulto` en `Contadores/bulto-…` y se imprime el PDF 100×60 mm (incluyendo `Elab.`, `ABIERTA` y desglose real en `bultos.js`). También permite **Pedir reconteo**, **Reimprimir** y **Ver detalle** de los correlativos generados.
+
+
+### 4.320 Bodega preasignada en tags, suma inteligente por lote en móvil e ingreso atómico LEV al stock (v21.274)
+- **Bodega asociada al tag (`tags-conteo.js` + `levantamiento-movil.js`):** al reservar tags «CONTADO» se puede asignar una bodega (o crear una nueva como *Bodega Satélite Vestidor* ahí mismo). El tag imprime la bodega y, al escanear su QR en el teléfono, se selecciona automáticamente esa bodega.
+- **Coincidencias y suma en vivo en el teléfono (`levantamiento-movil.js`):**
+  - `catalogo(b)` integra los productos ya ingresados/contados en `Conteos_Cajas` además de `Insumos`, y `Producto nuevo` sugiere en vivo coincidencias existentes para evitar duplicar descripciones.
+  - En P2 (`lotesCombinados`) se muestran los lotes del sistema junto con los lotes ya contados en esa bodega para sumar al mismo lote con un toque o sumar un lote distinto con `+ Otro lote`, mostrando diferencias y avance por lote en vivo.
+  - En *Ver resumen* se agrega **Reintentar cajas «para revisar»** para rescatar cajas retenidas por permisos tras desplegar reglas.
+- **Aceptar e ingresar stock del levantamiento (`tags-conteo.js` + `nomenclaturas.js`):**
+  - Acciones explícitas **Aceptar**, **Aceptar y etiquetar (N)**, **Reconteo** y **Rechazar** por tag.
+  - Botón **Ingresar al stock (LEV)** (`ingresarStockLevantamiento`, correlativo `LEV-AAAA-NNNNN` registrado en `nomenclaturas.js`): incorpora las cajas `ETIQUETADO` sin `lev` a `Insumos` + `Historial_Movimientos` en una sola `runTransaction` por producto (`origenOC: true`, sumando lotes iguales y agregando lotes nuevos) y estampa `Conteos_Cajas.lev` para impedir dobles ingresos.

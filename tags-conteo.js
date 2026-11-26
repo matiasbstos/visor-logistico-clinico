@@ -944,7 +944,7 @@
         box.innerHTML = `<div class="tg-cred-box">
           <b>${ultCred.yaExistia ? 'Usuario sincronizado con rol Contador' : 'Credencial de Contador creada'}</b>
           <div>Nombre: <b>${esc(ultCred.nombre)}</b> · Correo: <b>${esc(ultCred.email)}</b></div>
-          <div>Clave temporal: ${ultCred.password ? `<span class="tg-cred-pass">${esc(ultCred.password)}</span>` : '<em>(La cuenta ya existía; conserva su clave actual)</em>'}</div>
+          <div>${ultCred.claveManual ? 'Clave asignada' : 'Clave temporal'}: ${ultCred.password ? `<span class="tg-cred-pass">${esc(ultCred.password)}</span>` : '<em>(La cuenta ya existía; conserva su clave actual)</em>'}</div>
           <small>Acceso teléfono: <code>${esc(URL_CONTEO)}</code></small>
           <div class="tg-cred-acc">
             <button type="button" class="btn btn-primary btn-sm" id="tg-cred-pdf"><i class="ph-bold ph-printer" aria-hidden="true"></i> Imprimir credencial (100×60)</button>
@@ -1006,6 +1006,7 @@
           <form id="tg-cred-f" class="tg-cred-form">
             <label class="form-label">Nombre completo<input id="tg-cn" class="form-control" placeholder="Ej. María González" required></label>
             <label class="form-label">Usuario (@cormumel.cl)<input id="tg-cu" class="form-control" placeholder="ej. conteo1" required></label>
+            <label class="form-label" style="grid-column:1/-1;">Clave de acceso (opcional · vacía = automática)<input id="tg-cp" class="form-control" type="text" minlength="6" autocomplete="off" placeholder="Mín. 6 caracteres, o déjala vacía para generarla sola"></label>
             <button type="submit" class="btn btn-primary" id="tg-cred-go" style="grid-column:1/-1;"><i class="ph-bold ph-identification-card" aria-hidden="true"></i> Crear credencial de contador</button>
           </form>
           <div id="tg-cred-res"></div>
@@ -1039,13 +1040,14 @@
     root.querySelector('#tg-cred-f').onsubmit = async (e) => {
       e.preventDefault();
       if (typeof window.SAR_CrearUsuario !== 'function') { toast('Error', 'Falta el módulo de usuarios (recarga la página).', 'error'); return; }
-      const inpN = root.querySelector('#tg-cn'), inpU = root.querySelector('#tg-cu'), btn = root.querySelector('#tg-cred-go');
-      const nombre = inpN.value.trim(), prefijo = inpU.value.trim();
+      const inpN = root.querySelector('#tg-cn'), inpU = root.querySelector('#tg-cu'), inpP = root.querySelector('#tg-cp'), btn = root.querySelector('#tg-cred-go');
+      const nombre = inpN.value.trim(), prefijo = inpU.value.trim(), password = inpP ? inpP.value.trim() : '';
       if (!nombre || !prefijo) { toast('Campos incompletos', 'Ingresa nombre y usuario.', 'warning'); return; }
+      if (password && password.length < 6) { toast('Clave muy corta', 'Usa al menos 6 caracteres o déjala vacía para generarla automáticamente.', 'warning'); return; }
       btn.disabled = true; const orig = btn.innerHTML; btn.textContent = 'Creando…';
       try {
-        ultCred = await window.SAR_CrearUsuario({ nombre, prefijo, rol: 'contador' });
-        inpN.value = ''; inpU.value = '';
+        ultCred = await window.SAR_CrearUsuario({ nombre, prefijo, rol: 'contador', password });
+        inpN.value = ''; inpU.value = ''; if (inpP) inpP.value = '';
         contadoresLista = await listarContadores();
         pintarCredBox(root);
         toast('Credencial lista', ultCred.yaExistia ? `Rol contador asignado a ${ultCred.email}.` : `Cuenta ${ultCred.email} creada. Ya puedes imprimir o copiar su credencial.`, 'success');

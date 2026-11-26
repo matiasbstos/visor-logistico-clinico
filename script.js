@@ -10433,16 +10433,18 @@ window.firebaseStorageSdk = { ref: storageRef, uploadBytes, getDownloadURL };
 window.firebaseAuth = auth;
 
 /** v21.273: Crea una cuenta de usuario (Auth secundario + perfil en /Usuarios) reutilizable desde Usuarios y Tags de conteo. */
-window.SAR_CrearUsuario = async function ({ nombre, prefijo, rol }) {
+window.SAR_CrearUsuario = async function ({ nombre, prefijo, rol, password }) {
     let p = String(prefijo || '').trim().toLowerCase();
     if (p.includes('@')) p = p.split('@')[0].trim();
     p = p.replace(/\.cormumel\.cl$/, '').replace(/[^a-z0-9._-]/g, '').trim();
     const n = String(nombre || '').trim();
     const r = String(rol || 'contador').trim().toLowerCase();
+    const passManual = String(password || '').trim();
     if (!p) throw new Error('Ingresa un nombre de usuario válido (sin espacios).');
     if (!n) throw new Error('Ingresa el nombre completo del usuario.');
+    if (passManual && passManual.length < 6) throw new Error('La clave debe tener al menos 6 caracteres (o déjala vacía para generarla automáticamente).');
     const correoCompleto = p + '@cormumel.cl';
-    const tempPass = 'Cormu' + Math.floor(1000 + Math.random() * 9000) + '*';
+    const tempPass = passManual || ('Cormu' + Math.floor(1000 + Math.random() * 9000) + '*');
     const secondaryApp = getApps().find(a => a.name === 'SecondaryApp') || initializeApp(firebaseConfig, 'SecondaryApp');
     const secondaryAuth = getAuth(secondaryApp);
     let yaExistia = false;
@@ -10463,7 +10465,7 @@ window.SAR_CrearUsuario = async function ({ nombre, prefijo, rol }) {
         fechaRegistro: serverTimestamp(),
         activo: true
     }, { merge: true });
-    return { nombre: n, email: correoCompleto, password: yaExistia ? '' : tempPass, rol: r, yaExistia };
+    return { nombre: n, email: correoCompleto, password: yaExistia ? '' : tempPass, rol: r, yaExistia, claveManual: Boolean(passManual) };
 };
 
 

@@ -146,14 +146,25 @@
         return { batches: arr, quantity: num(d.quantity) + total };
     }
     const numeroActa = (anio, n) => (window.SAR_Folio ? window.SAR_Folio.formato('AE', anio, n) : `AE-${anio}-${String(n).padStart(4, '0')}`);   // 5 dígitos desde 2027 (estándar de correlativos)
+    /** v21.276: Bodega propia del ítem (o la bodega de origen por defecto para actas antiguas). */
+    function bodegaDe(item, origenFallback) {
+        return String((item && item.bodega) || origenFallback || '').trim();
+    }
+    /** v21.276: Lista única y texto legible de las bodegas de origen que participan en un acta. */
+    function resumenBodegas(items, origenFallback) {
+        const lista = [];
+        (items || []).forEach(i => { const b = bodegaDe(i, origenFallback); if (b && !lista.includes(b)) lista.push(b); });
+        if (!lista.length && origenFallback) lista.push(String(origenFallback).trim());
+        return { lista, texto: lista.join(' + ') };
+    }
     function validarBorrador(b) {
         const errores = [];
         if (!String(b.centro || '').trim()) errores.push('Indica a qué centro se entrega.');
-        if (!b.origen) errores.push('Elige la bodega de origen.');
+        if (!b.origen && !(b.items || []).some(i => i.bodega)) errores.push('Elige la bodega de origen.');
         if (!b.items.length) errores.push('Agrega al menos un producto.');
         else if (!b.items.some(i => num(i.cantidad) > 0 || num(i.solicitado) > 0)) errores.push('Indica cantidad a entregar, o 0 con la cantidad pedida para dejarlo pendiente del centro.');
         if (b.items.length > MAX_ITEMS) errores.push(`Máximo ${MAX_ITEMS} productos por acta.`);
-        b.items.forEach(i => { if (!(num(i.cantidad) > 0 || (num(i.cantidad) === 0 && num(i.solicitado) > 0)) || num(i.cantidad) !== Math.floor(num(i.cantidad))) errores.push(`Cantidad inválida en ${i.nombre}.`); else if (!String(i.nombre || '').trim() || (i.manual && String(i.nombre).trim().length < 3)) errores.push('Un producto manual necesita nombre.'); else if (i.controlado && num(i.cantidad) > num(i.stock)) errores.push(`${i.nombre}: es medicamento controlado, no puede entregarse sin stock en sistema (requiere folio DAU en registro separado).`); });
+        b.items.forEach(i => { if (!bodegaDe(i, b.origen)) errores.push(`${i.nombre}: falta indicar su bodega de origen.`); else if (!(num(i.cantidad) > 0 || (num(i.cantidad) === 0 && num(i.solicitado) > 0)) || num(i.cantidad) !== Math.floor(num(i.cantidad))) errores.push(`Cantidad inválida en ${i.nombre}.`); else if (!String(i.nombre || '').trim() || (i.manual && String(i.nombre).trim().length < 3)) errores.push('Un producto manual necesita nombre.'); else if (i.controlado && num(i.cantidad) > num(i.stock)) errores.push(`${i.nombre}: es medicamento controlado, no puede entregarse sin stock en sistema (requiere folio DAU en registro separado).`); });
         return errores;
     }
 
@@ -239,16 +250,17 @@
     /* v21.235: las actas emitidas desde esta versión ya sacaron su stock (campo `reservado` del producto); solo se descuentan aquí las antiguas */
     const reservadoItem = (id, nombre) => pendConf.reduce((t, a) => t + (a.items || []).filter(i => (id && i.id === id) || (!i.id && nombre && normN(i.nombre) === normN(nombre))).reduce((s2, i) => s2 + Math.max(0, num(i.cantidad) - (a.reservaStock && i.reserva ? num(i.reserva.qty) : 0)), 0), 0);   /* v21.235: lo ya reservado en el producto no se cuenta dos veces */
     const reservadoOC = (ocId, key, ocI) => pendConf.filter(a => a.oc && a.oc.id === ocId && a.oc.columna === key).reduce((t, a) => t + (a.items || []).filter(i => i.ocI === ocI).reduce((s2, i) => s2 + num(i.cantidad), 0), 0);
-    /** v21.229: dónde más hay stock de un producto (otras bodegas), por nombre normalizado o ID de Mercado Público. */
-    function enOtras(nombre, codigo) {
+    /** v21.229 / v21.276: dónde más hay stock de un producto (otras bodegas distintas de la suya), por nombre normalizado o ID de Mercado Público. */
+    function enOtras(nombre, codigo, excluirBodega) {
         const n = normN(nombre), c = String(codigo || ''), m = new Map();
-        global.filter(g => g.bodega !== String(borrador.origen || '').trim() && (g.n === n || (c && /^\d{5,}$/.test(c) && g.cod === c))).forEach(g => m.set(g.bodega, (m.get(g.bodega) || 0) + g.q));
+        const excl = String(excluirBodega != null ? excluirBodega : (borrador.origen || '')).trim();
+        global.filter(g => g.bodega !== excl && (g.n === n || (c && /^\d{5,}$/.test(c) && g.cod === c))).forEach(g => m.set(g.bodega, (m.get(g.bodega) || 0) + g.q));
         return [...m.entries()].map(([bodega, q]) => ({ bodega, q })).sort((a, b) => b.q - a.q);
     }
     /* v21.233: confirmaciones con la ventana del sitio (al centro, con la marca), nunca el cuadro de Chrome */
     const preg = (o) => (window.SAR_Progreso && window.SAR_Progreso.confirmar ? window.SAR_Progreso.confirmar(o) : Promise.resolve(window.confirm(String(o.titulo || '') + '\n\n' + String(o.texto || '').replace(/<[^>]+>/g, ''))));
     const pedirTx = (o) => (window.SAR_Progreso && window.SAR_Progreso.pedir ? window.SAR_Progreso.pedir(o) : Promise.resolve(window.prompt(String(o.titulo || ''), o.valor || '')));
-    const otrasHTML = (o) => o.length ? `<span class="act-otra"><i class="ph-bold ph-warning"></i> Hay ${o.map(x => `<b>${x.q}</b> en ${esc(x.bodega)}`).join(', ')}</span> <button type="button" class="btn btn-outline btn-sm act-cambia" data-cambia="${esc(o[0].bodega)}">Usar ${esc(o[0].bodega)}</button>` : '';
+    const otrasHTML = (o, idx) => o.length ? `<span class="act-otra"><i class="ph-bold ph-warning"></i> Hay ${o.map(x => `<b>${x.q}</b> en ${esc(x.bodega)}`).join(', ')}</span> ` + o.map(x => `<button type="button" class="btn btn-outline btn-sm act-cambia" data-cambia="${esc(x.bodega)}"${idx != null ? ` data-k="${idx}"` : ''}>Usar ${esc(x.bodega)}</button>`).join(' ') : '';
     async function cargarStock() {
         stock = [];
         await cargarPendConf();
@@ -278,13 +290,13 @@
         for (const i of items) if (i.id && num(i.cantidad) > 0 && !m.has(i.id)) { const ref = f.doc(f.collection(db(), 'Insumos'), i.id), sn = await tx.get(ref); m.set(i.id, { ref, d: sn.exists() ? sn.data() : null }); }
         return m;
     }
-    /** Calcula la reserva de cada línea (el mismo producto en dos líneas se reserva sobre lo que va quedando). */
+    /** Calcula la reserva de cada línea (el mismo producto en dos líneas se reserva sobre lo que va quedando; cada ítem respeta su propia bodega). */
     function planReserva(rs, items, origen, numero, legadoDe) {
         const vivo = new Map(), porItem = items.map(() => null);
         items.forEach((i, k) => {
             const e = i.id && rs.get(i.id); if (!e || !e.d) return;
-            const d = vivo.get(i.id) || e.d;
-            if ((d.location || '') !== origen) throw new Error(`${i.nombre} ya no está en ${origen}: actualiza la pantalla.`);
+            const d = vivo.get(i.id) || e.d, bod = bodegaDe(i, origen);
+            if ((d.location || '') !== bod) throw new Error(`${i.nombre} ya no está en ${bod}: actualiza la pantalla.`);
             if (d.status === 'CUARENTENA') throw new Error(`${i.nombre} está en CUARENTENA.`);
             const rr = reservarEn(d, i.cantidad, vivo.has(i.id) ? 0 : (legadoDe ? legadoDe(i) : 0));
             if (d.controlado && rr.r < num(i.cantidad)) throw new Error(`${i.nombre} es medicamento controlado: no puede entregarse sin stock en sistema.`);
@@ -297,10 +309,11 @@
         const f = fs(), hechos = new Set();
         items.forEach((i, k) => {
             const res = plan.porItem[k]; if (!res) return;
+            const dVivo = plan.vivo.get(i.id), bod = (dVivo && dVivo.location) || bodegaDe(i, origen);
             tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: i.nombre, item: i.nombre, quantity: res.qty, type: 'RESERVA_ACTA', delta: -res.qty, user: usuario, date: f.serverTimestamp(), document: numero, actaId: numero,
-                batch: res.lotes.length === 1 ? res.lotes[0].batch : 'MULTI-LOTE', lotes: res.lotes, origin: origen, dest: centro, idInsumoOrigen: i.id, observacion: `Reservado para el acta ${numero} (por confirmar con el acta firmada)` });
+                batch: res.lotes.length === 1 ? res.lotes[0].batch : 'MULTI-LOTE', lotes: res.lotes, origin: bod, dest: centro, idInsumoOrigen: i.id, observacion: `Reservado para el acta ${numero} desde ${bod} (por confirmar con el acta firmada)` });
             if (hechos.has(i.id)) return; hechos.add(i.id);
-            const d = plan.vivo.get(i.id), prox = (d.batches || [])[0], limite = num(d.criticalLimit || d.stock_minimo || 50);
+            const d = dVivo, prox = (d.batches || [])[0], limite = num(d.criticalLimit || d.stock_minimo || 50);
             tx.update(f.doc(f.collection(db(), 'Insumos'), i.id), { quantity: d.quantity, batches: d.batches, reservado: d.reservado, reservas: d.reservas, isCritical: d.quantity <= limite, ...(prox ? { batch: prox.batch, expirationDate: prox.expirationDate || '' } : {}), updatedAt: f.serverTimestamp() });
         });
     }
@@ -356,11 +369,12 @@
                hasta confirmar la entrega con el acta firmada (ahí se cierra) o anular el acta (ahí vuelve). Todo en esta misma transacción. */
             const rs = await leerReserva(tx, items);
             const plan = planReserva(rs, items, b.origen, numero, (i) => reservadoItem(i.id, i.nombre));
-            const itemsActa = items.map((i, k) => ({ ...(plan.porItem[k] ? { reserva: plan.porItem[k] } : {}), id: i.id || null, nombre: String(i.nombre || '').toUpperCase() === i.nombre ? i.nombre : i.nombre, cantidad: num(i.cantidad), ...(i.manual && !i.id ? { manual: true } : {}), ...(i.codigo ? { codigoMP: String(i.codigo) } : {}), ...(!b.oc && num(i.solicitado) > num(i.cantidad) ? { solicitado: num(i.solicitado), entregadoTotal: num(i.cantidad) } : {}), ...(i.fisico && normN(i.fisico) !== normN(i.nombre) ? { entregaFisica: { nombre: String(i.fisico).trim().toUpperCase(), ...(codDe(i.fisico) ? { codigoMP: codDe(i.fisico) } : {}) } } : {}), ...(b.oc ? { ocI: i.ocI, solicitado: i.solicitado, entregadoTotal: i.entregadoTotal } : {}), ...(i.distI != null ? { distI: i.distI } : {}) }));
+            const resBod = resumenBodegas(items, b.origen);
+            const itemsActa = items.map((i, k) => ({ ...(plan.porItem[k] ? { reserva: plan.porItem[k] } : {}), id: i.id || null, nombre: String(i.nombre || '').toUpperCase() === i.nombre ? i.nombre : i.nombre, bodega: bodegaDe(i, b.origen), cantidad: num(i.cantidad), ...(i.manual && !i.id ? { manual: true } : {}), ...(i.codigo ? { codigoMP: String(i.codigo) } : {}), ...(!b.oc && num(i.solicitado) > num(i.cantidad) ? { solicitado: num(i.solicitado), entregadoTotal: num(i.cantidad) } : {}), ...(i.fisico && normN(i.fisico) !== normN(i.nombre) ? { entregaFisica: { nombre: String(i.fisico).trim().toUpperCase(), ...(codDe(i.fisico) ? { codigoMP: codDe(i.fisico) } : {}) } } : {}), ...(b.oc ? { ocI: i.ocI, solicitado: i.solicitado, entregadoTotal: i.entregadoTotal } : {}), ...(i.distI != null ? { distI: i.distI } : {}) }));
             tx.set(ctrRef, { ultimo: n, anio, updatedAt: f.serverTimestamp() });
             escribirReserva(tx, plan, items, numero, b.origen, b.centro.trim(), usuario);
             const acta = {
-                numero, fecha, centro: b.centro.trim(), bodegaOrigen: b.origen, estado: 'EMITIDA', stockDescontado: false, conSobregiro: false, reservaStock: true,
+                numero, fecha, centro: b.centro.trim(), bodegaOrigen: resBod.texto, ...(resBod.lista.length > 1 ? { bodegasOrigen: resBod.lista } : {}), estado: 'EMITIDA', stockDescontado: false, conSobregiro: false, reservaStock: true,
                 confirmacion: { estado: 'PENDIENTE' },
                 items: itemsActa, pendientes: [...b.pendientes.map(p => ({ nombre: p.nombre, cantidad: num(p.cantidad), ...(p.codigoMP ? { codigoMP: String(p.codigoMP) } : {}) })), ...autoPend],
                 documentos: b.documentos.map(d => ({ tipo: d.tipo, numero: d.numero, detalle: d.detalle || '' })),
@@ -410,8 +424,9 @@
     async function confirmarEntrega(a, file, usuario) {
         const f = fs();
         const resp = await guardarRespaldo(a.numero, file, usuario, a.oc && a.oc.id);
-        const b = { origen: a.bodegaOrigen, centro: a.centro, pendientes: a.pendientes || [], documentos: a.documentos || [], recibe: a.recibe || {}, oc: a.oc && a.oc.id ? { id: a.oc.id, key: a.oc.columna, numeroOC: a.oc.numeroOC, memo: a.oc.memo, cdp: a.oc.cdp } : null,
-            items: (a.items || []).map(i => ({ id: i.id || null, manual: !i.id, nombre: i.nombre, codigo: i.codigoMP || '', cantidad: num(i.cantidad), ...(a.reservaStock && i.reserva && num(i.reserva.qty) > 0 ? { reserva: i.reserva } : {}), solicitado: num(i.solicitado), ocI: i.ocI, ...(i.distI != null ? { distI: i.distI } : {}), fisico: i.entregaFisica ? i.entregaFisica.nombre : '' })), dist: a.distribucion || null };
+        const origDef = (Array.isArray(a.bodegasOrigen) && a.bodegasOrigen[0]) || a.bodegaOrigen;
+        const b = { origen: origDef, centro: a.centro, pendientes: a.pendientes || [], documentos: a.documentos || [], recibe: a.recibe || {}, oc: a.oc && a.oc.id ? { id: a.oc.id, key: a.oc.columna, numeroOC: a.oc.numeroOC, memo: a.oc.memo, cdp: a.oc.cdp } : null,
+            items: (a.items || []).map(i => ({ id: i.id || null, manual: !i.id, nombre: i.nombre, bodega: i.bodega || origDef, codigo: i.codigoMP || '', cantidad: num(i.cantidad), ...(a.reservaStock && i.reserva && num(i.reserva.qty) > 0 ? { reserva: i.reserva } : {}), solicitado: num(i.solicitado), ocI: i.ocI, ...(i.distI != null ? { distI: i.distI } : {}), fisico: i.entregaFisica ? i.entregaFisica.nombre : '' })), dist: a.distribucion || null };
         return emitir(b, usuario, { numero: a.numero, respaldo: resp });
     }
     async function subirFirmada(a, file, usuario) {
@@ -434,26 +449,26 @@
         const fecha = opc.historica ? opc.historica.fecha : new Date().toISOString().slice(0, 10);
         const numHist = opc.historica ? 'HIS-' + String(opc.historica.folio || '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '') : '';
         if (opc.historica && (numHist === 'HIS-' || !/^\d{4}-\d{2}-\d{2}$/.test(fecha))) throw new Error('Indica el N° de tu acta anterior y su fecha original.');
-        // Productos manuales: si ya existe uno con ese nombre en la bodega se usa; si no, se crea como PROVISIONAL.
-        const items = b.items.map(i => ({ ...i }));
-        /* v21.228: se compara el nombre sin tildes, mayúsculas ni espacios de más contra TODOS los productos de la bodega
-           (antes, por name_lowercase exacto: cada acta sin stock creaba un provisional nuevo del mismo producto y la deuda quedaba repartida) */
-        let locales = null; const nn = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+        // Productos manuales: si ya existe uno con ese nombre en su bodega se usa; si no, se crea como PROVISIONAL en esa bodega.
+        const items = b.items.map(i => ({ ...i, bodega: bodegaDe(i, b.origen) }));
+        /* v21.228 / v21.276: se compara el nombre sin tildes, mayúsculas ni espacios de más contra los productos de la bodega de cada ítem */
+        const localesPorBod = new Map(); const nn = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
         for (const i of items) {
             if (i.id || !i.manual) continue;
-            const nombre = String(i.nombre || '').trim().replace(/\s+/g, ' ').toUpperCase();
-            if (!locales) { locales = []; try { const sl = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('location', '==', b.origen), f.limit(5000))); sl.forEach(x => locales.push({ id: x.id, d: x.data() })); } catch (e) { /* sigue con la búsqueda exacta */ } }
+            const nombre = String(i.nombre || '').trim().replace(/\s+/g, ' ').toUpperCase(), bod = bodegaDe(i, b.origen);
+            if (!localesPorBod.has(bod)) { const loc = []; try { const sl = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('location', '==', bod), f.limit(5000))); sl.forEach(x => loc.push({ id: x.id, d: x.data() })); } catch (e) { /* sigue con la búsqueda exacta */ } localesPorBod.set(bod, loc); }
+            const locales = localesPorBod.get(bod) || [];
             const igual = locales.filter(x => nn(x.d.name) === nn(nombre) && x.d.status !== 'CUARENTENA').sort((a, c) => (Number(c.d.quantity) || 0) - (Number(a.d.quantity) || 0) || (a.d.provisional ? 1 : 0) - (c.d.provisional ? 1 : 0))[0];
-            if (igual) { i.id = igual.id; i.nombre = igual.d.name || nombre; continue; }
-            const q = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('name_lowercase', '==', nombre.toLowerCase()), f.where('location', '==', b.origen), f.limit(1)));
-            let q2 = null; if (q.empty && i.codigo) q2 = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('codigoMP', '==', String(i.codigo)), f.where('location', '==', b.origen), f.limit(1)));
-            if (!q.empty) { i.id = q.docs[0].id; i.nombre = q.docs[0].data().name || nombre; }
-            else if (q2 && !q2.empty) { i.id = q2.docs[0].id; i.nombre = q2.docs[0].data().name || nombre; }
-            else { i.nuevo = true; i.nombre = nombre; }
+            if (igual) { i.id = igual.id; i.nombre = igual.d.name || nombre; i.bodega = igual.d.location || bod; continue; }
+            const q = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('name_lowercase', '==', nombre.toLowerCase()), f.where('location', '==', bod), f.limit(1)));
+            let q2 = null; if (q.empty && i.codigo) q2 = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('codigoMP', '==', String(i.codigo)), f.where('location', '==', bod), f.limit(1)));
+            if (!q.empty) { i.id = q.docs[0].id; i.nombre = q.docs[0].data().name || nombre; i.bodega = q.docs[0].data().location || bod; }
+            else if (q2 && !q2.empty) { i.id = q2.docs[0].id; i.nombre = q2.docs[0].data().name || nombre; i.bodega = q2.docs[0].data().location || bod; }
+            else { i.nuevo = true; i.nombre = nombre; i.bodega = bod; }
         }
         /* v21.230: el mismo producto puede venir en dos líneas (p. ej. dos líneas de una OC con el mismo insumo): se planifica en orden
            sobre el stock que va quedando y se escribe UNA vez por producto con el resultado acumulado (antes un descuento pisaba al otro). */
-        const claveIt = (i) => i.nuevo ? 'n:' + String(i.nombre || '').toLowerCase().replace(/\s+/g, ' ').trim() : 'i:' + i.id, refPorClave = new Map();
+        const claveIt = (i) => i.nuevo ? 'n:' + bodegaDe(i, b.origen).toLowerCase() + ':' + String(i.nombre || '').toLowerCase().replace(/\s+/g, ' ').trim() : 'i:' + i.id, refPorClave = new Map();
         const refs = items.map(i => ({ i, clave: claveIt(i), ref: refPorClave.get(claveIt(i)) || (refPorClave.set(claveIt(i), i.nuevo ? f.doc(f.collection(db(), 'Insumos')) : f.doc(f.collection(db(), 'Insumos'), i.id)), refPorClave.get(claveIt(i))), hist: f.doc(f.collection(db(), 'Historial_Movimientos')), histC: f.doc(f.collection(db(), 'Historial_Movimientos')) }));
         const resultado = await f.runTransaction(db(), async (tx) => {
             let n = 0, numero = opc.numero || numHist;
@@ -484,12 +499,12 @@
                 autoPend = ocLineas.map((l, idx) => ({ idx, l, p: num(l.dist && l.dist[b.oc.key]) - num(l.entregado[b.oc.key]) }))
                     .filter(x => !yaEn.has(x.idx) && x.p > 0).map(x => ({ nombre: String(x.l.descripcion || '').toUpperCase(), cantidad: x.p }));
             }
-            const base = (r) => ({ ...(r.i.codigo ? { codigoMP: String(r.i.codigo) } : {}), name: r.i.nombre, name_lowercase: String(r.i.nombre).toLowerCase(), location: b.origen, quantity: 0, batches: [], sobregiro: 0, provisional: true, category: 'Provisional', criticalLimit: 50, isCritical: true, unitPrice: 0, status: 'ACTIVO', createdAt: f.serverTimestamp(), createdBy: usuario });
+            const base = (r) => ({ ...(r.i.codigo ? { codigoMP: String(r.i.codigo) } : {}), name: r.i.nombre, name_lowercase: String(r.i.nombre).toLowerCase(), location: bodegaDe(r.i, b.origen), quantity: 0, batches: [], sobregiro: 0, provisional: true, category: 'Provisional', criticalLimit: 50, isCritical: true, unitPrice: 0, status: 'ACTIVO', createdAt: f.serverTimestamp(), createdBy: usuario });
             const datos = refs.map((r, k) => {
                 if (r.i.nuevo) return base(r);
                 if (!snaps[k].exists()) throw new Error(`${r.i.nombre} ya no existe en la bodega.`);
-                const d = snaps[k].data();
-                if ((d.location || '') !== b.origen) throw new Error(`${r.i.nombre} cambió de bodega.`);
+                const d = snaps[k].data(), bod = bodegaDe(r.i, b.origen);
+                if ((d.location || '') !== bod) throw new Error(`${r.i.nombre} cambió de bodega (se esperaba ${bod}, figura en ${d.location || 'sin bodega'}).`);
                 if (d.status === 'CUARENTENA') throw new Error(`${r.i.nombre} está en CUARENTENA.`);
                 return d;
             });
@@ -509,24 +524,25 @@
                 if (datos[k].controlado && p.faltante > 0) throw new Error(`${r.i.nombre} es medicamento controlado: no puede entregarse sin stock en sistema.`);
                 return { ...p, rv, resto, usadosTot: [...(rv > 0 ? (r.i.reserva.lotes || []) : []), ...p.usados], reservado, reservas, conRes };
             });
-            const itemsActa = refs.map((r, k) => ({ id: r.ref.id, nombre: r.i.nombre, cantidad: num(r.i.cantidad), lotes: calc[k].usadosTot, sinRespaldo: calc[k].faltante, ...(datos[k].codigoMP || r.i.codigo ? { codigoMP: String(datos[k].codigoMP || r.i.codigo) } : {}), ...(!b.oc && num(r.i.solicitado) > num(r.i.cantidad) ? { solicitado: num(r.i.solicitado), entregadoTotal: num(r.i.cantidad) } : {}), ...(r.i.nuevo ? { provisional: true } : {}), ...(r.i.fisico && normN(r.i.fisico) !== normN(r.i.nombre) ? { entregaFisica: { nombre: String(r.i.fisico).trim().toUpperCase(), ...(codDe(r.i.fisico) ? { codigoMP: codDe(r.i.fisico) } : {}) } } : {}), ...(b.oc ? { ocI: r.i.ocI, solicitado: r.i.solicitado, entregadoTotal: r.i.entregadoTotal } : {}), ...(r.i.distI != null ? { distI: r.i.distI } : {}) }));
+            const itemsActa = refs.map((r, k) => ({ id: r.ref.id, nombre: r.i.nombre, bodega: datos[k].location || bodegaDe(r.i, b.origen), cantidad: num(r.i.cantidad), lotes: calc[k].usadosTot, sinRespaldo: calc[k].faltante, ...(datos[k].codigoMP || r.i.codigo ? { codigoMP: String(datos[k].codigoMP || r.i.codigo) } : {}), ...(!b.oc && num(r.i.solicitado) > num(r.i.cantidad) ? { solicitado: num(r.i.solicitado), entregadoTotal: num(r.i.cantidad) } : {}), ...(r.i.nuevo ? { provisional: true } : {}), ...(r.i.fisico && normN(r.i.fisico) !== normN(r.i.nombre) ? { entregaFisica: { nombre: String(r.i.fisico).trim().toUpperCase(), ...(codDe(r.i.fisico) ? { codigoMP: codDe(r.i.fisico) } : {}) } } : {}), ...(b.oc ? { ocI: r.i.ocI, solicitado: r.i.solicitado, entregadoTotal: r.i.entregadoTotal } : {}), ...(r.i.distI != null ? { distI: r.i.distI } : {}) }));
             refs.forEach((r, k) => {
-                const d = datos[k], c = calc[k];
+                const d = datos[k], c = calc[k], bod = d.location || bodegaDe(r.i, b.origen);
                 const limite = num(d.criticalLimit || d.stock_minimo || 50);
                 const prox = c.batches[0];
                 const cambios = { ...(r.i.codigoNuevo && r.i.codigo && !d.codigoMP ? { codigoMP: String(r.i.codigo) } : {}), quantity: c.quantity, batches: c.batches, sobregiro: c.sobregiro, sobregiroDetalle: c.sobregiroDetalle, ...(c.conRes ? { reservado: c.reservado, reservas: c.reservas } : {}), isCritical: c.quantity <= limite, ...(prox ? { batch: prox.batch, expirationDate: prox.expirationDate || '' } : {}), updatedAt: f.serverTimestamp() };
                 if (ultimo.get(r.clave) === k) { if (r.i.nuevo) tx.set(r.ref, { ...d, ...cambios }); else tx.update(r.ref, cambios); }   // una escritura por producto, con lo acumulado
-                c.cubiertas.forEach(cu => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name, quantity: cu.qty, type: 'CUADRE_SOBREGIRO', delta: -num(cu.qty), user: usuario, date: f.serverTimestamp(), document: numero, batch: 'MULTI-LOTE', origin: b.origen, idInsumoOrigen: r.ref.id, observacion: `Cuadre automático al ${opc.numero ? 'confirmar' : 'emitir'} ${numero}: ${cu.qty} u. del acta ${cu.acta} ya estaban entregadas sin respaldo`, actaId: cu.acta, cuadradoPor: numero }));
+                c.cubiertas.forEach(cu => tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name, quantity: cu.qty, type: 'CUADRE_SOBREGIRO', delta: -num(cu.qty), user: usuario, date: f.serverTimestamp(), document: numero, batch: 'MULTI-LOTE', origin: bod, idInsumoOrigen: r.ref.id, observacion: `Cuadre automático al ${opc.numero ? 'confirmar' : 'emitir'} ${numero}: ${cu.qty} u. del acta ${cu.acta} ya estaban entregadas sin respaldo`, actaId: cu.acta, cuadradoPor: numero }));
                 tx.set(r.hist, {
                     insumoName: d.name, quantity: num(r.i.cantidad), type: 'ENTREGA_ACTA', delta: -(c.resto - num(c.faltante)), ...(c.rv > 0 ? { reservaPrevia: c.rv } : {}), user: usuario, date: f.serverTimestamp(), document: numero,
-                    batch: c.usadosTot.length === 1 ? c.usadosTot[0].batch : (c.usadosTot.length ? 'MULTI-LOTE' : 'SIN-RESPALDO'), origin: b.origen, dest: b.centro, lotes: c.usadosTot, ...(opc.historica ? { fechaDocumento: fecha, historica: true } : {}),
+                    batch: c.usadosTot.length === 1 ? c.usadosTot[0].batch : (c.usadosTot.length ? 'MULTI-LOTE' : 'SIN-RESPALDO'), origin: bod, dest: b.centro, lotes: c.usadosTot, ...(opc.historica ? { fechaDocumento: fecha, historica: true } : {}),
                     idInsumoOrigen: r.ref.id, sinRespaldo: c.faltante,
                     observacion: `${opc.historica ? 'Acta histórica (anterior al sistema, del ' + fecha + ') ' : 'Acta de entrega '}${numero}${c.rv > 0 ? ` · ${c.rv} u. ya estaban reservadas desde la emisión` : ''}${c.faltante > 0 ? ` · ${c.faltante} u. sin respaldo en sistema (sobregiro)` : ''}${r.i.nuevo ? ' · insumo provisional' : ''}`, actaId: numero
                 });
             });
             if (!opc.numero && !opc.historica) tx.set(ctrRef, { ultimo: n, anio, updatedAt: f.serverTimestamp() });
+            const resBod = resumenBodegas(itemsActa, b.origen);
             const acta = {
-                numero, fecha, centro: b.centro.trim(), bodegaOrigen: b.origen, estado: 'EMITIDA', stockDescontado: true,
+                numero, fecha, centro: b.centro.trim(), bodegaOrigen: resBod.texto, ...(resBod.lista.length > 1 ? { bodegasOrigen: resBod.lista } : {}), estado: 'EMITIDA', stockDescontado: true,
                 conSobregiro: itemsActa.some(i => i.sinRespaldo > 0),
                 items: itemsActa, pendientes: [...b.pendientes.map(p => ({ nombre: p.nombre, cantidad: num(p.cantidad), ...(p.codigoMP ? { codigoMP: String(p.codigoMP) } : {}) })), ...autoPend],
                 documentos: b.documentos.map(d => ({ tipo: d.tipo, numero: d.numero, detalle: d.detalle || '' })),
@@ -536,7 +552,7 @@
             };
             if (b.oc) acta.oc = { id: b.oc.id, numeroOC: b.oc.numeroOC || '', columna: b.oc.key, memo: b.oc.memo || '', cdp: b.oc.cdp || '' };
             if (b.dist && b.dist.id) acta.distribucion = { id: b.dist.id, correlativo: b.dist.correlativo || '', centro: b.dist.centro || '', ci: b.dist.ci == null ? null : b.dist.ci };
-            if (opc.numero) tx.update(actaRef, { items: itemsActa, stockDescontado: true, conSobregiro: acta.conSobregiro, confirmacion: { estado: 'CONFIRMADA', fecha: fecha, por: usuario, ...(opc.respaldo ? { respaldo: opc.respaldo } : {}) }, respaldo: opc.respaldo || null, confirmadaEn: f.serverTimestamp() });
+            if (opc.numero) tx.update(actaRef, { items: itemsActa, bodegaOrigen: acta.bodegaOrigen, ...(acta.bodegasOrigen ? { bodegasOrigen: acta.bodegasOrigen } : {}), stockDescontado: true, conSobregiro: acta.conSobregiro, confirmacion: { estado: 'CONFIRMADA', fecha: fecha, por: usuario, ...(opc.respaldo ? { respaldo: opc.respaldo } : {}) }, respaldo: opc.respaldo || null, confirmadaEn: f.serverTimestamp() });
             else tx.set(actaRef, acta);
             if (b.oc) {
                 tx.update(ocRef, { lineas: ocLineas, actualizadoEn: f.serverTimestamp() });
@@ -593,7 +609,7 @@
                     const d = vivoL.get(i.id) || e.d, res = restaurarLotes(d, i.reserva.lotes || [{ batch: 'S/L', used: num(i.reserva.qty), expirationDate: '' }]);
                     vivoL.set(i.id, { ...d, quantity: res.quantity, batches: res.batches, reservado: Math.max(0, num(d.reservado) - num(i.reserva.qty)), reservas: sinReserva(d.reservas, numero) });
                     tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name || i.nombre, item: d.name || i.nombre, quantity: num(i.reserva.qty), type: 'LIBERA_RESERVA', delta: num(i.reserva.qty), user: usuario, date: f.serverTimestamp(), document: numero, actaId: numero,
-                        batch: (i.reserva.lotes || []).length === 1 ? i.reserva.lotes[0].batch : 'MULTI-LOTE', lotes: i.reserva.lotes || [], origin: a.centro || '', dest: a.bodegaOrigen, idInsumoDestino: i.id, observacion: `Acta ${numero} eliminada antes de entregarse: vuelve al stock lo reservado. Motivo: ${motivo}` });
+                        batch: (i.reserva.lotes || []).length === 1 ? i.reserva.lotes[0].batch : 'MULTI-LOTE', lotes: i.reserva.lotes || [], origin: a.centro || '', dest: d.location || i.bodega || a.bodegaOrigen, idInsumoDestino: i.id, observacion: `Acta ${numero} eliminada antes de entregarse: vuelve al stock lo reservado. Motivo: ${motivo}` });
                 });
                 vivoL.forEach((d, id) => { const limite = num(d.criticalLimit || d.stock_minimo || 50); tx.update(leidos.get(id).ref, { quantity: d.quantity, batches: d.batches, reservado: d.reservado, reservas: d.reservas, isCritical: d.quantity <= limite, updatedAt: f.serverTimestamp() }); });
                 tx.update(actaRef, { estado: 'ANULADA', stockDescontado: false, anuladaEn: f.serverTimestamp(), anuladaPor: usuario, anulacionMotivo: motivo }); return;
@@ -614,7 +630,7 @@
                 if (ultimoA.get(r.i.id) === k) tx.update(r.ref, { quantity: res.quantity, batches: res.batches, sobregiro: res.sobregiro, sobregiroDetalle: res.sobregiroDetalle, isCritical: res.quantity <= limite, updatedAt: f.serverTimestamp() });
                 tx.set(r.hist, {
                     insumoName: d.name, quantity: num(r.i.cantidad), type: 'ANULACION_ACTA', devueltoStock: res.quantity - num(d.quantity), delta: res.quantity - num(d.quantity), user: usuario, date: f.serverTimestamp(), document: numero,
-                    batch: 'MULTI-LOTE', origin: a.centro, dest: a.bodegaOrigen, lotes: r.i.lotes || [], idInsumoDestino: r.i.id,
+                    batch: 'MULTI-LOTE', origin: a.centro, dest: d.location || r.i.bodega || a.bodegaOrigen, lotes: r.i.lotes || [], idInsumoDestino: r.i.id,
                     observacion: `Anulación de acta ${numero}: ${motivo}`, actaId: numero
                 });
             });
@@ -686,16 +702,21 @@
             global.forEach(g => { if (vistos.has(g.n) || g.bodega === String(borrador.origen || '').trim() || !(g.nombre.toLowerCase().includes(q) || g.cod.includes(q))) return; vistos.add(g.n); out.push({ ci: -1, gi: out.length, nombre: String(g.nombre).toUpperCase(), codigo: g.cod, imagen: '', derivado: '' }); });   /* v21.229: también lo que está en otras bodegas */
             return out.slice(0, 20);
         })();
-        const yaCat = (x) => borrador.items.some(i => i.manual && (normN(i.nombre) === normN(x.nombre) || (x.codigo && i.codigo === x.codigo)));
+        const yaCat = (x) => { const o = enOtras(x.nombre, x.codigo, borrador.origen), bodObj = o.length ? o[0].bodega : borrador.origen; return borrador.items.some(i => bodegaDe(i, borrador.origen) === bodObj && (normN(i.nombre) === normN(x.nombre) || (x.codigo && i.codigo === x.codigo))); };
         const esCero = (i) => num(i.cantidad) === 0 && num(i.solicitado) > 0;   // no se entrega nada: queda pendiente del centro
         const pares = borrador.items.map((i, k) => [i, k]);
         const entregan = pares.filter(([i]) => !esCero(i)), enCero = pares.filter(([i]) => esCero(i));
-        const filaItem = (i, k) => `<div class="act-fila"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(i.nombre, { codigo: i.codigo }) : ''}${esc(i.nombre)}${i.manual ? ' <small>(manual · provisional)</small>' : ''}<small>${i.codigo ? '<b>ID ' + esc(i.codigo) + '</b> · ' : (i.manual ? '' : `<input class="act-cod" data-k="${k}" inputmode="numeric" placeholder="Sin ID: escríbelo aquí (opcional)" aria-label="ID de Mercado Público"> `)}Disponible: ${num(i.stock)}${num(i.solicitado) > num(i.cantidad) ? ` · pedido ${num(i.solicitado)} · <b>pendiente ${num(i.solicitado) - num(i.cantidad)}</b>` : ''}${num(i.cantidad) > num(i.stock) ? ` · <span class="act-sin">sin respaldo: ${num(i.cantidad) - num(i.stock)}</span>` : ''}${num(i.cantidad) > num(i.stock) ? (() => { const o = enOtras(i.nombre, i.codigo); return o.length ? '<br>' + otrasHTML(o) : ''; })() : ''}</small>${fotoDe(i, k)}<small class="act-fis-w"><input class="act-fis" data-k="${k}" list="act-fisl" value="${esc(i.fisico || '')}" placeholder="¿Entregas físicamente otro similar? Escríbelo (solo interno, no sale en el acta)" aria-label="Producto que se entrega físicamente"></small></div>
+        const resBodBorr = resumenBodegas(borrador.items, borrador.origen);
+        const bodConteo = (() => { const m = new Map(); entregan.forEach(([i]) => { const b = bodegaDe(i, borrador.origen); if (b) m.set(b, (m.get(b) || 0) + 1); }); return [...m.entries()]; })();
+        const filaItem = (i, k) => {
+            const bod = bodegaDe(i, borrador.origen);
+            return `<div class="act-fila"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(i.nombre, { codigo: i.codigo }) : ''}${esc(i.nombre)}${i.manual ? ' <small>(manual · provisional)</small>' : ''}<small>${bod ? `<span class="act-bod-tag">${esc(bod)}</span> ` : ''}${i.codigo ? '<b>ID ' + esc(i.codigo) + '</b> · ' : (i.manual ? '' : `<input class="act-cod" data-k="${k}" inputmode="numeric" placeholder="Sin ID: escríbelo aquí (opcional)" aria-label="ID de Mercado Público"> `)}Disponible: ${num(i.stock)}${num(i.solicitado) > num(i.cantidad) ? ` · pedido ${num(i.solicitado)} · <b>pendiente ${num(i.solicitado) - num(i.cantidad)}</b>` : ''}${num(i.cantidad) > num(i.stock) ? ` · <span class="act-sin">sin respaldo: ${num(i.cantidad) - num(i.stock)}</span>` : ''}${num(i.cantidad) > num(i.stock) ? (() => { const o = enOtras(i.nombre, i.codigo, bod); return o.length ? '<br>' + otrasHTML(o, k) : ''; })() : ''}</small>${fotoDe(i, k)}<small class="act-fis-w"><input class="act-fis" data-k="${k}" list="act-fisl" value="${esc(i.fisico || '')}" placeholder="¿Entregas físicamente otro similar? Escríbelo (solo interno, no sale en el acta)" aria-label="Producto que se entrega físicamente"></small></div>
                 <input type="number" min="0" value="${num(i.solicitado) > num(i.cantidad) ? num(i.solicitado) : ''}" class="act-qty act-sedit" data-k="${k}" placeholder="Pedido" aria-label="Cantidad pedida"><input type="number" min="0" value="${i.cantidad}" class="act-qty act-edit" data-k="${k}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-del" data-k="${k}" aria-label="Quitar">✕</button></div>`;
+        };
         const errores = validarBorrador(borrador);
         r.innerHTML = `
         <div class="page-header mb-24"><div class="page-title"><h2>Actas de entrega</h2>
-            <p>Arma el acta desde el stock de la bodega. Al emitirla queda con su número; el stock sale cuando subes el acta firmada.</p></div>
+            <p>Arma el acta sumando productos de una o varias bodegas. Al emitirla queda con su número; el stock sale de cada bodega al subir el acta firmada.</p></div>
 </div>
         <nav class="act-tabs" role="tablist" aria-label="Secciones de actas de entrega"${tab === 'seguimiento' ? ' hidden' : ''}>${TABS.map(t => `<button type="button" role="tab" class="act-tab${t[0] === tab ? ' active' : ''}" data-tab="${t[0]}" aria-selected="${t[0] === tab}"><i class="ph-bold ${t[1]}"></i><span>${t[2]}</span>${t[0] === 'emitidas' ? `<em>${historial.length}</em>` : ''}</button>`).join('')}</nav>
         <div data-act-tab="emitir"${tab === 'emitir' ? '' : ' hidden'}>
@@ -703,7 +724,7 @@
         <div class="act-grid">
           <div class="act-col">
             <h3 class="act-h">1 · Stock disponible</h3>
-            <label class="act-l">Bodega de origen
+            <label class="act-l">Bodega a consultar <small style="font-weight:400;color:var(--text-muted);">(puedes cambiar de bodega para agregar productos de varias a la misma acta)</small>
               <select id="act-origen"><option value="">— elegir —</option>${bodegas.map(b => `<option value="${esc(b.name)}"${b.name === borrador.origen ? ' selected' : ''}>${esc(b.name)}</option>`).join('')}</select></label>
             ${borrador.autoOrigen && borrador.autoOrigen.bodega === borrador.origen ? `<div class="act-auto" role="status"><i class="ph-bold ph-arrows-left-right" aria-hidden="true"></i><span>Origen elegido automáticamente: <b>${esc(borrador.origen)}</b> tiene el stock de ${esc(borrador.autoOrigen.producto)}.</span><span class="act-auto-b"><button type="button" class="btn btn-outline btn-sm act-auto-ok">Correcto</button>${borrador.autoOrigen.previa ? `<button type="button" class="btn btn-outline btn-sm act-auto-volver" data-volver="${esc(borrador.autoOrigen.previa)}">Volver a ${esc(borrador.autoOrigen.previa)}</button>` : ''}</span></div>` : ''}
             <input id="act-buscar" type="search" placeholder="Buscar por nombre o ID del producto…" value="${esc(busqueda)}" autocomplete="off">
@@ -718,8 +739,8 @@
             <div class="act-stock">${!borrador.origen ? '<p class="act-hint">Elige una bodega para ver su stock.</p>' : !lista.length ? '<p class="act-hint">Sin resultados. Si no está en el sistema, agrégalo a mano abajo.</p>' : lista.map(s => `
               <div class="act-fila${yaEsta(s.id) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(s.name, { codigo: s.codigo }) : ''}${esc(s.name)}${s.controlado ? ' <small>(controlado)</small>' : ''}${s.provisional ? ' <small>(provisional)</small>' : ''}<small>${s.codigo ? '<b>ID ' + esc(s.codigo) + '</b> · ' : '<span class="act-sin">sin ID</span> · '}${s.disp > 0 ? 'Disponible: ' + s.disp + (s.reserv > 0 ? ' · reservado en actas por confirmar: ' + s.reserv : '') : '<span class="act-sin">Sin stock en sistema</span>'}${s.sobregiro > 0 ? ' · sobregiro: ' + s.sobregiro : ''}</small></div>
                 ${yaEsta(s.id) ? '<span class="act-chip">agregado</span>' : `<input type="number" min="0" class="act-qty" data-sid="${esc(s.id)}" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input type="number" min="1" value="1" class="act-qty" data-qid="${esc(s.id)}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-add" data-id="${esc(s.id)}">Agregar</button>`}</div>`).join('')}
-              ${enCat.length ? '<p class="act-hint"><b>Sin stock en esta bodega</b> (del catálogo, registrados antes o en otras bodegas). Si está en otra bodega, al agregarlo el origen cambia solo a esa bodega; si no hay en ninguna, queda como manual · provisional (deuda):</p>' + enCat.map(x => `
-              <div class="act-fila${yaCat(x) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}${esc(x.nombre)} <small>(${x.derivado ? 'registrado en ' + esc(x.derivado) : 'catálogo'})</small><small>${x.codigo ? '<b>ID ' + esc(x.codigo) + '</b>' : '<span class="act-sin">sin ID</span>'} · <span class="act-sin">Sin stock en esta bodega</span>${(() => { const o = enOtras(x.nombre, x.codigo); return o.length ? '<br>' + otrasHTML(o) : ''; })()}</small></div>
+              ${enCat.length ? '<p class="act-hint"><b>Sin stock en esta bodega</b> (del catálogo, registrados antes o en otras bodegas). Si está en otra bodega, al agregarlo se toma automáticamente desde esa bodega sin alterar los demás productos del acta; si no hay en ninguna, queda como manual · provisional (deuda):</p>' + enCat.map(x => `
+              <div class="act-fila${yaCat(x) ? ' act-ya' : ''}"><div class="act-fn">${window.SAR_Imagenes ? window.SAR_Imagenes.thumb(x.nombre, { codigo: x.codigo }) : ''}${esc(x.nombre)} <small>(${x.derivado ? 'registrado en ' + esc(x.derivado) : 'catálogo'})</small><small>${x.codigo ? '<b>ID ' + esc(x.codigo) + '</b>' : '<span class="act-sin">sin ID</span>'} · <span class="act-sin">Sin stock en esta bodega</span>${(() => { const o = enOtras(x.nombre, x.codigo, borrador.origen); return o.length ? '<br>' + otrasHTML(o) : ''; })()}</small></div>
                 ${yaCat(x) ? '<span class="act-chip">agregado</span>' : (() => { const k = x.ci < 0 ? 'g' + x.gi : x.ci, dat = x.ci < 0 ? `data-gi="${x.gi}" data-gn="${esc(x.nombre)}" data-gc="${esc(x.codigo)}"` : `data-ci="${x.ci}"`; return `<input type="number" min="0" class="act-qty" data-csid="${k}" placeholder="Pedido" aria-label="Cantidad pedida (opcional)"><input type="number" min="0" value="1" class="act-qty" data-cqid="${k}" aria-label="Cantidad a entregar"><button type="button" class="btn btn-outline act-addcat" ${dat}>Agregar</button>`; })()}</div>`).join('') : ''}
               ${stock.filter(s => !q || s.name.toLowerCase().includes(q) || String(s.codigo || '').includes(q)).length > 80 ? '<p class="act-hint">Hay más resultados: afina la búsqueda.</p>' : ''}</div>
           </div>
@@ -729,6 +750,7 @@
               <input id="act-centro" list="act-centros" value="${esc(borrador.centro)}" placeholder="Ej: Pomaire"><datalist id="act-fisl">${stock.slice(0, 400).map(x => `<option value="${esc(x.name)}">`).join('')}</datalist><datalist id="act-centros">${listaCentros().map(c => `<option value="${esc(c)}">`).join('')}</datalist></label>
               <div class="act-centro-acc"><button type="button" class="btn btn-outline btn-sm" id="act-centro-add">+ Guardar este centro en la lista</button></div>
             <h4 class="act-h4">Productos entregados (${entregan.length})</h4>
+            ${bodConteo.length > 1 ? `<div class="act-auto" role="status"><i class="ph-bold ph-warehouse" aria-hidden="true"></i><span><b>Acta multi-bodega:</b> ${bodConteo.map(([b, c]) => `${esc(b)} (${c})`).join(' · ')}. Cada producto reservará y descontará de su propia bodega.</span></div>` : ''}
             ${entregan.length ? entregan.map(([i, k]) => filaItem(i, k)).join('') : '<p class="act-hint">Aún no agregas productos que se entreguen.</p>'}
             <details class="act-det"${(borrador.pendientes.length || enCero.length) ? ' open' : ''}><summary>Productos pendientes de entrega${enCero.length ? ` (${enCero.length} sin stock, entrega 0)` : ' (opcional)'}</summary>
               ${enCero.map(([i, k]) => filaItem(i, k)).join('')}
@@ -818,8 +840,8 @@
         const refrescar = () => { leerCampos(); guardarBorrador(); pintar(); };
         $('#act-origen').addEventListener('change', async (e) => {
             leerCampos();
-            if (borrador.items.length && !(await preg({ titulo: 'Cambiar la bodega de origen', texto: `Se quitarán los <b>${borrador.items.length}</b> productos ya agregados al acta.`, si: 'Cambiar bodega', no: 'Mantener' }))) { e.target.value = borrador.origen || ''; return; }
-            borrador.origen = e.target.value || null; borrador.items = []; borrador.autoOrigen = null;
+            // v21.276: cambiar la bodega del panel izquierdo NO borra los productos ya agregados (cada ítem recuerda su propia bodega)
+            borrador.origen = e.target.value || null; borrador.autoOrigen = null;
             try { await cargarStock(); } catch (x) { toast('Error', 'No se pudo cargar el stock: ' + x.message, 'error'); }
             guardarBorrador(); pintar();
         });
@@ -834,29 +856,46 @@
         /* v21.229: usar como origen la bodega donde sí hay stock; lo ya agregado se vuelve a buscar en esa bodega */
         /* Cambia el origen a otra bodega y vuelve a buscar ahí lo ya agregado. Si no se puede leer el stock de la nueva bodega, no cambia nada (v21.233). */
         const buscaEn = (lista, nombre, codigo) => lista.find(x => normN(x.name) === normN(nombre) || (codigo && /^\d{5,}$/.test(String(codigo)) && String(x.codigo) === String(codigo)));
-        const cambiarOrigen = async (nueva, opc) => {
-            opc = opc || {}; if (ocupado && !opc.interno) return null;
-            if (!opc.interno) ocupado = true;
+        /* v21.276: cambia la bodega de vista en el panel izquierdo SIN perder ni reasignar los productos ya agregados al acta */
+        const cambiarVistaBodega = async (nueva) => {
+            if (ocupado) return null;
+            ocupado = true;
             try {
                 leerCampos();
                 let nuevo;
-                try { await cargarPendConf(); await cargarCatalogo(); nuevo = opc.pre || await leerStock(nueva); }
+                try { await cargarPendConf(); await cargarCatalogo(); nuevo = await leerStock(nueva); }
                 catch (x) { toast('No se cambió la bodega', 'No se pudo leer el stock de ' + nueva + ': ' + (x.message || x), 'error'); return null; }
-                const previos = borrador.items.map(i => ({ ...i })), antes = borrador.origen;
-                borrador.origen = nueva; stock = nuevo; borrador.items = [];
-                let conStock = 0, sin = 0;
-                previos.forEach(i => { const s = buscaEn(stock, i.nombre, i.codigo);
-                    if (s) { conStock++; borrador.items.push({ ...i, id: s.id, manual: false, nombre: s.name, codigo: s.codigo || i.codigo || '', stock: s.disp, controlado: s.controlado }); }
-                    else { sin++; borrador.items.push({ ...i, id: null, manual: true, stock: 0 }); } });
-                borrador.autoOrigen = opc.auto ? { bodega: nueva, previa: antes || '', producto: opc.producto || '' } : null;
+                borrador.origen = nueva; stock = nuevo; borrador.autoOrigen = null;
                 const sel = document.getElementById('act-origen'); if (sel) sel.value = nueva;
-                guardarBorrador();
-                if (!opc.silencioso) { pintar(); toast('Bodega de origen: ' + nueva, previos.length ? `${conStock} producto(s) ahora con stock de ${nueva}${sin ? ` · ${sin} siguen sin stock (revísalos)` : ''}.` : 'Ya puedes agregar el producto con su stock.', sin ? 'warning' : 'success'); }
-                return { conStock, sin };
-            } finally { if (!opc.interno) ocupado = false; }
+                guardarBorrador(); pintar();
+                toast('Mostrando stock de ' + nueva, 'Tus productos ya agregados conservan su bodega.', 'info');
+                return nuevo;
+            } finally { ocupado = false; }
         };
-        $$('.act-cambia').forEach(b => b.addEventListener('click', () => cambiarOrigen(b.dataset.cambia)));
-        const vAuto = r.querySelector('.act-auto-volver'); if (vAuto) vAuto.addEventListener('click', () => cambiarOrigen(vAuto.dataset.volver));
+        /* v21.276: asigna una bodega específica SOLO al producto k del acta, sin tocar los demás productos */
+        const asignarBodegaItem = async (k, nueva) => {
+            if (ocupado) return;
+            const it = borrador.items[k]; if (!it) return;
+            ocupado = true;
+            try {
+                leerCampos();
+                let cand;
+                try { await cargarPendConf(); await cargarCatalogo(); cand = await leerStock(nueva); }
+                catch (x) { toast('Sin conexión', 'No se pudo leer el stock de ' + nueva + ': ' + (x.message || x), 'error'); return; }
+                const s = buscaEn(cand, it.nombre, it.codigo);
+                if (!s || !(num(s.disp) > 0)) { toast('Sin stock disponible', `En ${nueva} no queda stock libre de ${it.nombre}.`, 'warning'); return; }
+                if (borrador.items.some((x, j) => j !== k && x.id && x.id === s.id)) { toast('Ya está en el acta', `«${s.name}» ya está agregado desde ${nueva}. Ajusta su cantidad en esa fila.`, 'warning'); return; }
+                if (s.controlado && num(it.cantidad) > num(s.disp)) { toast('Medicamento controlado', `En ${nueva} hay ${s.disp} disponibles: no puede entregarse sin stock en sistema.`, 'error'); return; }
+                borrador.items[k] = { ...it, id: s.id, manual: false, bodega: nueva, nombre: s.name, codigo: s.codigo || it.codigo || '', stock: s.disp, controlado: s.controlado };
+                guardarBorrador(); pintar();
+                toast('Bodega asignada: ' + nueva, `«${s.name}» ahora descuenta de ${nueva} (disponible: ${s.disp}). Los demás productos mantienen su bodega.`, 'success');
+            } finally { ocupado = false; }
+        };
+        $$('.act-cambia').forEach(b => b.addEventListener('click', () => {
+            if (b.dataset.k != null) asignarBodegaItem(+b.dataset.k, b.dataset.cambia);
+            else cambiarVistaBodega(b.dataset.cambia);
+        }));
+        const vAuto = r.querySelector('.act-auto-volver'); if (vAuto) vAuto.addEventListener('click', () => cambiarVistaBodega(vAuto.dataset.volver));
         const vAutoOk = r.querySelector('.act-auto-ok'); if (vAutoOk) vAutoOk.addEventListener('click', () => { borrador.autoOrigen = null; guardarBorrador(); pintar(); });
         $$('.act-addcat').forEach(b => b.addEventListener('click', async () => {
             if (ocupado) return;
@@ -866,37 +905,28 @@
             const c = Math.floor(num((r.querySelector(`.act-qty[data-cqid="${key}"]`) || {}).value)), solC = Math.floor(num((r.querySelector(`.act-qty[data-csid="${key}"]`) || {}).value));
             if (!(c > 0 || (c === 0 && solC > 0))) { toast('Cantidad', 'Indica una cantidad mayor que 0 (o 0 con el pedido, para dejarlo pendiente).', 'warning'); return; }
             if (borrador.items.length >= MAX_ITEMS) { toast('Límite', `Máximo ${MAX_ITEMS} productos por acta.`, 'warning'); return; }
-            if (borrador.items.some(i => normN(i.nombre) === normN(nom))) { toast('Ya está en el acta', 'Ese producto ya está agregado: cambia su cantidad en la lista del acta.', 'warning'); return; }
-            const item = (extra) => ({ id: null, manual: true, nombre: nom, codigo: cod, cantidad: c, solicitado: solC > c ? solC : 0, stock: 0, ...(c0 && c0.imagen ? { imagen: c0.imagen } : {}), ...(extra || {}) });
-            const o = enOtras(nom, cod);
-            if (!o.length) { borrador.items.push(item()); refrescar(); return; }
-            /* v21.233: si el producto tiene stock DISPONIBLE en otra bodega, el origen cambia solo a esa bodega (sin preguntar) y queda un aviso al costado.
-               Se pregunta solo si el cambio dejaría con menos respaldo lo que ya está en el acta. Cerrar la ventana = no se agrega nada. */
+            const item = (extra) => ({ id: null, manual: true, bodega: borrador.origen, nombre: nom, codigo: cod, cantidad: c, solicitado: solC > c ? solC : 0, stock: 0, ...(c0 && c0.imagen ? { imagen: c0.imagen } : {}), ...(extra || {}) });
+            const o = enOtras(nom, cod, borrador.origen);
+            if (!o.length) {
+                if (borrador.items.some(i => bodegaDe(i, borrador.origen) === borrador.origen && normN(i.nombre) === normN(nom))) { toast('Ya está en el acta', 'Ese producto ya está agregado en esta bodega: cambia su cantidad en la lista del acta.', 'warning'); return; }
+                borrador.items.push(item()); refrescar(); return;
+            }
+            /* v21.276: el producto tiene stock en otra bodega -> se agrega directamente desde esa bodega sin alterar ni perder el origen de los demás productos */
             ocupado = true; b.disabled = true;
             try {
                 const nueva = o[0].bodega;
                 let cand; try { await cargarPendConf(); cand = await leerStock(nueva); } catch (x) { toast('Sin conexión', 'No se pudo revisar el stock de ' + nueva + ': no se agregó. Intenta de nuevo.', 'error'); return; }
                 const s0 = buscaEn(cand, nom, cod), dispN = s0 ? num(s0.disp) : 0;
                 const sinStockAqui = `queda como provisional sin stock (deuda en ${esc(borrador.origen)})`;
-                if (dispN <= 0) {   /* lo que hay en la otra bodega está reservado o es deuda: no sirve cambiar */
+                if (dispN <= 0) {
                     if (await preg({ titulo: 'Sin stock disponible', texto: `<b>${esc(nom)}</b>: lo que hay en ${esc(nueva)} ya está reservado en actas por confirmar. Si lo agregas, ${sinStockAqui}.`, si: 'Agregar sin stock', no: 'Cancelar' })) { borrador.items.push(item()); refrescar(); }
                     return;
                 }
                 if (s0.controlado && c > dispN) { toast('Medicamento controlado', `En ${nueva} hay ${dispN} disponibles: no puede entregarse sin stock en sistema.`, 'error'); return; }
-                if (s0.id && borrador.items.some(i => i.id === s0.id || (i.codigo && s0.codigo && String(i.codigo) === String(s0.codigo)))) { toast('Ya está en el acta', `Ese producto ya está agregado (como ${s0.name}): cambia su cantidad en la lista del acta.`, 'warning'); return; }
-                const cubre = (i, disp) => Math.min(num(i.cantidad), Math.max(0, num(disp)));
-                const pierden = borrador.items.filter(i => { const x = buscaEn(cand, i.nombre, i.codigo); return cubre(i, i.stock) > cubre(i, x ? x.disp : 0); });
-                if (pierden.length) {
-                    const r2 = await preg({ titulo: `Hay stock en ${nueva}`, texto: `<b>${esc(nom)}</b>: hay <b>${dispN}</b> disponibles en ${esc(nueva)} y nada en ${esc(borrador.origen)}. Si cambias el origen, estos productos del acta quedan con menos respaldo:`, lineas: pierden.slice(0, 8).map(i => { const x = buscaEn(cand, i.nombre, i.codigo); return `${esc(i.nombre)}: ${cubre(i, i.stock)} → <b>${cubre(i, x ? x.disp : 0)}</b> con stock`; }).concat(pierden.length > 8 ? [`y ${pierden.length - 8} más…`] : []), si: `Cambiar a ${nueva}`, alt: `Agregar sin stock en ${borrador.origen}`, no: 'Cancelar' });
-                    if (r2 === 'alt') { borrador.items.push(item()); refrescar(); return; }
-                    if (r2 !== true) return;
-                }
-                const res = await cambiarOrigen(nueva, { auto: true, producto: nom, silencioso: true, interno: true, pre: cand });
-                if (!res) return;
-                const s1 = buscaEn(stock, nom, cod);
-                borrador.items.push(s1 ? { id: s1.id, nombre: s1.name, codigo: s1.codigo || cod, cantidad: c, solicitado: solC > c ? solC : 0, stock: s1.disp, controlado: s1.controlado } : item());
+                if (s0.id && borrador.items.some(i => i.id === s0.id)) { toast('Ya está en el acta', `«${s0.name}» ya está agregado desde ${nueva}: cambia su cantidad en la lista del acta.`, 'warning'); return; }
+                borrador.items.push({ id: s0.id, nombre: s0.name, bodega: nueva, codigo: s0.codigo || cod, cantidad: c, solicitado: solC > c ? solC : 0, stock: dispN, controlado: s0.controlado });
                 refrescar();
-                toast('Origen cambiado a ' + nueva, `Ahí hay ${dispN} disponibles de ${nom}${dispN < c ? ` (faltan ${c - dispN}: quedan sin respaldo)` : ''}${res.sin ? ` · ${res.sin} producto(s) del acta siguen sin stock` : ''}. Revisa el origen al costado.`, res.sin || dispN < c ? 'warning' : 'info');
+                toast('Agregado desde ' + nueva, `«${s0.name}» quedó asignado a ${nueva} (${dispN} disponibles${dispN < c ? `, faltan ${c - dispN} sin respaldo` : ''}). Los demás productos mantienen su bodega.`, dispN < c ? 'warning' : 'success');
             } finally { ocupado = false; b.disabled = false; }
         }));
         $$('.act-add').forEach(b => b.addEventListener('click', () => {
@@ -907,7 +937,8 @@
             if (borrador.items.length >= MAX_ITEMS) { toast('Límite', `Máximo ${MAX_ITEMS} productos por acta.`, 'warning'); return; }
             if (s.controlado && c > s.disp) { toast('Medicamento controlado', 'No puede entregarse sin stock en sistema.', 'error'); return; }
             const sp = r.querySelector(`.act-qty[data-sid="${CSS.escape(b.dataset.id)}"]`), sol = Math.floor(num(sp && sp.value));
-            if (borrador.items.some(i => normN(i.nombre) === normN(s.name))) { toast('Ya está en el acta', 'Ese producto ya está agregado: cambia su cantidad en la lista del acta.', 'warning'); return; } borrador.items.push({ id: s.id, nombre: s.name, codigo: s.codigo || '', cantidad: c, solicitado: sol > c ? sol : 0, stock: s.disp, controlado: s.controlado }); refrescar();
+            if (borrador.items.some(i => (i.id && i.id === s.id) || (bodegaDe(i, borrador.origen) === borrador.origen && normN(i.nombre) === normN(s.name)))) { toast('Ya está en el acta', 'Ese producto ya está agregado desde esta bodega: cambia su cantidad en la lista del acta.', 'warning'); return; }
+            borrador.items.push({ id: s.id, nombre: s.name, bodega: borrador.origen, codigo: s.codigo || '', cantidad: c, solicitado: sol > c ? sol : 0, stock: s.disp, controlado: s.controlado }); refrescar();
         }));
         // Sugerencias con foto: al escribir una letra aparece el nombre sugerido, su ID y su fotografía (stock de la bodega + catálogo, incluidos los ingresados manualmente)
         const fuenteSug = () => {
@@ -950,7 +981,7 @@
             if (par) { toast('Ya existe', `"${par.name}" ya está en esta bodega: agrégalo desde la lista.`, 'warning'); return; }
             if (!cod && !(await preg({ titulo: '¿Agregar sin ID?', texto: 'No indicaste el ID del producto (Mercado Público). Sirve para asociar la foto y la orden de compra después.', si: 'Agregar sin ID', no: 'Volver' }))) return;
             const sol = Math.floor(num($('#act-ms').value));
-            if (borrador.items.some(i => normN(i.nombre) === normN(n))) { toast('Ya está en el acta', 'Ese producto ya está agregado: cambia su cantidad en la lista del acta.', 'warning'); return; } borrador.items.push({ id: null, manual: true, nombre: n, codigo: cod, cantidad: c, solicitado: sol > c ? sol : 0, stock: 0, ...(manualImg ? { imagen: manualImg } : {}) }); manualImg = ''; refrescar();
+            if (borrador.items.some(i => bodegaDe(i, borrador.origen) === borrador.origen && normN(i.nombre) === normN(n))) { toast('Ya está en el acta', 'Ese producto ya está agregado en esta bodega: cambia su cantidad en la lista del acta.', 'warning'); return; } borrador.items.push({ id: null, manual: true, bodega: borrador.origen, nombre: n, codigo: cod, cantidad: c, solicitado: sol > c ? sol : 0, stock: 0, ...(manualImg ? { imagen: manualImg } : {}) }); manualImg = ''; refrescar();
         });
         $('#act-padd').addEventListener('click', () => {
             const n = $('#act-pn').value.trim(); const c = Math.floor(num($('#act-pq').value));
@@ -1099,14 +1130,15 @@
                 }
             } catch (e) { /* sin la orden: se arma con lo elegido */ }
         }
-        const acta = { numero, fecha: hoy.toISOString().slice(0, 10), centro: (b.centro || '').trim() || 'CENTRO (prueba)', bodegaOrigen: b.origen || '', estado: 'PRUEBA', items, pendientes,
+        const resBodP = resumenBodegas(b.items, b.origen);
+        const acta = { numero, fecha: hoy.toISOString().slice(0, 10), centro: (b.centro || '').trim() || 'CENTRO (prueba)', bodegaOrigen: resBodP.texto || '', estado: 'PRUEBA', items, pendientes,
             documentos: b.documentos.map(d => ({ tipo: d.tipo, numero: d.numero, detalle: d.detalle || '' })), entrega: { nombre: firma.nombre, cargo: firma.cargo }, recibe: { nombre: (b.recibe && b.recibe.nombre) || '', cargo: (b.recibe && b.recibe.cargo) || '' } };
         const prog = window.SAR_Progreso.iniciar('Generando el acta de prueba…', [`Armando el documento ${formato.toUpperCase()}…`]);
         try { await descargar(actaParaDoc(acta), formato); }
         catch (e) { prog.error(); toast('Acta de prueba', 'No se pudo generar: ' + (e.message || e), 'error'); return; }
         prog.paso('Registrando la prueba en el historial…');
         try {
-            await f.setDoc(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: 'ACTA DE PRUEBA (sin efecto en stock)', quantity: items.reduce((s, i) => s + i.cantidad, 0), type: 'ACTA_PRUEBA', user: usuario, date: f.serverTimestamp(), document: numero, batch: 'N/A', origin: b.origen || '', dest: acta.centro, actaId: numero, sinEfectoStock: true,
+            await f.setDoc(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: 'ACTA DE PRUEBA (sin efecto en stock)', quantity: items.reduce((s, i) => s + i.cantidad, 0), type: 'ACTA_PRUEBA', user: usuario, date: f.serverTimestamp(), document: numero, batch: 'N/A', origin: resBodP.texto || '', dest: acta.centro, actaId: numero, sinEfectoStock: true,
                 observacion: `Acta de prueba ${numero} (${formato.toUpperCase()}): ${items.map(i => i.nombre + ' x' + i.cantidad).join('; ')}`.slice(0, 900) });
             prog.listo(`Acta de prueba ${numero} generada (sin descontar stock)`, { informe: true });
         } catch (e) { prog.error(); toast('Acta de prueba', 'Se generó el documento, pero no se pudo registrar en el historial: ' + (e.message || e), 'warning'); }
@@ -1120,7 +1152,8 @@
         if (!/^\d{4}-\d{2}-\d{2}$/.test(h.fecha || '')) { toast('Falta la fecha', 'Indica la fecha original del acta.', 'warning'); return; }
         if (h.fecha > new Date().toISOString().slice(0, 10)) { toast('Fecha futura', 'La fecha original no puede ser posterior a hoy.', 'warning'); return; }
         const total = borrador.items.reduce((s, i) => s + num(i.cantidad), 0);
-        if (!(await preg({ titulo: `¿Registrar el acta histórica ${String(h.folio)}?`, texto: `Del ${esc(h.fecha)} para <b>${esc(borrador.centro.trim())}</b>: ${borrador.items.length} productos (${total} unidades).<br>El stock de ${esc(borrador.origen)} <b>se descuenta ahora</b> (por lote que vence primero), porque esa entrega ya ocurrió.`, si: 'Registrar', no: 'Cancelar' }))) return;
+        const resBodH = resumenBodegas(borrador.items, borrador.origen);
+        if (!(await preg({ titulo: `¿Registrar el acta histórica ${String(h.folio)}?`, texto: `Del ${esc(h.fecha)} para <b>${esc(borrador.centro.trim())}</b>: ${borrador.items.length} productos (${total} unidades).<br>El stock de <b>${esc(resBodH.texto)}</b> <b>se descuenta ahora</b> (por lote que vence primero), porque esa entrega ya ocurrió.`, si: 'Registrar', no: 'Cancelar' }))) return;
         emitiendo = true; const btn = document.getElementById('act-emitir'); if (btn) btn.disabled = true;
         const prog = window.SAR_Progreso.iniciar('Registrando el acta histórica…', ['Descontando el stock…']);
         try {
@@ -1143,19 +1176,20 @@
         if (errores.length) { toast('Revisa el acta', errores[0], 'warning'); return; }
         if (borrador.historica && borrador.historica.on) return emitirHistorica();
         const total = borrador.items.reduce((s, i) => s + num(i.cantidad), 0);
+        const resBodE = resumenBodegas(borrador.items, borrador.origen);
         const sin = borrador.items.map(i => ({ n: i.nombre, f: Math.max(0, num(i.cantidad) - num(i.stock)) })).filter(x => x.f > 0);
         const avisoSin = sin.length ? `<span class="sar-conf__aviso"><b>Sin respaldo en sistema</b> (${sin.length}): quedan como sobregiro hasta cuadrar con la OC/SDC.</span>` : '';
-        if (!(await preg({ titulo: '¿Emitir el acta?', texto: `Para <b>${esc(borrador.centro.trim())}</b> con ${borrador.items.length} productos (${total} unidades) desde ${esc(borrador.origen)}.<br>El stock <b>no se descuenta ahora</b>: queda reservado hasta que subas el acta firmada (en «Actas emitidas»).${avisoSin}`, lineas: sin.map(x => `${esc(x.n)}: <b>${x.f}</b> u. sin respaldo`), si: 'Emitir acta', no: 'Revisar' }))) return;
+        if (!(await preg({ titulo: '¿Emitir el acta?', texto: `Para <b>${esc(borrador.centro.trim())}</b> con ${borrador.items.length} productos (${total} unidades) desde <b>${esc(resBodE.texto)}</b>.<br>El stock <b>no se descuenta ahora</b>: queda reservado en cada bodega hasta que subas el acta firmada (en «Actas emitidas»).${avisoSin}`, lineas: sin.map(x => `${esc(x.n)}: <b>${x.f}</b> u. sin respaldo`), si: 'Emitir acta', no: 'Revisar' }))) return;
         /* v21.248: sin internet el acta queda en la cola del teléfono con folio provisional AE-P y PDF provisional para firmar;
            al volver la conexión se emite con su AE definitivo y reserva el stock (lo que falte queda como sobregiro, igual que con internet). */
         if (window.SAR_Cola && !(await window.SAR_Cola.hayConexion())) {
             if (borrador.oc) { toast('Sin internet', 'Las actas de una orden de compra necesitan internet (validan lo recibido de la orden). Emítela al volver la conexión; el borrador queda guardado.', 'warning'); return; }
             const fol = window.SAR_Folio ? window.SAR_Folio.provisional('AE') : 'AE-P-' + Date.now().toString(36).toUpperCase(), b = JSON.parse(JSON.stringify({ ...borrador, folioProvisional: fol, entrega: { nombre: firma.nombre, cargo: firma.cargo } }));   /* la misma firma del PDF provisional */
-            (b.items || []).forEach(i => { delete i.imagen; });   /* las fotos no viajan en la cola (espacio del teléfono) */
+            (b.items || []).forEach(i => { delete i.imagen; if (!i.bodega) i.bodega = borrador.origen; });   /* las fotos no viajan en la cola (espacio del teléfono) */
             try { window.SAR_Cola.encolar({ tipo: 'acta-emitir', titulo: `Acta ${fol} · ${String(borrador.centro).trim()} · ${total} u.`, datos: { b, usuario: usuarioEmail(), en: new Date().toISOString() } }); }
             catch (e) { toast('No se guardó en el teléfono', (e.message || e) + ' El borrador sigue aquí: libera espacio o espera la conexión.', 'error'); return; }
             guardarCentro(borrador.centro).catch(() => {});
-            const local = { numero: `${fol} (PROVISIONAL)`, fecha: new Date().toISOString().slice(0, 10), centro: borrador.centro.trim(), bodegaOrigen: borrador.origen, estado: 'EMITIDA', items: borrador.items.map(i => ({ id: i.id || null, nombre: i.nombre, cantidad: num(i.cantidad), ...(i.codigo ? { codigo: i.codigo } : {}), ...(i.solicitado != null ? { solicitado: num(i.solicitado) } : {}) })), pendientes: (borrador.pendientes || []).map(p => ({ nombre: p.nombre, cantidad: num(p.cantidad) })), documentos: (borrador.documentos || []).map(d => ({ tipo: d.tipo, numero: d.numero, detalle: d.detalle || '' })), entrega: { nombre: firma.nombre, cargo: firma.cargo }, recibe: { nombre: (borrador.recibe && borrador.recibe.nombre) || '', cargo: (borrador.recibe && borrador.recibe.cargo) || '' }, creadoEn: new Date().toISOString() };
+            const local = { numero: `${fol} (PROVISIONAL)`, fecha: new Date().toISOString().slice(0, 10), centro: borrador.centro.trim(), bodegaOrigen: resBodE.texto, estado: 'EMITIDA', items: borrador.items.map(i => ({ id: i.id || null, nombre: i.nombre, bodega: bodegaDe(i, borrador.origen), cantidad: num(i.cantidad), ...(i.codigo ? { codigo: i.codigo } : {}), ...(i.solicitado != null ? { solicitado: num(i.solicitado) } : {}) })), pendientes: (borrador.pendientes || []).map(p => ({ nombre: p.nombre, cantidad: num(p.cantidad) })), documentos: (borrador.documentos || []).map(d => ({ tipo: d.tipo, numero: d.numero, detalle: d.detalle || '' })), entrega: { nombre: firma.nombre, cargo: firma.cargo }, recibe: { nombre: (borrador.recibe && borrador.recibe.nombre) || '', cargo: (borrador.recibe && borrador.recibe.cargo) || '' }, creadoEn: new Date().toISOString() };
             borrador = { ...vacio(), origen: borrador.origen, centro: '' }; guardarBorrador(); pintar();
             toast('Sin internet: acta en cola', `${fol}: se emitirá con su número AE definitivo apenas vuelva la conexión (mantén el Visor abierto). Puedes imprimir el PDF provisional para firmar.`, 'info');
             try { await descargar(actaParaDoc(local), 'pdf'); } catch (e) { toast('PDF provisional', 'No se pudo generar sin internet: ' + (e.message || e), 'warning'); }
@@ -1198,15 +1232,16 @@
             if (window.SAR_Imagenes) window.SAR_Imagenes.cargar().catch(() => {});
             await Promise.all([cargarCatalogo(), cargarBodegas(), cargarCentros(), cargarHistorial().catch(() => { historial = []; })]);
             if (!borrador.origen) { const c = bodegas.find(b => /central/i.test(b.name)); if (c) borrador.origen = c.name; }
-            else if (!bodegas.some(b => b.name === borrador.origen)) { borrador.origen = null; borrador.items = []; }
+            else if (!bodegas.some(b => b.name === borrador.origen)) { const c = bodegas.find(b => /central/i.test(b.name)); borrador.origen = c ? c.name : null; }
+            if (borrador.origen) (borrador.items || []).forEach(i => { if (!i.bodega) i.bodega = borrador.origen; });
             await cargarStock();
             if (precarga) {   // viene de "Pendientes por entregar": el acta queda lista con lo que hay en stock
                 const pc = precarga; precarga = null; borrador.centro = pc.centro; borrador.items = []; borrador.dist = pc.dist || null;
                 pc.lista.forEach(p => {
                     const s = stock.find(x => (p.codigo && String(x.codigo).replace(/\D/g, '') === String(p.codigo).replace(/\D/g, '')) || normN(x.name) === normN(p.nombre));
                     const dI = p.distI != null ? { distI: p.distI } : {};
-                    if (!s || !(s.disp > 0)) { if (p.sinStock) borrador.items.push({ id: null, manual: true, nombre: String(p.nombre || '').toUpperCase(), codigo: p.codigo || '', cantidad: 0, solicitado: num(p.pendiente), stock: 0, ...dI }); return; }
-                    const c = Math.min(num(p.entregable), s.disp); borrador.items.push({ id: s.id, nombre: s.name, codigo: s.codigo || p.codigo || '', cantidad: c, solicitado: num(p.pendiente) > c ? num(p.pendiente) : 0, stock: s.disp, controlado: s.controlado, ...dI });
+                    if (!s || !(s.disp > 0)) { if (p.sinStock) borrador.items.push({ id: null, manual: true, bodega: borrador.origen, nombre: String(p.nombre || '').toUpperCase(), codigo: p.codigo || '', cantidad: 0, solicitado: num(p.pendiente), stock: 0, ...dI }); return; }
+                    const c = Math.min(num(p.entregable), s.disp); borrador.items.push({ id: s.id, nombre: s.name, bodega: borrador.origen, codigo: s.codigo || p.codigo || '', cantidad: c, solicitado: num(p.pendiente) > c ? num(p.pendiente) : 0, stock: s.disp, controlado: s.controlado, ...dI });
                 });
                 guardarBorrador(); if (!borrador.items.length) toast('Pendientes', 'No encontré esos productos en la bodega de origen elegida.', 'warning');
             }
@@ -1217,6 +1252,6 @@
     let precarga = null, manualImg = '', manualAbierto = false;
     const vistaMImg = () => manualImg ? `<img src="${esc(manualImg)}" alt="" class="act-mimg-v"><button type="button" class="btn btn-outline btn-sm" id="act-mimg-q">Quitar</button>` : '<small>WEBP, JPG, PNG… (queda en el catálogo)</small>';
     function precargar(centro, lista, dist) { precarga = { centro, lista: lista || [], dist: dist || null }; if (window.location.hash === '#view-actas-entrega') abrir(); else window.location.hash = 'view-actas-entrega'; }
-    window.SAR_ActasEntrega = { precargar, recargarStock: async () => { await cargarStock(); if (typeof pintar === 'function') pintar(); }, ver: verActa, verPorNumero: async (n) => { if (!historial.find(x => x.numero === n)) await cargarHistorial(); return verActa(n); }, avisarFirmada: (a, file) => file.arrayBuffer().then(buf => window.SAR_Avisos && window.SAR_Avisos.avisarActa('firmada', a, { firmada: { bytes: new Uint8Array(buf), mime: file.type, nombre: file.name } })), precargar, listaCentros, abrir, planificar, cuadrar, restaurarConSobregiro, detalleDe, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, reservarEn, reservarAntiguas, confirmarEntrega, lotesDeDoc, subirFirmada, verRespaldo, descargarRespaldo: (a) => verRespaldo(a, true) };
+    window.SAR_ActasEntrega = { precargar, recargarStock: async () => { await cargarStock(); if (typeof pintar === 'function') pintar(); }, ver: verActa, verPorNumero: async (n) => { if (!historial.find(x => x.numero === n)) await cargarHistorial(); return verActa(n); }, avisarFirmada: (a, file) => file.arrayBuffer().then(buf => window.SAR_Avisos && window.SAR_Avisos.avisarActa('firmada', a, { firmada: { bytes: new Uint8Array(buf), mime: file.type, nombre: file.name } })), precargar, listaCentros, abrir, bodegaDe, resumenBodegas, planReserva, planificar, cuadrar, restaurarConSobregiro, detalleDe, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, reservarEn, reservarAntiguas, confirmarEntrega, lotesDeDoc, subirFirmada, verRespaldo, descargarRespaldo: (a) => verRespaldo(a, true) };
     if (typeof module !== 'undefined') module.exports = window.SAR_ActasEntrega;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: { dataset: {} } });

@@ -32,15 +32,16 @@
                 Object.assign(d, { quantity: r.quantity, batches: r.batches, sobregiro: r.sobregiro, sobregiroDetalle: r.sobregiroDetalle });
                 const l = ocLineas && ocLineas[i.ocI]; if (l) l.entregado[a.oc.columna] = Math.max(0, num(l.entregado[a.oc.columna]) - num(i.cantidad));
             });
-            // 2) aplicar lo nuevo
+            // 2) aplicar lo nuevo (v21.276: cada ítem valida y descuenta de su propia bodega)
             const itemsActa = N.items.map(it => {
                 const d = W[it.id]; if (!d) throw new Error(`${it.nombre} ya no existe.`);
-                if ((d.location || '') !== a.bodegaOrigen) throw new Error(`${d.name} no está en ${a.bodegaOrigen}.`);
+                const bodEsp = it.bodega || (orig[it.id] && orig[it.id].location) || '';
+                if (bodEsp && (d.location || '') !== bodEsp) throw new Error(`${d.name} no está en ${bodEsp}.`);
                 if (d.status === 'CUARENTENA') throw new Error(`${d.name} está en CUARENTENA.`);
                 const p = A.planificar({ ...d }, it.cantidad, numero);
                 if (d.controlado && p.faltante > 0) throw new Error(`${d.name} es medicamento controlado: no puede entregarse sin stock en sistema.`);
                 Object.assign(d, { quantity: p.quantity, batches: p.batches, sobregiro: p.sobregiro, sobregiroDetalle: p.sobregiroDetalle });
-                const row = { id: it.id, nombre: d.name, cantidad: num(it.cantidad), lotes: p.usados, sinRespaldo: p.faltante, ...(d.codigoMP ? { codigoMP: String(d.codigoMP) } : {}), ...(it.entregaFisica ? { entregaFisica: it.entregaFisica } : {}), ...(it.ocI == null && num(it.solicitado) > num(it.cantidad) ? { solicitado: num(it.solicitado), entregadoTotal: num(it.cantidad) } : {}) };
+                const row = { id: it.id, nombre: d.name, bodega: d.location || bodEsp || a.bodegaOrigen || '', cantidad: num(it.cantidad), lotes: p.usados, sinRespaldo: p.faltante, ...(d.codigoMP ? { codigoMP: String(d.codigoMP) } : {}), ...(it.entregaFisica ? { entregaFisica: it.entregaFisica } : {}), ...(it.ocI == null && num(it.solicitado) > num(it.cantidad) ? { solicitado: num(it.solicitado), entregadoTotal: num(it.cantidad) } : {}) };
                 const l = it.ocI != null && ocLineas ? ocLineas[it.ocI] : null;
                 if (l) {
                     const disp = num(l.ingresado && l.ingresado[a.oc.columna]) - num(l.entregado[a.oc.columna]);
@@ -50,6 +51,7 @@
                 }
                 return row;
             });
+            const resBod = A.resumenBodegas ? A.resumenBodegas(itemsActa, a.bodegaOrigen) : { lista: [a.bodegaOrigen], texto: a.bodegaOrigen };
             // 3) escribir
             let hubo = 0;
             ids.forEach(id => {
@@ -57,14 +59,14 @@
                 const limite = num(d.criticalLimit || d.stock_minimo || 50);
                 tx.update(refs[id], { quantity: d.quantity, batches: d.batches, sobregiro: d.sobregiro, sobregiroDetalle: d.sobregiroDetalle, isCritical: d.quantity <= limite, updatedAt: f.serverTimestamp() });
                 const antes = ((a.items || []).find(x => x.id === id) || {}).cantidad || 0, ahora = (itemsActa.find(x => x.id === id) || {}).cantidad || 0;
-                if (antes !== ahora || num(d.quantity) !== num(orig[id] && orig[id].quantity)) { hubo++;   /* v21.231: también si cambió el stock aunque no la cantidad del acta */ tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name, quantity: Math.abs(ahora - antes), type: 'EDICION_ACTA', delta: num(d.quantity) - num(orig[id] && orig[id].quantity), user, date: f.serverTimestamp(), document: numero, batch: 'MULTI-LOTE', origin: a.bodegaOrigen, dest: centro, idInsumoOrigen: id, actaId: numero, observacion: `Edición del acta ${numero}: ${d.name} de ${antes} a ${ahora} u.` }); }
+                if (antes !== ahora || num(d.quantity) !== num(orig[id] && orig[id].quantity)) { hubo++;   /* v21.231: también si cambió el stock aunque no la cantidad del acta */ tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: d.name, quantity: Math.abs(ahora - antes), type: 'EDICION_ACTA', delta: num(d.quantity) - num(orig[id] && orig[id].quantity), user, date: f.serverTimestamp(), document: numero, batch: 'MULTI-LOTE', origin: d.location || a.bodegaOrigen, dest: centro, idInsumoOrigen: id, actaId: numero, observacion: `Edición del acta ${numero}: ${d.name} de ${antes} a ${ahora} u.` }); }
             });
-            if (!hubo) tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: `ACTA ${numero} (editada)`, quantity: 0, type: 'EDICION_ACTA', user, date: f.serverTimestamp(), document: numero, batch: 'N/A', origin: a.bodegaOrigen, dest: centro, actaId: numero, observacion: `Edición del acta ${numero}: datos del documento (centro, fecha, pendientes, documentos o firmas).` });
+            if (!hubo) tx.set(f.doc(f.collection(db(), 'Historial_Movimientos')), { insumoName: `ACTA ${numero} (editada)`, quantity: 0, type: 'EDICION_ACTA', user, date: f.serverTimestamp(), document: numero, batch: 'N/A', origin: resBod.texto || a.bodegaOrigen, dest: centro, actaId: numero, observacion: `Edición del acta ${numero}: datos del documento (centro, fecha, pendientes, documentos o firmas).` });
             if (ocLineas) {
                 tx.update(ocRef, { lineas: ocLineas, actualizadoEn: f.serverTimestamp() });
                 tx.set(f.doc(f.collection(db(), 'Seguimiento_OC', a.oc.id, 'Eventos')), { tipo: 'ENTREGA', texto: `Acta ${numero} editada (${centro}):\n` + itemsActa.map(i => `- ${i.nombre}: ${i.cantidad} un.`).join('\n'), autor: user, fecha: f.serverTimestamp(), columna: a.oc.columna, actaId: numero });
             }
-            const cambios = { centro, fecha: N.fecha || a.fecha, items: itemsActa, conSobregiro: itemsActa.some(i => i.sinRespaldo > 0), pendientes: N.pendientes || [], documentos: N.documentos || [], entrega: N.entrega || a.entrega, recibe: N.recibe || a.recibe, editadaEn: f.serverTimestamp(), editadaPor: user, ediciones: num(a.ediciones) + 1 };
+            const cambios = { centro, fecha: N.fecha || a.fecha, bodegaOrigen: resBod.texto || a.bodegaOrigen, ...(resBod.lista.length > 1 ? { bodegasOrigen: resBod.lista } : {}), items: itemsActa, conSobregiro: itemsActa.some(i => i.sinRespaldo > 0), pendientes: N.pendientes || [], documentos: N.documentos || [], entrega: N.entrega || a.entrega, recibe: N.recibe || a.recibe, editadaEn: f.serverTimestamp(), editadaPor: user, ediciones: num(a.ediciones) + 1 };
             tx.update(actaRef, cambios);
             return { ...a, ...cambios, editadaEn: new Date().toISOString() };
         });
@@ -78,10 +80,10 @@
         const S = { centro: acta.centro || '', fecha: acta.fecha || '', items: (acta.items || []).map(i => ({ ...i })), pendientes: (acta.pendientes || []).map(p => ({ ...p })), documentos: (acta.documentos || []).map(d => ({ ...d })),
             entrega: { ...(acta.entrega || {}) }, recibe: { ...(acta.recibe || {}) } };
         let opciones = [];
-        const prog0 = window.SAR_Progreso.iniciar('Cargando el acta…', [oxi ? 'Leyendo los balones llenos disponibles…' : `Leyendo el stock de ${acta.bodegaOrigen}…`]);
+        const prog0 = window.SAR_Progreso.iniciar('Cargando el acta…', [oxi ? 'Leyendo los balones llenos disponibles…' : 'Leyendo el stock de las bodegas…']);
         try {
             if (oxi) opciones = (await window.SAR_Oxigeno.listarLlenos()).map(e => ({ id: e.id, nombre: `N° ${e.serie} · ${e.capacidad || ''}`, serie: e.serie, e }));
-            else { const sn = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.where('location', '==', acta.bodegaOrigen), f.limit(1500))); sn.forEach(d => { const x = d.data(); if (x.status !== 'CUARENTENA') opciones.push({ id: d.id, nombre: x.name || '', disp: Math.max(0, num(x.quantity) - num(x.sobregiro)) }); }); opciones.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es')); }
+            else { const sn = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(4000))); sn.forEach(d => { const x = d.data(); if (x.status !== 'CUARENTENA' && x.location) opciones.push({ id: d.id, nombre: x.name || '', bodega: x.location || '', disp: Math.max(0, num(x.quantity) - num(x.sobregiro)) }); }); opciones.sort((a, b) => a.nombre.localeCompare(b.nombre, 'es') || a.bodega.localeCompare(b.bodega, 'es')); }
             prog0.cerrar();
         } catch (e) { prog0.error(); toast('No se pudo abrir la edición', e.message || String(e), 'error'); return; }
         const ov = document.createElement('div'); ov.className = 'cierre-overlay';
@@ -90,11 +92,11 @@
         function pintar() {
             const usados = new Set(S.items.map(i => i.id));
             ov.innerHTML = `<div class="cierre-box cierre-box--ancho" role="dialog" aria-modal="true"><h3>Editar acta ${esc(acta.numero)}${oxi ? ' · oxígeno' : ''}</h3>
-              <p class="cierre-hint">${oxi ? 'Quita o agrega balones, o cambia la serie (quita el balón y agrega el correcto). Los balones quitados vuelven a SAR como llenos.' : `Los cambios reajustan el stock de ${esc(acta.bodegaOrigen)}${acta.oc ? ' y lo entregado de la orden ' + esc(acta.oc.numeroOC || '') : ''}.`} Al guardar se rehace el documento.</p>
+              <p class="cierre-hint">${oxi ? 'Quita o agrega balones, o cambia la serie (quita el balón y agrega el correcto). Los balones quitados vuelven a SAR como llenos.' : `Los cambios reajustan el stock de cada bodega (${esc(acta.bodegaOrigen)})${acta.oc ? ' y lo entregado de la orden ' + esc(acta.oc.numeroOC || '') : ''}.`} Al guardar se rehace el documento.</p>
               <div class="soc-fila"><label>Centro<input id="ed-centro" list="ed-centros" value="${esc(S.centro)}"><datalist id="ed-centros">${(ctx.centros || []).map(c => `<option value="${esc(c)}">`).join('')}</datalist></label><label>Fecha<input id="ed-fecha" type="date" value="${esc(S.fecha)}"></label></div>
               <h4 class="act-h4">${oxi ? 'Balones' : 'Productos entregados'} (${S.items.length})</h4>
-              ${S.items.map((i, k) => `<div class="act-fila"><div class="act-fn">${esc(i.nombre)}</div>${oxi ? '' : `<input type="number" min="1" class="act-qty ed-q" data-k="${k}" value="${i.cantidad}" aria-label="Cantidad">`}<button type="button" class="btn btn-outline ed-del" data-k="${k}" aria-label="Quitar">✕</button></div>`).join('')}
-              <div class="act-fila act-docs"><select id="ed-sel"><option value="">${oxi ? 'Agregar balón lleno…' : 'Agregar producto de la bodega…'}</option>${opciones.filter(o => !usados.has(o.id)).map(o => `<option value="${esc(o.id)}">${esc(o.nombre)}${oxi ? '' : ' (disp. ' + o.disp + ')'}</option>`).join('')}</select>${oxi ? '' : '<input id="ed-selq" type="number" min="1" value="1" class="act-qty" aria-label="Cantidad">'}<button type="button" class="btn btn-outline" id="ed-add">Agregar</button></div>
+              ${S.items.map((i, k) => `<div class="act-fila"><div class="act-fn">${esc(i.nombre)}${!oxi && i.bodega ? ` <small><span class="act-bod-tag">${esc(i.bodega)}</span></small>` : ''}</div>${oxi ? '' : `<input type="number" min="1" class="act-qty ed-q" data-k="${k}" value="${i.cantidad}" aria-label="Cantidad">`}<button type="button" class="btn btn-outline ed-del" data-k="${k}" aria-label="Quitar">✕</button></div>`).join('')}
+              <div class="act-fila act-docs"><select id="ed-sel"><option value="">${oxi ? 'Agregar balón lleno…' : 'Agregar producto (de cualquier bodega)…'}</option>${opciones.filter(o => !usados.has(o.id)).map(o => `<option value="${esc(o.id)}">${esc(o.nombre)}${oxi ? '' : ' · ' + esc(o.bodega) + ' (disp. ' + o.disp + ')'}</option>`).join('')}</select>${oxi ? '' : '<input id="ed-selq" type="number" min="1" value="1" class="act-qty" aria-label="Cantidad">'}<button type="button" class="btn btn-outline" id="ed-add">Agregar</button></div>
               ${oxi ? '' : `<h4 class="act-h4">Productos pendientes de entrega</h4>
               ${S.pendientes.map((p, k) => `<div class="act-fila"><div class="act-fn">${esc(p.nombre)}</div><input type="number" min="1" class="act-qty ed-pq" data-k="${k}" value="${p.cantidad}"><button type="button" class="btn btn-outline ed-pdel" data-k="${k}">✕</button></div>`).join('')}
               <div class="act-fila act-docs"><input id="ed-pn" placeholder="Producto pendiente"><input id="ed-pc" type="number" min="1" value="1" class="act-qty"><button type="button" class="btn btn-outline" id="ed-padd">Añadir</button></div>`}
@@ -115,7 +117,7 @@
             $('#ed-add').addEventListener('click', () => {
                 leer(); const o = opciones.find(x => x.id === $('#ed-sel').value); if (!o) { toast('Agregar', 'Elige qué agregar.', 'warning'); return; }
                 if (oxi) S.items.push({ id: o.id, nombre: window.SAR_Oxigeno.nombreEnActa(o.e), cantidad: 1, serie: o.serie });
-                else { const q = Math.floor(num($('#ed-selq').value)); if (!(q > 0)) { toast('Cantidad', 'Indica una cantidad mayor que 0.', 'warning'); return; } S.items.push({ id: o.id, nombre: o.nombre, cantidad: q }); }
+                else { const q = Math.floor(num($('#ed-selq').value)); if (!(q > 0)) { toast('Cantidad', 'Indica una cantidad mayor que 0.', 'warning'); return; } S.items.push({ id: o.id, nombre: o.nombre, bodega: o.bodega || '', cantidad: q }); }
                 pintar();
             });
             if (!oxi) $('#ed-padd').addEventListener('click', () => { leer(); const n = $('#ed-pn').value.trim().toUpperCase(), c = Math.floor(num($('#ed-pc').value)); if (!n || !(c > 0)) { toast('Pendiente', 'Escribe el producto y la cantidad.', 'warning'); return; } S.pendientes.push({ nombre: n, cantidad: c }); pintar(); });
@@ -127,7 +129,7 @@
                 const prog = window.SAR_Progreso.iniciar(`Guardando los cambios del acta ${acta.numero}…`, [oxi ? 'Reajustando el estado de los balones…' : 'Reajustando el stock y la orden…']);
                 try {
                     const nueva = oxi ? await window.SAR_Oxigeno.editarActa(acta.numero, { centro: S.centro, fecha: S.fecha, ids: S.items.map(i => i.id), documentos: S.documentos, entrega: S.entrega, recibe: S.recibe })
-                        : await editarEntrega(acta.numero, { centro: S.centro, fecha: S.fecha, items: S.items.map(i => ({ id: i.id, nombre: i.nombre, cantidad: i.cantidad, ocI: i.ocI, solicitado: i.ocI == null ? i.solicitado : undefined })), pendientes: S.pendientes, documentos: S.documentos, entrega: S.entrega, recibe: S.recibe });
+                        : await editarEntrega(acta.numero, { centro: S.centro, fecha: S.fecha, items: S.items.map(i => ({ id: i.id, nombre: i.nombre, bodega: i.bodega || '', cantidad: i.cantidad, ocI: i.ocI, solicitado: i.ocI == null ? i.solicitado : undefined })), pendientes: S.pendientes, documentos: S.documentos, entrega: S.entrega, recibe: S.recibe });
                     prog.paso('Rehaciendo el documento…');
                     let r = null; try { r = await window.SAR_ActasEntrega.descargarActa(nueva, 'pdf'); } catch (x) { toast('Documento', 'Se guardó el acta, pero el PDF no se pudo generar: ' + (x.message || x), 'warning'); }
                     const SO = window.SAR_SeguimientoOC;

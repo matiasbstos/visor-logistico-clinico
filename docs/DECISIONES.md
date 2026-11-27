@@ -1931,3 +1931,11 @@ Caso real del usuario (`Factura 152.pdf`, `MICHIS PUBLICIDAD LIMITADA`, OC `1298
 - **Asignar bodega al volver el tag (`tags-conteo.js`):**
   - En el modal **Aceptar y etiquetar (N)** se agrega el selector **«Bodega asignada para etiquetas e ingreso»** (más botón **`+ Nueva bodega`**). La bodega elegida se guarda en cada etiqueta `bulto` (caja grande e interiores) y se muestra en la tabla de Tags de conteo sin requerir cambios adicionales en `firestore.rules`.
   - Al pulsar **Ingresar al stock (LEV)** se abre una confirmación con selector **«Bodega de destino»** (respetar la bodega de cada caja o enviar todo el lote a una bodega elegida, con **`+ Nueva bodega`**) antes de ejecutar `ingresarStockLevantamiento`.
+
+
+### 4.322 Actas de entrega multi-bodega (v21.276)
+- **Problema:** antes, cada acta de entrega tenía una única `bodegaOrigen` global. Al entregar productos repartidos entre distintas bodegas (p. ej. parches en `Bodega Central` y jeringas en `Bodega CAM`), cambiar de bodega con **`Usar Bodega CAM`** dejaba *sin respaldo* a los demás productos del acta.
+- **Solución (`actas-entrega.js`, `acta-edicion.js`, `pendientes-entrega.js`, `vida-producto.js`):**
+  - Cada ítem del acta guarda su propia `bodega` (`bodegaDe` / `resumenBodegas`). Cambiar la bodega del panel izquierdo **ya no borra** los productos agregados; agregar un producto con stock en otra bodega o pulsar **`Usar <Bodega>`** en una fila asigna esa bodega **solo a ese producto**.
+  - Al emitir (reserva), confirmar (descuento y `ENTREGA_ACTA` / `CUADRE_SOBREGIRO`), editar (`EDICION_ACTA`) y anular (`LIBERA_RESERVA` / `ANULACION_ACTA`), cada producto valida, reserva, descuenta y devuelve stock sobre **su propia bodega** en la misma transacción. El acta conserva `bodegaOrigen` legible (p. ej. `Bodega Central + Bodega CAM`) y `bodegasOrigen[]` cuando participan 2 o más.
+  - En la **Hoja de picking** (`pendientes-entrega.js`), si el acta incluye más de una bodega se muestra la columna **Bodega** por fila para saber de dónde retirar cada producto. Compatibilidad total con actas anteriores de una sola bodega.

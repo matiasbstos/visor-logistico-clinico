@@ -1229,3 +1229,35 @@ t('v21.273: fecha de elaboración opcional en levantamiento-movil y plan/contado
   assert.strictEqual(mez.batches[1].batch, 'L2026B');
   assert.strictEqual(mez.batches[1].quantity, 150);
 });
+
+t('v21.276: actas multi-bodega — cada producto conserva y reserva/descuenta desde su propia bodega', () => {
+  const A = (require('../actas-entrega.js'), (global.window || global).SAR_ActasEntrega);
+  const items = [
+    { id: 'doc-p1', nombre: 'PARCHE OCULAR ADULTO', bodega: 'Bodega Central', cantidad: 200, stock: 200 },
+    { id: 'doc-p2', nombre: 'PARCHE OCULAR PEDIATRICO', bodega: 'Bodega Central', cantidad: 700, stock: 700 },
+    { id: 'doc-j1', nombre: 'JERINGA TUBERCULINA 1 ML', bodega: 'Bodega CAM', cantidad: 7200, stock: 7291 }
+  ];
+  // 1) Resumen de bodegas (una sola vs múltiples)
+  const rMulti = A.resumenBodegas(items, 'Bodega Central');
+  assert.deepStrictEqual(rMulti.lista, ['Bodega Central', 'Bodega CAM']);
+  assert.strictEqual(rMulti.texto, 'Bodega Central + Bodega CAM');
+  assert.strictEqual(A.resumenBodegas([items[0]], 'Bodega Central').texto, 'Bodega Central');
+  assert.strictEqual(A.bodegaDe({ nombre: 'LEGADO' }, 'Bodega Central'), 'Bodega Central');
+  // 2) Validación del borrador multi-bodega
+  assert.deepStrictEqual(A.validarBorrador({ origen: 'Bodega Central', centro: 'BODEGA CENTRAL CORPO', items }), []);
+  // 3) planReserva valida y reserva cada producto contra SU bodega (sin mezclar)
+  const rs = new Map([
+    ['doc-p1', { d: { name: 'PARCHE OCULAR ADULTO', location: 'Bodega Central', quantity: 200, batches: [{ batch: 'L1', quantity: 200, expirationDate: '2028-01-01' }] } }],
+    ['doc-p2', { d: { name: 'PARCHE OCULAR PEDIATRICO', location: 'Bodega Central', quantity: 700, batches: [{ batch: 'L2', quantity: 700, expirationDate: '2028-02-01' }] } }],
+    ['doc-j1', { d: { name: 'JERINGA TUBERCULINA 1 ML', location: 'Bodega CAM', quantity: 7291, batches: [{ batch: 'L3', quantity: 7291, expirationDate: '2028-03-01' }] } }]
+  ]);
+  const plan = A.planReserva(rs, items, 'Bodega Central', 'AE-2026-0999', null);
+  assert.strictEqual(plan.porItem[0].qty, 200);
+  assert.strictEqual(plan.porItem[1].qty, 700);
+  assert.strictEqual(plan.porItem[2].qty, 7200);
+  assert.strictEqual(plan.vivo.get('doc-p1').quantity, 0);
+  assert.strictEqual(plan.vivo.get('doc-j1').quantity, 91);
+  // 4) Si un producto realmente cambió de bodega respecto a la suya, debe fallar
+  const rsMal = new Map([['doc-j1', { d: { name: 'JERINGA TUBERCULINA 1 ML', location: 'Bodega Central', quantity: 7291 } }]]);
+  assert.throws(() => A.planReserva(rsMal, [items[2]], 'Bodega Central', 'AE-2026-0999', null), /Bodega CAM/);
+});

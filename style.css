@@ -6551,6 +6551,7 @@ body:not([data-user-role="solicitante"]) .menu-item[data-target="view-solicitud-
 .menu-item.menu-sub{padding-left:38px;font-size:.88em;opacity:.95}.menu-item.menu-sub i{font-size:1em}
 .sidebar.collapsed .menu-item.menu-sub{padding-left:inherit}
 .act-otra{display:inline-flex;align-items:center;gap:4px;color:#1d4ed8;font-weight:600}.act-otra i{color:#d97706}
+.act-bod-tag{display:inline-block;padding:1px 7px;border-radius:999px;background:#e0f2fe;color:#075985;font-weight:700;font-size:.72rem;vertical-align:middle}
 .act-auto{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:6px 0 10px;padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #1d4ed8;border-radius:6px;font-size:.85rem;color:#1e3a8a}.act-auto>i{font-size:1.1rem}.act-auto>span:first-of-type{flex:1 1 220px}.act-auto-b{display:flex;gap:6px;flex-wrap:wrap}
 .act-cambia{margin-top:4px;padding:2px 10px;font-size:12px}
 

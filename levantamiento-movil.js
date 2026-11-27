@@ -550,7 +550,7 @@
     guardando = true; repintar();
     const previa = cajas().find(c => c.folio === d.folio), antes = dr.orig || (previa && previa.doc) || null;
     const reconteoAjeno = !!(dr.editando && antes && antes.contadoPor && antes.contadoPor !== u.correo);   /* v21.276: recuenta otra persona (doble conteo) */
-    if (dr.editando && antes) { d.en = antes.en || d.en; d.contadoPor = antes.contadoPor || d.contadoPor; if (reconteoAjeno) d.contadoNombre = antes.contadoNombre || d.contadoNombre; d.huella = huella(d); }
+    if (dr.editando && antes) { d.en = antes.en || d.en; d.contadoPor = antes.contadoPor || d.contadoPor; if (reconteoAjeno) { d.contadoNombre = antes.contadoNombre || d.contadoNombre; ['bodega', 'bodegaId', 'insumoId', 'nombre', 'nombreNorm', 'nuevo', 'controlado'].forEach(k => { if (k in antes) d[k] = antes[k]; else delete d[k]; }); }   /* el reconteo ajeno no cambia producto ni bodega (regla) */ d.huella = huella(d); }
     /* una corrección de una caja que aún no llegó al servidor sigue siendo «crear» con los datos nuevos */
     const entrada = dr.editando && !(previa && previa.estado === 'pend' && previa.op !== 'editar') ? { folio: d.folio, doc: { ...d, editadoEn: new Date().toISOString() }, estado: 'pend', op: 'editar', campos: cambiosDe(antes, d) } : { folio: d.folio, doc: d, estado: 'pend', op: 'crear' };
     if (entrada.op === 'editar' && previa && previa.op === 'editar' && previa.estado === 'pend') entrada.campos = { ...previa.campos, ...entrada.campos };

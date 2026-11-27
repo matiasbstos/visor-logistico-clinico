@@ -419,7 +419,7 @@ service cloud.firestore {
           && (!('hijos' in n) || (n.hijos is list && n.hijos.size() <= 600))
           && (!('contadoCompleto' in n) || n.contadoCompleto is bool)
           // quien contó no acepta su propia caja, salvo el superadmin (queda marcado aceptadoPropio)
-          && (n.estado != 'ACEPTADO' || o.estado == 'ACEPTADO' || o.contadoPor != request.auth.token.email
+          && (n.estado != 'ACEPTADO' || o.estado == 'ACEPTADO' || (o.contadoPor != request.auth.token.email && o.get('recontadoPor', '') != request.auth.token.email)
               || (isSuperAdmin() && n.get('aceptadoPropio', false) == true))
           // al aceptar, bodega confirma exactamente lo que se contó (si la caja cambió entremedio, se rechaza)
           && (n.estado != 'ACEPTADO' || o.estado == 'ACEPTADO'
@@ -465,6 +465,8 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(camposCaja())
           && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['contadoPor', 'folio', 'en', 'aceptadoPor', 'aceptadoEn', 'lev', 'hijos'])
           && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['servidorEn']) || request.resource.data.servidorEn == request.time)   /* una corrección que llega como 2.º setDoc (sin internet) trae su propio serverTimestamp */
+          /* v21.276: si otra persona ya la recontó, una corrección del autor debe quedar posterior al reconteo (si no, pasaría por «recontada») */
+          && (!('recontadoPor' in resource.data) || (request.resource.data.get('editadoEn', null) is string && request.resource.data.editadoEn > resource.data.get('recontadoEn', '')))
           && cajaOk(request.resource.data))
         // bodega: solo estado y campos de aceptación/rechazo; una caja ACEPTADA solo pasa a ETIQUETADO
         || (isAdmin()
@@ -478,6 +480,7 @@ service cloud.firestore {
           && resource.data.contadoPor != request.auth.token.email
           && request.resource.data.recontadoPor == request.auth.token.email
           && request.resource.data.recontadoEn is string && request.resource.data.recontadoEn == request.resource.data.get('editadoEn', '')
+          && txt(request.resource.data, 'recontadoNombre', 120)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(camposCaja().concat(['recontadoPor', 'recontadoNombre', 'recontadoEn']))
           && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['contadoPor', 'contadoNombre', 'folio', 'en', 'bodega', 'bodegaId', 'insumoId', 'nombre', 'nombreNorm', 'nuevo', 'controlado'])
           && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['servidorEn']) || request.resource.data.servidorEn == request.time)
@@ -486,7 +489,7 @@ service cloud.firestore {
         || (isSuperAdmin()
           && ('lev' in resource.data) && !('contadoCompleto' in resource.data) && !('cuadradaPor' in resource.data)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cuadradaPor', 'cuadradaEn', 'cuadradaNota'])
-          && request.resource.data.cuadradaPor == request.auth.token.email && txt(request.resource.data, 'cuadradaNota', 300))
+          && request.resource.data.cuadradaPor == request.auth.token.email && txt(request.resource.data, 'cuadradaNota', 300) && txt(request.resource.data, 'cuadradaEn', 120))
         // v21.276: legado v21.273–274 sin LEV (reemplaza «agregar lev a ETIQUETADO/RECHAZADO», que dejaba estampar sin stock)
         || (isAdmin()
           && legadoOk(request.resource.data, resource.data, request.resource.data.diff(resource.data).affectedKeys()));

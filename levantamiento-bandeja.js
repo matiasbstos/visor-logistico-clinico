@@ -106,7 +106,7 @@
     cajas.forEach(c => {
       if (!aceptable(c)) errores.push(E('estado', `Tag ${nTag(c.folio)}: ${c.estado === 'RECONTEO' ? 'está en reconteo' : c.lev ? `ya ingresada (${c.lev})` : 'está ' + String(c.estado || 'sin registro').toLowerCase()}.`, { folios: [c.folio], estadoCaja: c.estado, levCaja: c.lev || '' }));
       else if ((o.huellas && o.huellas[c.folio] && o.huellas[c.folio] !== c.huella) || (o.vistas && o.vistas[c.folio] && firma(o.vistas[c.folio]) !== firma(c)) || (o.key && productoKey(c) !== o.key)) errores.push(E('cambio', `Tag ${nTag(c.folio)}: el contador la corrigió mientras la revisabas. Vuelve a mirarla.`, { folios: [c.folio] }));
-      if (o.yo && norm(c.contadoPor) === norm(o.yo) && !o.esSuper) errores.push(E('propia', `Tag ${nTag(c.folio)}: la contaste tú; la acepta otra persona (o el superadmin).`, { folios: [c.folio] }));
+      if (o.yo && (norm(c.contadoPor) === norm(o.yo) || norm(c.recontadoPor) === norm(o.yo)) && !o.esSuper) errores.push(E('propia', `Tag ${nTag(c.folio)}: la contaste o recontaste tú; la acepta otra persona (o el superadmin).`, { folios: [c.folio] }));
     });
     if (ctl && !o.esSuper) errores.push(E('super', 'Producto controlado: solo lo acepta el superadmin.'));
     if (ctl && cajas.some(c => c.estado === 'REGISTRADO' && !recontada(c))) errores.push(E('doble', 'Producto controlado: cada caja necesita doble conteo de OTRA persona (pide reconteo; quien contó no puede recontarla).', { folios: cajas.filter(c => c.estado === 'REGISTRADO' && !recontada(c)).map(c => c.folio) }));
@@ -444,7 +444,7 @@
         /* cajas → ACEPTADO; tag → BUL real con sus interiores (misma transacción) */
         const todasBul = [], reutilizadas = [];
         L.cajas.forEach((c, i) => {
-          const propia = norm(c.contadoPor) === norm(yo), ru = reusa[c.folio];
+          const propia = norm(c.contadoPor) === norm(yo) || norm(c.recontadoPor) === norm(yo), ru = reusa[c.folio];
           if (ru) {   /* legado con BUL: se anota el LEV en la grande y en sus interiores existentes; no se crean etiquetas nuevas */
             const marca = { lev, rec: lev, insumoId: id, nombre, actualizado: ahora };
             tx.update(refTag(c.folio), marca); reutilizadas.push(c.folio);

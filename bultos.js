@@ -206,6 +206,222 @@
   }
   async function listar(lim) { const f = fs(), sn = await f.getDocs(f.query(f.collection(db(), 'Contadores'), f.where('tipo', '==', 'bulto'), f.limit(lim || 2000))), l = []; sn.forEach(d => l.push(d.data())); return l.sort((a, b) => String(b.folio).localeCompare(String(a.folio))); }
 
+  // ---------------- últimos 15 ingresos (v21.278) ----------------
+  const K_ULT_ING = 'sar_ultimo_ingreso_etq', K_ING_IMP = 'sar_ingresos_impresos_etq';
+  const TIPOS_ING = new Set(['INGRESO_PROVEEDOR', 'INGRESO_OC', 'INGRESO_INVENTARIO', 'INGRESO_LEVANTAMIENTO', 'entrada', 'carga masiva']);
+
+  function tsDe(v) {
+    if (!v) return 0;
+    if (typeof v.toDate === 'function') return v.toDate().getTime();
+    if (v instanceof Date) return isNaN(v) ? 0 : v.getTime();
+    if (typeof v === 'object' && typeof v.seconds === 'number') return v.seconds * 1000;
+    const d = new Date(v); return isNaN(d) ? 0 : d.getTime();
+  }
+  function isoFecha(v) {
+    if (!v) return '';
+    const s = String(v).trim();
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    const t = tsDe(v); if (!t) return '';
+    const d = new Date(t);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  function extraerOC(docTxt) { const m = /\bOC\s+([A-Z0-9-]+)/i.exec(String(docTxt || '')); return m ? m[1] : ''; }
+  function extraerREC(docTxt) { const m = /\b(REC-[A-Z0-9-]+)/i.exec(String(docTxt || '')); return m ? m[1] : ''; }
+  function claveIngreso(x) {
+    return x.id ? 'id:' + x.id : [norm(x.nombre), norm(x.lote || 'S/L'), x.fechaIngreso || '', num(x.cantidad), norm(x.bodega || '')].join('|');
+  }
+  /** Filtra movimientos a ingresos reales, ordena del más reciente al más antiguo y toma los últimos N (por defecto 15). */
+  function ultimosIngresosDe(movs, lim) {
+    const out = [];
+    (movs || []).forEach(m => {
+      if (!m) return;
+      const tipo = String(m.type || m.tipo || '').trim();
+      if (!TIPOS_ING.has(tipo) && !TIPOS_ING.has(tipo.toLowerCase())) return;
+      const q = Math.abs(num(m.quantity));
+      if (!(q > 0)) return;
+      const nombre = String(m.insumoName || m.item || m.articleName || '').trim();
+      if (!nombre) return;
+      const ts = tsDe(m.creadoEl || m.date || m.timestamp || m.fechaDocumento || m.fecha);
+      const fechaIngreso = isoFecha(m.creadoEl || m.date || m.timestamp || m.fechaDocumento || m.fecha) || hoyISO();
+      const docTxt = String(m.document || m.codigoIngreso || '');
+      const item = {
+        id: m.id || '',
+        nombre,
+        codigoMP: String(m.codigoMP || '').trim(),
+        insumoId: String(m.idInsumoDestino || m.insumoId || '').trim(),
+        lote: String(m.batch || m.lote || 'S/L').trim() || 'S/L',
+        vence: (m.expirationDate && m.expirationDate !== 'N/A') ? String(m.expirationDate).trim() : (m.vence && m.vence !== 'N/A' ? String(m.vence).trim() : ''),
+        fechaIngreso,
+        cantidad: q,
+        bodega: String(m.destinoNombre || m.destination || m.dest || m.bodega || 'Bodega Central').trim(),
+        proveedor: String(m.provider || '').trim(),
+        oc: String(m.oc || extraerOC(docTxt)).trim(),
+        rec: String(m.rec || extraerREC(docTxt)).trim(),
+        documento: docTxt,
+        ts
+      };
+      item.key = claveIngreso(item);
+      out.push(item);
+    });
+    out.sort((a, b) => (b.ts || 0) - (a.ts || 0) || String(b.fechaIngreso).localeCompare(String(a.fechaIngreso)));
+    return out.slice(0, lim || 15);
+  }
+  function registrarUltimoIngreso(ing) {
+    if (!ing || !ing.nombre) return null;
+    const normIng = {
+      id: ing.id || '',
+      nombre: String(ing.nombre).trim(),
+      codigoMP: String(ing.codigoMP || '').trim(),
+      insumoId: String(ing.insumoId || '').trim(),
+      lote: String(ing.lote || 'S/L').trim() || 'S/L',
+      vence: (ing.vence && ing.vence !== 'N/A') ? String(ing.vence).trim() : '',
+      fechaIngreso: ing.fechaIngreso || hoyISO(),
+      cantidad: Math.abs(num(ing.cantidad || ing.total)),
+      bodega: String(ing.bodega || 'Bodega Central').trim(),
+      proveedor: String(ing.proveedor || '').trim(),
+      oc: String(ing.oc || '').trim(),
+      rec: String(ing.rec || '').trim(),
+      documento: String(ing.documento || '').trim(),
+      ts: Date.now()
+    };
+    normIng.key = claveIngreso(normIng);
+    try { sessionStorage.setItem(K_ULT_ING, JSON.stringify(normIng)); } catch (_) { /* sin storage */ }
+    return normIng;
+  }
+  function obtenerUltimoIngresoSesion() {
+    try {
+      const r = JSON.parse(sessionStorage.getItem(K_ULT_ING) || 'null');
+      if (r && r.nombre && Date.now() - num(r.ts) < 4 * 60 * 60 * 1000) return r;
+    } catch (_) { /* nada */ }
+    return null;
+  }
+  function leerImpresosSesion() {
+    try { const a = JSON.parse(sessionStorage.getItem(K_ING_IMP) || '[]'); return new Set(Array.isArray(a) ? a : []); } catch (_) { return new Set(); }
+  }
+  function marcarIngresoImpreso(key) {
+    if (!key) return;
+    const s = leerImpresosSesion(); s.add(key);
+    try { sessionStorage.setItem(K_ING_IMP, JSON.stringify([...s].slice(-120))); } catch (_) { /* sin storage */ }
+  }
+  function coincideRecien(a, b) {
+    if (!a || !b) return false;
+    if (a.id && b.id && a.id === b.id) return true;
+    return norm(a.nombre) === norm(b.nombre) && norm(a.lote) === norm(b.lote) && num(a.cantidad) === num(b.cantidad) && norm(a.bodega) === norm(b.bodega);
+  }
+  async function cargarUltimosIngresos(lim) {
+    const f = fs(), max = lim || 15;
+    let lista = [];
+    try {
+      const sn = await f.getDocs(f.query(f.collection(db(), 'Historial_Movimientos'), f.orderBy('date', 'desc'), f.limit(120)));
+      const raw = []; sn.forEach(d => raw.push({ id: d.id, ...d.data() }));
+      lista = ultimosIngresosDe(raw, max);
+    } catch (_) { lista = []; }
+    const rec = obtenerUltimoIngresoSesion();
+    if (rec) {
+      const idx = lista.findIndex(x => coincideRecien(x, rec));
+      if (idx >= 0) {
+        const [hit] = lista.splice(idx, 1);
+        hit.recienIngresado = true;
+        lista.unshift(hit);
+      } else {
+        lista.unshift({ ...rec, recienIngresado: true });
+        lista = lista.slice(0, max);
+      }
+    }
+    return lista;
+  }
+  /** Renderiza el bloque reutilizable «Últimos ingresos registrados» con filtro local, badges y carga en un clic. */
+  function renderBloqueUltimosIngresos(host, opc) {
+    if (!host) return;
+    const o = opc || {};
+    let items = [], filtroQ = '', cargando = true, errTxt = '';
+    const pintar = () => {
+      const impresos = leerImpresosSesion();
+      const q = norm(filtroQ);
+      const vis = items.filter(x => !q || norm([x.nombre, x.lote, x.bodega, x.proveedor, x.documento, x.codigoMP].join(' ')).includes(q));
+      host.innerHTML = `<section class="bu-ult" aria-label="Últimos ingresos registrados">
+        <div class="bu-ult-cab">
+          <div>
+            <h4><i class="ph-bold ph-clock-counter-clockwise" aria-hidden="true"></i> Últimos ingresos registrados</h4>
+            <small>Últimos ${items.length || 15} ingresos en bodega. Haz clic en una fila para cargar todos los campos de la etiqueta.</small>
+          </div>
+          <div class="bu-ult-ctrl">
+            <input type="search" id="bu-ult-q" class="si-in bu-ult-in" placeholder="Filtrar estos 15 ingresos…" value="${esc(filtroQ)}" autocomplete="off" aria-label="Filtrar últimos ingresos">
+            <button type="button" class="btn btn-outline btn-sm" id="bu-ult-ref" title="Actualizar listado"><i class="ph-bold ph-arrows-clockwise" aria-hidden="true"></i></button>
+          </div>
+        </div>
+        ${cargando ? '<p class="si-v">Cargando últimos ingresos…</p>' : errTxt ? `<p class="si-v">${esc(errTxt)}</p>` : vis.length ? `
+          <div class="bu-ult-tw">
+            <table class="si-tb bu-ult-tb">
+              <thead><tr><th>Producto</th><th>Lote</th><th>Vencimiento</th><th>Ingreso</th><th style="text-align:right;">Cantidad</th><th>Bodega</th><th></th></tr></thead>
+              <tbody>
+                ${vis.map((x, idx) => {
+                  const imp = impresos.has(x.key);
+                  const activo = o.claveActiva && o.claveActiva() === x.key;
+                  return `<tr class="bu-ult-row${x.recienIngresado ? ' bu-ult-row--new' : ''}${activo ? ' bu-ult-row--sel' : ''}" data-ui-i="${idx}" tabindex="0" role="button">
+                    <td>
+                      <div class="bu-ult-nom">
+                        <b>${esc(x.nombre)}</b>
+                        <span class="bu-ult-badges">
+                          ${x.recienIngresado ? '<span class="bu-tag bu-tag--new">RECIÉN INGRESADO</span>' : ''}
+                          ${imp ? '<span class="bu-tag bu-tag--imp">IMPRESA</span>' : ''}
+                        </span>
+                      </div>
+                      ${x.codigoMP || x.documento ? `<small>${x.codigoMP ? 'ID ' + esc(x.codigoMP) : ''}${x.codigoMP && x.documento ? ' · ' : ''}${esc(x.documento)}</small>` : ''}
+                    </td>
+                    <td><b>${esc(x.lote)}</b></td>
+                    <td>${x.vence ? esc(fechaCL(x.vence)) : '—'}</td>
+                    <td>${esc(fechaCL(x.fechaIngreso))}</td>
+                    <td style="text-align:right;"><b>${x.cantidad.toLocaleString('es-CL')}</b> u.</td>
+                    <td>${esc(x.bodega)}</td>
+                    <td style="text-align:right;"><button type="button" class="btn btn-outline btn-sm bu-ult-btn" data-ui-i="${idx}"><i class="ph-bold ph-tag" aria-hidden="true"></i> Cargar etiqueta</button></td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>` : `<p class="si-v">${q ? 'Ninguno de los últimos 15 ingresos coincide con el filtro.' : 'Aún no hay ingresos registrados.'}</p>`}
+      </section>`;
+      const iq = host.querySelector('#bu-ult-q');
+      if (iq) iq.oninput = (e) => { const p = e.target.selectionStart; filtroQ = e.target.value; pintar(); const n = host.querySelector('#bu-ult-q'); if (n) { n.focus(); n.setSelectionRange(p, p); } };
+      const br = host.querySelector('#bu-ult-ref');
+      if (br) br.onclick = () => cargar();
+      host.querySelectorAll('[data-ui-i]').forEach(el => {
+        const elegir = (e) => {
+          e.stopPropagation();
+          const it = vis[Number(el.dataset.uiI)];
+          if (it && o.onElegir) o.onElegir(it);
+        };
+        el.addEventListener('click', elegir);
+        if (el.tagName === 'TR') el.addEventListener('keydown', (k) => { if (k.key === 'Enter' || k.key === ' ') { k.preventDefault(); elegir(k); } });
+      });
+    };
+    const cargar = async () => {
+      cargando = true; errTxt = ''; pintar();
+      try { items = await cargarUltimosIngresos(15); }
+      catch (e) { errTxt = 'No se pudieron leer los últimos ingresos.'; }
+      cargando = false; pintar();
+    };
+    cargar();
+    return { refrescar: pintar, recargar: cargar };
+  }
+
+  /** Vista previa rápida de etiqueta + código de barras Code 128 dentro del modal de creación. */
+  function htmlVistaPreviaEtiqueta(sel) {
+    if (!sel || !sel.nombre) return '';
+    const P = window.SAR_Precintos;
+    const code = String(sel.codigoMP || sel.lote || 'BUL-PREVIEW').trim().toUpperCase().slice(0, 18);
+    const svg = P && P.barrasSVG ? P.barrasSVG(code, 26, true) : '';
+    return `<div class="bu-lp-wrap">
+      <div class="bu-lp-head"><span>Vista previa de etiqueta (100 × 60 mm · 203 dpi)</span>${sel.recienIngresado ? '<span class="bu-tag bu-tag--new">RECIÉN INGRESADO</span>' : ''}</div>
+      <div class="bu-lp-card">
+        <div class="bu-lp-top"><b>VISOR LOGÍSTICO SAR</b><span>${num(sel.total) ? num(sel.total) + ' u.' : '—'} · ${esc(sel.bodega || 'Bodega Central')}</span></div>
+        <div class="bu-lp-nom">${esc(String(sel.nombre).toUpperCase())}</div>
+        <div class="bu-lp-meta"><span><b>LOTE:</b> ${esc(sel.lote || 'S/L')}</span><span><b>VENC:</b> ${sel.vence ? esc(fechaCL(sel.vence)) : '—'}</span><span><b>ING:</b> ${esc(fechaCL(sel.fechaRecepcion || hoyISO()))}</span></div>
+        <div class="bu-lp-bar">${svg}<small>${esc(code)}</small></div>
+      </div>
+    </div>`;
+  }
+
   // ---------------- diálogo: crear o reimprimir etiquetas ----------------
   let insumos = null;
   async function cargarInsumos() { if (insumos) return insumos; const f = fs(), sn = await f.getDocs(f.query(f.collection(db(), 'Insumos'), f.limit(5000))), l = []; sn.forEach(d => l.push({ id: d.id, ...d.data() })); insumos = l; return l; }
@@ -230,8 +446,17 @@
     const ov = ventana(conteo ? 'Etiquetar stock existente (con conteo)' : 'Etiquetas de bulto', `<div class="bu-tabs"><button type="button" class="on" data-t="nueva">${conteo ? 'Contar y etiquetar' : 'Nuevas etiquetas'}</button><button type="button" data-t="re">Reimprimir existentes</button></div><div class="bu-pane" data-p="nueva"></div><div class="bu-pane" data-p="re" hidden></div>`, { encima: !!p.encima });
     ov.querySelectorAll('.bu-tabs button').forEach(b => b.onclick = () => { ov.querySelectorAll('.bu-tabs button').forEach(x => x.classList.toggle('on', x === b)); ov.querySelectorAll('.bu-pane').forEach(x => { x.hidden = x.dataset.p !== b.dataset.t; }); if (b.dataset.t === 're') pintarReimprimir(ov.querySelector('[data-p="re"]')); });
     const pane = ov.querySelector('[data-p="nueva"]');
+    const formHost = document.createElement('div');
+    const ultHost = document.createElement('div');
+    pane.appendChild(formHost);
+    if (!conteo) pane.appendChild(ultHost);
     let sel = lineas ? { ...lineas[0], idx: 0 } : { ...p }, totalManual = false;
+    if (!sel.nombre && !conteo && !lineas) {
+      const rec = obtenerUltimoIngresoSesion();
+      if (rec && p.preseleccionarReciente) sel = { ...sel, nombre: rec.nombre, insumoId: rec.insumoId, codigoMP: rec.codigoMP, bodega: rec.bodega, lote: rec.lote, vence: rec.vence, total: rec.cantidad, proveedor: rec.proveedor, oc: rec.oc, rec: rec.rec, fechaRecepcion: rec.fechaIngreso, _ingresoKey: rec.key, recienIngresado: true };
+    }
     if (conteo) { sel.total = 0; sel.sistema = num(p.total) || null; }
+    let ultCtrl = null;
     const totalDe = () => conteo && !totalManual ? num(sel.cajas) * num(sel.porCaja) + num(sel.sueltas) : num(sel.total);
     const pintar = () => {
       const sug = sugerirPorCaja(sel.nombre);
@@ -243,9 +468,10 @@
       const plan = planCajas({ total: enCajas, porCaja: sel.porCaja, subPor: sel.tieneSub ? sel.subPor : 0 });
       const nG = plan.length, nI = plan.reduce((t, x) => t + x.hijos.length, 0);
       const dif = conteo && sel.sistema != null && sel.insumoId ? num(sel.total) - num(sel.sistema) - num(sel.reservado) : null;
-      pane.innerHTML = `${conteo ? '<p class="si-v">Para productos que <b>ya están en el sistema</b> y no tienen etiqueta: cuenta lo que hay, compara con el sistema y crea las etiquetas. No es un ingreso nuevo.</p>' : ''}
+      formHost.innerHTML = `${conteo ? '<p class="si-v">Para productos que <b>ya están en el sistema</b> y no tienen etiqueta: cuenta lo que hay, compara con el sistema y crea las etiquetas. No es un ingreso nuevo.</p>' : ''}
+        ${sel.recienIngresado ? `<div class="bu-rec-banner"><span class="bu-tag bu-tag--new">RECIÉN INGRESADO</span><span>Datos cargados del último ingreso registrado (${esc(sel.bodega || 'Bodega Central')}). Verifica las cajas y genera la etiqueta.</span></div>` : ''}
         ${lineas ? `<label class="bu-l">Producto de esta recepción<select id="bu-lin" class="si-in">${lineas.map((l, i) => `<option value="${i}"${i === sel.idx ? ' selected' : ''}>${esc(l.nombre)} · ${num(l.total)} u.${l.lote ? ' · lote ' + esc(l.lote) : ''}${l.hecho ? ' ✔' : ''}</option>`).join('')}</select></label>`
-          : `<label class="bu-l">Producto${conteo ? ' (elige el lote que estás contando)' : ''}<input id="bu-q" class="si-in" placeholder="Busca por nombre…" value="${esc(sel.nombre || '')}" autocomplete="off"></label><div id="bu-sug" class="bu-sug"></div>`}
+          : `<label class="bu-l">Producto${conteo ? ' (elige el lote que estás contando)' : ''}<input id="bu-q" class="si-in" placeholder="Busca por nombre o haz clic en un ingreso abajo…" value="${esc(sel.nombre || '')}" autocomplete="off"></label><div id="bu-sug" class="bu-sug"></div>`}
         <div class="bu-g3"><label class="bu-l">Lote<input id="bu-lote" class="si-in" value="${esc(sel.lote || '')}"${conteo ? ' placeholder="S/L si no trae"' : ''}></label><label class="bu-l">Vence<input id="bu-vence" type="date" class="si-in" value="${esc(sel.vence || '')}"></label><label class="bu-l">Bodega<input id="bu-bod" class="si-in" value="${esc(sel.bodega || '')}"${conteo && sel.insumoId ? ' readonly title="Bodega del producto en el sistema"' : ''}></label></div>
         <h4 class="fp-sub">¿Cómo viene?</h4>
         <div class="bu-g3">
@@ -261,40 +487,43 @@
           <div class="bu-l"><span>Diferencia</span><b id="bu-dif" class="bu-cifra ${dif > 0 ? 'bu-mas' : dif < 0 ? 'bu-menos' : ''}">${dif == null ? '—' : (dif > 0 ? '+' : '') + dif}</b><small id="bu-difm">${textoDif(dif, esSuper)}</small></div></div>` : ''}
         ${conteo ? '<details class="bu-opc"><summary>Datos opcionales para la etiqueta (proveedor, OC, fecha)</summary>' : ''}<div class="bu-g3"><label class="bu-l">Proveedor<input id="bu-prov" class="si-in" value="${esc(sel.proveedor || '')}"></label><label class="bu-l">Orden de compra<input id="bu-oc" class="si-in" value="${esc(sel.oc || '')}"></label><label class="bu-l">Fecha de recepción<input id="bu-fr" type="date" class="si-in" value="${esc(sel.fechaRecepcion || hoyISO())}"></label></div>${conteo ? '</details>' : ''}
         ${sel.rec ? `<p class="si-v">Recepción ${esc(sel.rec)}</p>` : ''}
+        <div id="bu-lp-live">${htmlVistaPreviaEtiqueta(sel)}</div>
         <div class="bu-prev" id="bu-prevt">${nG ? `<b>${nG + nI} etiqueta${nG + nI === 1 ? '' : 's'}</b>: ${nG} caja${nG === 1 ? '' : 's'} grande${nG === 1 ? '' : 's'}${nG > 1 && plan[nG - 1].q !== plan[0].q ? ` (${nG - 1} de ${plan[0].q} u. y la última de ${plan[nG - 1].q} u.)` : ` de ${plan[0].q} u.`}${nI ? ` + ${nI} cajas interiores de ${num(sel.subPor)} u.` : ''} · ${enCajas} u. en cajas${conteo && num(sel.sueltas) ? ` + ${num(sel.sueltas)} sueltas` : ''}` : (conteo ? 'Indica las cajas y las unidades por caja (o el total contado).' : 'Indica el total y las unidades por caja.')}</div>
         <div class="fp-facc"><button type="button" class="btn btn-primary" id="bu-gen"${(nG || (conteo && num(sel.total) > 0)) ? '' : ' disabled'}><i class="ph-bold ph-${conteo ? 'check-circle' : 'tag'}"></i> ${conteo ? (nG ? 'Registrar conteo y crear etiquetas' : 'Registrar conteo') : 'Crear etiquetas'}</button></div>`;
-      const v = (id) => (pane.querySelector('#' + id) || {}).value;
+      const v = (id) => (formHost.querySelector('#' + id) || {}).value;
       const leer2 = () => { sel.lote = v('bu-lote'); sel.vence = v('bu-vence'); sel.bodega = v('bu-bod'); sel.porCaja = num(v('bu-pc')); sel.proveedor = v('bu-prov'); sel.oc = v('bu-oc'); sel.fechaRecepcion = v('bu-fr');
         if (sel.tieneSub) sel.subPor = num(v('bu-sp')); if (conteo) { sel.cajas = num(v('bu-cajas')); sel.sueltas = num(v('bu-sue')); } else sel.total = num(v('bu-total')); };
+      const actPrev = () => { const lp = formHost.querySelector('#bu-lp-live'); if (lp) lp.innerHTML = htmlVistaPreviaEtiqueta(sel); };
       /* v21.238: se recalcula mientras se escribe, sin redibujar (no se pierde el foco ni se cierra el teclado del teléfono) */
       const vivo = () => {
-        if (conteo && !totalManual) { sel.total = totalDe(); const et = pane.querySelector('#bu-total'); if (et) et.value = sel.total || ''; }
+        if (conteo && !totalManual) { sel.total = totalDe(); const et = formHost.querySelector('#bu-total'); if (et) et.value = sel.total || ''; }
         const enC = Math.max(0, num(sel.total) - (conteo ? num(sel.sueltas) : 0)), pl = planCajas({ total: enC, porCaja: sel.porCaja, subPor: sel.tieneSub ? sel.subPor : 0 }), g = pl.length, it = pl.reduce((t, x) => t + x.hijos.length, 0);
-        const pv = pane.querySelector('#bu-prevt'); if (pv) pv.innerHTML = g ? `<b>${g + it} etiqueta${g + it === 1 ? '' : 's'}</b>: ${g} caja${g === 1 ? '' : 's'} grande${g === 1 ? '' : 's'}${g > 1 && pl[g - 1].q !== pl[0].q ? ` (${g - 1} de ${pl[0].q} u. y la última de ${pl[g - 1].q} u.)` : ` de ${pl[0].q} u.`}${it ? ` + ${it} cajas interiores de ${num(sel.subPor)} u.` : ''} · ${enC} u. en cajas${conteo && num(sel.sueltas) ? ` + ${num(sel.sueltas)} sueltas` : ''}` : 'Indica las cajas y las unidades por caja.';
-        const ni = pane.querySelector('#bu-nint'); if (ni) ni.textContent = num(sel.subPor) > 0 && num(sel.porCaja) > 0 ? Math.ceil(num(sel.porCaja) / num(sel.subPor)) : '—';
-        const df = conteo && sel.sistema != null && sel.insumoId ? num(sel.total) - num(sel.sistema) - num(sel.reservado) : null, ed = pane.querySelector('#bu-dif'), em = pane.querySelector('#bu-difm');
+        const pv = formHost.querySelector('#bu-prevt'); if (pv) pv.innerHTML = g ? `<b>${g + it} etiqueta${g + it === 1 ? '' : 's'}</b>: ${g} caja${g === 1 ? '' : 's'} grande${g === 1 ? '' : 's'}${g > 1 && pl[g - 1].q !== pl[0].q ? ` (${g - 1} de ${pl[0].q} u. y la última de ${pl[g - 1].q} u.)` : ` de ${pl[0].q} u.`}${it ? ` + ${it} cajas interiores de ${num(sel.subPor)} u.` : ''} · ${enC} u. en cajas${conteo && num(sel.sueltas) ? ` + ${num(sel.sueltas)} sueltas` : ''}` : 'Indica las cajas y las unidades por caja.';
+        const ni = formHost.querySelector('#bu-nint'); if (ni) ni.textContent = num(sel.subPor) > 0 && num(sel.porCaja) > 0 ? Math.ceil(num(sel.porCaja) / num(sel.subPor)) : '—';
+        const df = conteo && sel.sistema != null && sel.insumoId ? num(sel.total) - num(sel.sistema) - num(sel.reservado) : null, ed = formHost.querySelector('#bu-dif'), em = formHost.querySelector('#bu-difm');
         if (ed) { ed.textContent = df == null ? '—' : (df > 0 ? '+' : '') + df; ed.className = 'bu-cifra ' + (df > 0 ? 'bu-mas' : df < 0 ? 'bu-menos' : ''); } if (em) em.textContent = textoDif(df, esSuper);
-        const bg = pane.querySelector('#bu-gen'); if (bg) { bg.disabled = !(g || (conteo && num(sel.total) > 0)); bg.lastChild.textContent = ' ' + (conteo ? (g ? 'Registrar conteo y crear etiquetas' : 'Registrar conteo') : 'Crear etiquetas'); }
+        const bg = formHost.querySelector('#bu-gen'); if (bg) { bg.disabled = !(g || (conteo && num(sel.total) > 0)); bg.lastChild.textContent = ' ' + (conteo ? (g ? 'Registrar conteo y crear etiquetas' : 'Registrar conteo') : 'Crear etiquetas'); }
+        actPrev();
       };
-      ['bu-pc', 'bu-sp', 'bu-sue'].concat(conteo ? ['bu-cajas'] : ['bu-total']).forEach(id => { const e = pane.querySelector('#' + id); if (e) e.oninput = () => { leer2(); vivo(); }; });
-      if (conteo) { const et = pane.querySelector('#bu-total'); if (et) et.oninput = () => { leer2(); const t = Math.max(0, Math.floor(num(et.value))); totalManual = t !== num(sel.cajas) * num(sel.porCaja) + num(sel.sueltas); sel.total = t; vivo(); }; }
-      else { const ec = pane.querySelector('#bu-cajas'); if (ec) ec.onchange = () => { leer2(); const n = Math.max(1, num(ec.value)); if (sel.total) sel.porCaja = Math.ceil(sel.total / n); pintar(); }; }
-      const rc = pane.querySelector('#bu-recalc'); if (rc) rc.onclick = () => { totalManual = false; leer2(); pintar(); };
-      if (conteo) { const el = pane.querySelector('#bu-lote'); if (el) el.onchange = () => { leer2(); const i = (insumos || []).find(x => x.id === sel.insumoId); if (i) { sel.sistema = enLote(i, sel.lote || 'S/L'); } pintar(); }; }
-      const ts = pane.querySelector('#bu-tsub'); if (ts) ts.onchange = () => { leer2(); sel.tieneSub = ts.checked; pintar(); };
-      const ls = pane.querySelector('#bu-lin'); if (ls) ls.onchange = () => { const i = num(ls.value); sel = { ...lineas[i], idx: i }; pintar(); };
-      const q = pane.querySelector('#bu-q'); if (q) q.oninput = async () => {
-        const t = norm(q.value), box = pane.querySelector('#bu-sug'); if (t.length < 2) { box.innerHTML = ''; return; }
+      ['bu-pc', 'bu-sp', 'bu-sue', 'bu-lote', 'bu-vence', 'bu-bod', 'bu-fr'].concat(conteo ? ['bu-cajas'] : ['bu-total']).forEach(id => { const e = formHost.querySelector('#' + id); if (e) e.oninput = () => { leer2(); vivo(); }; });
+      if (conteo) { const et = formHost.querySelector('#bu-total'); if (et) et.oninput = () => { leer2(); const t = Math.max(0, Math.floor(num(et.value))); totalManual = t !== num(sel.cajas) * num(sel.porCaja) + num(sel.sueltas); sel.total = t; vivo(); }; }
+      else { const ec = formHost.querySelector('#bu-cajas'); if (ec) ec.onchange = () => { leer2(); const n = Math.max(1, num(ec.value)); if (sel.total) sel.porCaja = Math.ceil(sel.total / n); pintar(); }; }
+      const rc = formHost.querySelector('#bu-recalc'); if (rc) rc.onclick = () => { totalManual = false; leer2(); pintar(); };
+      if (conteo) { const el = formHost.querySelector('#bu-lote'); if (el) el.onchange = () => { leer2(); const i = (insumos || []).find(x => x.id === sel.insumoId); if (i) { sel.sistema = enLote(i, sel.lote || 'S/L'); } pintar(); }; }
+      const ts = formHost.querySelector('#bu-tsub'); if (ts) ts.onchange = () => { leer2(); sel.tieneSub = ts.checked; pintar(); };
+      const ls = formHost.querySelector('#bu-lin'); if (ls) ls.onchange = () => { const i = num(ls.value); sel = { ...lineas[i], idx: i }; pintar(); };
+      const q = formHost.querySelector('#bu-q'); if (q) q.oninput = async () => {
+        const t = norm(q.value), box = formHost.querySelector('#bu-sug'); if (t.length < 2) { box.innerHTML = ''; return; }
         const l = (await cargarInsumos()).filter(i => i.status !== 'CUARENTENA' && t.split(' ').every(w => norm(i.name).includes(w))).slice(0, 8);
         box.innerHTML = l.map(i => (conteo ? lotesTodos(i).concat([{ batch: '', quantity: 0, expirationDate: '', nuevo: true }]) : lotesDe(i)).map(b => b.nuevo ? `<button type="button" class="bu-op bu-op-n" data-id="${esc(i.id)}" data-lote="" data-v="" data-q="0"><b>${esc(i.name)}</b><small>${esc(i.location || '')} · <u>otro lote</u> (lo escribes tú: no está en el sistema)</small></button>` : `<button type="button" class="bu-op" data-id="${esc(i.id)}" data-lote="${esc(b.batch || 'S/L')}" data-v="${esc(b.expirationDate || '')}" data-q="${num(b.quantity)}"><b>${esc(i.name)}</b><small>${esc(i.location || '')} · lote ${esc(b.batch || 'S/L')}${b.expirationDate ? ' · vence ' + esc(fechaCL(b.expirationDate)) : ''} · ${num(b.quantity)} u.</small></button>`).join('')).join('') || '<p class="si-v">Sin coincidencias.</p>';
         box.querySelectorAll('.bu-op').forEach(b => b.onclick = () => { const i = insumos.find(x => x.id === b.dataset.id);
-          sel = { ...sel, nombre: i.name, insumoId: i.id, codigoMP: i.codigoMP || '', bodega: i.location || '', lote: b.dataset.lote, vence: b.dataset.v, porCaja: num(i.unidadesPorCaja) || 0, proveedor: sel.proveedor || i.provider || '' };
+          sel = { ...sel, nombre: i.name, insumoId: i.id, codigoMP: i.codigoMP || '', bodega: i.location || '', lote: b.dataset.lote, vence: b.dataset.v, porCaja: num(i.unidadesPorCaja) || 0, proveedor: sel.proveedor || i.provider || '', _ingresoKey: '', recienIngresado: false };
           if (conteo) { sel.sistema = num(b.dataset.q); sel.reservado = num(i.reservado); sel.deuda = num(i.sobregiro); sel.cajas = 0; sel.sueltas = 0; totalManual = false; sel.etiquetadas = null;
             listar(5000).then(bs => { const m = bs.filter(x => x.nivel !== 'interior' && x.estado !== 'VACIA' && (x.insumoId === i.id || norm(x.nombre) === norm(i.name)) && (x.lote || 'S/L') === (sel.lote || 'S/L')); sel.etiquetadas = { n: m.length, u: m.reduce((t2, x) => t2 + num(x.contenido), 0) }; pintar(); }).catch(() => {}); }
           else sel.total = num(b.dataset.q);
           pintar(); });
       };
-      pane.querySelector('#bu-gen').onclick = async (e) => {
+      formHost.querySelector('#bu-gen').onclick = async (e) => {
         leer2(); if (!sel.nombre) { toast('Etiquetas', 'Elige el producto.', 'warning'); return; }
         if (sel.tieneSub && !(num(sel.subPor) > 0)) { toast('Cajas interiores', 'Indica cuántas unidades trae cada caja interior.', 'warning'); return; }
         const btn = e.currentTarget; btn.disabled = true;
@@ -317,7 +546,8 @@
           if (l.length) {
             const P = window.SAR_Progreso, nI = l.filter(b => b.nivel === 'interior').length;
             const ok = P && P.confirmar ? await P.confirmar({ titulo: `${l.length} etiqueta${l.length === 1 ? '' : 's'} creada${l.length === 1 ? '' : 's'}`, texto: `${esc(l[0].folio)}${l.length > 1 ? ' a ' + esc(l[l.length - 1].folio) : ''}${msgConteo ? '<br>' + msgConteo : ''}`, lineas: [`${l.length - nI} caja(s) grande(s)${nI ? ` + ${nI} interior(es)` : ''}`, 'Puedes corregir los datos después en «Impresión de etiquetas» (quedan para reimprimir).'], si: 'Imprimir ahora', no: 'Después' }) : true;
-            if (ok) await imprimir(l); else toast('Etiquetas guardadas', 'Quedan «sin imprimir» en Impresión de etiquetas.', 'info');
+            if (ok) { await imprimir(l); if (sel._ingresoKey) marcarIngresoImpreso(sel._ingresoKey); if (ultCtrl) ultCtrl.refrescar(); }
+            else toast('Etiquetas guardadas', 'Quedan «sin imprimir» en Impresión de etiquetas.', 'info');
           } else if (msgConteo && window.SAR_Progreso && window.SAR_Progreso.exito) window.SAR_Progreso.exito({ titulo: 'Conteo registrado', texto: msgConteo });
           insumos = null; if (conteo) { sel = { fechaRecepcion: hoyISO() }; totalManual = false; }
           pintar();
@@ -325,6 +555,26 @@
       };
     };
     pintar();
+    if (!conteo) {
+      ultCtrl = renderBloqueUltimosIngresos(ultHost, {
+        claveActiva: () => sel._ingresoKey || '',
+        onElegir: (it) => {
+          const sug = sugerirPorCaja(it.nombre);
+          sel = {
+            nombre: it.nombre, insumoId: it.insumoId, codigoMP: it.codigoMP,
+            bodega: it.bodega, lote: it.lote, vence: it.vence,
+            total: it.cantidad, porCaja: sug || it.cantidad, _sugPc: !!sug,
+            proveedor: it.proveedor, oc: it.oc, rec: it.rec,
+            fechaRecepcion: it.fechaIngreso || hoyISO(),
+            _ingresoKey: it.key, recienIngresado: !!it.recienIngresado
+          };
+          pintar();
+          if (ultCtrl) ultCtrl.refrescar();
+          formHost.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          toast('Etiqueta cargada', `${it.nombre} · lote ${it.lote} (${it.cantidad} u.).`, 'info');
+        }
+      });
+    }
     return ov;
   }
   /** v21.238: compara lo contado con el sistema. Más → ajuste AJU «Conteo físico» (superadmin: directo; otros: solicitud). Menos → informe de diferencias. */
@@ -609,7 +859,24 @@
     const en = opc && opc.en;
     if (en) en.innerHTML = `<div class="si-wrap si-ancho"><div class="si-cab"><div><h2 class="si-t">Impresión de etiquetas</h2><p class="si-s">Las etiquetas de bulto de cada orden de compra: imprime las que quedaron pendientes al recibir, reimprime o corrige datos.</p></div></div>
       <div class="etq-acc"><button type="button" class="bu-big" data-ex="conteo"><i class="ph-bold ph-list-checks"></i><b>Etiquetar stock existente</b><small>Lo que ya estaba en el sistema sin etiqueta: cuéntalo, compara y etiqueta</small></button><button type="button" class="bu-big" data-ex="nueva"><i class="ph-bold ph-tag"></i><b>Crear etiquetas</b><small>Para un producto y lote, con cajas interiores</small></button></div><p class="etq-dif"><button type="button" class="bu-lnk" data-ex="dif"><i class="ph-bold ph-scales"></i> Diferencias de conteo</button> · <button type="button" class="bu-lnk" data-ex="contar"><i class="ph-bold ph-barcode"></i> Contar por bultos (pistola)</button> · <button type="button" class="bu-lnk" data-ex="probar"><i class="ph-bold ph-scan"></i> Probar la pistola</button></p>
-      <div class="bu-b etq-pag"><p class="si-v">Cargando órdenes y etiquetas…</p></div></div>`;
+      <div class="bu-b etq-pag"><p class="si-v">Cargando órdenes y etiquetas…</p></div>
+      <div id="etq-ult-ingresos" class="etq-ult-host"></div></div>`;
+    if (en) {
+      const ultHostPag = en.querySelector('#etq-ult-ingresos');
+      renderBloqueUltimosIngresos(ultHostPag, {
+        onElegir: (it) => {
+          const sug = sugerirPorCaja(it.nombre);
+          etiquetar({
+            nombre: it.nombre, insumoId: it.insumoId, codigoMP: it.codigoMP,
+            bodega: it.bodega, lote: it.lote, vence: it.vence,
+            total: it.cantidad, porCaja: sug || it.cantidad,
+            proveedor: it.proveedor, oc: it.oc, rec: it.rec,
+            fechaRecepcion: it.fechaIngreso || hoyISO(),
+            _ingresoKey: it.key, recienIngresado: !!it.recienIngresado
+          }).then(ov2 => { if (ov2) { const o = ov2._fin; ov2._fin = () => { if (o) o(); porOC({ en }); }; } });
+        }
+      });
+    }
     if (en) en.querySelectorAll('[data-ex]').forEach(b => b.onclick = () => { const x = b.dataset.ex, re = (ov2) => { if (ov2) { const o = ov2._fin; ov2._fin = () => { if (o) o(); porOC({ en }); }; } };
       if (x === 'probar') probarPistola(); else if (x === 'dif') diferencias(); else if (x === 'contar') escanear('conteo').then(re); else etiquetar(x === 'conteo' ? { conteo: true } : {}).then(re); });
     const ov = en || ventana('Etiquetas por orden de compra', '<p class="si-v">Cargando órdenes y etiquetas…</p>');
@@ -844,6 +1111,6 @@
     inp.addEventListener('input', () => { clearTimeout(tm); tm = setTimeout(() => registrar('nada'), 250); });
     pintar(''); setTimeout(() => inp.focus(), 50); return ov;
   }
-  window.SAR_Bultos = { esTag, avisoTag, reservarFolios, reservarTramo, quedanReservados, leerCajasTx, leerConCamara, leer, sacar, probarPistola, hojaPrueba, code39, i2de5, planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo };
+  window.SAR_Bultos = { esTag, avisoTag, reservarFolios, reservarTramo, quedanReservados, leerCajasTx, leerConCamara, leer, sacar, probarPistola, hojaPrueba, code39, i2de5, planCajas, registrarConteo, diferencias, enLote, porOC, abrirEtiquetas, editar, imprimir, marcarImpresas, estadoImp, estadoOC, faltantesOC, desdeRecepcion, repartirEnCajas, cargarQR, matrizQR, abrir, etiquetar, escanear, ofrecerRecepcion, pdf, crear, listar, sugerirPorCaja, repartirCajas, folioDe, digitos, resumirConteo, ultimosIngresosDe, cargarUltimosIngresos, registrarUltimoIngreso, marcarIngresoImpreso, renderBloqueUltimosIngresos };
   if (typeof module !== 'undefined' && module.exports) module.exports = window.SAR_Bultos;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: null, addEventListener() {} });

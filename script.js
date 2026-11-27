@@ -887,6 +887,19 @@ document.addEventListener('DOMContentLoaded', () => {
                         accionDetallada = `Resta de stock: ${stockActual} -> ${nuevoStock} (-${cantidadAbs})`;
                     }
 
+                    /* v21.278: si es ajuste de salida con posible causal Merma/Dañado/Vencido, buscamos fecha de ingreso del lote antes de abrir la transacción */
+                    const AM = window.SAR_ActasMerma;
+                    let fechaIngresoFallback = '';
+                    if (AM && cantidadParsed < 0) {
+                        const preEv = AM.evaluarCausalAjuste({ motivo: opts && opts.motivo, cantidad: cantidadParsed, vence: (opts && opts.vence) || '' });
+                        if (preEv.aplica || !(opts && opts.motivo)) {
+                            fechaIngresoFallback = await AM.buscarFechaIngresoLote(insumoNombre, docId, (opts && opts.lote) || '').catch(() => '');
+                        }
+                    }
+
+                    let movIdFinal = '';
+                    let actaMermaGenerada = null;
+
                     await runTransaction(db, async (transaction) => {
                         const insumoRef = doc(db, 'Insumos', docId);
                         const insumoSnap = await transaction.get(insumoRef);
@@ -897,7 +910,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         const solRef = opts && opts.solicitudId ? doc(db, 'Solicitudes_Ajuste', opts.solicitudId) : null;
                         if (solRef) { const ss = await transaction.get(solRef); if (!ss.exists()) throw new Error('La solicitud no existe.'); if (ss.data().status !== 'pendiente') { const e = new Error('Esta solicitud ya fue procesada.'); e.ya = true; throw e; } if (ss.data().tipo === 'SOLICITUD_INSUMOS') throw new Error('Esto es una solicitud de insumos, no un ajuste.'); if (opts.cantidadVista != null && Number(ss.data().cantidad) !== Number(opts.cantidadVista)) throw new Error('La solicitud cambió mientras la revisabas: vuelve a abrirla.'); }   /* v21.247 */
                         const movRef = opts && opts.idMov ? doc(db, 'Historial_Movimientos', 'aju-' + opts.idMov) : doc(collection(db, 'Historial_Movimientos'));
+                        movIdFinal = movRef.id;
                         if (opts && opts.idMov) { const ms = await transaction.get(movRef); if (ms.exists()) { const e = new Error('Este ajuste ya estaba aplicado.'); e.ya = true; throw e; } }
+                        /* v21.278: leer contador AM-AAAA antes de escribir (requisito de transacciones Firestore) */
+                        const anioAm = new Date().getFullYear();
+                        const ctrAmRef = (AM && cantidadParsed < 0) ? doc(collection(db, 'Contadores'), 'acta-merma-' + anioAm) : null;
+                        const ctrAmSnap = ctrAmRef ? await transaction.get(ctrAmRef) : null;
 
                         const dataActual = insumoSnap.data();
                         const stockReal = dataActual.quantity || 0;
@@ -927,6 +945,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (hay !== Number(opts.esperadoLote)) throw new Error(`El lote ${opts.lote} cambió desde el conteo (tenía ${opts.esperadoLote}, ahora ${hay}).${opts.solicitudId ? ' Rechaza esta solicitud y vuelve a contar el lote.' : ' Vuelve a contarlo.'}`);
                         }
 
+                        let loteAfectado = (opts && opts.lote) || '';
+                        let venceAfectado = (opts && opts.vence) || '';
+                        let fechaIngAfectada = '';
                         if (cantidadParsed < 0) {
                             // RESTA - FEFO (v21.238: con opts.lote, solo de ese lote)
                             let qtyToReduce = Math.abs(cantidadParsed);
@@ -936,6 +957,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             for (let i = 0; i < currentBatches.length && qtyToReduce > 0; i++) {
                                 if (opts && opts.lote && !esLote(currentBatches[i])) continue;
                                 if (currentBatches[i].quantity > 0) {
+                                    if (!loteAfectado) loteAfectado = currentBatches[i].batch || 'S/L';
+                                    if (!venceAfectado && currentBatches[i].expirationDate) venceAfectado = currentBatches[i].expirationDate;
+                                    if (!fechaIngAfectada && (currentBatches[i].fechaIngreso || currentBatches[i].fechaRecepcion)) fechaIngAfectada = currentBatches[i].fechaIngreso || currentBatches[i].fechaRecepcion;
                                     const available = currentBatches[i].quantity;
                                     if (available >= qtyToReduce) {
                                         currentBatches[i].quantity -= qtyToReduce;
@@ -981,7 +1005,58 @@ document.addEventListener('DOMContentLoaded', () => {
                             lastUpdated: serverTimestamp()
                         });
 
-                        if (solRef) transaction.update(solRef, { status: 'aprobado', dateActioned: serverTimestamp(), actioner: auth.currentUser.email });
+                        /* v21.278: generación atómica de Acta de Merma (AM-AAAA-NNNN) cuando la salida corresponde a Merma, Dañado o Vencido */
+                        const evMerma = (AM && cantidadParsed < 0) ? AM.evaluarCausalAjuste({ motivo: opts && opts.motivo, cantidad: cantidadParsed, vence: venceAfectado || dataActual.expirationDate || '' }) : { aplica: false };
+                        let camposMerma = {};
+                        if (evMerma.aplica && ctrAmRef) {
+                            const nAm = (ctrAmSnap && ctrAmSnap.exists() ? (Number(ctrAmSnap.data().ultimo) || 0) : 0) + 1;
+                            const folioAm = AM.folioMerma(anioAm, nAm);
+                            const ahoraAm = new Date();
+                            const fechaIsoAm = ahoraAm.toISOString();
+                            const fechaYmd = `${ahoraAm.getFullYear()}-${String(ahoraAm.getMonth() + 1).padStart(2, '0')}-${String(ahoraAm.getDate()).padStart(2, '0')}`;
+                            const horaAm = ahoraAm.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+                            const fechaIngFinal = fechaIngAfectada || fechaIngresoFallback || (dataActual.createdAt && typeof dataActual.createdAt.toDate === 'function' ? dataActual.createdAt.toDate().toISOString().slice(0, 10) : '');
+                            const codigoProd = String(dataActual.codigoMP || dataActual.codigoSAR || dataActual.code || '').trim();
+                            actaMermaGenerada = {
+                                tipo: 'acta-merma',
+                                folio: folioAm,
+                                numero: folioAm,
+                                movimientoId: movRef.id,
+                                codigoAjuste,
+                                fecha: fechaYmd,
+                                hora: horaAm,
+                                fechaISO: fechaIsoAm,
+                                bodega: dataActual.location || 'Bodega Central',
+                                responsable: auth.currentUser.email,
+                                causal: evMerma.causal,
+                                textoCausal: evMerma.textoCausal,
+                                etiqueta: evMerma.etiqueta,
+                                observacion: (opts && opts.observacion) || justificacion || '',
+                                codigo: codigoProd,
+                                codigoMP: String(dataActual.codigoMP || '').trim(),
+                                descripcion: insumoNombre,
+                                insumoName: insumoNombre,
+                                insumoId: docId,
+                                lote: loteAfectado || dataActual.batch || 'S/L',
+                                vence: venceAfectado || (dataActual.expirationDate && dataActual.expirationDate !== 'N/A' ? dataActual.expirationDate : ''),
+                                fechaIngreso: fechaIngFinal,
+                                cantidad: Math.abs(cantidadParsed),
+                                stockAntes: stockReal,
+                                stockDespues: nuevoStockTransaccion
+                            };
+                            transaction.set(ctrAmRef, { ultimo: nAm, anio: anioAm, tipo: 'contador-acta-merma', updatedAt: serverTimestamp() }, { merge: true });
+                            transaction.set(doc(collection(db, 'Contadores'), 'acta-merma-' + folioAm), { ...actaMermaGenerada, creadoEn: serverTimestamp() });
+                            camposMerma = {
+                                actaMermaFolio: folioAm,
+                                causalMerma: evMerma.causal,
+                                etiquetaMerma: evMerma.etiqueta,
+                                venceLote: actaMermaGenerada.vence,
+                                fechaIngresoLote: fechaIngFinal,
+                                ...(codigoProd ? { codigoMP: codigoProd } : {})
+                            };
+                        }
+
+                        if (solRef) transaction.update(solRef, { status: 'aprobado', dateActioned: serverTimestamp(), actioner: auth.currentUser.email, ...(actaMermaGenerada ? { actaMermaFolio: actaMermaGenerada.folio, causalMerma: actaMermaGenerada.causal } : {}) });
                         transaction.set(movRef, {
                             type: 'AJUSTE_CRITICO',
                             insumoName: insumoNombre, insumoId: docId, idInsumoOrigen: docId, document: codigoAjuste, bodega: dataActual.location || '',
@@ -992,8 +1067,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             origin: 'Ajuste Manual Crítico',
                             dest: 'N/A',
                             /* v21.233: código AJU y motivo visibles en el kárdex y el informe contable */
-                            codigoSeguimiento: codigoAjuste, delta: cantidadParsed, ...(opts && opts.lote ? { batch: opts.lote } : {}),
-                            ...(opts && opts.motivo ? { motivo: opts.motivo } : {}), ...(opts && opts.observacion ? { observacion: opts.observacion } : {})
+                            codigoSeguimiento: codigoAjuste, delta: cantidadParsed, ...(loteAfectado ? { batch: loteAfectado } : (opts && opts.lote ? { batch: opts.lote } : {})),
+                            ...(opts && opts.motivo ? { motivo: opts.motivo } : {}), ...(opts && opts.observacion ? { observacion: opts.observacion } : {}),
+                            ...camposMerma
                         });
 
                         const newAuditRef = doc(collection(db, 'Auditoria'));
@@ -1003,11 +1079,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             item: insumoNombre,
                             action: accionDetallada,
                             justification: justificacion,
+                            ...(actaMermaGenerada ? { actaMermaFolio: actaMermaGenerada.folio } : {}),
                             date: serverTimestamp()
                         });
                     });
 
-                    return { codigoAjuste, accionDetallada };
+                    if (actaMermaGenerada && AM) { AM.espejarEnColeccion(actaMermaGenerada).catch(() => {}); }
+                    return { codigoAjuste, accionDetallada, movimientoId: movIdFinal, actaMerma: actaMermaGenerada };
                 };
 
                 if (btnEjecutarAjuste) {
@@ -1076,7 +1154,11 @@ document.addEventListener('DOMContentLoaded', () => {
                                 // Ejecutar directamente
                                 const res = await window.ejecutarAjusteDirecto(docId, stockActual, insumoNombre, cantidadParsed, justificacionFinal, codigoGob, { motivo: motivoSel, observacion: justificacion, ...optLote });
                                 cacheInsumosParaAjuste = null;   /* v21.239: la próxima búsqueda trae el stock nuevo */
-                                window.showAlertCenter("Ajuste realizado", `Código: ${res.codigoAjuste}\nQueda en el historial y en el informe contable del producto.`);
+                                if (res && res.actaMerma && window.SAR_ActasMerma) {
+                                    window.SAR_ActasMerma.mostrarCierre(res.actaMerma);
+                                } else {
+                                    window.showAlertCenter("Ajuste realizado", `Código: ${res.codigoAjuste}\nQueda en el historial y en el informe contable del producto.`);
+                                }
                                 
                                 /* v21.233: se quitó el correo a visor@tudominio.com (dirección de ejemplo que abría el programa de correo tras cada ajuste) */
                             } else {
@@ -1116,12 +1198,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const subtabBtns = {
                     crear: document.getElementById('btn-subtab-crear-ajuste'),
                     solicitudes: document.getElementById('btn-subtab-mis-solicitudes'),
-                    aprobaciones: document.getElementById('btn-subtab-aprobaciones')
+                    aprobaciones: document.getElementById('btn-subtab-aprobaciones'),
+                    actasMerma: document.getElementById('btn-subtab-actas-merma')
                 };
                 const subtabPanels = {
                     crear: document.getElementById('panel-crear-ajuste'),
                     solicitudes: document.getElementById('panel-mis-solicitudes'),
-                    aprobaciones: document.getElementById('panel-aprobaciones')
+                    aprobaciones: document.getElementById('panel-aprobaciones'),
+                    actasMerma: document.getElementById('panel-actas-merma')
                 };
 
                 function switchSubtab(activeKey) {
@@ -1140,11 +1224,15 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                         }
                     });
+                    if (activeKey === 'actasMerma' && window.SAR_ActasMerma) {
+                        window.SAR_ActasMerma.renderListado(document.getElementById('actas-merma-root'));
+                    }
                 }
 
                 if (subtabBtns.crear) subtabBtns.crear.onclick = () => switchSubtab('crear');
                 if (subtabBtns.solicitudes) subtabBtns.solicitudes.onclick = () => switchSubtab('solicitudes');
                 if (subtabBtns.aprobaciones) subtabBtns.aprobaciones.onclick = () => switchSubtab('aprobaciones');
+                if (subtabBtns.actasMerma) subtabBtns.actasMerma.onclick = () => switchSubtab('actasMerma');
 
                 // Asegurar que el Superadmin vea el botón de aprobaciones
                 if (userRole === 'superadmin' && subtabBtns.aprobaciones) {
@@ -1211,13 +1299,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         }
 
                         row.innerHTML = `
-                            <td><strong>${window.escapeHTML(data.code || 'N/A')}</strong></td>
+                            <td><strong>${window.escapeHTML(data.code || 'N/A')}</strong>${data.actaMermaFolio ? `<br><span class="am-badge am-badge--folio" style="margin-top:4px;">${window.escapeHTML(data.actaMermaFolio)}</span>` : ''}</td>
                             <td>${window.escapeHTML(data.insumoName || 'Desconocido')}</td>
                             <td>${dateStr}</td>
                             <td>${variation}</td>
                             <td>${data.previousStock} &rarr; ${data.projectedStock}</td>
                             <td>${statusBadge}</td>
-                            <td style="font-size: 11px;">${window.escapeHTML(data.justificacion || '')} <br> <span class="text-muted">${detalles}</span></td>
+                            <td style="font-size: 11px;">${window.escapeHTML(data.justificacion || '')} <br> <span class="text-muted">${detalles}</span>${data.status === 'aprobado' && data.actaMermaFolio ? `<div style="display:flex;gap:6px;margin-top:6px;"><button type="button" class="btn btn-outline btn-sm" onclick="window.SAR_ActasMerma && window.SAR_ActasMerma.reimprimirActa('${window.escapeHTML(data.actaMermaFolio)}')"><i class="ph-bold ph-file-pdf"></i> Acta Merma</button><button type="button" class="btn btn-outline btn-sm" onclick="window.SAR_ActasMerma && window.SAR_ActasMerma.reimprimirEtiqueta('${window.escapeHTML(data.actaMermaFolio)}')"><i class="ph-bold ph-barcode"></i> Etiqueta</button></div>` : ''}</td>
                         `;
                         tbody.appendChild(row);
                     });
@@ -1315,6 +1403,9 @@ document.addEventListener('DOMContentLoaded', () => {
                             { solicitudId: docId, cantidadVista: cantidadMostrada != null ? cantidadMostrada : reqData.cantidad, motivo: reqData.motivo || '', observacion: reqData.observacion || '', ...(reqData.lote ? { lote: reqData.lote, vence: reqData.vence || '', saldarDeuda: !!reqData.conteo, ...(reqData.mesLote ? { mesLote: reqData.mesLote } : {}), ...(reqData.loteSistema != null ? { esperadoLote: reqData.loteSistema } : {}) } : {}), ...(reqData.deudaTotal ? { saldarDeuda: true, saldarDeudaConteoTotal: true } : {}), ...(reqData.conteo && reqData.esperadoDeuda != null ? { esperadoDeuda: reqData.esperadoDeuda } : {}) }   // v21.230: se marca aprobada en la misma transacción del ajuste
                         );
 
+                        if (res && res.actaMerma && window.SAR_ActasMerma) {
+                            window.SAR_ActasMerma.mostrarCierre(res.actaMerma);
+                        }
                         window.showToast("Solicitud Aprobada", `El ajuste ${reqData.code} fue ejecutado con éxito.`, "success");
                     } catch (error) {
                         if (error && error.ya) { window.showToast("Solicitud ya procesada", "Esta solicitud ya quedó aprobada (no se aplicó dos veces).", "info"); return; }   // v21.230
@@ -5064,6 +5155,28 @@ document.addEventListener('DOMContentLoaded', () => {
                         throw eChk;
                     }
                     showToast('Éxito', 'Movimiento registrado y auditado correctamente.', 'success');
+                    /* v21.278: registrar último ingreso para preselección y carga rápida en Impresión de etiquetas */
+                    if (window.SAR_Bultos && window.SAR_Bultos.registrarUltimoIngreso) {
+                        const ult = window.SAR_Bultos.registrarUltimoIngreso({
+                            nombre: nombreInput.trim(), insumoId, codigoMP: pIng.codigoMP || '',
+                            lote: cleanBatch, vence: formattedDate === 'N/A' ? '' : formattedDate,
+                            fechaIngreso: new Date().toISOString().slice(0, 10),
+                            cantidad: quantity, bodega: pIng.destinoNombre,
+                            proveedor: data.providerId || '', documento: data.documentNumber || ''
+                        });
+                        let bar = document.getElementById('ing-post-etq-bar');
+                        if (!bar && moveForm.parentNode) { bar = document.createElement('div'); bar.id = 'ing-post-etq-bar'; bar.className = 'bu-rec-banner'; bar.style.marginTop = '12px'; moveForm.parentNode.insertBefore(bar, moveForm.nextSibling); }
+                        if (bar && ult) {
+                            bar.innerHTML = `<span class="bu-tag bu-tag--new">RECIÉN INGRESADO</span><span><b>${window.escapeHTML(ult.nombre)}</b> · lote ${window.escapeHTML(ult.lote)} · ${ult.cantidad} u. (${window.escapeHTML(ult.bodega)})</span><button type="button" class="btn btn-primary btn-sm" id="ing-post-etq-btn"><i class="ph-bold ph-barcode"></i> Imprimir etiqueta</button>`;
+                            const bEtq = bar.querySelector('#ing-post-etq-btn');
+                            if (bEtq) bEtq.onclick = () => window.SAR_Bultos.etiquetar({
+                                nombre: ult.nombre, insumoId: ult.insumoId, codigoMP: ult.codigoMP,
+                                bodega: ult.bodega, lote: ult.lote, vence: ult.vence,
+                                total: ult.cantidad, proveedor: ult.proveedor, fechaRecepcion: ult.fechaIngreso,
+                                _ingresoKey: ult.key, recienIngresado: true
+                            });
+                        }
+                    }
                     moveForm.reset();
                     populateInsumosSelect(); // Refrescar lista con nuevos stocks
                     if (typeof window.loadFirstPage === 'function') window.loadFirstPage(); // Refrescar tabla de inventario
@@ -5410,6 +5523,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 const patientInfo = ''; // sin datos de pacientes (docs/DECISIONES.md §2)
 
+                const esMermaMov = Boolean(m.actaMermaFolio) || baseType === 'merma_inventario' || (baseType === 'ajuste_critico' && Number(m.quantity) < 0 && /merma|da[ñn]|vencid/i.test(String(m.motivo || '')));
+                const btnsMerma = esMermaMov ? `<button type="button" class="btn btn-icon btn-reimp-acta-merma" data-mid="${window.escapeHTML(m.id || '')}" data-am="${window.escapeHTML(m.actaMermaFolio || '')}" title="Reimprimir Acta de Merma (PDF)" aria-label="Reimprimir Acta de Merma"><i class="ph-bold ph-file-pdf"></i></button><button type="button" class="btn btn-icon btn-reimp-etq-merma" data-mid="${window.escapeHTML(m.id || '')}" data-am="${window.escapeHTML(m.actaMermaFolio || '')}" title="Reimprimir etiqueta MERMADO / VENCIDO" aria-label="Reimprimir etiqueta de baja"><i class="ph-bold ph-barcode"></i></button>` : '';
+
                 tr.innerHTML = `
                 <td><div class="item-name">${dateFmt}</div><div class="item-category">${timeFmt}</div></td>
                 <td><span class="action-badge ${typeClass}">${typeText}</span></td>
@@ -5424,12 +5540,25 @@ document.addEventListener('DOMContentLoaded', () => {
                     </div>
                 </td>
                 <td><div class="item-name">L: ${window.escapeHTML(m.batch || m.lote || 'S/L')}</div><div class="${qtyClass} font-bold">${qtySign} ${m.quantity || 0} uds</div></td>
-                <td><div class="item-category">Doc: ${window.escapeHTML(m.document || m.supportDocument || 'S/N')}</div>${m.codigoIngreso ? `<div class="item-category"><b>${window.escapeHTML(m.codigoIngreso)}</b></div>` : ''}</td>
+                <td><div class="item-category">Doc: ${window.escapeHTML(m.document || m.supportDocument || 'S/N')}</div>${m.codigoIngreso ? `<div class="item-category"><b>${window.escapeHTML(m.codigoIngreso)}</b></div>` : ''}${m.actaMermaFolio ? `<div class="item-category"><span class="am-badge am-badge--folio">${window.escapeHTML(m.actaMermaFolio)}</span></div>` : ''}</td>
                 <td><span class="doc-badge">${window.escapeHTML(m.document || m.supportDocument || 'FACT-000')}</span></td>
-                <td><button class="btn btn-icon" onclick="window.showAlertCenter('Mensaje del Sistema', 'Detalle:\\nProducto: ${window.escapeHTML(m.insumoName || m.articleName || 'Insumo').replace(/'/g, "\\'")}\\nFecha: ${dateFmt} ${timeFmt}\\nUsuario: ${window.escapeHTML(m.user || m.operatorUid || m.usuario || 'S/I').replace(/'/g, "\\'")}')"><i class="ph ph-eye"></i></button>${m.type === 'INGRESO_PROVEEDOR' ? `<button type="button" class="btn btn-icon btn-edit-mov admin-only" data-id="${window.escapeHTML(m.id || '')}" title="Editar ingreso" aria-label="Editar ingreso"><i class="ph ph-pencil-simple"></i></button>` : ''}${m.editado ? '<div class="item-category" title="Este ingreso fue corregido">editado</div>' : ''}</td>
+                <td><button class="btn btn-icon" onclick="window.showAlertCenter('Mensaje del Sistema', 'Detalle:\\nProducto: ${window.escapeHTML(m.insumoName || m.articleName || 'Insumo').replace(/'/g, "\\'")}\\nFecha: ${dateFmt} ${timeFmt}\\nUsuario: ${window.escapeHTML(m.user || m.operatorUid || m.usuario || 'S/I').replace(/'/g, "\\'")}')"><i class="ph ph-eye"></i></button>${btnsMerma}${m.type === 'INGRESO_PROVEEDOR' ? `<button type="button" class="btn btn-icon btn-edit-mov admin-only" data-id="${window.escapeHTML(m.id || '')}" title="Editar ingreso" aria-label="Editar ingreso"><i class="ph ph-pencil-simple"></i></button>` : ''}${m.editado ? '<div class="item-category" title="Este ingreso fue corregido">editado</div>' : ''}</td>
             `;
                 tbody.appendChild(tr);
             });
+            if (!tbody.dataset.mermaBound) {
+                tbody.dataset.mermaBound = '1';
+                tbody.addEventListener('click', (e) => {
+                    const bActa = e.target.closest('.btn-reimp-acta-merma');
+                    const bEtq = e.target.closest('.btn-reimp-etq-merma');
+                    if (!bActa && !bEtq) return;
+                    const btn = bActa || bEtq;
+                    const mov = globalHistoryData.find(x => x.id === btn.dataset.mid) || null;
+                    if (!window.SAR_ActasMerma) return;
+                    if (bActa) window.SAR_ActasMerma.reimprimirActa(btn.dataset.am, mov).catch(er => showToast('Acta de Merma', er.message || String(er), 'error'));
+                    else window.SAR_ActasMerma.reimprimirEtiqueta(btn.dataset.am, mov).catch(er => showToast('Etiqueta de Merma', er.message || String(er), 'error'));
+                });
+            }
         }
 
         // EXPORTACIÓN DE HISTORIAL (ADMIN ONLY)

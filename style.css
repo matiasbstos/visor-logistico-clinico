@@ -6578,6 +6578,65 @@ body:not([data-user-role="solicitante"]) .menu-item[data-target="view-solicitud-
 .act-hc-det ul{margin:6px 0 0;padding-left:16px;font-size:.78rem;display:grid;gap:4px;color:#334155}
 .act-hc-mini{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.act-hc-mini span{background:#f1f5f9;color:#334155;font-size:.75rem;padding:2px 8px;border-radius:6px}
 .act-hc-vacio{text-align:center;padding:36px 16px;background:#fff;border:1px solid #e2e8f0;border-radius:12px}.act-hc-vacio i{font-size:2rem;color:#94a3b8}
+/* v21.278 · Últimos ingresos en etiquetas + Acta de Merma y Etiqueta térmica MERMADO/VENCIDO */
+.etq-ult-host{margin-top:20px}
+.bu-ult{margin-top:18px;border:1px solid #cbd5e1;border-radius:12px;background:#f8fafc;padding:12px 14px}
+.bu-ult-cab{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:10px;margin-bottom:10px}
+.bu-ult-cab h4{margin:0;font-size:.92rem;color:var(--sar-blue,#1A3668);display:flex;align-items:center;gap:6px}
+.bu-ult-cab small{display:block;font-size:.76rem;color:#64748b;margin-top:2px}
+.bu-ult-ctrl{display:flex;gap:6px;align-items:center;flex:1 1 220px;max-width:340px}.bu-ult-in{flex:1;min-width:160px}
+.bu-ult-tw{max-height:290px;overflow:auto;background:#fff;border:1px solid #e2e8f0;border-radius:8px}
+.bu-ult-tb{width:100%;font-size:.82rem;margin:0}.bu-ult-tb th{position:sticky;top:0;background:#f1f5f9;z-index:1;font-size:.72rem;text-transform:uppercase;color:#475569}
+.bu-ult-row{cursor:pointer;transition:background .12s}.bu-ult-row:hover,.bu-ult-row:focus-visible{background:#eff6ff;outline:none}
+.bu-ult-row--new{background:#f0fdf4}.bu-ult-row--sel{background:#dbeafe}
+.bu-ult-nom{display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+.bu-ult-badges{display:inline-flex;gap:4px;flex-wrap:wrap}
+.bu-tag{display:inline-block;padding:1px 6px;border-radius:4px;font-size:.66rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;line-height:1.45}
+.bu-tag--new{background:#1A3668;color:#fff}.bu-tag--imp{background:#e2e8f0;color:#334155;border:1px solid #cbd5e1}
+.bu-rec-banner{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 12px;margin-bottom:12px;border:1px solid #bfdbfe;border-left:4px solid #1A3668;border-radius:8px;background:#f8fafc;font-size:.84rem;color:#0f172a}
+.bu-rec-banner>span:nth-child(2){flex:1 1 220px}
+.bu-lp-wrap{margin:12px 0;padding:10px 12px;border:1px solid #cbd5e1;border-radius:10px;background:#f8fafc}
+.bu-lp-head{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:.74rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.03em;margin-bottom:8px}
+.bu-lp-card{max-width:340px;margin:0 auto;background:#fff;color:#000;border:1.5px solid #0f172a;border-radius:4px;padding:8px 10px;font-family:"Segoe UI",Arial,sans-serif}
+.bu-lp-top{display:flex;justify-content:space-between;font-size:.68rem;border-bottom:1px solid #000;padding-bottom:4px;margin-bottom:5px}
+.bu-lp-nom{font-size:.86rem;font-weight:700;line-height:1.2;margin-bottom:5px}
+.bu-lp-meta{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 10px;font-size:.72rem;margin-bottom:6px}
+.bu-lp-bar{text-align:center}.bu-lp-bar .pr-bar{display:block;width:82%;height:26px;margin:0 auto}.bu-lp-bar small{display:block;font-size:.68rem;font-weight:700;letter-spacing:.05em;margin-top:2px}
+/* Acta de Merma y Etiqueta térmica MERMADO/VENCIDO */
+.am-c{max-width:620px}
+.am-cierre{display:grid;gap:14px}
+.am-cierre-top{display:flex;gap:12px;align-items:flex-start}
+.am-cierre-ico{width:40px;height:40px;border-radius:10px;background:#eff6ff;color:#1A3668;display:grid;place-items:center;font-size:1.35rem;flex:0 0 40px}
+.am-badges{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:4px}
+.am-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.am-badge--folio{background:#1A3668;color:#fff}
+.am-badge--causal{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
+.am-badge--ref{background:#f1f5f9;color:#334155;border:1px solid #cbd5e1}
+.am-cierre-sub{margin:0;font-size:.84rem;color:#475569}
+.am-res-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;font-size:.84rem}
+.am-res-grid>div span{display:block;font-size:.72rem;color:#64748b;text-transform:uppercase;letter-spacing:.02em}
+.am-res-grid>div b{color:#0f172a}.am-res-grid>div.full{grid-column:1/-1}
+.am-acc{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.am-acc--dest{justify-content:stretch}.am-acc--dest .btn{flex:1 1 220px;justify-content:center}
+.am-acc--sec{justify-content:space-between;border-top:1px solid #e2e8f0;padding-top:10px}
+.am-ctrl-grid{display:grid;grid-template-columns:1fr;gap:10px;margin-bottom:12px}
+.am-lbl{display:block;font-size:.74rem;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:.03em;margin-bottom:5px}
+.am-seg{display:flex;flex-wrap:wrap;gap:6px}.am-cop-in{max-width:110px}
+.am-prev-wrap{background:#f1f5f9;border:1px solid #cbd5e1;border-radius:10px;padding:12px;margin-bottom:14px}
+.am-thermal{margin:0 auto;background:#fff;color:#000;border:2px solid #000;border-radius:3px;overflow:hidden;font-family:"Segoe UI",Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.am-thermal--100x60{max-width:380px}.am-thermal--50x30{max-width:250px;font-size:.82rem}
+.am-th-bar{background:#000;color:#fff;font-weight:800;text-align:center;letter-spacing:.06em;padding:6px 8px;font-size:1rem}
+.am-thermal--50x30 .am-th-bar{padding:4px 6px;font-size:.78rem}
+.am-th-body{padding:8px 10px;display:grid;gap:4px}
+.am-th-desc{font-weight:800;font-size:.9rem;line-height:1.2;border-bottom:1px solid #000;padding-bottom:4px}
+.am-thermal--50x30 .am-th-desc{font-size:.74rem}
+.am-th-row{display:flex;justify-content:space-between;gap:8px;font-size:.76rem}
+.am-thermal--50x30 .am-th-row{font-size:.66rem}
+.am-th-meta{border-top:1px dashed #64748b;padding-top:3px}
+.am-th-code{text-align:center;padding-top:4px}.am-th-code .pr-bar{display:block;width:84%;height:32px;margin:0 auto}
+.am-thermal--50x30 .am-th-code .pr-bar{height:22px}
+.am-th-code small{display:block;font-size:.72rem;font-weight:700;letter-spacing:.06em;margin-top:2px}
+.am-list-bar{display:flex;gap:8px;align-items:center;margin-bottom:12px}.am-list-bar input{flex:1}
 .act-auto{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin:6px 0 10px;padding:8px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-left:4px solid #1d4ed8;border-radius:6px;font-size:.85rem;color:#1e3a8a}.act-auto>i{font-size:1.1rem}.act-auto>span:first-of-type{flex:1 1 220px}.act-auto-b{display:flex;gap:6px;flex-wrap:wrap}
 .act-cambia{margin-top:4px;padding:2px 10px;font-size:12px}
 

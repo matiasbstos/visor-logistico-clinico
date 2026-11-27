@@ -315,6 +315,12 @@ service cloud.firestore {
             || request.resource.data.estado == 'EMITIDA');
       allow delete: if false;
     }
+    // ACTAS DE MERMA / BAJA DE INVENTARIO (v21.278): folio correlativo AM-AAAA-NNNN ligado a un ajuste de salida por merma/daño/vencido.
+    match /Actas_Merma/{folio} {
+      allow read, create: if isStaff();
+      allow update: if isAdmin() && request.resource.data.folio == resource.data.folio;
+      allow delete: if false;
+    }
     match /Equipos_Oxigeno/{equipoId} {
       allow read, create, update: if isStaff();
       allow delete: if isAdmin();

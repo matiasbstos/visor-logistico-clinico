@@ -1300,3 +1300,41 @@ t('v21.277: histórico por centro — agrupa variantes de nombre, consolida prod
   assert.ok(csv.includes('AE-2026-0022'));
   assert.ok(csv.includes('Bodega CAM'));
 });
+
+t('v21.278: últimos 15 ingresos en etiquetas + causal de Acta de Merma y etiqueta MERMADO/VENCIDO', () => {
+  const B = require('../bultos.js');
+  const AM = require('../actas-merma.js');
+  // 1) ultimosIngresosDe: filtra solo ingresos con cantidad > 0, ordena desc y limita a 15
+  const movs = [];
+  for (let i = 1; i <= 20; i++) {
+    movs.push({ id: 'm' + i, type: 'INGRESO_PROVEEDOR', insumoName: 'INSUMO ' + i, batch: 'L' + i, expirationDate: '2028-05-01', quantity: i * 10, destination: 'Bodega Central', date: new Date(2026, 10, i) });
+  }
+  movs.push({ id: 'sal1', type: 'ENTREGA_ACTA', insumoName: 'NO DEBE SALIR', quantity: 50, date: new Date(2026, 10, 28) });
+  movs.push({ id: 'oc1', type: 'INGRESO_OC', insumoName: 'JERINGA OC', batch: 'LOC1', expirationDate: '2029-01-15', quantity: 500, destination: 'Bodega CAM', document: 'REC-2026-00010 · OC 1298355-999-AG26', date: new Date(2026, 10, 29) });
+  const ult = B.ultimosIngresosDe(movs, 15);
+  assert.strictEqual(ult.length, 15);
+  assert.strictEqual(ult[0].nombre, 'JERINGA OC');
+  assert.strictEqual(ult[0].oc, '1298355-999-AG26');
+  assert.strictEqual(ult[0].rec, 'REC-2026-00010');
+  assert.strictEqual(ult[0].bodega, 'Bodega CAM');
+  assert.strictEqual(ult.some(x => x.nombre === 'NO DEBE SALIR'), false);
+
+  // 2) evaluarCausalAjuste: dispara en salidas por Merma, Dañado o Vencido (o lote expirado) y NO en conteo/positivas
+  const ref = '2026-11-27';
+  const rMerma = AM.evaluarCausalAjuste({ motivo: 'Merma o daño', cantidad: -10, vence: '2028-06-01', fechaRef: ref });
+  assert.strictEqual(rMerma.aplica, true); assert.strictEqual(rMerma.causal, 'MERMA'); assert.strictEqual(rMerma.etiqueta, 'MERMADO');
+  const rVencMot = AM.evaluarCausalAjuste({ motivo: 'Vencido', cantidad: -5, vence: '2028-06-01', fechaRef: ref });
+  assert.strictEqual(rVencMot.aplica, true); assert.strictEqual(rVencMot.causal, 'VENCIDO'); assert.strictEqual(rVencMot.etiqueta, 'VENCIDO');
+  const rVencLote = AM.evaluarCausalAjuste({ motivo: 'Merma o daño', cantidad: -3, vence: '2026-10-01', fechaRef: ref });
+  assert.strictEqual(rVencLote.aplica, true); assert.strictEqual(rVencLote.causal, 'VENCIDO'); assert.strictEqual(rVencLote.etiqueta, 'VENCIDO');
+  const rConteo = AM.evaluarCausalAjuste({ motivo: 'Conteo físico (toma de inventario)', cantidad: -4, vence: '2026-01-01', fechaRef: ref });
+  assert.strictEqual(rConteo.aplica, false);
+  const rPos = AM.evaluarCausalAjuste({ motivo: 'Merma o daño', cantidad: 10, vence: '2026-01-01', fechaRef: ref });
+  assert.strictEqual(rPos.aplica, false);
+
+  // 3) Franja térmica y folio correlativo AM-AAAA-NNNN
+  assert.strictEqual(AM.textoFranjaEtiqueta('MERMADO'), 'MERMADO - BAJA');
+  assert.strictEqual(AM.textoFranjaEtiqueta('VENCIDO'), 'VENCIDO - NO USAR');
+  assert.strictEqual(AM.folioMerma(2026, 7), 'AM-2026-0007');
+  assert.strictEqual(AM.codigoBarrasDe({ folio: 'AM-2026-0007', lote: 'L1' }), 'AM-2026-0007');
+});

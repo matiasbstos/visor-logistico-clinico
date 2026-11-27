@@ -1948,3 +1948,13 @@ Caso real del usuario (`Factura 152.pdf`, `MICHIS PUBLICIDAD LIMITADA`, OC `1298
   - Muestra KPIs del centro (actas válidas, productos distintos, unidades entregadas, rango de fechas), filtros por producto/acta/bodega, rango **Desde / Hasta**, actas por confirmar y anuladas.
   - Ofrece dos vistas: **Por producto** (consolidado con total entregado, N° de actas, última entrega, bodegas y detalle desplegable de cada acta) y **Por acta** (línea cronológica con botón **Ver acta** — `verPorNumero` ahora lee de Firestore si el acta es más antigua que las últimas 40).
   - Exportación **Excel (CSV)** con BOM UTF-8 y separador `;`. Sin nuevas colecciones ni cambios en `firestore.rules`.
+
+
+### 4.324 Últimos 15 ingresos en Impresión de etiquetas + Acta de Merma y Etiqueta MERMADO/VENCIDO (v21.278)
+- **Últimos ingresos en Impresión de etiquetas (`bultos.js` + `script.js`):**
+  - Bloque inferior fijo **«Últimos ingresos registrados»** (consulta los últimos 15 ingresos en `Historial_Movimientos` ordenados por fecha descendente) tanto en el modal `etiquetar` como en la vista `Impresión de etiquetas`.
+  - Carga en un clic de todos los campos + vista previa en vivo con código de barras Code 128, filtro rápido local sobre los 15 ítems, badge **`RECIÉN INGRESADO`** (tras guardar un ingreso en `form-movimiento`) y marca **`IMPRESA`** durante la sesión.
+- **Acta de Merma y Etiqueta térmica MERMADO / VENCIDO en Ajustes de Stock (`actas-merma.js` + `script.js` + `firestore.rules` + `nomenclaturas.js`):**
+  - Al ejecutar o aprobar un ajuste de salida por **Merma o daño** o **Vencido** (o sobre un lote vencido), se genera atómicamente en la misma `runTransaction` el correlativo **`AM-AAAA-NNNN`** (`Contadores/acta-merma-AAAA`, guardado en `Contadores/acta-merma-<folio>` y espejado en `Actas_Merma/<folio>` con su regla en `firestore.rules`) vinculado al `movimientoId`.
+  - Pantalla de cierre inmediata con folio, detalle y dos acciones directas: **Imprimir / Descargar Acta de Merma (PDF)** (plantilla institucional gemela al Acta de Entrega, tabla de detalle, 3 firmas y vista HTML fondo blanco puro) e **Imprimir Etiqueta MERMADO / VENCIDO** (Zebra ZD230 a 203 dpi en `100×60 mm` y `50×30 mm`, franja negra invertida `MERMADO - BAJA` / `VENCIDO - NO USAR`, alternador manual, Code 128 con quiet zone y selector de copias).
+  - Reimpresión disponible en todo momento desde **Historial de Transacciones**, **Mis Solicitudes** y la nueva subpestaña **Actas de Merma** dentro de Ajustes de Stock. Sin alterar el cálculo de stock ni movimientos de otras causales.

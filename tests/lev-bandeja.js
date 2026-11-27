@@ -1,4 +1,4 @@
-/* Bandeja «Levantamientos por aprobar» (DECISIONES 4.307): la transacción por producto y bodega contra un Firestore en memoria
+/* Bandeja «Levantamientos por aprobar» (DECISIONES 4.322): la transacción por producto y bodega contra un Firestore en memoria
    con transacciones optimistas (lecturas versionadas, reintento si otra escritura cambió lo leído), como el SDK real.
    Uso: node tests/lev-bandeja.js */
 const assert = require('assert');
@@ -7,7 +7,7 @@ globalThis.document = { body: { dataset: { userRole: 'admin' } }, getElementById
 let EN_LINEA = true;
 
 // ---------------- Firestore en memoria ----------------
-let DB = new Map(), VER = new Map(), conflictoUnaVez = null;
+let DB = new Map(), VER = new Map(), conflictoUnaVez = null, fallaCommitUnaVez = false;
 const cl = (x) => x === undefined ? undefined : JSON.parse(JSON.stringify(x));
 const tick = () => new Promise(r => setImmediate(r));
 const ref = (path) => ({ path, id: path.split('/').pop() });
@@ -35,6 +35,7 @@ globalThis.firebaseFirestore = {
       const res = await fn(tx);
       if (conflictoUnaVez) { const p = conflictoUnaVez; conflictoUnaVez = null; escribir(p, { tocado: Date.now() }, true); }   /* otra escritura justo antes del commit */
       if ([...leidas].some(([p, v]) => (VER.get(p) || 0) !== v)) { reintentos++; continue; }   /* el SDK reintenta la función completa */
+      if (fallaCommitUnaVez) { fallaCommitUnaVez = false; throw Object.assign(new Error('unavailable (se cayó la red al confirmar)'), { code: 'unavailable' }); }   /* nada se escribe */
       w.forEach(([p, d, m, upd]) => { if (upd && !DB.has(p)) throw new Error('update de un documento que no existe: ' + p); escribir(p, d, m); });
       return res;
     }
@@ -190,6 +191,156 @@ const t = async (nombre, f) => { try { const r = await f(); n++; R.push(['OK', n
     assert.strictEqual((await LB.pendientesDe('g1', BOD, 'A')).length, 0);
     const z = await LB.cerrarLev(r.lev); assert.strictEqual(z.ira, 100); assert.strictEqual(DB.get('Contadores/lev-' + r.lev).estado, 'cerrado');
     const r2 = await LB.aceptar(grupo([p]), { modo: 'caja' }); assert.notStrictEqual(r2.lev, r.lev);
+  });
+  // ---------------- B.A. (ba274/run.js y run2.js) adaptados a la bandeja: las cajas como quedaron en producción (ETIQUETADO sin LEV, con BUL) ----------------
+  const legado = (o, opt) => {   /* caja que v21.273–274 dejó aceptada/etiquetada sin stock; con BUL ya creadas si opt.bul */
+    const c = caja(o), q = opt || {}, hj = Array.from({ length: q.hijos || 0 }, (_, i) => `BUL-2026-${String(700 + nTag * 3 + i).padStart(6, '0')}`);
+    const d = { ...DB.get('Conteos_Cajas/' + c.folio), estado: q.estado || 'ETIQUETADO', aceptadoPor: 'otro@sar.cl', aceptadoEn: '2026-11-26T15:00:00.000Z', aceptadoTotal: c.total, aceptadoLote: c.lote, aceptadoVence: c.vence, aceptadoInsumoId: c.insumoId || null, insumoId: c.insumoId || null, ...(q.estado === 'ACEPTADO' ? {} : { hijos: hj }) };
+    escribir('Conteos_Cajas/' + c.folio, d);
+    if (q.bul !== false && (q.estado || 'ETIQUETADO') === 'ETIQUETADO') {
+      escribir('Contadores/bulto-' + c.folio, { tipo: 'bulto', folio: c.folio, grupo: c.folio, nombre: c.nombre, lote: c.lote, contenido: c.total, origen: 'levantamiento', impresiones: 1, ...(hj.length ? { hijos: hj } : {}) });
+      hj.forEach((h, i) => escribir('Contadores/bulto-' + h, { tipo: 'bulto', folio: h, grupo: c.folio, nivel: 'interior', padre: c.folio, contenido: Math.floor(c.total / hj.length), origen: 'levantamiento', impresiones: 1 }));
+    }
+    return d;
+  };
+  const rol = (r) => { globalThis.document.body.dataset.userRole = r; };
+  await t('B.A. 1 · saldo A=100, contado A=100 (base 100), caja ya ETIQUETADA → queda 100', async () => {
+    reset({ g1: { batches: [{ batch: 'A', quantity: 100, expirationDate: '2027-05' }] } });
+    const c = legado({ insumoId: 'g1', lote: 'A', total: 100, base: 100 }, { hijos: 0 });
+    await debe(LB.aceptar(grupo([c]), { modo: 'caja' }), 'modo');
+    const r = await LB.aceptar(grupo([c]), { modo: 'completo' });
+    assert.strictEqual(lotes('g1'), 'A:100'); assert.strictEqual(hist().filter(x => x.quantity > 0).length, 0); const d = DB.get('Conteos_Cajas/' + c.folio); assert.ok(d.estado === 'ETIQUETADO' && d.lev === r.lev);
+    return `A = 100 (antes v21.274: 200) · caja con ${r.lev}, sigue ETIQUETADO`;
+  });
+  await t('B.A. 2 · S/L 200 contado A 120 + B 80 → reclasifica, total 200', async () => {
+    reset({ g1: { batches: [{ batch: 'S/L', quantity: 200, expirationDate: '' }] } });
+    const a = legado({ insumoId: 'g1', lote: 'A', total: 120, base: 0, baseSL: 200 }), b = legado({ insumoId: 'g1', lote: 'B', vence: '2027-08', total: 80, base: 0, baseSL: 200 });
+    await LB.aceptar(grupo([a, b]), { modo: 'completo' });
+    assert.strictEqual(lotes('g1'), 'A:120 B:80'); assert.strictEqual(ins('g1').quantity, 200); assert.strictEqual(hist().filter(x => x.type === 'CAMBIO_CONTROLADO').length, 2);
+    return 'A 120 + B 80 = 200 (antes v21.274: 400 con S/L 200 intacto)';
+  });
+  await t('B.A. 3 · base 100, despacho de 30 antes de aceptar → no suma, pide recontar', async () => {
+    reset({ g1: { batches: [{ batch: 'A', quantity: 70, expirationDate: '2027-05' }] } });
+    const c = legado({ insumoId: 'g1', lote: 'A', total: 100, base: 100 });
+    const e = await debe(LB.aceptar(grupo([c]), { modo: 'completo' }), 'movido'); assert.strictEqual(lotes('g1'), 'A:70'); assert.strictEqual(hist().length, 0); assert.ok(!DB.get('Conteos_Cajas/' + c.folio).lev);
+    return `A = 70 · «${e.message}»`;
+  });
+  await t('B.A. 4 · dos pestañas, lote nuevo N 100 con A 50 → 150', async () => {
+    reset({ g1: { batches: [{ batch: 'A', quantity: 50, expirationDate: '2027-05' }] } });
+    const c = legado({ insumoId: 'g1', lote: 'N', total: 100, base: 0 }), g = grupo([c]);
+    const rs = await Promise.allSettled([LB.aceptar(g, { modo: 'caja' }), LB.aceptar(g, { modo: 'caja' })]);
+    assert.strictEqual(ins('g1').quantity, 150); assert.strictEqual(hist().filter(x => x.type === 'INGRESO_INVENTARIO').length, 1);
+    return `150 · ${rs.map(x => x.status === 'fulfilled' ? (x.value.ya ? 'ya estaba' : 'aplicó') : 'error ' + x.reason.tipo).join(' / ')}`;
+  });
+  await t('B.A. 5a · segundo clic con la lista vieja → 150', async () => {
+    reset({ g1: { batches: [{ batch: 'A', quantity: 50, expirationDate: '2027-05' }] } });
+    const c = legado({ insumoId: 'g1', lote: 'N', total: 100, base: 0 }), g = grupo([c]);
+    await LB.aceptar(g, { modo: 'caja' }); const r2 = await LB.aceptar(g, { modo: 'caja' });
+    assert.ok(r2.ya); assert.strictEqual(ins('g1').quantity, 150); return '150 · 2.º clic: «ya estaba»';
+  });
+  await t('B.A. 5b · se cae la red al confirmar y se reintenta → 150, sin LEV a medias', async () => {
+    reset({ g1: { batches: [{ batch: 'A', quantity: 50, expirationDate: '2027-05' }] } });
+    const c = legado({ insumoId: 'g1', lote: 'N', total: 100, base: 0 }); fallaCommitUnaVez = true;
+    await assert.rejects(LB.aceptar(grupo([c]), { modo: 'caja' }), /unavailable/);
+    assert.strictEqual(ins('g1').quantity, 50); assert.ok(!DB.get('Conteos_Cajas/' + c.folio).lev); assert.strictEqual(hist().length, 0);
+    await LB.aceptar(grupo([c]), { modo: 'caja' }); assert.strictEqual(ins('g1').quantity, 150); assert.ok(DB.get('Conteos_Cajas/' + c.folio).lev);
+    return '1.er intento: nada escrito (50) · reintento: 150 con LEV en la caja';
+  });
+  await t('B.A. 6 · controlado nuevo sin ficha, deuda 20 → superadmin + doble conteo, ficha provisional, sin origenOC', async () => {
+    reset({});
+    const c = legado({ nombre: 'MORFINA 10MG', insumoId: '', controlado: 'ESTUPEFACIENTE', lote: 'M1', total: 30, deuda: 20, extra: { baseSistema: undefined } });
+    const d0 = DB.get('Conteos_Cajas/' + c.folio); delete d0.baseSistema; escribir('Conteos_Cajas/' + c.folio, d0);
+    await debe(LB.aceptar(grupo([c]), { modo: 'caja' }), 'super');
+    rol('superadmin'); try { await debe(LB.aceptar(grupo([c]), { modo: 'caja', vista: {} }), 'doble'); await LB.aceptar(grupo([c]), { modo: 'caja', vista: {}, confirmaDoble: true }); } finally { rol('admin'); }
+    const f = DB.get('Insumos/lev_morfina-10mg__bodega-cam');
+    assert.ok(f && f.quantity === 30 && f.controlado === 'ESTUPEFACIENTE' && f.levProvisional === true && f.origenOC === undefined && !f.sobregiro, JSON.stringify(f));
+    return 'MORFINA 30 en ficha provisional (no se despacha), controlado ESTUPEFACIENTE, sin origenOC ni deuda inventada';
+  });
+  await t('B.A. 7 · insumoId vacío y «Gasa estéril » → suma a «GASA ESTERIL», no crea otra ficha', async () => {
+    reset({}); escribir('Insumos/ins1', { name: 'GASA ESTERIL', location: BOD, quantity: 50, batches: [{ batch: 'A', quantity: 50, expirationDate: '2027-05' }] });
+    const c = legado({ insumoId: '', nombre: 'Gasa estéril ', lote: 'N', total: 100, base: 0 });
+    await LB.aceptar(grupo([c]), { modo: 'caja' });
+    assert.strictEqual(ins('ins1').quantity, 150); assert.strictEqual([...DB.keys()].filter(p => p.startsWith('Insumos/')).length, 1);
+    const n = caja({ nombre: 'GASA  ESTÉRIL', nuevo: true, lote: 'Z', total: 5 }); await debe(LB.aceptar(grupo([n]), { homologar: { tipo: 'ficha' } }), 'homologar');
+    return 'ins1 = 150, 1 sola ficha · «crear ficha nueva» con nombre casi igual → pide homologar';
+  });
+  await t('B.A. 8 · mismo lote A con otro mes (06 vs 05) → no lo parte; pide corregir el vencimiento', async () => {
+    reset({ g1: { batches: [{ batch: 'A', quantity: 100, expirationDate: '2027-05' }] } });
+    const c = legado({ insumoId: 'g1', lote: 'A', vence: '2027-06', total: 100, base: 0 });
+    const e = await debe(LB.aceptar(grupo([c]), { modo: 'completo', confirmaFaltas: true }), 'mes'); await debe(LB.aceptar(grupo([c]), { modo: 'caja' }), 'mes');
+    assert.strictEqual(lotes('g1'), 'A:100'); return `A:100 · «${e.message}»`;
+  });
+  await t('B.A. run2 · un operador hace 3 clics → no suma nunca', async () => {
+    reset({ g1: { batches: [{ batch: 'A', quantity: 50, expirationDate: '2027-05' }] } });
+    const c = legado({ insumoId: 'g1', lote: 'N', total: 100, base: 0 }); rol('operador');
+    try { for (let i = 0; i < 3; i++) await debe(LB.aceptar(grupo([c]), { modo: 'caja' }), 'rol'); } finally { rol('admin'); }
+    assert.strictEqual(ins('g1').quantity, 50); assert.ok(!DB.get('Conteos_Cajas/' + c.folio).lev); return '50 tras 3 clics (rol)';
+  });
+  await t('B.A. run2 · dos pestañas generan etiquetas → 1 grande + 3 interiores, sin huérfanas', async () => {
+    reset({ g1: { batches: [] } }); folioBul = 100;
+    const c = caja({ insumoId: 'g1', lote: 'X', total: 30, estructura: { estado: 'CERRADA', interiores: [{ q: 10 }, { q: 10 }, { q: 10 }], sueltas: 0 } }), g = grupo([c]);
+    const rs = await Promise.allSettled([LB.aceptar(g, { modo: 'caja' }), LB.aceptar(g, { modo: 'caja' })]);
+    const b = bul().map(p => DB.get(p)); assert.strictEqual(b.length, 4); assert.deepStrictEqual(DB.get('Conteos_Cajas/' + c.folio).hijos, DB.get('Contadores/bulto-' + c.folio).hijos);
+    assert.strictEqual(LB.bulHuerfanas(b.map(x => ({ ...x, lev: undefined }))).length, 0); assert.strictEqual(ins('g1').quantity, 30);
+    return `4 BUL · hijos de la caja = hijos de la grande · ${rs.map(x => x.status === 'fulfilled' ? (x.value.ya ? 'ya estaba' : 'aplicó') : 'error').join(' / ')}`;
+  });
+  await t('B.A. run2 · falla entre aceptar y etiquetar, reintento → sin BUL sueltas', async () => {
+    reset({ g1: { batches: [] } }); folioBul = 200;
+    const c = caja({ insumoId: 'g1', lote: 'X', total: 30, estructura: { estado: 'CERRADA', interiores: [{ q: 10 }, { q: 10 }, { q: 10 }], sueltas: 0 } });
+    fallaCommitUnaVez = true; await assert.rejects(LB.aceptar(grupo([c]), { modo: 'caja' }));
+    assert.strictEqual(bul().length, 0); assert.strictEqual(estado(c), 'REGISTRADO'); assert.strictEqual(DB.get('Contadores/bulto-' + c.folio).tipo, 'tag-conteo');
+    await LB.aceptar(grupo([c]), { modo: 'caja' }); assert.strictEqual(bul().length, 4); assert.strictEqual(folioBul, 203);
+    return '1.er intento: 0 BUL y caja REGISTRADO · reintento: 4 BUL con los mismos 3 folios reservados';
+  });
+  // ---------------- datos que dejó v21.273–274 en producción ----------------
+  await t('Legado 1 · ETIQUETADO sin LEV con BUL → entra al stock con baseSistema y reutiliza sus 3 BUL (no crea)', async () => {
+    reset({ g1: { batches: [] } }); folioBul = 300;
+    const c = legado({ insumoId: 'g1', lote: 'L', total: 60, base: 0, estructura: { estado: 'CERRADA', interiores: [{ q: 30 }, { q: 30 }], sueltas: 0 } }, { hijos: 2 });
+    const antes = bul().length, r = await LB.aceptar(grupo([c]), { modo: 'caja' });
+    assert.strictEqual(lotes('g1'), 'L:60'); assert.strictEqual(bul().length, antes); assert.strictEqual(folioBul, 300); assert.strictEqual(r.reutilizadas.length, 3);
+    assert.ok(bul().every(p => DB.get(p).lev === r.lev)); const d = DB.get('Conteos_Cajas/' + c.folio); assert.ok(d.estado === 'ETIQUETADO' && d.lev === r.lev && d.contadoCompleto === false && d.levPor === YO);
+    return `L:60 · ${antes} BUL antes y después (reutilizadas con ${r.lev}) · 0 folios reservados · caja sigue ETIQUETADO`;
+  });
+  await t('Legado 2 · ACEPTADO sin LEV (tag sin BUL) → stock + BUL en la transacción; imprimir → ETIQUETADO', async () => {
+    reset({ g1: { batches: [] } }); folioBul = 400;
+    const c = legado({ insumoId: 'g1', lote: 'K', total: 20, estructura: { estado: 'CERRADA', interiores: [{ q: 10 }, { q: 10 }], sueltas: 0 } }, { estado: 'ACEPTADO' });
+    const r = await LB.aceptar(grupo([c]), { modo: 'caja' }); assert.strictEqual(lotes('g1'), 'K:20'); assert.strictEqual(bul().length, 3); assert.strictEqual(estado(c), 'ACEPTADO');
+    const p = await LB.imprimirCajas([c.folio], { sinPdf: true }); assert.strictEqual(p.etiquetas, 3); assert.strictEqual(estado(c), 'ETIQUETADO'); assert.strictEqual(lotes('g1'), 'K:20');
+    return `K:20 · 3 BUL con ${r.lev} · impresas → ETIQUETADO`;
+  });
+  await t('Legado 3 · caja con LEV de v21.274 → «ya ingresada (revisar)», nunca se vuelve a sumar', async () => {
+    reset({ g1: { batches: [{ batch: 'A', quantity: 200, expirationDate: '2027-05' }] } });
+    const c = legado({ insumoId: 'g1', lote: 'A', total: 100, base: 100 }); escribir('Conteos_Cajas/' + c.folio, { ...DB.get('Conteos_Cajas/' + c.folio), lev: 'LEV-2026-00003' });
+    const d = DB.get('Conteos_Cajas/' + c.folio); assert.ok(LB.ingresadaV274(d) && !LB.esLegado(d)); assert.strictEqual(LB.agrupar([d]).size, 0);
+    const r = await LB.aceptar(grupo([c]), { modo: 'completo' }); assert.ok(r.ya && r.v274);
+    const r2 = await LB.aceptarDesdeTags(c.folio); assert.ok(r2.ya && r2.v274); assert.strictEqual(lotes('g1'), 'A:200'); assert.strictEqual(hist().length, 0);
+    return 'A sigue 200 · aceptar y «Ingresar» desde Tags: «ya ingresada por v21.274»';
+  });
+  await t('Legado 4 · informe «Ingresos LEV de v21.274 a revisar» (solo lectura)', async () => {
+    const m = (o) => ({ type: 'INGRESO_LEVANTAMIENTO', document: 'LEV-2026-00003 · Levantamiento', destination: BOD, insumoName: 'GASA', idInsumoDestino: 'g1', date: '2026-11-26T16:00:00Z', ...o });
+    const cj = (o) => ({ estado: 'ETIQUETADO', lev: 'LEV-2026-00003', bodega: BOD, nombre: 'Gasa', vence: '2027-05', ...o });
+    const I = LB.informeV274([m({ batch: 'A', expirationDate: '2027-05', quantity: 100 }), m({ batch: 'N', expirationDate: '2027-05', quantity: 30 }), m({ batch: 'B', expirationDate: '2027-05', quantity: 80 }), m({ insumoName: 'MORFINA', batch: 'M1', expirationDate: '2027-05', quantity: 5 }), { type: 'INGRESO_INVENTARIO', quantity: 9 }],
+      [cj({ folio: 'BUL-2026-000001', lote: 'A', total: 60, baseSistema: 100 }), cj({ folio: 'BUL-2026-000002', lote: 'A', total: 40, baseSistema: 100 }), cj({ folio: 'BUL-2026-000003', lote: 'N', total: 30, baseSistema: null }), cj({ folio: 'BUL-2026-000004', lote: 'B', total: 80, baseSistema: 50 }), cj({ folio: 'BUL-2026-000005', nombre: 'MORFINA', lote: 'M1', total: 5, controlado: 'ESTUPEFACIENTE' }), cj({ folio: 'BUL-2026-000006', lote: 'A', total: 99, lev: 'LEV-2026-00004', baseSistema: 0 })]);
+    const by = (l) => I.filas.find(f => f.lote === l);
+    assert.deepStrictEqual([by('A').contado, by('A').base, by('A').debio, by('A').exceso, by('A').folios.length], [100, 100, 0, 100, 2]);
+    assert.deepStrictEqual([by('N').exceso, by('B').debio, by('B').exceso, by('M1').exceso], [0, 30, 50, null]);
+    assert.deepStrictEqual([I.filas.length, I.excesoTotal, I.conExceso, I.aRevisar, I.unidadesSumadas], [4, 150, 2, 1, 215]);
+    const h = LB.bulHuerfanas([{ tipo: 'bulto', folio: 'P', hijos: ['H1'], origen: 'levantamiento' }, { tipo: 'bulto', folio: 'H1', nivel: 'interior', padre: 'P', origen: 'levantamiento' }, { tipo: 'bulto', folio: 'H0', nivel: 'interior', padre: 'P', origen: 'levantamiento' }]);
+    assert.deepStrictEqual(h.map(x => x.folio), ['H0']);
+    return `4 ingresos · exceso: A +100 (contado 100 = sistema 100), N 0, B +50, MORFINA «revisar» · total 150 u. · 1 BUL huérfana`;
+  });
+  await t('Legado 5 · caja sin LEV del mismo lote que v21.274 ya sumó → «movido», no se suma otra vez', async () => {
+    reset({ g1: { batches: [{ batch: 'A', quantity: 160, expirationDate: '2027-05' }] } });   /* 100 + 60 que sumó v21.274 con la otra caja */
+    const c = legado({ insumoId: 'g1', lote: 'A', total: 40, base: 100 });
+    await debe(LB.aceptar(grupo([c]), { modo: 'completo' }), 'movido'); assert.strictEqual(lotes('g1'), 'A:160'); return 'A sigue 160 · pide recontar';
+  });
+  await t('Tags → bandeja · «Aceptar» desde Tags usa la misma transacción; si hace falta decidir, lleva a la bandeja', async () => {
+    reset({ g1: { batches: [{ batch: 'A', quantity: 10, expirationDate: '2027-05' }] } });
+    const c = caja({ insumoId: 'g1', lote: 'N', total: 7 }), k = caja({ insumoId: 'g1', lote: 'A', total: 10, base: 10 });
+    const r = await LB.aceptarDesdeTags(c.folio); assert.strictEqual(lotes('g1'), 'A:10 N:7'); assert.strictEqual(estado(c), 'ACEPTADO'); assert.ok(r.lev);
+    const e = await debe(LB.aceptarDesdeTags(k.folio), 'modo'); assert.ok(e.irBandeja && e.bodega === BOD);
+    const T2 = require('../tags-conteo.js'); const g2 = await T2.aceptarConteo(DB.get('Conteos_Cajas/' + c.folio)); assert.ok(g2.ya);
+    return `N:7 aceptada (${r.lev}) · lote con saldo → irBandeja («${e.message.slice(0, 60)}…»)`;
   });
   R.forEach(([e, nom, d]) => console.log(`${e === 'OK' ? 'OK   ' : 'FALLA'} ${nom}${d ? '\n      → ' + d : ''}`));
   console.log(`\n${n} ok, ${mal} con falla`); process.exit(mal ? 1 : 0);

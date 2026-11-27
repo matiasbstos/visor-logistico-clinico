@@ -286,7 +286,7 @@
             const d = vivo.get(i.id) || e.d;
             if ((d.location || '') !== origen) throw new Error(`${i.nombre} ya no está en ${origen}: actualiza la pantalla.`);
             if (d.status === 'CUARENTENA') throw new Error(`${i.nombre} está en CUARENTENA.`);
-            if (d.levProvisional === true) throw new Error(window.SAR_LevBandeja ? window.SAR_LevBandeja.AVISO_FICHA(i.nombre) : `${i.nombre} es una ficha provisional sin validar.`);   /* 4.307 */
+            if (d.levProvisional === true) throw new Error(window.SAR_LevBandeja ? window.SAR_LevBandeja.AVISO_FICHA(i.nombre) : `${i.nombre} es una ficha provisional sin validar.`);   /* 4.322 */
             const rr = reservarEn(d, i.cantidad, vivo.has(i.id) ? 0 : (legadoDe ? legadoDe(i) : 0));
             if (d.controlado && rr.r < num(i.cantidad)) throw new Error(`${i.nombre} es medicamento controlado: no puede entregarse sin stock en sistema.`);
             vivo.set(i.id, { ...d, quantity: rr.quantity, batches: rr.batches, reservado: num(d.reservado) + rr.r, reservas: { ...(d.reservas || {}), [numero]: num((d.reservas || {})[numero]) + rr.r } });
@@ -492,7 +492,7 @@
                 const d = snaps[k].data();
                 if ((d.location || '') !== b.origen) throw new Error(`${r.i.nombre} cambió de bodega.`);
                 if (d.status === 'CUARENTENA') throw new Error(`${r.i.nombre} está en CUARENTENA.`);
-                if (d.levProvisional === true) throw new Error(window.SAR_LevBandeja ? window.SAR_LevBandeja.AVISO_FICHA(r.i.nombre) : `${r.i.nombre} es una ficha provisional sin validar.`);   /* 4.307 */
+                if (d.levProvisional === true) throw new Error(window.SAR_LevBandeja ? window.SAR_LevBandeja.AVISO_FICHA(r.i.nombre) : `${r.i.nombre} es una ficha provisional sin validar.`);   /* 4.322 */
                 return d;
             });
             const vivo = new Map(), ultimo = new Map(); refs.forEach((r, k) => ultimo.set(r.clave, k));

@@ -149,7 +149,7 @@
       controlado: dr.prod && dr.prod.controlado || null, lote: dr.sinLote ? 'S/L' : String(dr.lote || '').trim().toUpperCase(), vence: /^\d{4}-(0[1-9]|1[0-2])$/.test(dr.vence || '') ? dr.vence : 'N/A', sinLote: !!dr.sinLote,
       estructura: { estado: est.estado, interiores: (est.interiores || []).map(x => ({ q: ent(x.q), abierta: !!x.abierta })), sueltas: ent(est.sueltas) }, total: totalEstructura(est),
       contadoPor: u.correo || '', contadoNombre: u.nombre || '', en: new Date().toISOString(), estado: 'REGISTRADO', app: VERSION,
-      baseSistema: s.base == null ? null : ent(s.base), baseSistemaEn: s.en || new Date().toISOString(), deudaSistema: ent(s.deuda), baseSL: s.sl == null ? null : ent(s.sl) };   /* 4.307: baseSL = S/L del producto en la bodega al contar (la bandeja lo reclasifica) */
+      baseSistema: s.base == null ? null : ent(s.base), baseSistemaEn: s.en || new Date().toISOString(), deudaSistema: ent(s.deuda), baseSL: s.sl == null ? null : ent(s.sl) };   /* 4.322: baseSL = S/L del producto en la bodega al contar (la bandeja lo reclasifica) */
     if (elab) d.elaboracion = elab;
     if (d.controlado) { delete d.baseSistema; delete d.deudaSistema; delete d.baseSL; }   /* Decker: en controlados no se guarda lo que marca el sistema */
     d.nombreNorm = norm(d.nombre).slice(0, 120); d.huella = huella(d); return d;

@@ -17,7 +17,7 @@ const _fueraDeFase = (d) => {
     try {
         const p = (d && d.ref && d.ref.path) || '';
         if (p.startsWith('Bandejas_Turno/')) return true;
-        if (/^Insumos\/[^/]+$/.test(p)) { const x = d.data(); return x.origenOC !== true && x.origenLev !== true && x.provisional !== true && !(Number(x.sobregiro) > 0); }   /* 4.307: lo que entra por levantamiento (origenLev) también se ve */
+        if (/^Insumos\/[^/]+$/.test(p)) { const x = d.data(); return x.origenOC !== true && x.origenLev !== true && x.provisional !== true && !(Number(x.sobregiro) > 0); }   /* 4.322: lo que entra por levantamiento (origenLev) también se ve */
     } catch (e) { /* sin ruta: se muestra */ }
     return false;
 };
@@ -5776,7 +5776,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         if (dataActual.status === 'CUARENTENA') {
                             throw new Error('El producto está en CUARENTENA.');
                         }
-                        if (dataActual.levProvisional === true) throw new Error(window.SAR_LevBandeja ? window.SAR_LevBandeja.AVISO_FICHA(dataActual.name) : 'Ficha provisional sin validar: no se puede mover.');   /* 4.307 */
+                        if (dataActual.levProvisional === true) throw new Error(window.SAR_LevBandeja ? window.SAR_LevBandeja.AVISO_FICHA(dataActual.name) : 'Ficha provisional sin validar: no se puede mover.');   /* 4.322 */
                         if (qtyToMove > (Number(dataActual.quantity) || 0)) {
                             throw new Error('Stock insuficiente en la bodega de origen.');
                         }

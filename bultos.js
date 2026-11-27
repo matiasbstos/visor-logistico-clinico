@@ -89,7 +89,7 @@
     const PUNTO = 25.4 / 203, MOD = 5 * PUNTO;
     const barras = (b, y, h) => { if (!(P && P.barras)) return 0; const a = P.barras(digitos(b.folio)), tot = a.reduce((s2, w) => s2 + w, 0), mod = Math.min(MOD, Math.max(1, Math.floor(66 / tot / PUNTO)) * PUNTO), x0 = Math.round((3 + 10 * mod) / PUNTO) * PUNTO;   /* v21.242: cada borde de barra cae justo en un punto de la impresora */ let xx = x0; a.forEach((w, i) => { if (i % 2 === 0) d.rect(xx, y, w * mod, h, 'F'); xx += w * mod; }); return (x0 + xx) / 2; };
     const qr = (b, x0, y0, lado) => { const m = matrizQR(URL_APP + '#bulto=' + b.folio), cel = lado / m.length; m.forEach((fila, r) => fila.forEach((on, c) => { if (on) d.rect(x0 + c * cel, y0 + r * cel, cel + 0.02, cel + 0.02, 'F'); })); };
-    /* 4.307 (levantamiento): la caja grande sale ×2 (una por cara) con `copias`; `franja` = «ABIERTA – USAR PRIMERO» / «GRANEL» */
+    /* 4.322 (levantamiento): la caja grande sale ×2 (una por cara) con `copias`; `franja` = «ABIERTA – USAR PRIMERO» / «GRANEL» */
     const pags = []; lista.forEach(b => { for (let c = 0; c < Math.max(1, Math.min(4, Math.floor(num(b.copias)) || 1)); c++) pags.push(b); });
     pags.forEach((b, k) => {
       if (k) d.addPage([100, 60], 'landscape');

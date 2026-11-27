@@ -1934,3 +1934,34 @@ B.A. probó `ingresarStockLevantamiento` (4.320) con el código real, en simulac
 - **Controles faltantes:** los controlados no piden doble conteo, se ignora la deuda y queda `origenOC: true`.
 
 El botón queda desactivado y la función rechaza la operación. Lo contado no se pierde: sigue en `Conteos_Cajas`. La reemplaza la bandeja «Levantamientos por aprobar» (decisión del usuario, 27-11).
+
+### 4.322 Bandeja «Levantamientos por aprobar»: un solo camino para aceptar, entrar al stock y etiquetar (v21.276)
+Reemplaza el «Ingresar al stock (LEV)» de 4.320 (desactivado en 4.321). Pedido del usuario (22-11): «Me tiene que llegar la solicitud de lo contado junto con la de impresión de etiquetas. Yo la acepto y recién ahí entra al sistema».
+- **Un solo camino (`levantamiento-bandeja.js`).** Aceptar es **una transacción por producto y bodega**. Lee el producto una vez, valida cada caja (`REGISTRADO` + huella vista) y hace todo junto: reclasifica el S/L, suma altas y sobras, deja los faltantes como `Solicitudes_Ajuste` (no descuenta), salda la deuda con la deuda que vio el teléfono, escribe el historial, el registro por lote `Levantamientos/<LEV>/lotes/…` (`{base, contadoAceptado, aplicado}`) y convierte el tag en la BUL de la caja con sus interiores. Lo esperado es `baseSistema`, lo que marcaba el sistema al contar; si cambió, el lote queda «Movido: recontar».
+- **Tags de conteo ya no escribe stock ni BUL.** «Aceptar», «Aceptar y etiquetar» y «Aceptar e imprimir todas» llaman a `SAR_LevBandeja.aceptarDesdeTags` (la misma transacción, caja por caja). Si el producto necesita una decisión (contado completo, homologar, reconteo, controlado, lote movido, otro mes), el botón lleva a la bandeja. «Ingresar al stock (bandeja)» también lleva a ella. La impresión (`imprimirCajas`) va **después** de la transacción y solo marca ACEPTADO → ETIQUETADO. Se retiraron `ingresarStockLevantamiento`, `agruparParaIngreso`, `mezclarLotesIngreso`, `armarBultosDeConteo` y las escrituras sueltas de `generarBultosParaConteo`.
+- **Se conserva de v21.273–274:**
+  - la credencial del contador;
+  - la bodega preasignada en el tag;
+  - la fecha de elaboración, que ahora también va en las BUL de la bandeja;
+  - las sugerencias en vivo del teléfono;
+  - los KPIs de Tags de conteo;
+  - la previsualización e impresión de etiquetas, con la opción de imprimir solo la caja grande;
+  - «Reintentar cajas para revisar».
+- **Datos que dejó v21.274 (26-11 en adelante). No se corrige nada automáticamente.**
+  - **ACEPTADO o ETIQUETADO sin `lev`** («legado»): aparecen en la bandeja con «Aceptada/Etiquetada sin stock» y entran con su `baseSistema`, igual que las demás. Si el tag ya es BUL, se **reutiliza**: se anota el LEV en la grande y en sus interiores, y no se reservan ni crean etiquetas nuevas. La caja conserva su estado y recibe `lev`, `levPor` y `levEn`. Un controlado del flujo anterior solo lo acepta el superadmin, confirmando que otra persona lo recontó.
+  - **Con `lev` de v21.274** (sin `contadoCompleto`): se muestran como «ya ingresadas (revisar)» y nunca se vuelven a sumar; aceptar responde «ya ingresada». Si otra caja del mismo lote no tiene LEV, aparece como movida, porque v21.274 ya cambió el saldo.
+  - **Informe «Ingresos LEV de v21.274 a revisar»**, de solo lectura, en la bandeja. Lista cada `Historial_Movimientos` `INGRESO_LEVANTAMIENTO` con sus cajas, `baseSistema`, lo contado y lo sumado. Marca el **posible exceso = sumado − max(0, contado − baseSistema)** para cuadrarlo con un ajuste. Los controlados y las cajas sin base quedan «revisar a mano». También lista las BUL interiores huérfanas que dejó un reintento de «Aceptar y etiquetar».
+- **Correcciones de B.A. (ba274) cubiertas en `tests/lev-bandeja.js`:**
+  - (1–3) base, S/L y despachos;
+  - (4–5) idempotencia en la transacción y un operador que no puede aceptar;
+  - (6) controlados con superadmin y doble conteo, ficha provisional y sin `origenOC`;
+  - (7) misma ficha aunque cambien tildes o espacios; «crear ficha nueva» con un nombre casi igual pide homologar;
+  - (8) el mismo lote con otro mes no se parte y pide corregir el vencimiento;
+  - (9) BUL dentro de la transacción, sin huérfanas.
+- **Reglas (punto 10):**
+  - ACEPTADO exige `lev` y `contadoCompleto`, y que el registro `Contadores/lev-<LEV>` quede abierto en el mismo commit, con `ultimaEn` igual a `aceptadoEn` y `ultimoPor` igual a quien acepta (`levDeEstaTx`).
+  - ACEPTADO → ETIQUETADO solo cambia `estado` y exige `lev`.
+  - Se quitó «agregar `lev` a ETIQUETADO/RECHAZADO». La reemplaza `legadoOk`: mismo estado, campos acotados, `levPor` igual a quien acepta y `levDeEstaTx`.
+  - `Levantamientos/<LEV>/lotes` solo se escribe dentro de esa transacción. `Contadores/lev-*` lo escribe solo un administrador.
+  - `Historial_Movimientos` rechaza `INGRESO_LEVANTAMIENTO`, así un cliente con v21.274 en caché no puede volver a sumar.
+- Quien contó no acepta su propia caja, salvo el superadmin (queda marcado). Sin internet no se acepta. Los productos nuevos quedan como ficha provisional (`levProvisional`) y no se despachan (actas, traspasos, movimientos) hasta que el superadmin la valide.

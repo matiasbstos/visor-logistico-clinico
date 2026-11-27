@@ -33,7 +33,7 @@ t('cierre mensual: categorías y hojas', () => {
         insumos: [{ name: 'A', quantity: 7, unitPrice: 100, location: 'Central' }], actas: [{ numero: 'AE-1', fecha: '2026-10-07', estado: 'EMITIDA', confirmacion: { estado: 'PENDIENTE' }, items: [{ cantidad: 3 }] }], ocs: [{ numeroOC: 'X', cerrada: false, lineas: [{ dist: { SAR: 5 }, recibido: { SAR: 2 } }] }] };
     const r = Z.armarHojas(d, '2026-10'); assert.strictEqual(r.nMovs, 2); const res = r.hojas[0][1]; assert.ok(res.some(f => f[0] === 'Entradas' && f[1] === 1 && f[2] === 10)); assert.ok(r.hojas.find(h => h[0] === 'Órdenes abiertas')[1][1][5] === 3); assert.ok(res.some(f => /por confirmar/.test(f[0]) && f[1] === 1)); assert.strictEqual(r.hojas.length, 9);
 });
-t('bandeja 4.307: baseSL del teléfono y planificar (alta, sobra, falta, reclasificar, movido)', () => { globalThis.SAR_Toma = require('../toma-conciliacion.js'); const L = require('../levantamiento-movil.js'), B = require('../levantamiento-bandeja.js');
+t('bandeja 4.322: baseSL del teléfono y planificar (alta, sobra, falta, reclasificar, movido)', () => { globalThis.SAR_Toma = require('../toma-conciliacion.js'); const L = require('../levantamiento-movil.js'), B = require('../levantamiento-bandeja.js');
   const dr = { folio: 'BUL-2026-000845', bodega: { id: 'b1', name: 'CAM' }, prod: { insumoId: 'i1', nombre: 'Gasa' }, lote: 'D', vence: '2027-05', estructura: { estado: 'CERRADA', interiores: [], sueltas: 60 } };
   const d = L.armarDoc(dr, { correo: 'a@x.cl' }, { base: null, sl: 100 }); assert.strictEqual(d.baseSL, 100); assert.ok(!('baseSL' in L.armarDoc({ ...dr, prod: { ...dr.prod, controlado: 'estupefaciente' } }, { correo: 'a@x.cl' }, { sl: 5 })));
   const caja = (o) => ({ folio: 'BUL-2026-0009' + (o.n || 0), estado: 'REGISTRADO', contadoPor: 'ana@x', huella: 'h', lote: o.lote, vence: o.vence || '2027-05', total: o.total, baseSistema: o.base === undefined ? null : o.base, baseSL: o.baseSL, deudaSistema: 0 });
@@ -48,13 +48,13 @@ t('bandeja 4.307: baseSL del teléfono y planificar (alta, sobra, falta, reclasi
   p = B.planificar({ doc: doc([]), cajas: [{ ...caja({ lote: 'N', total: 3 }), contadoPor: 'yo@x' }], modo: 'caja', yo: 'yo@x' }); assert.deepStrictEqual(p.errores.map(e => e.tipo), ['propia']);
   assert.strictEqual(B.estadoLinea({ clave: 'k', reclasIn: [], alta: 0, sobra: 0, falta: 0, base: 5, contado: 5, ahora: 5 }, []), 'coincide');
 });
-t('bandeja 4.307: etiquetas BUL de la caja, pendientes e IRA', () => { globalThis.SAR_Toma = require('../toma-conciliacion.js'); const B = require('../levantamiento-bandeja.js');
+t('bandeja 4.322: etiquetas BUL de la caja, pendientes e IRA', () => { globalThis.SAR_Toma = require('../toma-conciliacion.js'); const B = require('../levantamiento-bandeja.js');
   const c = { folio: 'BUL-2026-000845', bodega: 'CAM', lote: 'l7', vence: '2027-05', total: 485, estructura: { estado: 'ABIERTA', interiores: Array(9).fill({ q: 50, abierta: false }).concat([{ q: 30, abierta: true }]), sueltas: 5 } };
   assert.strictEqual(B.nHijos(c), 11); const hj = Array.from({ length: 11 }, (_, i) => 'BUL-2026-0009' + String(i).padStart(2, '0'));
   const l = B.bultosDe(c, { lev: 'LEV-2026-00001', nombre: 'GASA', insumoId: 'g1', hijos: hj, ahora: '2026-11-23T10:00:00Z', por: 'yo@x' });
   assert.deepStrictEqual([l.length, l[0].folio, l[0].copias, l[0].lote, l[0].contenido], [12, c.folio, 2, 'L7', 485]); assert.strictEqual(l.filter(x => x.franja === 'ABIERTA – USAR PRIMERO')[0].capacidad, 50); assert.strictEqual(l.filter(x => x.granel)[0].contenido, 5);
   assert.throws(() => B.bultosDe(c, { hijos: hj.slice(0, 3) }), /Faltan folios/);
-  const cj = [{ estado: 'REGISTRADO', bodega: 'CAM', insumoId: 'g1', lote: 'L7', vence: '2027-05' }, { estado: 'ACEPTADO', bodega: 'CAM', insumoId: 'g1', lote: 'L7', vence: '2027-05' }, { estado: 'RECONTEO', bodega: 'CAM', nombreNorm: 'gasa', lote: 'L8', vence: '2027-06' }];
+  const cj = [{ estado: 'REGISTRADO', bodega: 'CAM', insumoId: 'g1', lote: 'L7', vence: '2027-05' }, { estado: 'ACEPTADO', lev: 'LEV-2026-00001', contadoCompleto: false, bodega: 'CAM', insumoId: 'g1', lote: 'L7', vence: '2027-05' }, { estado: 'RECONTEO', bodega: 'CAM', nombreNorm: 'gasa', lote: 'L8', vence: '2027-06' }];
   assert.strictEqual(B.pendientesEn(cj, 'g1', 'CAM', 'l7', '05/2027').length, 1); assert.strictEqual(B.pendientesEn(cj, 'Gasa', 'cam').length, 1); assert.strictEqual(B.pendientesEn(cj, 'g1', 'Central').length, 0);
   assert.strictEqual(B.ira([{ base: 10, contadoAceptado: 10 }, { base: 5, contadoAceptado: 4 }, { base: 0, contadoAceptado: 9 }]), 50); assert.strictEqual(B.ira([{ base: 0 }]), null);
   assert.strictEqual(B.bloqueaDespacho({ levProvisional: true }), true); assert.strictEqual(B.bloqueaDespacho({ provisional: true }), false);
@@ -1195,9 +1195,10 @@ t('v21.273: fecha de elaboración opcional en levantamiento-movil y plan/contado
   assert.strictEqual(planSimp.subdividida, false);
   assert.strictEqual(planSimp.totalEtiquetas, 1);
 
-  // 3) armarBultosDeConteo: 1 caja grande conservando el correlativo del tag + 10 interiores con sus unidades exactas
+  // 3) v21.276: las BUL las arma la bandeja (una transacción); llevan la elaboración y la caja grande conserva el correlativo del tag
+  globalThis.SAR_Toma = globalThis.SAR_Toma || require('../toma-conciliacion.js'); const LBu = require('../levantamiento-bandeja.js');
   const foliosHijos = Array.from({ length: 10 }, (_, i) => `BUL-2026-${String(2930 + i).padStart(6, '0')}`);
-  const bultos = T.armarBultosDeConteo(doc1, foliosHijos, { ahora: '2026-11-26T12:30:00Z', por: 'admin@cormumel.cl' });
+  const bultos = LBu.bultosDe(doc1, { lev: 'LEV-2026-00009', nombre: doc1.nombre, insumoId: 'i1', hijos: foliosHijos, ahora: '2026-11-26T12:30:00Z', por: 'admin@cormumel.cl' });
   assert.strictEqual(bultos.length, 11);
   assert.strictEqual(bultos[0].folio, 'BUL-2026-002928');
   assert.strictEqual(bultos[0].tipo, 'bulto');
@@ -1209,6 +1210,7 @@ t('v21.273: fecha de elaboración opcional en levantamiento-movil y plan/contado
   assert.strictEqual(bultos[1].contenido, 50);
   assert.strictEqual(bultos[10].contenido, 30);
   assert.strictEqual(bultos[10].estado, 'ABIERTA');
+  assert.strictEqual(bultos[10].elaboracion, '2026-05-15');
 
   // 4) contadoresEtiquetas: suma cajas contadas, subdivididas, grandes, interiores, pendientes y generadas
   const filas = T.unir(
@@ -1235,22 +1237,10 @@ t('v21.273: fecha de elaboración opcional en levantamiento-movil y plan/contado
   // Filtrar por bodega incluye también tags sin usar preasignados a esa bodega
   assert.strictEqual(T.filtrar(filas, { bodega: 'Bodega Satélite Vestidor' }).length, 3);
 
-  // 5) v21.274: agruparParaIngreso y mezclarLotesIngreso (suma mismo lote, agrega lote distinto y no duplica los ya ingresados con lev)
-  const cEtiq1 = { ...doc1, folio: 'BUL-2026-002930', estado: 'ETIQUETADO', total: 480, lote: 'L2026A', vence: '2028-05', elaboracion: '2026-05-15' };
-  const cEtiq2 = { ...doc1, folio: 'BUL-2026-002931', estado: 'ETIQUETADO', total: 200, lote: 'L2026A', vence: '2028-05' }; // mismo lote -> suma 680
-  const cEtiq3 = { ...doc1, folio: 'BUL-2026-002932', estado: 'ETIQUETADO', total: 150, lote: 'L2026B', vence: '2028-09' }; // lote distinto -> agrega
-  const cYaIng = { ...doc1, folio: 'BUL-2026-002933', estado: 'ETIQUETADO', lev: 'LEV-2026-00001', total: 100 }; // ya ingresado -> ignorado
-  const grupos = T.agruparParaIngreso([cEtiq1, cEtiq2, cEtiq3, cYaIng, doc1]);
-  assert.strictEqual(grupos.length, 1);
-  assert.strictEqual(grupos[0].folios.length, 3);
-  assert.strictEqual(grupos[0].total, 830);
-  assert.strictEqual(grupos[0].ingresos.length, 2);
-  const mez = T.mezclarLotesIngreso({ quantity: 100, batches: [{ batch: 'L2026A', expirationDate: '2028-05', quantity: 100 }] }, grupos[0].ingresos);
-  assert.strictEqual(mez.quantity, 930);
-  assert.strictEqual(mez.batches.length, 2);
-  assert.strictEqual(mez.batches[0].batch, 'L2026A');
-  assert.strictEqual(mez.batches[0].quantity, 780);
-  assert.strictEqual(mez.batches[0].elaboracion, '2026-05-15');
-  assert.strictEqual(mez.batches[1].batch, 'L2026B');
-  assert.strictEqual(mez.batches[1].quantity, 150);
+  // 5) v21.276: «Ingresar al stock (LEV)» de v21.274 se retiró (duplicaba stock); Tags ya no tiene caminos propios de stock ni BUL
+  ['ingresarStockLevantamiento', 'agruparParaIngreso', 'mezclarLotesIngreso', 'armarBultosDeConteo'].forEach(k => assert.strictEqual(T[k], undefined, k + ' debe estar retirado'));
+  const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'tags-conteo.js'), 'utf8');
+  assert.ok(!/runTransaction|updateDoc\(refConteo|Insumos'|Historial_Movimientos/.test(src), 'tags-conteo.js no escribe stock, historial ni el estado de las cajas');
+  assert.strictEqual(T.sinStock({ estado: 'ETIQUETADO' }), true); assert.strictEqual(T.sinStock({ estado: 'ETIQUETADO', lev: 'LEV-2026-00001' }), false);
+  assert.strictEqual(T.ingresadaV274({ estado: 'ETIQUETADO', lev: 'LEV-2026-00001' }), true); assert.strictEqual(T.ingresadaV274({ estado: 'ACEPTADO', lev: 'LEV-2026-00002', contadoCompleto: false }), false);
 });

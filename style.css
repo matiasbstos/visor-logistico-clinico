@@ -6822,6 +6822,19 @@ body:has(.lv-root .lv) .sp-inst{display:none}
 .lvb-fichas{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px}
 .lvb-fichas li{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 @media (max-width:640px){.lvb-pie .btn{width:100%}}
+/* v21.276: legado v21.273–274 e informe «Ingresos LEV de v21.274 a revisar» */
+.lvb-v274{margin-bottom:12px;background:#fffbeb;border-color:#fde68a}
+.lvb-v274-t{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;font-size:.92rem;color:#78350f}
+.lvb-inf{margin-bottom:14px}
+.lvb-inf-res{margin:6px 0 10px;font-size:.92rem}
+.lvb-mal{color:#991b1b}
+.lvb-exceso td{background:#fef2f2}
+.lvb-exceso td:last-child b{color:#991b1b}
+.tg-lev{display:block;color:#166534;font-weight:600}
+.tg-lev--rev{color:#9a3412}
+.tg-lev--pend{color:#92400e}
+.tg-bar-lev{background:#fffbeb;border-color:#fde68a}
+@media (max-width:640px){.lvb-v274-t .btn{width:100%}}
 /* v21.250 · Conteo e ingreso: mini manual del contador */
 .lv-ay { padding: 0; overflow: hidden; }
 .lv-ay > summary { list-style: none; cursor: pointer; padding: 16px; min-height: 56px; display: flex; align-items: center; gap: 10px; font-size: 1.05rem; color: var(--primary, #1a3668); }

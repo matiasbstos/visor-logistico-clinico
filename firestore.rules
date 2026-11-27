@@ -17,6 +17,15 @@ service cloud.firestore {
         : 'sin_acceso';
     }
 
+    // v21.276 (4.322): la caja o el registro por lote solo cambian dentro de la transacción de la bandeja, que en el mismo
+    // commit deja el LEV abierto con ultimaEn = la hora de esa aceptación y ultimoPor = quien acepta.
+    function levDeEstaTx(lev, en) {
+      return lev is string && lev.matches('^LEV-[0-9]{4}-[0-9]{5}$') && en is string
+        && getAfter(/databases/$(database)/documents/Contadores/$('lev-' + lev)).data.get('estado', '') == 'abierto'
+        && getAfter(/databases/$(database)/documents/Contadores/$('lev-' + lev)).data.get('ultimaEn', '') == en
+        && getAfter(/databases/$(database)/documents/Contadores/$('lev-' + lev)).data.get('ultimoPor', '') == request.auth.token.email;
+    }
+
     function getUserRole() {
       return (request.auth != null && 'email' in request.auth.token && exists(/databases/$(database)/documents/Usuarios/$(request.auth.token.email)))
         ? getUserRoleByDoc(request.auth.token.email)
@@ -120,7 +129,7 @@ service cloud.firestore {
     match /Insumos/{insumoId} {
       allow read: if hasRole() || isContador();
       allow create: if isOperadorOrAdmin();
-      // 4.307: una ficha provisional del levantamiento (levProvisional) solo la valida el superadmin
+      // 4.322: una ficha provisional del levantamiento (levProvisional) solo la valida el superadmin
       allow update: if (isOperadorOrAdmin() && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['levProvisional']) || isSuperAdmin()))
         || (isTransitoria() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ubicacionEstante', 'updatedAt']));
       allow delete: if isAdmin();
@@ -141,7 +150,8 @@ service cloud.firestore {
     // -----------------------------------------------------
     match /Historial_Movimientos/{movId} {
       allow read: if hasRole(); // Solo usuarios con rol asignado (el historial antiguo puede contener RUT de pacientes)
-      allow create: if hasRole();
+      // v21.276: «Ingresar al stock (LEV)» de v21.274 (INGRESO_LEVANTAMIENTO) duplicaba stock; un cliente con esa versión en caché ya no puede escribirlo
+      allow create: if hasRole() && request.resource.data.get('type', '') != 'INGRESO_LEVANTAMIENTO';
       // Solo el superadministrador, y solo para quitar datos de pacientes antiguos (anonimizar-pacientes.js)
       allow update: if isSuperAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rutPaciente', 'nombrePaciente', 'camaPaciente', 'document']);
@@ -329,7 +339,8 @@ service cloud.firestore {
       // v21.249: el contador valida el tag que escanea (¿es un tag «CONTADO» o la etiqueta de una caja?) y guarda la lista de tags para usarla sin internet
       allow get: if isContador() && id.matches('bulto-BUL-[0-9]{4}-[0-9]{6}');
       allow list: if isContador() && resource.data.tipo == 'tag-conteo';
-      allow create, update: if isStaff();
+      // v21.276: el registro del LEV (lev-<LEV>) y el puntero lev-abierto-<bodega> solo los escribe un administrador (bandeja)
+      allow create, update: if isStaff() && (!id.matches('lev-.*') || isAdmin());
       // N° SOL al enviar desde «Pedir insumos» (v21.219): el contador sube de a 1 y solo junto con la solicitud que lleva ese número
       allow create: if request.auth != null && id.matches('correlativo-solicitudes-[0-9]{4}')
         && request.resource.data.keys().hasOnly(['valor', 'actualizado', 'ultima']) && request.resource.data.valor == 1
@@ -352,7 +363,7 @@ service cloud.firestore {
       function camposBodega() {
         return ['estado', 'aceptadoPor', 'aceptadoEn', 'aceptadoTotal', 'aceptadoLote', 'aceptadoVence', 'aceptadoInsumoId', 'lev', 'hijos', 'insumoId',
                 'motivoRechazo', 'rechazadoPor', 'rechazadoEn', 'reconteoPedidoPor', 'reconteoEn', 'nota',
-                'contadoCompleto', 'aceptadoPropio'];   // 4.307: bandeja «Levantamientos por aprobar»
+                'contadoCompleto', 'aceptadoPropio', 'levPor', 'levEn'];   // 4.322: bandeja «Levantamientos por aprobar»; levPor/levEn: legado v21.273–274
       }
       function n6(v) { return v is int && v >= 0 && v <= 1000000; }
       // texto opcional (o null) de hasta n caracteres
@@ -383,7 +394,7 @@ service cloud.firestore {
           && (!('deudaSistema' in d) || n6(d.deudaSistema))
           && (d.get('baseSL', null) == null || n6(d.baseSL));
       }
-      // sin cambio de estado solo mientras se cuenta; ETIQUETADO y RECHAZADO quedan fijos (salvo agregar lev, abajo)
+      // sin cambio de estado solo mientras se cuenta; ETIQUETADO y RECHAZADO quedan fijos (salvo el legado sin LEV, abajo)
       function transicion(a, b) {
         return (a == b && a in ['REGISTRADO', 'RECONTEO'])
           || (a == 'REGISTRADO' && b in ['RECONTEO', 'ACEPTADO', 'RECHAZADO'])
@@ -405,7 +416,23 @@ service cloud.firestore {
           // al aceptar, bodega confirma exactamente lo que se contó (si la caja cambió entremedio, se rechaza)
           && (n.estado != 'ACEPTADO' || o.estado == 'ACEPTADO'
               || (n.get('aceptadoTotal', -1) == o.total && n.get('aceptadoLote', '') == o.lote && n.get('aceptadoVence', '') == o.vence
-                  && n.get('aceptadoInsumoId', null) == n.get('insumoId', null)));
+                  && n.get('aceptadoInsumoId', null) == n.get('insumoId', null)))
+          // v21.276: aceptar = la transacción de la bandeja (stock + BUL + LEV en el mismo commit). Sin LEV no hay ACEPTADO
+          // (el «Aceptar» de v21.273 en caché ya no deja cajas aceptadas sin stock)
+          && (n.estado != 'ACEPTADO' || o.estado == 'ACEPTADO' || (n.get('contadoCompleto', null) is bool && levDeEstaTx(n.get('lev', null), n.get('aceptadoEn', null))))
+          // ACEPTADO → ETIQUETADO: solo se marca la impresión de una caja que ya entró al stock (tiene LEV); nada más cambia
+          && (n.estado != 'ETIQUETADO' || o.estado == 'ETIQUETADO' || (('lev' in o) && cambia.hasOnly(['estado'])));
+      }
+      // v21.276: caja ACEPTADA o ETIQUETADA sin LEV por v21.273–274 → entra al stock en la bandeja. Mismo estado; se anota el LEV
+      // (en la misma transacción que el stock) y, si era ACEPTADO con el tag sin BUL, sus interiores nuevas.
+      function legadoOk(n, o, cambia) {
+        return o.estado in ['ACEPTADO', 'ETIQUETADO'] && !('lev' in o) && n.estado == o.estado
+          && cambia.hasOnly(['lev', 'insumoId', 'aceptadoInsumoId', 'hijos', 'contadoCompleto', 'aceptadoPropio', 'levPor', 'levEn'])
+          && n.get('levPor', '') == request.auth.token.email && n.get('contadoCompleto', null) is bool
+          && txt(n, 'insumoId', 120) && n.get('aceptadoInsumoId', null) == n.get('insumoId', null)
+          && (!cambia.hasAny(['hijos']) || (o.estado == 'ACEPTADO' && n.get('hijos', null) is list && n.hijos.size() <= 600))
+          && (o.contadoPor != request.auth.token.email || (isSuperAdmin() && n.get('aceptadoPropio', false) == true))
+          && levDeEstaTx(n.get('lev', null), n.get('levEn', null));
       }
       allow read: if rolConteo();
       allow create: if rolConteo()
@@ -429,19 +456,20 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(camposBodega())
           && transicion(resource.data.estado, request.resource.data.estado)
           && bodegaOk(request.resource.data, resource.data, request.resource.data.diff(resource.data).affectedKeys()))
-        // ETIQUETADO o RECHAZADO: solo se puede agregar el folio LEV si aún no lo tenía
+        // v21.276: legado v21.273–274 sin LEV (reemplaza «agregar lev a ETIQUETADO/RECHAZADO», que dejaba estampar sin stock)
         || (isAdmin()
-          && resource.data.estado in ['ETIQUETADO', 'RECHAZADO'] && !('lev' in resource.data)
-          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lev'])
-          && request.resource.data.lev is string && request.resource.data.lev.size() <= 120);
+          && legadoOk(request.resource.data, resource.data, request.resource.data.diff(resource.data).affectedKeys()));
       allow delete: if isSuperAdmin();
     }
-    // 4.307: registro por lote de cada levantamiento (LEV): base, contado aceptado y aplicado. Solo administradores; no se borra.
+    // 4.322: registro por lote de cada levantamiento (LEV): base, contado aceptado y aplicado. Solo administradores; no se borra.
+    // v21.276: solo dentro de la transacción de la bandeja (el LEV queda con ultimaEn = actualizadoEn del registro).
     match /Levantamientos/{lev} {
-      allow read, create, update: if isAdmin();
-      allow delete: if false;
+      allow read: if isAdmin();
+      allow create, update, delete: if false;
       match /lotes/{k} {
-        allow read, create, update: if isAdmin();
+        allow read: if isAdmin();
+        allow create, update: if isAdmin() && levDeEstaTx(lev, request.resource.data.get('actualizadoEn', null))
+          && request.resource.data.contadoAceptado is int && request.resource.data.aplicado is int && request.resource.data.base is int;
         allow delete: if false;
       }
     }

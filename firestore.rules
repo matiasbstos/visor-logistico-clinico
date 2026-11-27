@@ -151,7 +151,8 @@ service cloud.firestore {
     match /Historial_Movimientos/{movId} {
       allow read: if hasRole(); // Solo usuarios con rol asignado (el historial antiguo puede contener RUT de pacientes)
       // v21.276: «Ingresar al stock (LEV)» de v21.274 (INGRESO_LEVANTAMIENTO) duplicaba stock; un cliente con esa versión en caché ya no puede escribirlo
-      allow create: if hasRole() && request.resource.data.get('type', '') != 'INGRESO_LEVANTAMIENTO';
+      allow create: if hasRole() && request.resource.data.get('type', '') != 'INGRESO_LEVANTAMIENTO'
+        && (!movId.matches('(aju-)?lev-.*') || isAdmin());   /* v21.276: los ids lev-* son de la bandeja; nadie más los reserva antes */
       // Solo el superadministrador, y solo para quitar datos de pacientes antiguos (anonimizar-pacientes.js)
       allow update: if isSuperAdmin()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rutPaciente', 'nombrePaciente', 'camaPaciente', 'document']);
@@ -241,6 +242,7 @@ service cloud.firestore {
        function antigua(d) { return d.get('tipo', '') == 'SOLICITUD_INSUMOS'; }
        allow read: if hasRole();
        allow create: if hasRole() && !antigua(request.resource.data)
+         && (!id.matches('lev-.*') || isAdmin())
          && esMia(request.resource.data) && request.resource.data.get('status', '') == 'pendiente';
        allow update: if hasRole() && (
             isSuperAdmin()
@@ -420,6 +422,10 @@ service cloud.firestore {
           // v21.276: aceptar = la transacción de la bandeja (stock + BUL + LEV en el mismo commit). Sin LEV no hay ACEPTADO
           // (el «Aceptar» de v21.273 en caché ya no deja cajas aceptadas sin stock)
           && (n.estado != 'ACEPTADO' || o.estado == 'ACEPTADO' || (n.get('contadoCompleto', null) is bool && levDeEstaTx(n.get('lev', null), n.get('aceptadoEn', null))))
+          // v21.276: controlados solo los acepta el superadmin
+          && (n.estado != 'ACEPTADO' || o.estado == 'ACEPTADO' || o.get('controlado', null) in [null, false, ''] || isSuperAdmin())
+          // v21.276: los campos del LEV solo se escriben al aceptar (dentro de la transacción de la bandeja)
+          && (!cambia.hasAny(['lev', 'contadoCompleto', 'hijos', 'aceptadoPropio', 'levPor', 'levEn']) || (n.estado == 'ACEPTADO' && o.estado != 'ACEPTADO'))
           // ACEPTADO → ETIQUETADO: solo se marca la impresión de una caja que ya entró al stock (tiene LEV); nada más cambia
           && (n.estado != 'ETIQUETADO' || o.estado == 'ETIQUETADO' || (('lev' in o) && cambia.hasOnly(['estado'])));
       }
@@ -432,6 +438,7 @@ service cloud.firestore {
           && txt(n, 'insumoId', 120) && n.get('aceptadoInsumoId', null) == n.get('insumoId', null)
           && (!cambia.hasAny(['hijos']) || (o.estado == 'ACEPTADO' && n.get('hijos', null) is list && n.hijos.size() <= 600))
           && (o.contadoPor != request.auth.token.email || (isSuperAdmin() && n.get('aceptadoPropio', false) == true))
+          && (o.get('controlado', null) in [null, false, ''] || isSuperAdmin())
           && levDeEstaTx(n.get('lev', null), n.get('levEn', null));
       }
       allow read: if rolConteo();

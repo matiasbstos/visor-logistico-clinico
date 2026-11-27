@@ -280,6 +280,7 @@
         const f = fs();
         const snap = await f.getDocs(f.query(f.collection(db(), 'Actas_Entrega'), f.orderBy('creadoEn', 'desc'), f.limit(40)));
         historial = []; snap.forEach(d => historial.push({ id: d.id, ...d.data() }));
+        if (window.SAR_HistoricoCentro && window.SAR_HistoricoCentro.invalidarCache) window.SAR_HistoricoCentro.invalidarCache();
     }
 
 
@@ -682,7 +683,7 @@
     // ---------------------------------------------------------------
     const root = () => document.getElementById('act-root');
     let tab = 'emitir';
-    const TABS = [['emitir', 'ph-file-plus', 'Emitir acta'], ['emitidas', 'ph-files', 'Actas emitidas']];
+    const TABS = [['emitir', 'ph-file-plus', 'Emitir acta'], ['emitidas', 'ph-files', 'Actas emitidas'], ['centros', 'ph-buildings', 'Histórico por centro']];
 
     function pintar() {
         const r = root(); if (!r) return;
@@ -748,7 +749,7 @@
             <h3 class="act-h">2 · Acta</h3>
             <label class="act-l">Centro al que se entrega
               <input id="act-centro" list="act-centros" value="${esc(borrador.centro)}" placeholder="Ej: Pomaire"><datalist id="act-fisl">${stock.slice(0, 400).map(x => `<option value="${esc(x.name)}">`).join('')}</datalist><datalist id="act-centros">${listaCentros().map(c => `<option value="${esc(c)}">`).join('')}</datalist></label>
-              <div class="act-centro-acc"><button type="button" class="btn btn-outline btn-sm" id="act-centro-add">+ Guardar este centro en la lista</button></div>
+              <div class="act-centro-acc"><button type="button" class="btn btn-outline btn-sm" id="act-centro-add">+ Guardar este centro en la lista</button>${String(borrador.centro || '').trim() ? `<button type="button" class="btn btn-outline btn-sm" id="act-centro-hist"><i class="ph-bold ph-clock-counter-clockwise"></i> Ver histórico de este centro</button>` : ''}</div>
             <h4 class="act-h4">Productos entregados (${entregan.length})</h4>
             ${bodConteo.length > 1 ? `<div class="act-auto" role="status"><i class="ph-bold ph-warehouse" aria-hidden="true"></i><span><b>Acta multi-bodega:</b> ${bodConteo.map(([b, c]) => `${esc(b)} (${c})`).join(' · ')}. Cada producto reservará y descontará de su propia bodega.</span></div>` : ''}
             ${entregan.length ? entregan.map(([i, k]) => filaItem(i, k)).join('') : '<p class="act-hint">Aún no agregas productos que se entreguen.</p>'}
@@ -783,8 +784,10 @@
             const q = norm2([a.numero, a.centro, a.fecha, a.creadoPor, a.bodegaOrigen, pend ? 'por confirmar' : '', a.respaldo ? 'firmada' : 'sin firmar', a.estado === 'ANULADA' ? 'anulada' : '', a.conSobregiro ? 'sobregiro' : '', (a.items || []).map(i => i.nombre).join(' ')].join(' '));
             return `<div class="act-hrow${a.estado === 'ANULADA' ? ' act-anulada' : ''}" data-ver="${n}" data-q="${esc(q)}" data-est="${estadoFirma(a)}" data-pend="${!ox && a.estado !== 'ANULADA' && pendDeActa(a).length ? 1 : 0}" role="button" tabindex="0" aria-label="Ver el acta ${n}"><div class="act-hinfo"><div class="act-htit"><strong>${n}</strong><span>${esc(a.centro)}</span>${chip}${a.conSobregiro ? '<span class="act-chip act-c-sin" title="Parte de lo entregado no tenía respaldo en el sistema">Con sobregiro</span>' : ''}</div><small>${esc(a.fecha)} · ${ox ? 'oxígeno · ' : ''}${(a.items || []).length} ${ox ? 'balones' : 'productos'} · ${esc(a.bodegaOrigen)} · ${esc(a.creadoPor || '')}</small></div>
             <div class="act-hbtns">${ox ? '' : `<button type="button" class="btn btn-outline act-pickrow" data-n="${n}" aria-label="Hoja de picking del acta ${n}"><i class="ph-bold ph-list-checks"></i> Picking</button>`}${ox || a.estado === 'ANULADA' ? '' : (pendDeActa(a).length ? `<button type="button" class="btn btn-outline act-pendrow" data-n="${n}" aria-label="Ver productos pendientes del acta ${n}"><i class="ph-bold ph-hourglass-medium"></i> Pendientes (${pendDeActa(a).length})</button>` : `<button type="button" class="btn btn-outline act-pendrow" disabled title="Este centro no tiene productos pendientes en esta acta"><i class="ph-bold ph-hourglass-medium"></i> Pendientes</button>`)}<span class="btn btn-primary act-verbtn"><i class="ph-bold ph-eye"></i> Ver acta</span></div></div>`; }).join('') : '<div class="act-hint">Todavía no hay actas emitidas. <button type="button" class="btn btn-primary act-ir-emitir">Emitir la primera acta</button></div>'}</div></div>
+        <div data-act-tab="centros" id="act-centros-root"${tab === 'centros' ? '' : ' hidden'}></div>
         <div data-act-tab="seguimiento" id="seg-root"${tab === 'seguimiento' ? '' : ' hidden'}></div>`;
         r.querySelectorAll('.act-tab').forEach(b => b.addEventListener('click', () => { tab = b.dataset.tab; pintar(); }));
+        if (tab === 'centros' && window.SAR_HistoricoCentro) { const hc = r.querySelector('#act-centros-root'); if (hc) window.SAR_HistoricoCentro.render(hc); }
         const irA = (t) => { tab = t; pintar(); const h = root() && root().querySelector('h2'); if (h) { h.tabIndex = -1; h.focus({ preventScroll: true }); } };
         r.querySelectorAll('.act-goseg').forEach(b => b.addEventListener('click', () => irA('seguimiento')));
         r.querySelectorAll('.act-volver').forEach(b => b.addEventListener('click', () => irA('emitidas')));
@@ -849,6 +852,11 @@
         const bca = document.getElementById('act-centro-add'); if (bca) bca.addEventListener('click', async () => {
             leerCampos(); const n = normC(borrador.centro); if (!n) { toast('Falta el centro', 'Escribe el nombre del centro y luego guárdalo.', 'warning'); return; }
             try { const nuevo = await guardarCentro(n); toast(nuevo ? 'Centro guardado' : 'Ya estaba en la lista', n, nuevo ? 'success' : 'info'); pintar(); } catch (e) { toast('No se guardó el centro', e.message || String(e), 'error'); }
+        });
+        const bch = document.getElementById('act-centro-hist'); if (bch) bch.addEventListener('click', () => {
+            leerCampos(); const n = normC(borrador.centro); if (!n) return;
+            if (window.SAR_HistoricoCentro) window.SAR_HistoricoCentro.seleccionarCentro(n);
+            tab = 'centros'; pintar();
         });
         { const dh = document.getElementById('act-dist-host'); if (dh && window.SAR_Distribucion) window.SAR_Distribucion.panelEn(dh); }
         const hon = document.getElementById('act-hist-on'); if (hon) hon.addEventListener('change', () => { leerCampos(); borrador.historica = hon.checked ? { on: true, folio: '', fecha: '' } : null; guardarBorrador(); pintar(); });
@@ -1079,8 +1087,8 @@
         if (a.estado === 'ANULADA') ev.push({ d: tsDe(a.anuladaEn), t: 'Acta eliminada (anulada)', x: `Por ${a.anuladaPor || '—'}. Motivo: ${a.anulacionMotivo || '—'}` });
         return ev.sort((x, y) => (x.d ? x.d.getTime() : Infinity) - (y.d ? y.d.getTime() : Infinity));
     }
-    async function verActa(numero) {
-        const a = historial.find(x => x.numero === numero); if (!a) return;
+    async function verActa(numero, actaDirecta) {
+        const a = actaDirecta || historial.find(x => x.numero === numero); if (!a) return;
         if (modalCierre) modalCierre();
         const n = esc(a.numero), pend = a.estado === 'EMITIDA' && a.tipo !== 'OXIGENO' && a.confirmacion && a.confirmacion.estado === 'PENDIENTE', ox = a.tipo === 'OXIGENO';
         const estado = a.estado === 'ANULADA' ? '<span class="act-chip act-c-anu">Anulada</span>' : pend ? `<span class="act-chip act-c-pen"${a.reservaStock ? ' title="El stock de esta acta está reservado: no se puede usar en otro movimiento hasta confirmar la entrega o eliminar el acta"' : ''}>${a.reservaStock ? 'Por confirmar · stock reservado' : 'Por confirmar'}</span>` : (a.respaldo ? '<span class="act-chip act-c-ok">Firmada</span>' : '<span class="act-chip act-c-sin">Sin acta firmada</span>');
@@ -1252,6 +1260,6 @@
     let precarga = null, manualImg = '', manualAbierto = false;
     const vistaMImg = () => manualImg ? `<img src="${esc(manualImg)}" alt="" class="act-mimg-v"><button type="button" class="btn btn-outline btn-sm" id="act-mimg-q">Quitar</button>` : '<small>WEBP, JPG, PNG… (queda en el catálogo)</small>';
     function precargar(centro, lista, dist) { precarga = { centro, lista: lista || [], dist: dist || null }; if (window.location.hash === '#view-actas-entrega') abrir(); else window.location.hash = 'view-actas-entrega'; }
-    window.SAR_ActasEntrega = { precargar, recargarStock: async () => { await cargarStock(); if (typeof pintar === 'function') pintar(); }, ver: verActa, verPorNumero: async (n) => { if (!historial.find(x => x.numero === n)) await cargarHistorial(); return verActa(n); }, avisarFirmada: (a, file) => file.arrayBuffer().then(buf => window.SAR_Avisos && window.SAR_Avisos.avisarActa('firmada', a, { firmada: { bytes: new Uint8Array(buf), mime: file.type, nombre: file.name } })), precargar, listaCentros, abrir, bodegaDe, resumenBodegas, planReserva, planificar, cuadrar, restaurarConSobregiro, detalleDe, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, reservarEn, reservarAntiguas, confirmarEntrega, lotesDeDoc, subirFirmada, verRespaldo, descargarRespaldo: (a) => verRespaldo(a, true) };
+    window.SAR_ActasEntrega = { precargar, recargarStock: async () => { await cargarStock(); if (typeof pintar === 'function') pintar(); }, ver: verActa, verPorNumero: async (n) => { let a = historial.find(x => x.numero === n); if (!a) { await cargarHistorial(); a = historial.find(x => x.numero === n); } if (!a) { try { const sn = await fs().getDoc(fs().doc(fs().collection(db(), 'Actas_Entrega'), n)); if (sn.exists()) a = { id: sn.id, ...sn.data() }; } catch (e) { /* sin lectura */ } } return verActa(n, a); }, avisarFirmada: (a, file) => file.arrayBuffer().then(buf => window.SAR_Avisos && window.SAR_Avisos.avisarActa('firmada', a, { firmada: { bytes: new Uint8Array(buf), mime: file.type, nombre: file.name } })), precargar, listaCentros, abrir, bodegaDe, resumenBodegas, planReserva, planificar, cuadrar, restaurarConSobregiro, detalleDe, descargarActa: (a, f) => descargar(actaParaDoc(a), f), descontarFEFO, restaurarLotes, numeroActa, validarBorrador, emitir, anular, reservarEn, reservarAntiguas, confirmarEntrega, lotesDeDoc, subirFirmada, verRespaldo, descargarRespaldo: (a) => verRespaldo(a, true) };
     if (typeof module !== 'undefined') module.exports = window.SAR_ActasEntrega;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : { body: { dataset: {} } });

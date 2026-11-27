@@ -1261,3 +1261,42 @@ t('v21.276: actas multi-bodega — cada producto conserva y reserva/descuenta de
   const rsMal = new Map([['doc-j1', { d: { name: 'JERINGA TUBERCULINA 1 ML', location: 'Bodega Central', quantity: 7291 } }]]);
   assert.throws(() => A.planReserva(rsMal, [items[2]], 'Bodega Central', 'AE-2026-0999', null), /Bodega CAM/);
 });
+
+t('v21.277: histórico por centro — agrupa variantes de nombre, consolida productos, filtra anuladas y exporta CSV', () => {
+  const H = require('../actas-historico-centro.js');
+  const actas = [
+    { numero: 'AE-2026-0010', fecha: '2026-10-05', centro: 'Pomaire', bodegaOrigen: 'Bodega Central', estado: 'EMITIDA', respaldo: { nombre: 'f.pdf' }, items: [{ nombre: 'JERINGA 1 ML', codigoMP: '2231604', cantidad: 100, bodega: 'Bodega Central' }] },
+    { numero: 'AE-2026-0022', fecha: '2026-11-20', centro: 'POMAIRE ', bodegaOrigen: 'Bodega Central + Bodega CAM', estado: 'EMITIDA', confirmacion: { estado: 'PENDIENTE' }, items: [{ nombre: 'JERINGA 1 ML', codigoMP: '2231604', cantidad: 250, bodega: 'Bodega CAM' }, { nombre: 'PARCHE OCULAR', codigoMP: '2232611', cantidad: 50, bodega: 'Bodega Central' }] },
+    { numero: 'AE-2026-0023', fecha: '2026-11-21', centro: 'Pomaire', bodegaOrigen: 'Bodega Central', estado: 'ANULADA', items: [{ nombre: 'JERINGA 1 ML', codigoMP: '2231604', cantidad: 999 }] },
+    { numero: 'AE-2026-0025', fecha: '2026-11-22', centro: 'Bollenar', bodegaOrigen: 'Bodega Central', estado: 'EMITIDA', items: [{ nombre: 'GUANTE N° M', cantidad: 500 }] }
+  ];
+  const centros = H.listarCentrosDeActas(actas);
+  assert.strictEqual(centros.length, 2);
+  const pom = centros.find(c => c.clave === 'pomaire');
+  assert.strictEqual(pom.actasValidas, 2);
+  assert.strictEqual(pom.actasAnuladas, 1);
+  assert.strictEqual(pom.unidades, 400);
+  assert.strictEqual(pom.productosUnicos, 2);
+  // Resumen consolidado por centro (excluye anuladas de totales, suma Jeringa de ambas bodegas)
+  const res = H.resumenCentro(actas, 'Pomaire', {});
+  assert.strictEqual(res.kpis.actasValidas, 2);
+  assert.strictEqual(res.kpis.unidades, 400);
+  assert.strictEqual(res.kpis.anuladas, 1);
+  assert.strictEqual(res.productos.length, 2);
+  assert.strictEqual(res.productos[0].nombre, 'JERINGA 1 ML');
+  assert.strictEqual(res.productos[0].total, 350);
+  assert.strictEqual(res.productos[0].actas, 2);
+  assert.deepStrictEqual(res.productos[0].bodegas, ['Bodega CAM', 'Bodega Central']);
+  // Filtro sin por confirmar + rango de fecha
+  const soloConf = H.resumenCentro(actas, 'Pomaire', { incluirPorConfirmar: false });
+  assert.strictEqual(soloConf.kpis.actasValidas, 1);
+  assert.strictEqual(soloConf.kpis.unidades, 100);
+  const nov = H.resumenCentro(actas, 'Pomaire', { desde: '2026-11-01' });
+  assert.strictEqual(nov.kpis.actasValidas, 1);
+  assert.strictEqual(nov.kpis.unidades, 300);
+  // CSV con BOM UTF-8 y separador ;
+  const csv = H.generarCSV('Pomaire', res);
+  assert.ok(csv.startsWith('\uFEFFFecha;N° Acta;Estado;Centro;'));
+  assert.ok(csv.includes('AE-2026-0022'));
+  assert.ok(csv.includes('Bodega CAM'));
+});

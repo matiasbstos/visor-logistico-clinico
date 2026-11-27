@@ -1939,3 +1939,12 @@ Caso real del usuario (`Factura 152.pdf`, `MICHIS PUBLICIDAD LIMITADA`, OC `1298
   - Cada ítem del acta guarda su propia `bodega` (`bodegaDe` / `resumenBodegas`). Cambiar la bodega del panel izquierdo **ya no borra** los productos agregados; agregar un producto con stock en otra bodega o pulsar **`Usar <Bodega>`** en una fila asigna esa bodega **solo a ese producto**.
   - Al emitir (reserva), confirmar (descuento y `ENTREGA_ACTA` / `CUADRE_SOBREGIRO`), editar (`EDICION_ACTA`) y anular (`LIBERA_RESERVA` / `ANULACION_ACTA`), cada producto valida, reserva, descuenta y devuelve stock sobre **su propia bodega** en la misma transacción. El acta conserva `bodegaOrigen` legible (p. ej. `Bodega Central + Bodega CAM`) y `bodegasOrigen[]` cuando participan 2 o más.
   - En la **Hoja de picking** (`pendientes-entrega.js`), si el acta incluye más de una bodega se muestra la columna **Bodega** por fila para saber de dónde retirar cada producto. Compatibilidad total con actas anteriores de una sola bodega.
+
+
+### 4.323 Histórico de entregas por centro dentro de Actas de entrega (v21.277)
+- **Nuevo módulo (`actas-historico-centro.js`) + 3.ª pestaña en `actas-entrega.js`:**
+  - Pestaña **«Histórico por centro»** dentro de **Actas de entrega** y acceso directo **«Ver histórico de este centro»** al escribir un centro en **Emitir acta**.
+  - Agrupa entregas por centro normalizado (sin tildes ni diferencias de mayúsculas) leyendo hasta 1.500 actas de `Actas_Entrega` (con caché invalidada al emitir/editar/anular).
+  - Muestra KPIs del centro (actas válidas, productos distintos, unidades entregadas, rango de fechas), filtros por producto/acta/bodega, rango **Desde / Hasta**, actas por confirmar y anuladas.
+  - Ofrece dos vistas: **Por producto** (consolidado con total entregado, N° de actas, última entrega, bodegas y detalle desplegable de cada acta) y **Por acta** (línea cronológica con botón **Ver acta** — `verPorNumero` ahora lee de Firestore si el acta es más antigua que las últimas 40).
+  - Exportación **Excel (CSV)** con BOM UTF-8 y separador `;`. Sin nuevas colecciones ni cambios en `firestore.rules`.

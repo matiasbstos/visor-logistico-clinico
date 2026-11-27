@@ -58,7 +58,7 @@ t('bandeja 4.322: etiquetas BUL de la caja, pendientes e IRA', () => { globalThi
   assert.strictEqual(B.pendientesEn(cj, 'g1', 'CAM', 'l7', '05/2027').length, 1); assert.strictEqual(B.pendientesEn(cj, 'Gasa', 'cam').length, 1); assert.strictEqual(B.pendientesEn(cj, 'g1', 'Central').length, 0);
   assert.strictEqual(B.ira([{ base: 10, contadoAceptado: 10 }, { base: 5, contadoAceptado: 4 }, { base: 0, contadoAceptado: 9 }]), 50); assert.strictEqual(B.ira([{ base: 0 }]), null);
   assert.strictEqual(B.bloqueaDespacho({ levProvisional: true }), true); assert.strictEqual(B.bloqueaDespacho({ provisional: true }), false);
-  assert.strictEqual(B.agrupar([{ ...cj[0], nombre: 'Gasa', nombreNorm: 'gasa' }, cj[1]]).get('CAM').cajas, 1);
+  assert.strictEqual(B.agrupar([{ ...cj[0], nombre: 'Gasa', nombreNorm: 'gasa' }, cj[1]]).get('cam').cajas, 1);
 });
 const tAsync = []; const ta = (nombre, f) => tAsync.push(f().then(() => { n++; console.log('OK   ' + nombre); }).catch(e => { mal++; console.log('FALLA ' + nombre + ' → ' + e.message); }));
 ta('respaldo: serializar, comprimir, trocear y restaurar sin pérdida', async () => {

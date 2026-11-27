@@ -62,7 +62,7 @@ function caja(o) {
   escribir('Conteos_Cajas/' + folio, c); escribir('Contadores/bulto-' + folio, { tipo: 'tag-conteo', folio, estado: 'TAG', creadoEn: '2026-11-20T09:00:00.000Z' });
   return c;
 }
-const recontar = (c, cambios) => { const d = { ...DB.get('Conteos_Cajas/' + c.folio), ...cambios, estado: 'REGISTRADO', reconteoEn: '2026-11-23T11:00:00.000Z', reconteoPedidoPor: YO, editadoEn: '2026-11-23T11:30:00.000Z' }; d.huella = 'h' + c.folio + d.total + 'r'; escribir('Conteos_Cajas/' + c.folio, d); return d; };
+const recontar = (c, cambios) => { const d = { ...DB.get('Conteos_Cajas/' + c.folio), estado: 'REGISTRADO', reconteoEn: '2026-11-23T11:00:00.000Z', reconteoPedidoPor: YO, editadoEn: '2026-11-23T11:30:00.000Z', recontadoPor: 'beto@sar.cl', recontadoEn: '2026-11-23T11:30:00.000Z', ...cambios };   /* reconteo de OTRA persona */ d.huella = 'h' + c.folio + d.total + 'r'; escribir('Conteos_Cajas/' + c.folio, d); return d; };
 const grupo = (cs, extra) => ({ bodega: BOD, bodegaId: '', nombre: cs[0].nombre, nuevo: cs.some(c => c.nuevo), controlado: cs.find(c => c.controlado) ? cs.find(c => c.controlado).controlado : null, cajas: cs.map(c => DB.get('Conteos_Cajas/' + c.folio)), ...(extra || {}) });
 const ins = (id) => DB.get('Insumos/' + id);
 const lotes = (id) => (ins(id).batches || []).map(b => `${b.batch}:${b.quantity}`).sort().join(' ');
@@ -313,7 +313,7 @@ const t = async (nombre, f) => { try { const r = await f(); n++; R.push(['OK', n
     const c = legado({ insumoId: 'g1', lote: 'A', total: 100, base: 100 }); escribir('Conteos_Cajas/' + c.folio, { ...DB.get('Conteos_Cajas/' + c.folio), lev: 'LEV-2026-00003' });
     const d = DB.get('Conteos_Cajas/' + c.folio); assert.ok(LB.ingresadaV274(d) && !LB.esLegado(d)); assert.strictEqual(LB.agrupar([d]).size, 0);
     const r = await LB.aceptar(grupo([c]), { modo: 'completo' }); assert.ok(r.ya && r.v274);
-    const r2 = await LB.aceptarDesdeTags(c.folio); assert.ok(r2.ya && r2.v274); assert.strictEqual(lotes('g1'), 'A:200'); assert.strictEqual(hist().length, 0);
+    const r2 = await LB.aceptarDesdeTags(c.folio, { huella: d.huella }); assert.ok(r2.ya && r2.v274); assert.strictEqual(lotes('g1'), 'A:200'); assert.strictEqual(hist().length, 0);
     return 'A sigue 200 · aceptar y «Ingresar» desde Tags: «ya ingresada por v21.274»';
   });
   await t('Legado 4 · informe «Ingresos LEV de v21.274 a revisar» (solo lectura)', async () => {
@@ -337,10 +337,107 @@ const t = async (nombre, f) => { try { const r = await f(); n++; R.push(['OK', n
   await t('Tags → bandeja · «Aceptar» desde Tags usa la misma transacción; si hace falta decidir, lleva a la bandeja', async () => {
     reset({ g1: { batches: [{ batch: 'A', quantity: 10, expirationDate: '2027-05' }] } });
     const c = caja({ insumoId: 'g1', lote: 'N', total: 7 }), k = caja({ insumoId: 'g1', lote: 'A', total: 10, base: 10 });
-    const r = await LB.aceptarDesdeTags(c.folio); assert.strictEqual(lotes('g1'), 'A:10 N:7'); assert.strictEqual(estado(c), 'ACEPTADO'); assert.ok(r.lev);
-    const e = await debe(LB.aceptarDesdeTags(k.folio), 'modo'); assert.ok(e.irBandeja && e.bodega === BOD);
+    const r = await LB.aceptarDesdeTags(c.folio, { huella: c.huella, visto: c }); assert.strictEqual(lotes('g1'), 'A:10 N:7'); assert.strictEqual(estado(c), 'ACEPTADO'); assert.ok(r.lev);
+    const e = await debe(LB.aceptarDesdeTags(k.folio, { huella: k.huella }), 'modo'); assert.ok(e.irBandeja && e.bodega === BOD, JSON.stringify([e.irBandeja, e.bodega, e.errores && e.errores.map(x => x.tipo)]));
     const T2 = require('../tags-conteo.js'); const g2 = await T2.aceptarConteo(DB.get('Conteos_Cajas/' + c.folio)); assert.ok(g2.ya);
     return `N:7 aceptada (${r.lev}) · lote con saldo → irBandeja («${e.message.slice(0, 60)}…»)`;
+  });
+  // ---------------- revisión de B.A. a v21.276 (ba276/esc.js y run274.js) ----------------
+  const sol = () => [...DB.keys()].filter(p => p.startsWith('Solicitudes_Ajuste/')).map(p => DB.get(p));
+  const pendientes = () => sol().filter(x => x.status === 'pendiente');
+  const v274 = (o) => { const c = caja(o); const d = { ...DB.get('Conteos_Cajas/' + c.folio), estado: 'ETIQUETADO', lev: 'LEV-2026-00009', insumoId: c.insumoId }; escribir('Conteos_Cajas/' + c.folio, d); escribir('Contadores/bulto-' + c.folio, { tipo: 'bulto', folio: c.folio, grupo: c.folio, origen: 'levantamiento' }); return d; };
+  await t('B.A. 276 H1–H3 · la caja cambió después de verla (total, bodega, nombre; desde Tags) → no se acepta', async () => {
+    reset({ g1: { batches: [] } }); escribir('Insumos/g2', { name: 'G1', location: 'Bodega Central', quantity: 0, batches: [] });
+    const a = caja({ insumoId: 'g1', lote: 'N', total: 100 }), ga = grupo([a]); escribir('Conteos_Cajas/' + a.folio, { ...DB.get('Conteos_Cajas/' + a.folio), total: 150, huella: 'otra' }); await debe(LB.aceptar(ga, { modo: 'caja' }), 'cambio');
+    const b = caja({ insumoId: 'g1', lote: 'N', total: 100 }), gb = grupo([b]); escribir('Conteos_Cajas/' + b.folio, { ...DB.get('Conteos_Cajas/' + b.folio), bodega: 'Bodega Central', insumoId: 'g2' }); await debe(LB.aceptar(gb, { modo: 'caja' }), 'cambio');
+    const c = caja({ nombre: 'GASA X', nuevo: true, lote: 'K', total: 20 }), gc = grupo([c]); escribir('Conteos_Cajas/' + c.folio, { ...DB.get('Conteos_Cajas/' + c.folio), nombre: 'GUANTE M', nombreNorm: 'guante m' }); await debe(LB.aceptar(gc, { modo: 'caja', homologar: { tipo: 'ficha' } }), 'cambio');
+    const d = caja({ insumoId: 'g1', lote: 'N', total: 100 }), visto = { ...DB.get('Conteos_Cajas/' + d.folio) }; escribir('Conteos_Cajas/' + d.folio, { ...visto, total: 900, huella: 'h900', estructura: { estado: 'CERRADA', interiores: [], sueltas: 900 } });
+    await debe(LB.aceptarDesdeTags(d.folio), 'cambio'); const e = await debe(LB.aceptarDesdeTags(d.folio, { huella: visto.huella, visto }), 'cambio');
+    assert.strictEqual(lotes('g1'), ''); assert.strictEqual(lotes('g2'), ''); assert.strictEqual([...DB.keys()].filter(p => p.startsWith('Insumos/lev_')).length, 0);
+    return `4 × «cambio», nada escrito · Tags: «${e.message.slice(0, 70)}…»`;
+  });
+  await t('B.A. 276 C1 · lote 100: caja 60 (completo) y luego caja 40 → 0 solicitudes pendientes', async () => {
+    reset({ g1: { batches: [{ batch: 'A', quantity: 100, expirationDate: '2027-05' }] } }); rol('superadmin');
+    try { const a = caja({ insumoId: 'g1', lote: 'A', total: 60, base: 100 }); await LB.aceptar(grupo([a]), { modo: 'completo', confirmaFaltas: true }); assert.deepStrictEqual(pendientes().map(x => x.cantidad), [-40]);
+      const b = caja({ insumoId: 'g1', lote: 'A', total: 40, base: 100 }); await LB.aceptar(grupo([b]), { modo: 'completo', confirmaFaltas: true }); } finally { rol('admin'); }
+    assert.strictEqual(pendientes().length, 0); assert.deepStrictEqual(sol().map(x => x.status), ['anulado']); assert.strictEqual(lotes('g1'), 'A:100');
+    return 'tras 60: −40 pendiente · tras 40: −40 anulada, 0 pendientes · A:100';
+  });
+  await t('B.A. 276 C2 · lote 100: cajas 60 y luego 20 → total −20', async () => {
+    reset({ g1: { batches: [{ batch: 'A', quantity: 100, expirationDate: '2027-05' }] } }); rol('superadmin');
+    try { const a = caja({ insumoId: 'g1', lote: 'A', total: 60, base: 100 }); await LB.aceptar(grupo([a]), { modo: 'completo', confirmaFaltas: true });
+      const b = caja({ insumoId: 'g1', lote: 'A', total: 20, base: 100 }); await LB.aceptar(grupo([b]), { modo: 'completo', confirmaFaltas: true }); } finally { rol('admin'); }
+    assert.deepStrictEqual(pendientes().map(x => x.cantidad), [-20]); const reg = [...DB.keys()].filter(p => p.startsWith('Levantamientos/')).map(p => DB.get(p))[0]; assert.strictEqual(reg.solicitado, 20);
+    return 'pendiente −20 (la −40 anterior quedó anulada) · registro solicitado 20';
+  });
+  await t('B.A. 276 C3 · A=10 y B=50: A completo y luego B completo → 0 solicitudes falsas', async () => {
+    reset({ g1: { batches: [{ batch: 'A', quantity: 10, expirationDate: '2027-05' }, { batch: 'B', quantity: 50, expirationDate: '2028-01' }] } }); rol('superadmin');
+    try { const a = caja({ insumoId: 'g1', lote: 'A', total: 10, base: 10 }); await LB.aceptar(grupo([a]), { modo: 'completo', confirmaFaltas: true });
+      const b = caja({ insumoId: 'g1', lote: 'B', vence: '2028-01', total: 50, base: 50 }); await LB.aceptar(grupo([b]), { modo: 'completo' }); } finally { rol('admin'); }
+    assert.strictEqual(pendientes().length, 0); assert.strictEqual(lotes('g1'), 'A:10 B:50'); return `0 pendientes (B −50 anulada al llegar su caja; A usa lo ya aceptado) · ${lotes('g1')}`;
+  });
+  await t('B.A. 276 R1 · reservado: físico 100 = quantity 70 + reservado 30 → sin sobra, quantity 70', async () => {
+    reset({ g1: { reservado: 30, reservas: { 'ACT-1': 30 }, batches: [{ batch: 'A', quantity: 70, expirationDate: '2027-05' }] } });
+    const c = caja({ insumoId: 'g1', lote: 'A', total: 100, base: 70 }); const r = await LB.aceptar(grupo([c]), { modo: 'completo', reservadoVisto: 30 });
+    assert.strictEqual(r.resumen.sobras, 0); assert.strictEqual(ins('g1').quantity, 70); assert.strictEqual(hist().filter(x => x.type === 'AJUSTE_CRITICO').length, 0);
+    reset({ g1: { reservado: 30, batches: [{ batch: 'A', quantity: 70, expirationDate: '2027-05' }] } }); const d = caja({ insumoId: 'g1', lote: 'A', total: 20, base: 70 });
+    const e = await debe(LB.aceptar(grupo([d]), { modo: 'completo', confirmaFaltas: true }), 'reservado');
+    return `100 contados − 30 reservados = 70 → coincide · si el conteo no cubre lo reservado: «${e.message.slice(0, 60)}…»`;
+  });
+  await t('B.A. 276 V1–V2 · producto con cajas de v21.274 sin cuadrar → bloqueado; cuadradas por el superadmin → cuenta lo ya contado', async () => {
+    reset({ g1: { batches: [{ batch: 'A', quantity: 160, expirationDate: '2027-05' }] } });
+    const x = v274({ insumoId: 'g1', lote: 'A', total: 60, base: 100 }), y = caja({ insumoId: 'g1', lote: 'A', total: 40, base: 100 }), b = caja({ insumoId: 'g1', lote: 'B', vence: '2028-01', total: 5, base: 0 });
+    const e = await debe(LB.aceptar(grupo([y]), { modo: 'completo' }), 'v274'); assert.ok(/informe «Ingresos LEV de v21.274 a revisar»/.test(e.message)); await debe(LB.aceptar(grupo([b]), { modo: 'caja' }), 'v274');
+    await debe(LB.marcarCuadradas([x.folio]), 'super');
+    rol('superadmin'); try { await LB.marcarCuadradas([x.folio], 'AJU −60 hecho'); } finally { rol('admin'); }
+    const d = ins('g1'); escribir('Insumos/g1', { ...d, quantity: 100, batches: [{ batch: 'A', quantity: 100, expirationDate: '2027-05' }] });   /* el ajuste −60 del superadmin */
+    await LB.aceptar(grupo([y]), { modo: 'completo' }); assert.strictEqual(lotes('g1'), 'A:100'); assert.strictEqual(pendientes().length, 0);
+    assert.ok(DB.get('Conteos_Cajas/' + x.folio).cuadradaPor === 'admin@sar.cl' && LB.informeV274([], []).filas.length === 0);
+    return `«${e.message.slice(0, 60)}…» · cuadrada + ajuste −60 → Y (40) + X (60, ya contada) = 100, sin faltantes`;
+  });
+  await t('B.A. 276 K1 · controlado: cuentan 100, se despachan 30, la MISMA persona vuelve a guardar → no queda en 100; otra persona recuenta 70 → coincide', async () => {
+    reset({ m1: { name: 'MORFINA', controlado: 'estupefaciente', batches: [{ batch: 'M', quantity: 70, expirationDate: '2027-05' }] } }); rol('superadmin');
+    try { const c = caja({ insumoId: 'm1', nombre: 'MORFINA', controlado: 'estupefaciente', lote: 'M', total: 100 }); const d0 = DB.get('Conteos_Cajas/' + c.folio); delete d0.baseSistema; delete d0.deudaSistema; escribir('Conteos_Cajas/' + c.folio, d0);
+      await LB.pedirReconteo(c); recontar(c, { recontadoPor: ANA });   /* Ana re-guarda */
+      await debe(LB.aceptar(grupo([c]), { modo: 'completo', vista: { 'M|2027-05': 70 } }), 'doble'); assert.strictEqual(lotes('m1'), 'M:70');
+      recontar(c, { total: 100 }); await debe(LB.aceptar(grupo([c]), { modo: 'completo', vista: { 'M|2027-05': 70 } }), 'ctl');   /* otra persona, pero 100 ≠ 70 */
+      recontar(c, { total: 70, estructura: { estado: 'CERRADA', interiores: [], sueltas: 70 } }); await LB.aceptar(grupo([c]), { modo: 'completo', vista: { 'M|2027-05': 70 } }); } finally { rol('admin'); }
+    assert.strictEqual(lotes('m1'), 'M:70'); return 'Ana re-guarda → «doble» · Beto 100 → «ctl» (no coincide) · Beto 70 → aceptado, M:70';
+  });
+  await t('B.A. 276 V3 · legado ETIQUETADO con lote movido: rechazar (anula sus BUL) o el superadmin acepta con la base actual', async () => {
+    reset({ g1: { batches: [{ batch: 'A', quantity: 90, expirationDate: '2027-05' }] } });
+    const c = legado({ insumoId: 'g1', lote: 'A', total: 100, base: 100 }, { hijos: 2 }); await debe(LB.aceptar(grupo([c]), { modo: 'completo' }), 'movido');
+    const r = await LB.rechazar(c, 'lote movido'); assert.ok(r.rechazada && r.legado); assert.strictEqual(estado(c), 'RECHAZADO'); assert.ok(!LB.aceptable(DB.get('Conteos_Cajas/' + c.folio)));
+    assert.ok(bul().every(p => DB.get(p).estado === 'VACIA' && DB.get(p).contenido === 0)); assert.strictEqual(lotes('g1'), 'A:90');
+    const d = legado({ insumoId: 'g1', lote: 'A', total: 90, base: 100 }); await debe(LB.aceptar(grupo([d]), { modo: 'completo', baseActual: true }), 'movido');   /* un admin no puede */
+    rol('superadmin'); try { await LB.aceptar(grupo([d]), { modo: 'completo', baseActual: true }); } finally { rol('admin'); }
+    assert.strictEqual(lotes('g1'), 'A:90'); assert.ok(DB.get('Conteos_Cajas/' + d.folio).lev); return 'rechazada con 3 BUL anuladas (VACIA) · otra: el superadmin la acepta con la base actual (A:90, coincide)';
+  });
+  await t('B.A. 276 D1/N1/N2/B1 · deuda en caja por caja, lotes negativos y bodegaId mezclado', async () => {
+    reset({ g1: { sobregiro: 20, sobregiroDetalle: [{ acta: 'ACT-9', qty: 20 }], batches: [] } }); const c = caja({ insumoId: 'g1', lote: 'N', total: 50, deuda: 20 });
+    await debe(LB.aceptar(grupo([c]), { modo: 'caja' }), 'modo'); await LB.aceptar(grupo([c]), { modo: 'completo', deudaVista: 20 }); assert.strictEqual(ins('g1').sobregiro, 0); assert.strictEqual(ins('g1').quantity, 50);
+    reset({ g1: { batches: [{ batch: 'A', quantity: -10, expirationDate: '2027-05' }, { batch: 'B', quantity: 50, expirationDate: '2028-01' }] } }); const n1 = caja({ insumoId: 'g1', lote: 'C', vence: '2029-01', total: 20 });
+    await LB.aceptar(grupo([n1]), { modo: 'caja' }); assert.strictEqual(ins('g1').quantity, ins('g1').batches.reduce((t, b) => t + b.quantity, 0)); assert.strictEqual(lotes('g1'), 'B:50 C:20');
+    reset({ g1: { batches: [{ batch: 'A', quantity: -10, expirationDate: '2027-05' }] } }); const n2 = caja({ insumoId: 'g1', lote: 'A', total: 5, base: 0 }); await LB.aceptar(grupo([n2]), { modo: 'caja' }); assert.strictEqual(lotes('g1'), 'A:5');
+    reset({ g1: { batches: [] } }); const a = caja({ insumoId: 'g1', lote: 'A', total: 1, extra: { bodegaId: 'bcam' } }), b = caja({ insumoId: 'g1', lote: 'B', total: 1, extra: { bodega: 'bodega  cam' } });
+    const G = LB.agrupar([DB.get('Conteos_Cajas/' + a.folio), DB.get('Conteos_Cajas/' + b.folio)]); assert.strictEqual(G.size, 1); assert.strictEqual([...G.values()][0].productos.size, 1);
+    return 'deuda: caja por caja pide «completo», completo la salda · quantity = suma de lotes (70) · lote −10 cuenta como 0 (A:5) · 1 grupo';
+  });
+  await t('B.A. 276 run274 · casos 1–8 y run2 con caja REGISTRADO y con legado ETIQUETADO sin LEV dan lo esperado', async () => {
+    const res = [];
+    for (const L of [false, true]) { const mk = (o) => L ? legado(o) : caja(o), tag = L ? 'legado' : 'registrado';
+      const ok = async (p) => { try { const r = await p; return r.ya ? 'YA' : 'OK'; } catch (e) { return 'ERR:' + e.tipo; } };
+      reset({ g1: { batches: [{ batch: 'A', quantity: 100, expirationDate: '2027-05' }] } }); let c = mk({ insumoId: 'g1', lote: 'A', total: 100, base: 100 }); assert.strictEqual(await ok(LB.aceptar(grupo([c]), { modo: 'completo' })), 'OK'); assert.strictEqual(lotes('g1'), 'A:100');
+      reset({ g1: { batches: [{ batch: 'S/L', quantity: 200, expirationDate: '' }] } }); const a = mk({ insumoId: 'g1', lote: 'A', total: 120, baseSL: 200 }), b = mk({ insumoId: 'g1', lote: 'B', total: 80, baseSL: 200 }); await LB.aceptar(grupo([a, b]), { modo: 'completo' }); assert.strictEqual(lotes('g1'), 'A:120 B:80');
+      reset({ g1: { batches: [{ batch: 'A', quantity: 70, expirationDate: '2027-05' }] } }); c = mk({ insumoId: 'g1', lote: 'A', total: 100, base: 100 }); assert.strictEqual(await ok(LB.aceptar(grupo([c]), { modo: 'completo' })), 'ERR:movido'); assert.strictEqual(lotes('g1'), 'A:70');
+      reset({ g1: { batches: [{ batch: 'A', quantity: 50, expirationDate: '2027-05' }] } }); c = mk({ insumoId: 'g1', lote: 'N', total: 100, base: 0 }); let g = grupo([c]); assert.deepStrictEqual((await Promise.all([ok(LB.aceptar(g, { modo: 'caja' })), ok(LB.aceptar(g, { modo: 'caja' }))])).sort(), ['OK', 'YA']); assert.strictEqual(ins('g1').quantity, 150);
+      assert.strictEqual(await ok(LB.aceptar(g, { modo: 'caja' })), 'YA'); assert.strictEqual(ins('g1').quantity, 150);
+      reset({ g1: { batches: [{ batch: 'A', quantity: 50, expirationDate: '2027-05' }] } }); c = mk({ insumoId: 'g1', lote: 'N', total: 100, base: 0 }); fallaCommitUnaVez = true; assert.strictEqual(await ok(LB.aceptar(grupo([c]), { modo: 'caja' })), 'ERR:undefined'); assert.strictEqual(await ok(LB.aceptar(grupo([c]), { modo: 'caja' })), 'OK'); assert.strictEqual(ins('g1').quantity, 150);
+      reset({}); escribir('Insumos/ins1', { name: 'GASA ESTERIL', location: BOD, quantity: 50, batches: [{ batch: 'A', quantity: 50, expirationDate: '2027-05' }] }); c = mk({ nombre: 'Gasa estéril ', lote: 'N', total: 100, base: 0 }); await LB.aceptar(grupo([c]), { modo: 'caja' }); assert.strictEqual(ins('ins1').quantity, 150); assert.strictEqual([...DB.keys()].filter(p => p.startsWith('Insumos/')).length, 1);
+      reset({ g1: { batches: [{ batch: 'A', quantity: 100, expirationDate: '2027-05' }] } }); c = mk({ insumoId: 'g1', lote: 'A', vence: '2027-06', total: 100, base: 0 }); assert.strictEqual(await ok(LB.aceptar(grupo([c]), { modo: 'completo' })), 'ERR:mes');
+      reset({ g1: { batches: [{ batch: 'A', quantity: 50, expirationDate: '2027-05' }] } }); c = mk({ insumoId: 'g1', lote: 'N', total: 100, base: 0 }); rol('operador'); try { for (let i = 0; i < 3; i++) assert.strictEqual(await ok(LB.aceptar(grupo([c]), { modo: 'caja' })), 'ERR:rol'); } finally { rol('admin'); } assert.strictEqual(ins('g1').quantity, 50);
+      res.push(tag + ' 9/9'); }
+    return res.join(' · ');
   });
   R.forEach(([e, nom, d]) => console.log(`${e === 'OK' ? 'OK   ' : 'FALLA'} ${nom}${d ? '\n      → ' + d : ''}`));
   console.log(`\n${n} ok, ${mal} con falla`); process.exit(mal ? 1 : 0);

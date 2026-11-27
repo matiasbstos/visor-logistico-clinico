@@ -221,7 +221,7 @@
   /** «Aceptar y etiquetar»: acepta en la bandeja (si falta) y después imprime sus BUL. Devuelve { lev, etiquetas }. */
   async function generarBultosParaConteo(conteo, opc) {
     const B = LB(); let r = null;
-    if (!conteo.lev) { r = await B.aceptarDesdeTags(conteo.folio); }
+    if (!conteo.lev) { r = await B.aceptarDesdeTags(conteo.folio, { huella: conteo.huella, visto: conteo }); }
     const p = await B.imprimirCajas([conteo.folio], { soloGrande: !!(opc && opc.soloGrande), nombre: `etiquetas-${conteo.folio}.pdf` });
     return { lev: (r && r.lev) || conteo.lev, ya: !!(r && r.ya), etiquetas: p.etiquetas, resumen: r && r.resumen };
   }
@@ -247,7 +247,7 @@
   /* Reconteo y rechazo: los de la bandeja (transacción que exige que la caja siga pendiente). */
   async function pedirReconteo(conteo, nota) { return LB().pedirReconteo(conteo, nota); }
   /** «Aceptar» sin imprimir: la misma transacción de la bandeja (entra al stock y crea las BUL, quedan «por imprimir»). */
-  async function aceptarConteo(conteo) { return LB().aceptarDesdeTags(conteo.folio); }
+  async function aceptarConteo(conteo) { return LB().aceptarDesdeTags(conteo.folio, { huella: conteo.huella, visto: conteo }); }
   async function rechazarConteo(conteo, motivo) { return LB().rechazar(conteo, motivo || 'Rechazado por bodega (Tags de conteo)'); }
   /** Error de la bandeja que pide una decisión (contado completo, homologar, reconteo…): ofrece ir a «Levantamientos por aprobar». */
   async function falla(titulo, e) {
@@ -499,7 +499,7 @@
         } else if (c && x.estado === 'etiquetado') {
           acc = `<div class="tg-acc-col">${sinStock(c) ? `<button type="button" class="btn btn-primary btn-sm" data-tg-ing="${esc(x.folio)}"><i class="ph-bold ph-tray" aria-hidden="true"></i> Ingresar al stock</button>` : ''}<button type="button" class="btn btn-secondary btn-sm" data-tg-reimp="${esc(x.folio)}"><i class="ph-bold ph-printer" aria-hidden="true"></i> Reimprimir (${nGen})</button><button type="button" class="btn btn-outline btn-sm" data-tg-ver="${esc(x.folio)}">Detalle</button></div>`;
         }
-        return `<tr><td><b>${esc(numero(x.folio))}</b><small>${esc(x.folio)}</small></td><td>${t && t.primeraImpresion ? esc(hora(t.primeraImpresion)) : (t ? 'Sin imprimir' : '—')}</td><td><span class="tg-est tg-est--${x.estado}">${ESTADOS[x.estado]}</span>${c && c.lev ? (ingresadaV274(c) ? `<small class="tg-lev tg-lev--rev">Ya ingresada v21.274 · ${esc(c.lev)} (revisar)</small>` : `<small class="tg-lev">En stock · ${esc(c.lev)}</small>`) : sinStock(c) ? '<small class="tg-lev tg-lev--pend">Sin stock: ingresar en la bandeja</small>' : ''}</td>
+        return `<tr><td><b>${esc(numero(x.folio))}</b><small>${esc(x.folio)}</small></td><td>${t && t.primeraImpresion ? esc(hora(t.primeraImpresion)) : (t ? 'Sin imprimir' : '—')}</td><td><span class="tg-est tg-est--${x.estado}">${ESTADOS[x.estado]}</span>${c && c.lev ? (ingresadaV274(c) ? `<small class="tg-lev tg-lev--rev">Ya ingresada v21.274 · ${esc(c.lev)} ${c.cuadradaPor ? '(cuadrada)' : '(revisar)'}</small>` : `<small class="tg-lev">En stock · ${esc(c.lev)}</small>`) : sinStock(c) ? '<small class="tg-lev tg-lev--pend">Sin stock: ingresar en la bandeja</small>' : ''}</td>
           <td>${esc(bodMostrar)}</td><td>${c ? `${esc(c.nombre)}${c.nuevo ? ' <small>nuevo</small>' : ''}` : ''}</td><td>${c ? `${esc(c.lote)}${elabTxt ? ' · Elab. ' + esc(elabTxt) : ''} · ${esc(mesCL(c.vence))}` : ''}</td><td>${c ? `<b>${num(c.total)}</b> u.` : ''}</td><td>${celdaEtq}</td>
           <td>${c ? `${esc(c.contadoNombre || c.contadoPor || '')}<small>${esc(hora(c.en))}</small>` : ''}</td><td>${acc}</td></tr>`;
       }).join('') || '<tr><td colspan="10" class="err-vacio">Sin tags.</td></tr>'}</tbody></table></div>`;

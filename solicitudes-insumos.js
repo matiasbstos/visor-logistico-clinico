@@ -469,7 +469,7 @@
   /** Lotes con saldo de este producto en cualquier bodega. Primero la bodega a la que se pidió (no hay que mover), luego lo que vence antes. */
   function lotesCandidatos(l, lista, bodegaPedida, sinDestino) {
     const k = norm(l.asociado || l.nombre), out = [];
-    lista.filter(i => ((l.insumoId && i.id === l.insumoId) || norm(i.name) === k) && i.status !== 'CUARENTENA' && i.location !== TRANSITO && !(sinDestino && i.location === bodegaPedida)).forEach(i => lotesDeDoc(i).forEach(b => { const disp = num(b.quantity); if (disp > 0) out.push({ insumoId: i.id, bodega: i.location || '', estante: i.ubicacionEstante || '', clave: String(b.batch || 'S/L') + '|' + String(b.expirationDate || ''), lote: b.batch || 'S/L', vence: b.expirationDate || '', disp }); }));
+    lista.filter(i => ((l.insumoId && i.id === l.insumoId) || norm(i.name) === k) && i.status !== 'CUARENTENA' && i.levProvisional !== true /* v21.276: ficha provisional del levantamiento sin validar no se despacha */ && i.location !== TRANSITO && !(sinDestino && i.location === bodegaPedida)).forEach(i => lotesDeDoc(i).forEach(b => { const disp = num(b.quantity); if (disp > 0) out.push({ insumoId: i.id, bodega: i.location || '', estante: i.ubicacionEstante || '', clave: String(b.batch || 'S/L') + '|' + String(b.expirationDate || ''), lote: b.batch || 'S/L', vence: b.expirationDate || '', disp }); }));
     return out.sort((a, b) => ((a.bodega === bodegaPedida ? 0 : 1) - (b.bodega === bodegaPedida ? 0 : 1)) || (a.vence || '9999').localeCompare(b.vence || '9999'));
   }
   /** Reparte lo pedido entre los lotes en ese orden. Devuelve [cantidad por lote]. */

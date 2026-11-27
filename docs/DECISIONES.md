@@ -1965,3 +1965,18 @@ Reemplaza el «Ingresar al stock (LEV)» de 4.320 (desactivado en 4.321). Pedido
   - `Levantamientos/<LEV>/lotes` solo se escribe dentro de esa transacción. `Contadores/lev-*` lo escribe solo un administrador.
   - `Historial_Movimientos` rechaza `INGRESO_LEVANTAMIENTO`, así un cliente con v21.274 en caché no puede volver a sumar.
 - Quien contó no acepta su propia caja, salvo el superadmin (queda marcado). Sin internet no se acepta. Los productos nuevos quedan como ficha provisional (`levProvisional`) y no se despachan (actas, traspasos, movimientos) hasta que el superadmin la valide.
+- **Correcciones de B.A. a v21.276 (ba276: `esc.js`, `run274.js`, incorporados a `tests/lev-bandeja.js`):**
+  - **Contado completo:** un lote no contado en esta aceptación usa lo ya aceptado del LEV (`reg.contadoAceptado`, corrido por lo que se movió después). El registro por lote guarda `solicitudes` y `solicitado`. La falta se calcula como `max(0, ahora − contado)`; si cambia, las solicitudes pendientes del lote se **anulan** (`status: 'anulado'`, en la misma transacción) y queda una sola por el total. Una solicitud aprobada cuenta en lo esperado del lote. Ejemplos: 60 y luego 40 → 0 pendientes; 60 + 20 → −20; A y luego B → 0 solicitudes falsas.
+  - **Reservado en actas:** en contado completo se descuenta `doc.reservado` de lo contado (FEFO, `SAR_Toma.quitarReservado`) antes de comparar. Si el conteo no cubre lo reservado, se pide confirmar las actas. Si lo reservado cambió mientras se revisaba, el lote queda movido.
+  - **Cajas de v21.274 sin cuadrar** bloquean todo el producto (cualquier lote y modo), con un mensaje que manda al informe. El superadmin las marca **cuadradas** en el informe (`cuadradaPor`/`cuadradaEn`/`cuadradaNota`, con su regla). Desde ahí su total cuenta como ya contado en su lote.
+  - **Doble conteo de otra persona:** `recontadoPor`/`recontadoEn` los escribe, en el teléfono, alguien distinto de `contadoPor` cuando bodega pidió reconteo. Tiene regla propia y no puede cambiar producto, bodega ni autor. `recontada()` lo exige. En controlados, lo recontado debe **coincidir** con lo que marca el sistema al aceptar; si difiere, va por toma o ajuste del superadmin.
+  - **Legado trabado:** una caja ACEPTADA o ETIQUETADA sin LEV se puede **rechazar**; sus BUL quedan VACIAS (anuladas) en la misma transacción. La regla deja pasar a RECHAZADO solo sin `lev`. El superadmin también puede aceptarla con la base actual («Aceptar con lo que hay ahora»).
+  - **Cambios después de mirar la caja:** la huella del teléfono incluye bodega, `bodegaId` y `nombreNorm`. La bandeja compara además la firma completa de la caja (bodega, producto, lote, mes, total y estructura) y que `productoKey` sea el del grupo. `aceptarDesdeTags` exige la huella y lo que se vio en Tags.
+  - **Deuda:** con `sobregiro > 0`, caja por caja pide contado completo, que la salda con la deuda que vio el teléfono.
+  - **Lotes negativos:** cuentan como 0, y `quantity` es la suma de los lotes.
+  - **Agrupación:** por bodega normalizada.
+  - **Fichas provisionales:** tampoco se ofrecen como lote a despachar en Solicitudes de insumos.
+- **Pendiente:**
+  - (1) Exigir en las reglas que `Insumos` se escriba en el mismo commit que la caja (`getAfter` de `ultimoLev`/`updatedAt` del producto). No se hizo porque aquí no hay emulador para probarlo.
+  - (2) El bloqueo de despacho de fichas `levProvisional` existe solo en el cliente (actas, traspasos, movimientos y solicitudes); falta una regla.
+  - (3) Probar `firestore.rules` en el emulador antes de desplegar, en particular `levDeEstaTx`, `legadoOk`, el reconteo ajeno, la anulación de `Solicitudes_Ajuste` y el cuadrado de v21.274.

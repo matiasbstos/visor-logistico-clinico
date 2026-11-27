@@ -49,21 +49,24 @@
   const claveCaja = (c) => T().clave(c.lote, c.vence);
   const esSL = (lote) => T().lote(lote) === 'S/L';
   /** La caja volvió a contarse después de que bodega pidió reconteo (sirve de doble conteo / confirmación de falta o sobra grande). */
-  const recontada = (c) => !!(c && c.reconteoEn && c.estado === 'REGISTRADO' && c.editadoEn && String(c.editadoEn) > String(c.reconteoEn));
+  const recontada = (c) => !!(c && c.reconteoEn && c.estado === 'REGISTRADO' && c.recontadoPor && norm(c.recontadoPor) !== norm(c.contadoPor)
+    && c.recontadoEn && String(c.recontadoEn) > String(c.reconteoEn) && (!c.editadoEn || String(c.recontadoEn) >= String(c.editadoEn)));   /* v21.276: el reconteo lo hace OTRA persona (recontadoPor) y es lo último que se guardó */
   /** Lotes del registro de Insumos tal como están (sin lista → el stock queda como su lote o S/L, igual que el ajuste). */
   function lotesDoc(d) {
     if (!d) return [];
-    const l = Array.isArray(d.batches) ? d.batches.map(b => ({ ...b, quantity: num(b.quantity) })) : [];
-    if (!l.length && (d.batch || num(d.quantity) > 0)) l.push({ batch: d.batch || 'S/L', quantity: num(d.quantity), expirationDate: d.expirationDate || '' });
+    const l = Array.isArray(d.batches) ? d.batches.map(b => ({ ...b, quantity: Math.max(0, num(b.quantity)) })) : [];   /* un lote negativo cuenta como 0 (B.A.: no queda «movido» para siempre) */
+    if (!l.length && (d.batch || num(d.quantity) > 0)) l.push({ batch: d.batch || 'S/L', quantity: Math.max(0, num(d.quantity)), expirationDate: d.expirationDate || '' });
     return l;
   }
-  const productoKey = (c) => (c.nombreNorm || norm(c.nombre)) + '|' + (c.bodegaId || norm(c.bodega));
+  const productoKey = (c) => (c.nombreNorm || norm(c.nombre)) + '|' + norm(c.bodega);   /* v21.276: por bodega normalizada (aunque una caja traiga bodegaId y otra no) */
+  /** Cajas de v21.274 aún sin cuadrar por el superadmin (bloquean el producto). */
+  const v274SinCuadrar = (c) => ingresadaV274(c) && !c.cuadradaPor;
   /** Cajas pendientes (REGISTRADO, RECONTEO o legado sin LEV) agrupadas por bodega → producto. */
   function agrupar(cajas) {
     const bods = new Map();
     (cajas || []).filter(c => c && (PEND.includes(c.estado) || esLegado(c))).forEach(c => {
-      const bk = c.bodega || '(sin bodega)', b = bods.get(bk) || { bodega: bk, bodegaId: c.bodegaId || '', productos: new Map(), cajas: 0 };
-      const k = productoKey(c), p = b.productos.get(k) || { key: k, bodega: bk, bodegaId: c.bodegaId || '', nombre: c.nombre, nombreNorm: c.nombreNorm || norm(c.nombre), nuevo: false, controlado: null, insumoId: null, cajas: [] };
+      const bk = norm(c.bodega) || '(sin bodega)', b = bods.get(bk) || { bodega: c.bodega || '(sin bodega)', bodegaId: c.bodegaId || '', productos: new Map(), cajas: 0 };
+      const k = productoKey(c), p = b.productos.get(k) || { key: k, bodega: b.bodega, bodegaId: c.bodegaId || '', nombre: c.nombre, nombreNorm: c.nombreNorm || norm(c.nombre), nuevo: false, controlado: null, insumoId: null, cajas: [] };
       p.cajas.push(c); if (c.nuevo) p.nuevo = true; if (c.controlado) p.controlado = c.controlado; if (!p.insumoId && c.insumoId) p.insumoId = c.insumoId;
       b.productos.set(k, p); b.cajas++; bods.set(bk, b);
     });
@@ -75,45 +78,81 @@
    *       esSuper, yo, huellas {folio: huella vista}, confirmaFaltas, slVisto, deudaVista, vista {clave: cantidad al mostrarse} }
    * → { errores:[Error con .tipo], lineas, batches, quantity, delta, deuda, resumen }
    */
+  const ms = (v) => { if (!v) return 0; if (typeof v.toMillis === 'function') return v.toMillis(); if (typeof v.toDate === 'function') return v.toDate().getTime(); if (v.seconds != null) return v.seconds * 1000; const t = new Date(v).getTime(); return isFinite(t) ? t : 0; };
+  /** Lo que identifica una caja (si cambia algo de esto entre lo que se vio y lo que se acepta, se vuelve a mirar). */
+  const firma = (c) => { const Tm = T(), e = c.estructura || {}; return [norm(c.bodega), c.insumoId || '', c.nombreNorm || norm(c.nombre), Tm.lote(c.lote), Tm.mes(c.vence), ent(c.total), !!c.nuevo, c.controlado || '', JSON.stringify({ e: e.estado || '', i: (e.interiores || []).map(x => [ent(x.q), !!x.abierta]), s: ent(e.sueltas) })].join('|'); };
+  /** Solicitudes de faltante del registro por lote: pendientes y aprobadas (las anuladas o rechazadas no cuentan). */
+  function solicitudesDe(reg, est) {
+    const l = reg && Array.isArray(reg.solicitudes) ? reg.solicitudes : [], e = est || {}, out = { pend: 0, aprob: 0, pendIds: [] };
+    l.forEach(x => { const st = e[x.id] || 'pendiente'; if (st === 'pendiente') { out.pend += ent(x.q); out.pendIds.push(x.id); } else if (st === 'aprobado') out.aprob += ent(x.q); });
+    return out;
+  }
+  /**
+   * planificar(p) — el corazón de la aceptación (lo usa la vista previa y la transacción con los datos leídos en ella).
+   * p = { doc (Insumos o null), cajas (docs actuales de las cajas a aceptar), regs {clave: registro del LEV}, modo 'caja'|'completo',
+   *       esSuper, yo, huellas {folio: huella vista}, vistas {folio: caja vista}, key, confirmaFaltas, confirmaDoble, baseActual, slVisto,
+   *       deudaVista, reservadoVisto, vista {clave: cantidad al mostrarse}, solEst {id: status}, v274 [cajas sin cuadrar], v274Previo {clave: u.} }
+   * → { errores:[Error con .tipo], lineas, batches, quantity, delta, deuda, resumen }
+   * Por lote: contado = lo ya aceptado en este LEV (+ cajas v21.274 cuadradas) + lo nuevo − lo reservado en actas (FEFO, contado completo);
+   * sube = max(0, contado − ahora); falta = max(0, ahora − contado). Si la falta cambió, las solicitudes pendientes del lote se anulan
+   * y se pide una sola por el total (así 60 y luego 40 de un lote de 100 dejan 0 pendientes, y 60 + 20 dejan −20).
+   */
   function planificar(p) {
     const Tm = T(), o = p || {}, doc = o.doc || null, cajas = o.cajas || [], regs = o.regs || {}, modo = o.modo === 'completo' ? 'completo' : 'caja', errores = [];
     const ctl = !!(o.controlado || cajas.some(c => c.controlado) || (doc && doc.controlado));
     if (modo === 'completo' && num(o.enReconteo) > 0) errores.push(E('modo', `Hay ${num(o.enReconteo)} caja(s) de este producto en reconteo: espera que vuelvan antes de marcarlo contado completo.`));
+    /* datos de v21.274 sin cuadrar: nada de este producto entra hasta revisar el informe */
+    if (Array.isArray(o.v274) && o.v274.length) errores.push(E('v274', `Este producto tiene ${o.v274.length} caja(s) que «Ingresar al stock (LEV)» de v21.274 ya sumó (tags ${o.v274.slice(0, 5).map(c => nTag(c.folio)).join(', ')}). Revisa primero el informe «Ingresos LEV de v21.274 a revisar»: ajusta el exceso y que el superadmin las marque como cuadradas.`, { folios: o.v274.map(c => c.folio) }));
     cajas.forEach(c => {
       if (!aceptable(c)) errores.push(E('estado', `Tag ${nTag(c.folio)}: ${c.estado === 'RECONTEO' ? 'está en reconteo' : c.lev ? `ya ingresada (${c.lev})` : 'está ' + String(c.estado || 'sin registro').toLowerCase()}.`, { folios: [c.folio], estadoCaja: c.estado, levCaja: c.lev || '' }));
-      else if (o.huellas && o.huellas[c.folio] && o.huellas[c.folio] !== c.huella) errores.push(E('cambio', `Tag ${nTag(c.folio)}: el contador la corrigió mientras la revisabas. Vuelve a mirarla.`, { folios: [c.folio] }));
+      else if ((o.huellas && o.huellas[c.folio] && o.huellas[c.folio] !== c.huella) || (o.vistas && o.vistas[c.folio] && firma(o.vistas[c.folio]) !== firma(c)) || (o.key && productoKey(c) !== o.key)) errores.push(E('cambio', `Tag ${nTag(c.folio)}: el contador la corrigió mientras la revisabas. Vuelve a mirarla.`, { folios: [c.folio] }));
       if (o.yo && norm(c.contadoPor) === norm(o.yo) && !o.esSuper) errores.push(E('propia', `Tag ${nTag(c.folio)}: la contaste tú; la acepta otra persona (o el superadmin).`, { folios: [c.folio] }));
     });
     if (ctl && !o.esSuper) errores.push(E('super', 'Producto controlado: solo lo acepta el superadmin.'));
-    if (ctl && cajas.some(c => c.estado === 'REGISTRADO' && !recontada(c))) errores.push(E('doble', 'Producto controlado: cada caja necesita doble conteo (pide reconteo a otra persona).', { folios: cajas.filter(c => c.estado === 'REGISTRADO' && !recontada(c)).map(c => c.folio) }));
+    if (ctl && cajas.some(c => c.estado === 'REGISTRADO' && !recontada(c))) errores.push(E('doble', 'Producto controlado: cada caja necesita doble conteo de OTRA persona (pide reconteo; quien contó no puede recontarla).', { folios: cajas.filter(c => c.estado === 'REGISTRADO' && !recontada(c)).map(c => c.folio) }));
     /* legado controlado (aceptado por v21.273–274 sin doble conteo): ya no puede volver al teléfono; solo el superadmin, confirmando el doble conteo físico */
     if (ctl && cajas.some(esLegado) && !(o.esSuper && o.confirmaDoble)) errores.push(E('doble', 'Producto controlado aceptado con el flujo anterior (sin doble conteo): el superadmin debe confirmar que otra persona lo recontó.', { folios: cajas.filter(esLegado).map(c => c.folio) }));
-    const raw = lotesDoc(doc), S = Tm.agrupar(raw), ahoraDe = (k) => S.has(k) ? S.get(k).quantity : 0;
+    const raw = lotesDoc(doc), S = Tm.agrupar(raw), ahoraDe = (k) => S.has(k) ? S.get(k).quantity : 0, prev = o.v274Previo || {};
     const porClave = new Map(); cajas.forEach(c => { const k = claveCaja(c); if (!porClave.has(k)) porClave.set(k, []); porClave.get(k).push(c); });
-    const lineas = [];
+    const lineas = [], nueva = (x) => ({ alta: 0, sobra: 0, falta: 0, reclasIn: [], reclasOut: 0, anular: [], solNueva: 0, ...x });
     porClave.forEach((cs, k) => {
-      const reg = regs[k] || null, a = ahoraDe(k), aplicado = reg ? num(reg.aplicado) : 0; let base;
-      if (ctl) base = reg ? num(reg.base) : (o.vista ? ent(o.vista[k]) : null);   /* controlados: el teléfono no guarda lo que marcaba el sistema → lo que se mostró (lote que no se mostró = 0) */
+      const reg = regs[k] || null, a = ahoraDe(k), aplicado = reg ? num(reg.aplicado) : 0, so = solicitudesDe(reg, o.solEst); let base;
+      if (o.baseActual && o.esSuper && cs.every(esLegado)) base = a - aplicado + so.aprob;   /* legado trabado: el superadmin acepta con lo que hay ahora */
+      else if (ctl) base = reg ? num(reg.base) : (o.vista ? ent(o.vista[k]) : null);   /* controlados: el teléfono no guarda lo que marcaba el sistema → lo que se mostró (lote que no se mostró = 0) */
       else {
         const bs = cs.map(c => c.baseSistema == null ? 0 : ent(c.baseSistema));
-        if (reg) { base = num(reg.base); const vs = Array.isArray(reg.vistos) ? reg.vistos : [0]; if (bs.some(b => !vs.includes(b - base))) base = NaN; }   /* contada después de aceptar otra caja del lote: su base incluye lo ya aplicado */
+        if (reg) { base = num(reg.base); const vs = Array.isArray(reg.vistos) ? reg.vistos : [0]; if (bs.some(b => !vs.includes(b - base) && b - base !== aplicado - so.aprob)) base = NaN; }   /* contada después de aceptar otra caja del lote: su base incluye lo ya aplicado */
         else { base = bs[0]; if (bs.some(b => b !== base)) base = NaN; }
       }
-      const malBase = base == null || isNaN(base);
-      if (malBase || a !== base + aplicado) errores.push(E('movido', `Lote ${Tm.lote(cs[0].lote)} ${mesCL(Tm.mes(cs[0].vence))}: movido después del conteo (${malBase ? 'las cajas se contaron con el sistema distinto' : `esperaba ${base + aplicado}, hay ${a}`}). Recontar.`, { clave: k, folios: cs.map(c => c.folio) }));
-      const nuevas = cs.reduce((t, c) => t + ent(c.total), 0);
-      lineas.push({ clave: k, lote: Tm.lote(cs[0].lote), vence: Tm.mes(cs[0].vence), base: malBase ? null : base, aplicado, ahora: a, contadoAntes: reg ? num(reg.contadoAceptado) : 0, contado: (reg ? num(reg.contadoAceptado) : 0) + nuevas, nuevas, folios: cs.map(c => c.folio), cajas: cs, sl: esSL(cs[0].lote), alta: 0, sobra: 0, falta: 0, reclasIn: [], reclasOut: 0, reg });
+      const malBase = base == null || isNaN(base), esperado = malBase ? null : base + aplicado - so.aprob;
+      if (malBase || a !== esperado) errores.push(E('movido', `Lote ${Tm.lote(cs[0].lote)} ${mesCL(Tm.mes(cs[0].vence))}: movido después del conteo (${malBase ? 'las cajas se contaron con el sistema distinto' : `esperaba ${esperado}, hay ${a}`}). Recontar.`, { clave: k, folios: cs.map(c => c.folio), legado: cs.every(esLegado) }));
+      const nuevas = cs.reduce((t, c) => t + ent(c.total), 0), antes = (reg ? num(reg.contadoAceptado) : 0) + ent(prev[k]);
+      lineas.push(nueva({ clave: k, lote: Tm.lote(cs[0].lote), vence: Tm.mes(cs[0].vence), base: malBase ? null : base, aplicado, ahora: a, contadoAntes: antes, contado: antes + nuevas, nuevas, folios: cs.map(c => c.folio), cajas: cs, sl: esSL(cs[0].lote), reg, pend: so.pend, pendIds: so.pendIds, aprob: so.aprob }));
     });
     /* el mismo lote con otro mes de vencimiento en el sistema: no se parte en dos (B.A. 8) → corregir el vencimiento antes */
     lineas.filter(l => !l.sl).forEach(l => S.forEach((s, k) => { if (k !== l.clave && s.batch === l.lote && s.quantity > 0) errores.push(E('mes', `Lote ${l.lote}: en el sistema vence ${mesCL(s.vence)} y se contó ${mesCL(l.vence)}. Corrige el vencimiento (reconteo o ficha) antes de aceptar: no se parte el lote.`, { clave: l.clave, folios: l.folios })); }));
-    let deuda = null;
+    let deuda = null; const sg = num(doc && doc.sobregiro);
     if (modo === 'caja') {
       lineas.forEach(l => { if (l.base !== 0 && l.base != null) errores.push(E('modo', `Lote ${l.lote}: ya tenía ${l.base} u. en el sistema. Marca «Producto contado completo».`, { clave: l.clave })); });
       S.forEach((s, k) => { if (s.batch === 'S/L' && s.quantity > 0 && !(regs[k] && num(regs[k].base) === 0)) errores.push(E('modo', `Hay ${s.quantity} u. sin lote (S/L) de este producto en la bodega: marca «Producto contado completo» para reclasificarlas.`, { clave: k })); });
-      lineas.forEach(l => { if (l.base === 0) l.alta = Math.max(0, Math.max(0, l.contado - l.base) - l.aplicado); });
+      if (sg > 0) errores.push(E('modo', `El producto tiene una deuda (sobregiro) de ${sg} u. de actas entregadas sin stock: marca «Producto contado completo» para saldarla con lo contado.`));
+      lineas.forEach(l => { if (l.base === 0) l.alta = Math.max(0, l.contado - l.ahora); });
     } else {
       const contadas = new Set(lineas.map(l => l.clave));
-      S.forEach((s, k) => { if (contadas.has(k) || !(s.quantity > 0)) return; const reg = regs[k] || null; lineas.push({ clave: k, lote: s.batch, crudo: s.crudo, vence: s.vence, base: reg ? num(reg.base) : s.quantity, aplicado: reg ? num(reg.aplicado) : 0, ahora: s.quantity, contadoAntes: 0, contado: 0, nuevas: 0, folios: [], cajas: [], sl: s.batch === 'S/L', sinContar: true, alta: 0, sobra: 0, falta: 0, reclasIn: [], reclasOut: 0, reg }); });
+      S.forEach((s, k) => {
+        if (contadas.has(k) || !(s.quantity > 0)) return; const reg = regs[k] || null, so = solicitudesDe(reg, o.solEst), base = reg ? num(reg.base) : s.quantity, aplicado = reg ? num(reg.aplicado) : 0;
+        /* no contado en esta aceptación: vale lo ya aceptado del lote (movido después = movió físico y sistema por igual) */
+        const antes = reg ? Math.max(0, num(reg.contadoAceptado) + (s.quantity - (base + aplicado - so.aprob))) : 0;
+        lineas.push(nueva({ clave: k, lote: s.batch, crudo: s.crudo, vence: s.vence, base, aplicado, ahora: s.quantity, contadoAntes: antes + ent(prev[k]), contado: antes + ent(prev[k]), nuevas: 0, folios: [], cajas: [], sl: s.batch === 'S/L', sinContar: true, reg, pend: so.pend, pendIds: so.pendIds, aprob: so.aprob }));
+      });
+      /* lo reservado en actas sigue físicamente en la bodega pero ya no está en los lotes: se descuenta de lo contado (FEFO, como la toma) */
+      const resv = ent(doc && doc.reservado);
+      if (o.reservadoVisto != null && ent(o.reservadoVisto) !== resv) errores.push(E('movido', `Lo reservado en actas cambió mientras revisabas (era ${ent(o.reservadoVisto)}, ahora ${resv}). Vuelve a mirarlo.`));
+      if (resv > 0) {
+        const q = Tm.quitarReservado(lineas.map(l => ({ clave: l.clave, quantity: l.contado, expirationDate: l.vence === 'N/A' ? '' : l.vence })), resv);
+        q.forEach((x, i) => { lineas[i].reservado = lineas[i].contado - x.quantity; lineas[i].contado = x.quantity; });
+        if (q.reservadoSinCubrir > 0) errores.push(E('reservado', `Hay ${resv} u. reservadas en actas por confirmar y el conteo no las cubre (faltan ${q.reservadoSinCubrir}). ¿Esas actas ya se entregaron? Confírmalas antes de aceptar.`));
+      }
       lineas.forEach(l => { l.exceso = Math.max(0, l.contado - l.ahora); l.corto = Math.max(0, l.ahora - l.contado); });
       /* lo contado con lote consume primero el S/L del sistema (sin cambiar el total) */
       const pool = lineas.filter(l => l.sl && l.corto > 0);
@@ -121,7 +160,7 @@
         pool.forEach(s => { const t = Math.min(s.corto, l.exceso); if (!(t > 0)) return; s.corto -= t; s.reclasOut += t; l.exceso -= t; l.reclasIn.push({ de: s.clave, deLote: s.crudo || s.lote, q: t }); });
       });
       const usaSL = lineas.filter(l => l.sinContar && l.sl && l.reclasOut > 0);
-      usaSL.filter(l => l.reg).forEach(l => { if (l.ahora !== num(l.reg.base) + num(l.reg.aplicado)) errores.push(E('movido', `El S/L de este producto se movió después del conteo (esperaba ${num(l.reg.base) + num(l.reg.aplicado)}, hay ${l.ahora}). Recontar.`, { clave: l.clave })); });
+      usaSL.filter(l => l.reg).forEach(l => { if (l.ahora !== num(l.reg.base) + num(l.reg.aplicado) - l.aprob) errores.push(E('movido', `El S/L de este producto se movió después del conteo (esperaba ${num(l.reg.base) + num(l.reg.aplicado) - l.aprob}, hay ${l.ahora}). Recontar.`, { clave: l.clave })); });
       const libres = usaSL.filter(l => !l.reg);
       if (libres.length) {
         const hay = libres.reduce((t, l) => t + l.ahora, 0), bsl = cajas.map(c => c.baseSL);
@@ -135,21 +174,22 @@
       }
       lineas.forEach(l => {
         if (l.exceso > 0) { if (l.base === 0) l.alta = l.exceso; else l.sobra = l.exceso; }
-        if (l.corto > 0) l.falta = l.corto;
-        if (l.sobra && Tm.requiereReconteo({ delta: l.sobra, sistema: l.base }, { controlado: ctl }) && !l.cajas.some(recontada)) errores.push(E('reconteo', `Lote ${l.lote}: sobran ${l.sobra} u. sobre ${l.base} (más del 5 % o de 10 u.). Pide reconteo antes de aceptar.`, { clave: l.clave, folios: l.folios }));
-        if (l.falta) {
+        l.falta = l.corto;
+        if (l.falta !== l.pend) { l.anular = l.pendIds.slice(); l.solNueva = l.falta; }   /* reemplaza las pendientes del lote por una sola con el total */
+        if (ctl && (l.sobra || l.falta)) errores.push(E('ctl', `Controlado, lote ${l.lote}: lo recontado (${l.contado}) no coincide con lo que marca el sistema ahora (${l.ahora}). Las diferencias de controlados van por toma de inventario y ajuste del superadmin, no por el levantamiento.`, { clave: l.clave, folios: l.folios }));
+        if (l.sobra && !ctl && Tm.requiereReconteo({ delta: l.sobra, sistema: l.base }, { controlado: ctl }) && !l.cajas.some(recontada)) errores.push(E('reconteo', `Lote ${l.lote}: sobran ${l.sobra} u. sobre ${l.base} (más del 5 % o de 10 u.). Pide reconteo a otra persona antes de aceptar.`, { clave: l.clave, folios: l.folios }));
+        if (l.falta > l.pend && !ctl) {   /* la falta crece: se confirma; si baja o se anula, no hace falta */
           if (!o.confirmaFaltas) errores.push(E('falta', `Lote ${l.lote}${l.sinContar ? ' (no contado)' : ''}: faltan ${l.falta} u. Pide reconteo a otra persona; si se confirma, marca «Confirmo los faltantes».`, { clave: l.clave, folios: l.folios }));
-          else if (!l.sinContar && !l.cajas.some(recontada) && !o.esSuper) errores.push(E('falta', `Lote ${l.lote}: faltan ${l.falta} u. y nadie lo ha recontado. Pide reconteo antes de confirmar.`, { clave: l.clave, folios: l.folios }));
+          else if (!l.sinContar && !l.cajas.some(recontada) && !o.esSuper) errores.push(E('falta', `Lote ${l.lote}: faltan ${l.falta} u. y nadie más lo ha recontado. Pide reconteo antes de confirmar.`, { clave: l.clave, folios: l.folios }));
         }
       });
-      const sg = num(doc && doc.sobregiro);
       if (sg > 0) {
         const ds = cajas.map(c => c.deudaSistema).filter(v => v != null), esp = ds.length === cajas.length && ds.every(v => ent(v) === ent(ds[0])) ? ent(ds[0]) : (o.deudaVista != null ? ent(o.deudaVista) : null);
         if (esp !== sg) errores.push(E('deuda', `La deuda (sobregiro) del producto cambió desde el conteo (${esp == null ? 'las cajas no coinciden' : `era ${esp}`}, ahora ${sg}). Recontar.`));
         else deuda = { saldar: sg };
       }
     }
-    /* lotes finales */
+    /* lotes finales (un lote negativo cuenta como 0: lotesDoc ya lo deja en 0) */
     let bt = raw.map(b => ({ ...b }));
     const sumar = (k, q, lote, vence) => { const i = bt.findIndex(b => Tm.clave(b.batch, b.expirationDate) === k); if (i >= 0) bt[i].quantity = num(bt[i].quantity) + q; else bt.push({ batch: lote, quantity: q, expirationDate: vence === 'N/A' ? '' : vence }); };
     const restar = (k, q) => { let r = q; bt.forEach(b => { if (r <= 0 || Tm.clave(b.batch, b.expirationDate) !== k) return; const t = Math.min(num(b.quantity), r); b.quantity = num(b.quantity) - t; r -= t; }); if (r > 0) errores.push(E('movido', 'El S/L no alcanza para reclasificar: recontar.', { clave: k })); };
@@ -157,9 +197,9 @@
     bt = bt.filter(b => num(b.quantity) > 0); if (typeof window.fefoCompare === 'function') { try { bt.sort(window.fefoCompare); } catch (e) { /* sin fechas */ } }
     const movidos = new Set(errores.filter(e => e.tipo === 'movido' && e.clave).map(e => e.clave));   /* un lote movido se recuenta: sus avisos de sobra/falta no sirven */
     for (let i = errores.length - 1; i >= 0; i--) if (errores[i].tipo !== 'movido' && errores[i].clave && movidos.has(errores[i].clave)) errores.splice(i, 1);
-    const delta = lineas.reduce((t, l) => t + l.alta + l.sobra, 0);
-    const resumen = { cajas: cajas.length, unidades: cajas.reduce((t, c) => t + ent(c.total), 0), altas: lineas.reduce((t, l) => t + l.alta, 0), sobras: lineas.reduce((t, l) => t + l.sobra, 0), reclas: lineas.reduce((t, l) => t + l.reclasOut, 0), faltas: lineas.reduce((t, l) => t + l.falta, 0) };
-    return { errores, lineas, batches: bt, quantity: num(doc && doc.quantity) + delta, delta, deuda, ctl, modo, resumen };
+    const delta = lineas.reduce((t, l) => t + l.alta + l.sobra, 0), quantity = bt.reduce((t, b) => t + num(b.quantity), 0);   /* quantity = suma de los lotes */
+    const resumen = { cajas: cajas.length, unidades: cajas.reduce((t, c) => t + ent(c.total), 0), altas: lineas.reduce((t, l) => t + l.alta, 0), sobras: lineas.reduce((t, l) => t + l.sobra, 0), reclas: lineas.reduce((t, l) => t + l.reclasOut, 0), faltas: lineas.reduce((t, l) => t + l.solNueva, 0), anuladas: lineas.reduce((t, l) => t + l.anular.length, 0) };
+    return { errores, lineas, batches: bt, quantity, delta, deuda, ctl, modo, resumen };
   }
   /** Estado de un lote para la pantalla: movido · alta · reclasificar · sobra · falta · coincide. */
   function estadoLinea(l, errores) {
@@ -176,10 +216,13 @@
     const out = {};
     plan.lineas.forEach(l => {
       const mov = l.alta + l.sobra + l.reclasIn.reduce((t, r) => t + r.q, 0) - l.reclasOut;
-      if (!l.nuevas && !mov && !l.falta) return;   /* un faltante también deja registro: el siguiente usa otro N° de solicitud */
-      const r = l.reg || { base: l.base == null ? l.ahora : l.base, contadoAceptado: 0, aplicado: 0, vistos: [0], n: 0 };
-      const aplicado = num(r.aplicado) + mov, vistos = [...new Set([...(Array.isArray(r.vistos) ? r.vistos : [0]), aplicado])].slice(-60);
-      out[l.clave] = { insumoId, clave: l.clave, lote: l.lote, vence: l.vence, base: num(r.base), contadoAceptado: num(r.contadoAceptado) + l.nuevas, aplicado, vistos, n: num(r.n) + 1, cajas: [...new Set([...(r.cajas || []), ...l.folios])].slice(-300), actualizadoEn: ahoraISO };
+      if (!l.nuevas && !mov && !l.falta && !(l.anular || []).length && !l.solNueva) return;   /* un faltante también deja registro: el siguiente usa otro N° de solicitud */
+      const r = l.reg || { base: l.base == null ? l.ahora : l.base, contadoAceptado: 0, aplicado: 0, vistos: [0], n: 0, solicitudes: [] };
+      const aplicado = num(r.aplicado) + mov, vistos = [...new Set([...(Array.isArray(r.vistos) ? r.vistos : [0]), aplicado, aplicado - num(l.aprob)])].slice(-60);
+      /* solicitudes del lote: se quitan las anuladas y se agrega la nueva (con el total del faltante) */
+      const sols = (Array.isArray(r.solicitudes) ? r.solicitudes : []).filter(x => !(l.anular || []).includes(x.id)).concat(l.solNueva && l.solId ? [{ id: l.solId, q: l.solNueva }] : []).slice(-50);
+      out[l.clave] = { insumoId, clave: l.clave, lote: l.lote, vence: l.vence, base: num(r.base), contadoAceptado: num(r.contadoAceptado) + l.nuevas, aplicado, vistos, n: num(r.n) + 1, cajas: [...new Set([...(r.cajas || []), ...l.folios])].slice(-300),
+        solicitudes: sols, solicitado: l.solNueva ? l.solNueva : Math.max(0, num(l.pend) - (l.anular || []).reduce((t, id) => t + ent(((r.solicitudes || []).find(x => x.id === id) || {}).q), 0)), actualizadoEn: ahoraISO };
     });
     return out;
   }
@@ -223,10 +266,11 @@
       const sinBase = !cs.length || cs.some(c => c.controlado || !('baseSistema' in c)), bases = [...new Set(cs.map(c => c.baseSistema == null ? 0 : ent(c.baseSistema)))];
       const base = sinBase ? null : Math.max(...bases), debio = base == null ? null : Math.max(0, contado - base), exceso = debio == null ? null : sumado - debio;
       const aviso = !cs.length ? 'No encontré las cajas de este ingreso: revisar a mano.' : sinBase ? 'Sin lo que marcaba el sistema (controlado o caja antigua): revisar a mano.' : bases.length > 1 ? `Las cajas se contaron con el sistema distinto (${bases.join(' / ')}): se usa el mayor.` : '';
-      return { lev, fecha: m.date && m.date.toDate ? m.date.toDate().toISOString() : (typeof m.date === 'string' ? m.date : ''), bodega: bod, insumoId: m.idInsumoDestino || m.insumoId || '', nombre: m.insumoName || m.item || '', lote, vence: mes, sumado, contado, base, debio, exceso, folios: cs.map(c => c.folio), aviso };
+      const cuadrada = cs.length > 0 && cs.every(c => c.cuadradaPor);
+      return { cuadrada, cuadradaPor: cuadrada ? cs[0].cuadradaPor : '', lev, fecha: m.date && m.date.toDate ? m.date.toDate().toISOString() : (typeof m.date === 'string' ? m.date : ''), bodega: bod, insumoId: m.idInsumoDestino || m.insumoId || '', nombre: m.insumoName || m.item || '', lote, vence: mes, sumado, contado, base, debio, exceso, folios: cs.map(c => c.folio), aviso };
     }).sort((a, b) => String(a.lev).localeCompare(String(b.lev)) || a.nombre.localeCompare(b.nombre, 'es'));
-    const conExceso = filas.filter(f => f.exceso != null && f.exceso > 0);
-    return { filas, unidadesSumadas: filas.reduce((t, f) => t + f.sumado, 0), excesoTotal: conExceso.reduce((t, f) => t + f.exceso, 0), conExceso: conExceso.length, aRevisar: filas.filter(f => f.exceso == null).length };
+    const conExceso = filas.filter(f => f.exceso != null && f.exceso > 0 && !f.cuadrada);
+    return { filas, unidadesSumadas: filas.reduce((t, f) => t + f.sumado, 0), excesoTotal: conExceso.reduce((t, f) => t + f.exceso, 0), conExceso: conExceso.length, aRevisar: filas.filter(f => f.exceso == null && !f.cuadrada).length, cuadradas: filas.filter(f => f.cuadrada).length };
   }
   /** BUL interiores del levantamiento que su caja grande ya no nombra (B.A. 9: reintento de «Aceptar y etiquetar» de v21.273). Solo se informan. */
   function bulHuerfanas(bultos) {
@@ -294,12 +338,16 @@
     return out;
   }
   /** Lee (fuera o dentro de una transacción) lo necesario para planificar. */
-  async function leerTodo(get, destino, lev, cajasV, modo) {
+  async function leerTodo(get, destino, lev, cajasV, modo, foliosV274) {
     const sn = await get(destino.ref), doc = sn.exists() ? sn.data() : null, fuente = !doc && destino.fuenteRef ? await get(destino.fuenteRef) : null;
     const cajas = []; for (const c of cajasV) { const s = await get(refCaja(c.folio)); cajas.push(s.exists() ? { ...s.data(), folio: c.folio } : { folio: c.folio, estado: 'NO_EXISTE' }); }
     const claves = new Set(cajas.filter(c => c.lote).map(claveCaja)); lotesDoc(doc).forEach(b => { const k = T().clave(b.batch, b.expirationDate); if (modo === 'completo' || esSL(b.batch)) claves.add(k); });
     const regs = {}; for (const k of claves) { const r = await get(refReg(lev, destino.ref.id, k)); if (r.exists()) regs[k] = r.data(); }
-    return { doc, fuente: fuente && fuente.exists() ? fuente.data() : null, cajas, regs };
+    /* estado de las solicitudes de faltante del lote (pendiente / aprobado / anulado / rechazado) */
+    const solEst = {}; for (const r of Object.values(regs)) for (const x of (Array.isArray(r.solicitudes) ? r.solicitudes : [])) { const sn2 = await get(fs().doc(refCol('Solicitudes_Ajuste'), x.id)); solEst[x.id] = sn2.exists() ? String(sn2.data().status || 'pendiente') : 'anulado'; }
+    /* cajas de v21.274 del producto: sin cuadrar bloquean; cuadradas cuentan como ya contadas en su lote */
+    const v274 = [], v274Previo = {}; for (const fo of (foliosV274 || [])) { const x = await get(refCaja(fo)); if (!x.exists()) continue; const c = { ...x.data(), folio: fo }; if (!ingresadaV274(c)) continue; if (v274SinCuadrar(c)) v274.push(c); else { const k = claveCaja(c); v274Previo[k] = (v274Previo[k] || 0) + ent(c.total); } }
+    return { doc, fuente: fuente && fuente.exists() ? fuente.data() : null, cajas, regs, solEst, v274, v274Previo };
   }
   /** Códigos de seguimiento (AJU para sobras y faltantes, CAM para reclasificar) — se piden antes, como en la toma. */
   async function codigos(plan) {
@@ -320,11 +368,15 @@
     const huellas = {}; vistas.forEach(c => { huellas[c.folio] = c.huella; });
     const destino = await resolverDestino(g, o.homologar);
     let lev = o.lev || await levAbierto(g.bodega, g.bodegaId);
-    const base = { modo, esSuper, yo, huellas, confirmaFaltas: !!o.confirmaFaltas, confirmaDoble: !!o.confirmaDoble, slVisto: o.slVisto, deudaVista: o.deudaVista, vista: o.vista, controlado: g.controlado, enReconteo: (g.cajas || []).filter(c => c.estado === 'RECONTEO').length };
+    const vistasMap = {}; vistas.forEach(c => { vistasMap[c.folio] = c; });
+    const key = g.key || productoKey(vistas[0]);
+    const base = { modo, esSuper, yo, huellas, vistas: vistasMap, key, confirmaFaltas: !!o.confirmaFaltas, confirmaDoble: !!o.confirmaDoble, baseActual: !!o.baseActual, slVisto: o.slVisto, deudaVista: o.deudaVista, reservadoVisto: o.reservadoVisto, vista: o.vista, controlado: g.controlado, enReconteo: (g.cajas || []).filter(c => c.estado === 'RECONTEO').length };
+    /* cajas de v21.274 de este producto en esta bodega (se vuelven a leer dentro de la transacción) */
+    let foliosV274 = []; { const q = await f.getDocs(f.query(refCol(COL), f.where('bodega', '==', g.bodega), f.limit(5000))); q.forEach(x => { const c = { ...x.data(), folio: x.data().folio || x.id }; if (ingresadaV274(c) && productoKey(c) === key) foliosV274.push(c.folio); }); }
     const yaEstaba = (cs) => cs.length && cs.every(c => (c.estado === 'ACEPTADO' || c.estado === 'ETIQUETADO') && c.lev) ? Object.assign(new Error('Ya estaba aceptado.'), { ya: true, lev: cs[0].lev || lev, v274: cs.some(ingresadaV274) }) : null;   /* reintento de una aceptación que sí quedó (o caja ya ingresada por v21.274: nunca se vuelve a sumar) */
     /* vista previa fuera de la transacción: avisa rápido y dice qué códigos se necesitan */
-    const pre = await leerTodo((r) => f.getDoc(r), destino, lev, vistas, modo); { const y = yaEstaba(pre.cajas); if (y) return { lev: y.lev, ya: true, v274: y.v274 }; }
-    const p0 = planificar({ ...base, doc: pre.doc, cajas: pre.cajas, regs: pre.regs });
+    const pre = await leerTodo((r) => f.getDoc(r), destino, lev, vistas, modo, foliosV274); { const y = yaEstaba(pre.cajas); if (y) return { lev: y.lev, ya: true, v274: y.v274 }; }
+    const p0 = planificar({ ...base, doc: pre.doc, cajas: pre.cajas, regs: pre.regs, solEst: pre.solEst, v274: pre.v274, v274Previo: pre.v274Previo });
     if (p0.errores.length) throw juntar(p0.errores);
     /* tags: TAG → se crean las BUL en la transacción; legado con BUL ya creada (v21.273–274) → se reutiliza, no se reservan folios */
     const preTags = {}; for (const c of pre.cajas) { const t = await f.getDoc(refTag(c.folio)); preTags[c.folio] = t.exists() ? t.data() : null; }
@@ -332,9 +384,9 @@
     try {
       return await f.runTransaction(D, async (tx) => {
         const levSn = await tx.get(refLevReg(lev)); if (!levSn.exists() || levSn.data().estado !== 'abierto') throw E('lev', `El ${lev} se cerró mientras aceptabas: vuelve a intentar (se abre otro).`);
-        const L = await leerTodo((r) => tx.get(r), destino, lev, vistas, modo); { const y = yaEstaba(L.cajas); if (y) throw y; }
+        const L = await leerTodo((r) => tx.get(r), destino, lev, vistas, modo, foliosV274); { const y = yaEstaba(L.cajas); if (y) throw y; }
         const tags = []; for (const c of vistas) tags.push(await tx.get(refTag(c.folio)));
-        const plan = planificar({ ...base, doc: L.doc, cajas: L.cajas, regs: L.regs });
+        const plan = planificar({ ...base, doc: L.doc, cajas: L.cajas, regs: L.regs, solEst: L.solEst, v274: L.v274, v274Previo: L.v274Previo });
         /* BUL que se reutilizan (legado): la grande y sus interiores se leen aquí para anotarles el LEV */
         const reusa = {}, faltanBul = [];
         for (let i = 0; i < vistas.length; i++) {
@@ -367,6 +419,7 @@
           tx.set(ref, { ...b0, name: nombre, name_lowercase: nombre.toLowerCase(), location: bod, bodegaNombre: bod, bodegaId: g.bodegaId || '', criticalLimit: lim, category: src.category || 'General', ...(src.tipoInsumo || c0.tipo ? { tipoInsumo: src.tipoInsumo || c0.tipo } : {}), controlado: src.controlado || c0.controlado || null,
             origenIngreso: 'LEVANTAMIENTO', precioPendiente: true, ...(destino.crear ? { levProvisional: true, levFicha: { lev, creadaPor: yo, creadaEn: ahora, nombreContado: c0.nombre || '' } } : {}), creadoEn: ahora, ...campos });
         }
+        plan.lineas.forEach(l => { if (l.solNueva) l.solId = `lev-${lev}-${id}-${encodeURIComponent(l.clave)}-${(l.reg ? num(l.reg.n) : 0) + 1}`; });
         const regsN = registrosNuevos(plan, id, ahora), mov = (k) => f.doc(refCol('Historial_Movimientos'), idMov(lev, id, k, regsN[k] ? regsN[k].n : 1));
         const comunH = { insumoName: nombre, item: nombre, insumoId: id, user: yo, date: ts, document: lev, lev, bodega: bod, origen: 'LEVANTAMIENTO' };
         const altas = [], solicitudes = [];
@@ -378,9 +431,11 @@
             tx.set(f.doc(refCol('Historial_Movimientos'), 'aju-' + idMov(lev, id, k, regsN[k].n)), { ...comunH, type: 'AJUSTE_CRITICO', quantity: l.sobra, delta: l.sobra, batch: l.lote, idInsumoOrigen: id, origin: 'Levantamiento', dest: 'N/A', codigoSeguimiento: cod.AJU, motivo: 'Levantamiento: sobrante', observacion: `${lev} · lote ${l.lote}: sistema ${l.base}, contado ${l.contado}` });
             tx.set(f.doc(refCol('Auditoria')), { code: cod.AJU, user: yo, item: nombre, action: `Suma de stock por levantamiento ${lev}: lote ${l.lote} +${l.sobra}`, justification: `Levantamiento ${lev} · ${bod}`, date: ts, lev });
           }
-          if (l.falta) {
-            const sid = `lev-${lev}-${id}-${encodeURIComponent(k)}-${(l.reg ? num(l.reg.n) : 0) + 1}`; solicitudes.push(sid);
-            tx.set(f.doc(refCol('Solicitudes_Ajuste'), sid), { code: cod.AJU, insumoId: id, insumoName: nombre, cantidad: -l.falta, justificacion: `Levantamiento ${lev} · ${bod} · lote ${l.crudo || l.lote}: sistema ${l.ahora}, contado ${l.contado}${l.sinContar ? ' (no contado: producto contado completo)' : ''}`, previousStock: num(doc && doc.quantity), projectedStock: num(doc && doc.quantity) - l.falta,
+          /* faltante: las pendientes del lote se anulan y queda una sola por el total (60 y luego 40 → ninguna pendiente) */
+          (l.anular || []).forEach(sidA => tx.update(f.doc(refCol('Solicitudes_Ajuste'), sidA), { status: 'anulado', anuladoPor: yo, anuladoEn: ahora, motivoAnulacion: `Levantamiento ${lev}: llegó otra caja del lote ${l.lote} (contado ${l.contado}, sistema ${l.ahora}).` }));
+          if (l.solNueva) {
+            const sid = l.solId; solicitudes.push(sid);
+            tx.set(f.doc(refCol('Solicitudes_Ajuste'), sid), { code: cod.AJU, insumoId: id, insumoName: nombre, cantidad: -l.solNueva, justificacion: `Levantamiento ${lev} · ${bod} · lote ${l.crudo || l.lote}: sistema ${l.ahora}, contado ${l.contado}${l.sinContar ? ' (no contado: producto contado completo)' : ''}`, previousStock: num(doc && doc.quantity), projectedStock: num(doc && doc.quantity) - l.solNueva,
               motivo: 'Levantamiento: faltante', observacion: `${lev}`, status: 'pendiente', date: ts, requester: yo, contadoPor: [...new Set(l.cajas.map(c => c.contadoPor))].join(', '), lev, lote: l.crudo != null ? l.crudo : l.lote, mesLote: l.vence, vence: '', loteSistema: l.ahora, conteo: false });
           }
         });
@@ -425,8 +480,14 @@
   async function rechazar(c, motivo) {
     const f = fs(), yo = usuario(), m = String(motivo || '').trim(); if (!m) throw E('motivo', 'Escribe el motivo del rechazo.');
     if (!(await enLinea())) throw E('red', 'Sin internet no se puede rechazar.');
-    return f.runTransaction(db(), async (tx) => { const s = await tx.get(refCaja(c.folio)); if (!s.exists() || !PEND.includes(s.data().estado)) throw E('estado', `Tag ${nTag(c.folio)}: ya no está pendiente.`);
-      tx.update(refCaja(c.folio), { estado: 'RECHAZADO', rechazadoPor: yo, rechazadoEn: new Date().toISOString(), motivoRechazo: m.slice(0, 300) }); });
+    return f.runTransaction(db(), async (tx) => { const s = await tx.get(refCaja(c.folio)); if (!s.exists() || !(PEND.includes(s.data().estado) || esLegado(s.data()))) throw E('estado', `Tag ${nTag(c.folio)}: ya no está pendiente.`);
+      const d = s.data(), ahora = new Date().toISOString();
+      /* legado (v21.273–274) sin LEV: sus BUL no tienen stock detrás → quedan VACIAS (anuladas) en la misma transacción */
+      if (esLegado(d)) { const t = await tx.get(refTag(c.folio)), td = t.exists() ? t.data() : null;
+        if (bulDeCaja(td, { ...d, folio: c.folio })) { const hs = Array.isArray(td.hijos) && td.hijos.length ? td.hijos : (Array.isArray(d.hijos) ? d.hijos : []), hsn = []; for (const h of hs) hsn.push(await tx.get(refTag(h)));
+          const anula = { contenido: 0, estado: 'VACIA', anulada: true, anuladaPor: yo, anuladaEn: ahora, motivoAnulacion: `Conteo rechazado: ${m.slice(0, 200)}` };
+          tx.update(refTag(c.folio), anula); hsn.forEach((x, j) => { if (x.exists()) tx.update(refTag(hs[j]), anula); }); } }
+      tx.update(refCaja(c.folio), { estado: 'RECHAZADO', rechazadoPor: yo, rechazadoEn: ahora, motivoRechazo: m.slice(0, 300) }); return { rechazada: true, legado: esLegado(d) }; });
   }
   /** Cierra el LEV de una bodega: IRA (solo lotes con saldo previo), altas con precio pendiente y fichas provisionales. */
   async function cerrarLev(lev) {
@@ -438,6 +499,16 @@
       if (ps.exists() && ps.data().lev === lev) tx.update(refPtr(d.bodega), { lev: null, ultimoCerrado: lev });
       return { ira: ira(lotes), lotes: lotes.length };
     });
+  }
+  /** v21.276: el superadmin confirma que ya ajustó el exceso de esas cajas de v21.274 (informe): dejan de bloquear su producto. */
+  async function marcarCuadradas(folios, nota) {
+    if (rol() !== 'superadmin') throw E('super', 'Solo el superadmin marca como cuadradas las cajas de v21.274.');
+    if (!(await enLinea())) throw E('red', 'Sin internet no se puede marcar.');
+    const f = fs(), yo = usuario(), ahora = new Date().toISOString(), l = [...new Set(folios || [])]; if (!l.length) throw E('vacio', 'No hay cajas.');
+    return f.runTransaction(db(), async (tx) => { const sn = []; for (const fo of l) sn.push(await tx.get(refCaja(fo)));
+      sn.forEach((x, i) => { if (!x.exists() || !ingresadaV274(x.data())) throw E('estado', `Tag ${nTag(l[i])}: no es una caja de v21.274.`); });
+      sn.forEach((x, i) => { if (!x.data().cuadradaPor) tx.update(refCaja(l[i]), { cuadradaPor: yo, cuadradaEn: ahora, cuadradaNota: String(nota || 'Exceso ajustado').slice(0, 300) }); });
+      return { cajas: l.length }; });
   }
   /** Superadmin valida una ficha provisional (desde ahí se puede despachar). */
   async function validarFicha(id) {
@@ -469,8 +540,8 @@
     return `<div class="act-card lvb-inf"><h3 class="act-h">Ingresos LEV de v21.274 a revisar</h3>
       <p class="act-hint">Solo lectura. «Ingresar al stock (LEV)» de v21.274 sumó lo contado encima del saldo. Debió sumar solo lo que faltaba: <b>max(0, contado − lo que marcaba el sistema al contar)</b>. Cuadra cada posible exceso con un ajuste (Ajustes de stock, motivo «Levantamiento v21.274 duplicado»). Este informe no corrige nada.</p>
       <p class="lvb-inf-res"><b>${I.filas.length}</b> ingreso(s) · ${n(I.unidadesSumadas)} u. sumadas · <b class="${I.excesoTotal ? 'lvb-mal' : ''}">${n(I.excesoTotal)} u. de posible exceso</b> en ${I.conExceso} lote(s)${I.aRevisar ? ` · ${I.aRevisar} a revisar a mano` : ''} · ${yaV274} caja(s) con LEV de v21.274</p>
-      <div class="sal-tabla"><table class="aud-lib lvb-t"><thead><tr><th>LEV · fecha</th><th>Bodega</th><th>Producto</th><th>Lote · vence</th><th>Tags</th><th>Sistema al contar</th><th>Contado</th><th>Sumado</th><th>Debió sumar</th><th>Posible exceso</th></tr></thead><tbody>
-      ${I.filas.map(f => `<tr${f.exceso ? ' class="lvb-exceso"' : ''}><td><b>${esc(f.lev || '¿?')}</b><small>${esc(hora(f.fecha))}</small></td><td>${esc(f.bodega)}</td><td>${esc(f.nombre)}${f.aviso ? `<small>${esc(f.aviso)}</small>` : ''}</td><td>${esc(f.lote)} · ${esc(mesCL(f.vence))}</td><td><small>${esc(f.folios.map(nTag).join(', '))}</small></td><td>${n(f.base)}</td><td>${n(f.contado)}</td><td>${n(f.sumado)}</td><td>${n(f.debio)}</td><td><b>${f.exceso == null ? 'revisar' : (f.exceso > 0 ? '+' : '') + n(f.exceso)}</b></td></tr>`).join('') || '<tr><td colspan="10" class="err-vacio">No hay ingresos de v21.274.</td></tr>'}</tbody></table></div>
+      <div class="sal-tabla"><table class="aud-lib lvb-t"><thead><tr><th>LEV · fecha</th><th>Bodega</th><th>Producto</th><th>Lote · vence</th><th>Tags</th><th>Sistema al contar</th><th>Contado</th><th>Sumado</th><th>Debió sumar</th><th>Posible exceso</th><th>Cuadrado</th></tr></thead><tbody>
+      ${I.filas.map(f => `<tr${f.exceso ? ' class="lvb-exceso"' : ''}><td><b>${esc(f.lev || '¿?')}</b><small>${esc(hora(f.fecha))}</small></td><td>${esc(f.bodega)}</td><td>${esc(f.nombre)}${f.aviso ? `<small>${esc(f.aviso)}</small>` : ''}</td><td>${esc(f.lote)} · ${esc(mesCL(f.vence))}</td><td><small>${esc(f.folios.map(nTag).join(', '))}</small></td><td>${n(f.base)}</td><td>${n(f.contado)}</td><td>${n(f.sumado)}</td><td>${n(f.debio)}</td><td><b>${f.exceso == null ? 'revisar' : (f.exceso > 0 ? '+' : '') + n(f.exceso)}</b></td><td>${f.cuadrada ? `<small>Cuadrado · ${esc(f.cuadradaPor)}</small>` : rol() === 'superadmin' && f.folios.length ? `<button type="button" class="btn btn-secondary btn-sm" data-lvb="cuadrar" data-lev="${esc(f.lev)}" data-f="${esc(f.folios.join(','))}">Ya ajusté: marcar cuadrado</button>` : '<small>pendiente</small>'}</td></tr>`).join('') || '<tr><td colspan="11" class="err-vacio">No hay ingresos de v21.274.</td></tr>'}</tbody></table></div>
       ${I.huerfanas.length ? `<p class="act-hint"><b>${I.huerfanas.length} etiqueta(s) interior(es) huérfana(s)</b> (su caja grande ya no las nombra; quedaron de un reintento de «Aceptar y etiquetar»): ${esc(I.huerfanas.slice(0, 30).map(b => b.folio).join(', '))}${I.huerfanas.length > 30 ? '…' : ''}. Revísalas en Bultos y etiquetas; no tienen stock.</p>` : ''}</div>`;
   }
   const root = () => document.getElementById('levb-root');
@@ -485,8 +556,9 @@
   async function cargarLevs(bods) {
     const f = fs();
     for (const b of bods) {
-      try { const p = await f.getDoc(refPtr(b)), lev = p.exists() ? p.data().lev : null; if (!lev) { levs[b] = null; continue; } const r = await f.getDoc(refLevReg(lev)); levs[b] = r.exists() && r.data().estado === 'abierto' ? r.data() : null;
-        if (levs[b]) { const s = await f.getDocs(f.query(refCol('Levantamientos', lev, 'lotes'), f.limit(5000))), m = {}; s.forEach(x => { const d = x.data(); m[d.insumoId + '|' + d.clave] = d; }); regsLev[lev] = m; } } catch (e) { levs[b] = levs[b] || null; }
+      const nb = norm(b);
+      try { const p = await f.getDoc(refPtr(b)), lev = p.exists() ? p.data().lev : null; if (!lev) { levs[nb] = null; continue; } const r = await f.getDoc(refLevReg(lev)); levs[nb] = r.exists() && r.data().estado === 'abierto' ? r.data() : null;
+        if (levs[nb]) { const s = await f.getDocs(f.query(refCol('Levantamientos', lev, 'lotes'), f.limit(5000))), m = {}; s.forEach(x => { const d = x.data(); m[d.insumoId + '|' + d.clave] = d; }); regsLev[lev] = m; } } catch (e) { levs[nb] = levs[nb] || null; }
     }
   }
   /** Registro del producto en la bodega (para la vista previa; la transacción vuelve a leerlo). */
@@ -497,11 +569,11 @@
     return i ? { id: i.id, d: i } : { id: '', d: null };
   }
   function vistaPrevia(p) {
-    const o = opc[p.key] || {}, { id, d } = docDe(p), lev = levs[p.bodega], rg = {}; if (lev && id) Object.values(regsLev[lev.folio] || {}).filter(r => r.insumoId === id).forEach(r => { rg[r.clave] = r; });
+    const o = opc[p.key] || {}, { id, d } = docDe(p), lev = levs[norm(p.bodega)], rg = {}; if (lev && id) Object.values(regsLev[lev.folio] || {}).filter(r => r.insumoId === id).forEach(r => { rg[r.clave] = r; });
     const reg = p.cajas.filter(aceptable), S = T().agrupar(lotesDoc(d)), vista = {}; S.forEach((s, k) => { vista[k] = s.quantity; });
     const sl = [...S.values()].filter(s => s.batch === 'S/L').reduce((t, s) => t + s.quantity, 0);
     const modo = o.completo ? 'completo' : 'caja';
-    const plan = planificar({ doc: d, cajas: reg, regs: rg, modo, esSuper: rol() === 'superadmin', yo: usuario(), confirmaFaltas: !!o.faltas, confirmaDoble: !!o.doble, slVisto: sl, deudaVista: d ? num(d.sobregiro) : 0, vista, controlado: p.controlado, enReconteo: p.cajas.filter(c => c.estado === 'RECONTEO').length });
+    const plan = planificar({ doc: d, cajas: reg, regs: rg, modo, esSuper: rol() === 'superadmin', yo: usuario(), confirmaFaltas: !!o.faltas, confirmaDoble: !!o.doble, baseActual: !!o.baseActual, reservadoVisto: d ? num(d.reservado) : 0, v274: cajas.filter(c => v274SinCuadrar(c) && productoKey(c) === p.key), v274Previo: cajas.filter(c => ingresadaV274(c) && c.cuadradaPor && productoKey(c) === p.key).reduce((m, c) => { const k = claveCaja(c); m[k] = (m[k] || 0) + ent(c.total); return m; }, {}), slVisto: sl, deudaVista: d ? num(d.sobregiro) : 0, vista, controlado: p.controlado, enReconteo: p.cajas.filter(c => c.estado === 'RECONTEO').length });
     if (p.nuevo && !o.hom) plan.errores.unshift(E('homologar', 'Producto nuevo: elige un producto del catálogo o «Crear ficha nueva».'));
     if (!reg.length) plan.errores.unshift(E('vacio', 'Todas las cajas están en reconteo.'));
     return { plan, d, vista, sl, reg, modo };
@@ -510,7 +582,7 @@
     const est = c.estado === 'RECONTEO' ? '<span class="tg-est tg-est--reconteo">Reconteo pedido</span>' : recontada(c) ? '<span class="tg-est tg-est--contado">Recontada</span>' : esLegado(c) ? `<span class="tg-est tg-est--incorporado" title="Aceptada con el flujo anterior (v21.273–274): falta entrar al stock">${c.estado === 'ETIQUETADO' ? 'Etiquetada' : 'Aceptada'} sin stock</span>` : '';
     const ET = window.SAR_TagsConteo && window.SAR_TagsConteo.estructuraCorta ? window.SAR_TagsConteo.estructuraCorta(c.estructura) : '';
     return `<tr class="lvb-caja"><td><b>N° ${esc(nTag(c.folio))}</b> ${est}</td><td colspan="2">${esc(ET)}</td><td><b>${ent(c.total)}</b> u.</td><td colspan="2"><small>${esc(c.contadoNombre || c.contadoPor || '')} · ${esc(hora(c.en))}${c.editadoEn ? ' · corregida ' + esc(hora(c.editadoEn)) : ''}${c.nota ? ' · ' + esc(c.nota) : ''}</small>
-      <span class="lvb-acc">${aceptable(c) && puedeCaja ? `<button type="button" class="btn btn-primary btn-sm" data-lvb="caja" data-f="${esc(c.folio)}"${enRed ? '' : ' disabled'}>Aceptar</button>` : ''}${c.estado === 'REGISTRADO' ? `<button type="button" class="btn btn-secondary btn-sm" data-lvb="recontar" data-f="${esc(c.folio)}"${enRed ? '' : ' disabled'}>Pedir reconteo</button>` : ''}${esLegado(c) ? '' : `<button type="button" class="btn btn-outline btn-sm" data-lvb="rechazar" data-f="${esc(c.folio)}"${enRed ? '' : ' disabled'}>Rechazar</button>`}</span></td></tr>`;
+      <span class="lvb-acc">${aceptable(c) && puedeCaja ? `<button type="button" class="btn btn-primary btn-sm" data-lvb="caja" data-f="${esc(c.folio)}"${enRed ? '' : ' disabled'}>Aceptar</button>` : ''}${c.estado === 'REGISTRADO' ? `<button type="button" class="btn btn-secondary btn-sm" data-lvb="recontar" data-f="${esc(c.folio)}"${enRed ? '' : ' disabled'}>Pedir reconteo</button>` : ''}<button type="button" class="btn btn-outline btn-sm" data-lvb="rechazar" data-f="${esc(c.folio)}"${enRed ? '' : ' disabled'}>Rechazar${esLegado(c) ? ' (anula sus etiquetas)' : ''}</button></span></td></tr>`;
   }
   function tarjeta(p, enRed) {
     const o = opc[p.key] || {}, v = vistaPrevia(p), pl = v.plan, puedeCaja = !o.completo && !pl.errores.some(e => e.tipo === 'modo' || e.tipo === 'super' || e.tipo === 'doble' || e.tipo === 'homologar');
@@ -530,6 +602,7 @@
       ${msgs ? `<ul class="lvb-msg">${msgs}</ul>` : ''}
       <div class="lvb-pie"><label class="lvb-chk"><input type="checkbox" data-lvb-comp="${esc(p.key)}"${o.completo ? ' checked' : ''}> Producto contado completo <small>(lo no contado de este producto en ${esc(p.bodega)} cuenta como 0)</small></label>
         ${p.controlado && p.cajas.some(esLegado) && rol() === 'superadmin' ? `<label class="lvb-chk"><input type="checkbox" data-lvb-doble="${esc(p.key)}"${o.doble ? ' checked' : ''}> Confirmo que otra persona recontó estas cajas (controlado aceptado con el flujo anterior)</label>` : ''}
+        ${rol() === 'superadmin' && (pl.errores.some(e => e.tipo === 'movido' && e.legado) || o.baseActual) ? `<label class="lvb-chk"><input type="checkbox" data-lvb-base="${esc(p.key)}"${o.baseActual ? ' checked' : ''}> Aceptar las cajas del flujo anterior con lo que hay ahora en el sistema (el lote se movió desde el conteo; confirmo que lo contado sigue igual)</label>` : ''}
         ${o.completo && faltas ? `<label class="lvb-chk"><input type="checkbox" data-lvb-faltas="${esc(p.key)}"${o.faltas ? ' checked' : ''}> Confirmo los faltantes (ya se recontaron): quedan como solicitud de ajuste para el superadmin, no se descuentan</label>` : ''}
         <button type="button" class="btn btn-primary" data-lvb="producto" data-k="${esc(p.key)}"${enRed && !pl.errores.length ? '' : ' disabled'}>${lbl}</button>${enRed ? '' : '<small class="lvb-off">Sin internet no se acepta.</small>'}</div></article>`;
   }
@@ -542,9 +615,9 @@
     const cat = [...new Set(insumos.filter(i => !i.levProvisional && i.status !== 'CUARENTENA').map(i => String(i.name || '')).filter(Boolean))].sort((x, y) => x.localeCompare(y, 'es')).slice(0, 3000);
     r.innerHTML = `<div class="lvb"><div class="si-cab"><div><h2 class="si-t">Levantamientos por aprobar</h2><p class="si-s">Lo que contaron los tomadores con el teléfono. Al aceptar entra al stock (documento LEV) y el tag pasa a ser la etiqueta BUL de la caja: queda en «Impresión de etiquetas».</p></div></div>
       ${enRed ? '' : '<p class="lvb-banda">Sin internet: puedes revisar, pero no aceptar ni rechazar.</p>'}
-      ${(() => { const v = cajas.filter(ingresadaV274), lg = cajas.filter(esLegado); return v.length || lg.length || verInforme ? `<div class="act-card lvb-v274"><div class="lvb-v274-t"><span>${v.length ? `<b>${v.length} caja(s) ya ingresadas por v21.274 (revisar)</b>: no se vuelven a sumar. ` : ''}${lg.length ? `<b>${lg.length} caja(s) aceptadas con el flujo anterior sin stock</b>: aparecen abajo para entrar al stock con lo que marcaba el sistema al contar (sus etiquetas ya impresas se reutilizan). ` : ''}</span><button type="button" class="btn btn-outline btn-sm" data-lvb="informe">${verInforme ? 'Ocultar informe' : 'Ingresos LEV de v21.274 a revisar'}</button></div></div>${verInforme ? htmlInforme(v.length) : ''}` : ''; })()}
+      ${(() => { const v = cajas.filter(v274SinCuadrar), lg = cajas.filter(esLegado); return v.length || lg.length || verInforme ? `<div class="act-card lvb-v274"><div class="lvb-v274-t"><span>${v.length ? `<b>${v.length} caja(s) ya ingresadas por v21.274 (revisar)</b>: no se vuelven a sumar. ` : ''}${lg.length ? `<b>${lg.length} caja(s) aceptadas con el flujo anterior sin stock</b>: aparecen abajo para entrar al stock con lo que marcaba el sistema al contar (sus etiquetas ya impresas se reutilizan). ` : ''}</span><button type="button" class="btn btn-outline btn-sm" data-lvb="informe">${verInforme ? 'Ocultar informe' : 'Ingresos LEV de v21.274 a revisar'}</button></div></div>${verInforme ? htmlInforme(v.length) : ''}` : ''; })()}
       ${fichas.length ? `<div class="act-card"><h3 class="act-h">Fichas provisionales por validar (${fichas.length})</h3><p class="act-hint">Productos nuevos del levantamiento. No se despachan hasta validarlos.</p><ul class="lvb-fichas">${fichas.map(i => `<li><b>${esc(i.name)}</b> · ${esc(i.location || '')} · ${num(i.quantity)} u. <button type="button" class="btn btn-secondary btn-sm" data-lvb="validar" data-id="${esc(i.id)}"${enRed ? '' : ' disabled'}>Validar</button></li>`).join('')}</ul></div>` : ''}
-      ${bods.length ? `<div class="lvb-bods" role="tablist">${bods.map(x => `<button type="button" role="tab" class="lvb-bod${x === bodSel ? ' is-on' : ''}" aria-selected="${x === bodSel}" data-lvb="bodega" data-b="${esc(x)}">${esc(x)} <span class="home-badge">${B.get(x).cajas}</span></button>`).join('')}</div>
+      ${bods.length ? `<div class="lvb-bods" role="tablist">${bods.map(x => `<button type="button" role="tab" class="lvb-bod${x === bodSel ? ' is-on' : ''}" aria-selected="${x === bodSel}" data-lvb="bodega" data-b="${esc(x)}">${esc(B.get(x).bodega)} <span class="home-badge">${B.get(x).cajas}</span></button>`).join('')}</div>
         <div class="lvb-lev">${lev ? `<span><b>${esc(lev.folio)}</b> abierto · ${num(lev.cajas)} caja${num(lev.cajas) === 1 ? '' : 's'} aceptada${num(lev.cajas) === 1 ? '' : 's'} · ${num(lev.unidades)} u.</span><button type="button" class="btn btn-outline btn-sm" data-lvb="cerrar" data-lev="${esc(lev.folio)}"${enRed ? '' : ' disabled'}>Cerrar ${esc(lev.folio)}</button><a class="btn btn-outline btn-sm" href="#view-etiquetas">Impresión de etiquetas</a>` : '<span>Al aceptar la primera caja se abre el documento LEV de esta bodega.</span>'}</div>
         <datalist id="lvb-cat">${cat.map(n => `<option value="${esc(n)}">`).join('')}</datalist>
         ${[...b.productos.values()].sort((x, y) => x.nombre.localeCompare(y.nombre, 'es')).map(p => tarjeta(p, enRed)).join('')}` : `<div class="home-empty">${cargadoIns ? 'No hay cajas por aprobar.' : 'Cargando…'}</div>`}</div>`;
@@ -560,6 +633,8 @@
     r.querySelectorAll('[data-lvb="bodega"]').forEach(x => x.onclick = () => { bodSel = x.dataset.b; pintar(); });
     r.querySelectorAll('[data-lvb-comp]').forEach(x => x.onchange = () => { const k = x.dataset.lvbComp; opc[k] = { ...(opc[k] || {}), completo: x.checked }; pintar(); });
     r.querySelectorAll('[data-lvb-faltas]').forEach(x => x.onchange = () => { const k = x.dataset.lvbFaltas; opc[k] = { ...(opc[k] || {}), faltas: x.checked }; pintar(); });
+    r.querySelectorAll('[data-lvb-base]').forEach(x => x.onchange = () => { const k = x.dataset.lvbBase; opc[k] = { ...(opc[k] || {}), baseActual: x.checked }; pintar(); });
+    r.querySelectorAll('[data-lvb="cuadrar"]').forEach(x => x.onclick = async () => { const fo = String(x.dataset.f || '').split(',').filter(Boolean), P = window.SAR_Progreso, ok = P && P.confirmar ? await P.confirmar({ titulo: '¿Marcar como cuadradas?', texto: `Confirmo que ya ajusté el exceso de ${fo.length} caja(s) de v21.274 (${x.dataset.lev || ''}). Desde ahora su producto se puede aceptar en la bandeja.`, si: 'Marcar cuadradas' }) : true; if (ok) accion(x, () => marcarCuadradas(fo, 'Exceso ajustado (informe v21.274)'), () => 'Cajas marcadas como cuadradas.').then(() => cargarInforme().then(pintar, () => {})); });
     r.querySelectorAll('[data-lvb-doble]').forEach(x => x.onchange = () => { const k = x.dataset.lvbDoble; opc[k] = { ...(opc[k] || {}), doble: x.checked }; pintar(); });
     r.querySelectorAll('[data-lvb="informe"]').forEach(x => x.onclick = () => { verInforme = !verInforme; if (verInforme) cargarInforme().then(pintar, (e) => { toast('Informe', esc(e.message || e), 'error'); }); pintar(); });
     r.querySelectorAll('[data-lvb-ficha]').forEach(x => x.onchange = () => { const k = x.dataset.lvbFicha; opc[k] = { ...(opc[k] || {}), hom: x.checked ? { tipo: 'ficha' } : null }; pintar(); });
@@ -567,7 +642,7 @@
     r.querySelectorAll('[data-lvb="producto"],[data-lvb="caja"]').forEach(x => x.onclick = () => {
       const k = x.dataset.k || (cajas.find(c => c.folio === x.dataset.f) ? productoKey(cajas.find(c => c.folio === x.dataset.f)) : ''), g = grupoDe(k); if (!g) return; const o = opc[k] || {}, v = vistaPrevia(g);
       const folios = x.dataset.lvb === 'caja' ? [x.dataset.f] : v.reg.map(c => c.folio);
-      accion(x, () => aceptar(g, { modo: o.completo ? 'completo' : 'caja', folios, homologar: o.hom, confirmaFaltas: !!o.faltas, confirmaDoble: !!o.doble, slVisto: v.sl, deudaVista: v.d ? num(v.d.sobregiro) : 0, vista: v.vista }),
+      accion(x, () => aceptar(g, { modo: o.completo ? 'completo' : 'caja', folios, homologar: o.hom, confirmaFaltas: !!o.faltas, confirmaDoble: !!o.doble, baseActual: !!o.baseActual, reservadoVisto: v.d ? num(v.d.reservado) : 0, slVisto: v.sl, deudaVista: v.d ? num(v.d.sobregiro) : 0, vista: v.vista }),
         (res) => res.ya ? (res.v274 ? `Ya ingresada por v21.274 (${res.lev}): no se vuelve a sumar. Revísala en el informe.` : 'Ya estaba aceptado.') : `${res.lev}: ${res.resumen.cajas} caja(s), ${res.resumen.unidades} u.${res.resumen.altas ? ` · alta ${res.resumen.altas}` : ''}${res.resumen.reclas ? ` · reclasificado ${res.resumen.reclas}` : ''}${res.resumen.sobras ? ` · sobra ${res.resumen.sobras}` : ''}${res.solicitudes.length ? ` · ${res.solicitudes.length} faltante(s) al superadmin` : ''} ${res.bultos.length ? ` · ${res.bultos.length} etiqueta(s) por imprimir` : ''}${res.reutilizadas && res.reutilizadas.length ? ` · ${res.reutilizadas.length} etiqueta(s) ya impresas reutilizadas` : ''}${res.faltanBul && res.faltanBul.length ? ` · faltan ${res.faltanBul.length} etiqueta(s) interiores (revisa en Bultos)` : ''}`);
     });
     r.querySelectorAll('[data-lvb="recontar"]').forEach(x => x.onclick = async () => { const c = cajas.find(y => y.folio === x.dataset.f); if (!c) return; const P = window.SAR_Progreso, ok = P && P.confirmar ? await P.confirmar({ titulo: `¿Pedir reconteo del tag N° ${nTag(c.folio)}?`, texto: 'La caja vuelve al teléfono marcada «Bodega pidió recontar». Que la cuente otra persona.', si: 'Pedir reconteo' }) : true; if (ok) accion(x, () => pedirReconteo(c), () => 'Reconteo pedido.'); });
@@ -589,23 +664,26 @@
   if (typeof setTimeout === 'function' && typeof document.getElementById === 'function') { let k = 0; const t = () => { if (desuscribir || k++ > 40) return; if (fs() && db() && usuario() && esAdmin()) suscribir(); else setTimeout(t, 3000); }; setTimeout(t, 4000); }
 
   // ---------------- desde «Tags de conteo» (v21.276): el mismo camino, sin escrituras propias ----------------
-  const IR_BANDEJA = ['modo', 'homologar', 'super', 'doble', 'falta', 'reconteo', 'movido', 'mes', 'propia', 'deuda', 'estado', 'cambio'];
+  const IR_BANDEJA = ['modo', 'homologar', 'super', 'doble', 'falta', 'reconteo', 'movido', 'mes', 'propia', 'deuda', 'estado', 'v274', 'ctl', 'reservado'];
   /** Lleva a la bandeja con la bodega del producto elegida. */
-  function ir(bodega) { if (bodega) bodSel = bodega; if (typeof window.location !== 'undefined') window.location.hash = 'view-lev-bandeja'; }
+  function ir(bodega) { if (bodega) bodSel = norm(bodega); if (typeof window.location !== 'undefined') window.location.hash = 'view-lev-bandeja'; }
   /**
    * «Aceptar» / «Aceptar y etiquetar» / «Ingresar al stock» de Tags de conteo: acepta UNA caja con la transacción de la bandeja
    * (modo caja por caja). Si el producto necesita una decisión (contado completo, homologar, reconteo, controlado, movido…),
    * lanza el error con irBandeja = true para llevar al usuario a la bandeja. Nunca escribe stock ni BUL por su cuenta.
    */
   async function aceptarDesdeTags(folio, o2) {
+    const q2 = o2 || {}; if (!q2.huella && !q2.visto) throw E('cambio', `Tag ${nTag(folio)}: falta lo que se vio en pantalla (huella). Actualiza la lista.`);
     const f = fs(), sn = await f.getDocs(f.query(refCol(COL), f.limit(5000))), l = []; sn.forEach(x => l.push({ ...x.data(), folio: x.data().folio || x.id })); cajas = l;
     const c = cajas.find(x => x.folio === folio); if (!c) throw E('no', `No encontré el conteo del tag ${nTag(folio)}.`);
     if (c.lev) return { lev: c.lev, ya: true, v274: ingresadaV274(c), resumen: null, bultos: [], reutilizadas: [] };
     if (!aceptable(c)) throw Object.assign(E('estado', `Tag ${nTag(folio)}: está ${String(c.estado || '').toLowerCase()}.`), { irBandeja: c.estado === 'RECONTEO', bodega: c.bodega });
+    /* lo que se vio en Tags de conteo debe ser lo que hay ahora (el contador pudo corregir la caja entremedio) */
+    if ((q2.huella && q2.huella !== c.huella) || (q2.visto && firma(q2.visto) !== firma(c))) throw E('cambio', `Tag ${nTag(folio)}: el contador la corrigió mientras la revisabas (ahora ${ent(c.total)} u.). Actualiza la lista y vuelve a mirarla.`);
     await cargarInsumos(); const g = grupoDe(productoKey(c)); if (!g) throw E('no', 'No encontré el producto en la bandeja.');
     await cargarLevs([g.bodega]);
     const op = opc[g.key] || {}, v = vistaPrevia({ ...g, cajas: g.cajas.filter(x => x.folio === folio || x.estado === 'RECONTEO') });
-    try { return await aceptar(g, { modo: 'caja', folios: [folio], homologar: op.hom, confirmaDoble: !!(o2 && o2.confirmaDoble), slVisto: v.sl, deudaVista: v.d ? num(v.d.sobregiro) : 0, vista: v.vista }); }
+    try { return await aceptar(g, { modo: 'caja', folios: [folio], homologar: op.hom, confirmaDoble: !!q2.confirmaDoble, slVisto: v.sl, deudaVista: v.d ? num(v.d.sobregiro) : 0, reservadoVisto: v.d ? num(v.d.reservado) : 0, vista: v.vista }); }
     catch (e) { if (e && IR_BANDEJA.includes(e.tipo)) { e.irBandeja = true; e.bodega = g.bodega; e.message += ' Revísalo en «Levantamientos por aprobar».'; } throw e; }
   }
   /**
@@ -628,7 +706,7 @@
     return { etiquetas: lista.length, cajas: cajasOk.length };
   }
 
-  const api = { abrir, pintar, aceptar, aceptarDesdeTags, imprimirCajas, ir, informeV274, bulHuerfanas, cargarInforme, esLegado, ingresadaV274, aceptable, pedirReconteo, rechazar, cerrarLev, validarFicha, levAbierto, resolverDestino, pendientesDe, pendientesEn, bloqueaDespacho, AVISO_FICHA, planificar, estadoLinea, registrosNuevos, bultosDe, agrupar, recontada, lotesDoc, ira, idReg, nHijos };
+  const api = { marcarCuadradas, v274SinCuadrar, firma, solicitudesDe, abrir, pintar, aceptar, aceptarDesdeTags, imprimirCajas, ir, informeV274, bulHuerfanas, cargarInforme, esLegado, ingresadaV274, aceptable, pedirReconteo, rechazar, cerrarLev, validarFicha, levAbierto, resolverDestino, pendientesDe, pendientesEn, bloqueaDespacho, AVISO_FICHA, planificar, estadoLinea, registrosNuevos, bultosDe, agrupar, recontada, lotesDoc, ira, idReg, nHijos };
   window.SAR_LevBandeja = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis, typeof document !== 'undefined' ? document : {});

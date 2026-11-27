@@ -251,7 +251,12 @@ service cloud.firestore {
                   .hasOnly(['estado', 'historial', 'lineas', 'nota', 'servicio', 'solicitante', 'correo', 'editadoEn', 'recibidoEn']))
          || (!antigua(resource.data) && !antigua(request.resource.data)
              && esMia(resource.data) && esMia(request.resource.data)
-             && resource.data.get('status', '') == 'pendiente' && request.resource.data.get('status', '') == 'pendiente'));
+             && resource.data.get('status', '') == 'pendiente' && request.resource.data.get('status', '') == 'pendiente')
+         // v21.276: la bandeja anula un faltante del levantamiento que otra caja del lote dejó sin efecto (misma transacción del LEV)
+         || (isAdmin() && id.matches('lev-.*') && resource.data.get('status', '') == 'pendiente' && request.resource.data.get('status', '') == 'anulado'
+             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'anuladoPor', 'anuladoEn', 'motivoAnulacion'])
+             && request.resource.data.anuladoPor == request.auth.token.email
+             && levDeEstaTx(resource.data.get('lev', null), request.resource.data.get('anuladoEn', null))));
        allow delete: if isSuperAdmin();
     }
     
@@ -401,7 +406,8 @@ service cloud.firestore {
         return (a == b && a in ['REGISTRADO', 'RECONTEO'])
           || (a == 'REGISTRADO' && b in ['RECONTEO', 'ACEPTADO', 'RECHAZADO'])
           || (a == 'RECONTEO' && b in ['REGISTRADO', 'RECHAZADO'])
-          || (a == 'ACEPTADO' && b == 'ETIQUETADO');
+          || (a == 'ACEPTADO' && b == 'ETIQUETADO')
+          || (a in ['ACEPTADO', 'ETIQUETADO'] && b == 'RECHAZADO');   // v21.276: solo legado sin LEV (ver bodegaOk)
       }
       function bodegaOk(n, o, cambia) {
         return (!cambia.hasAny(['aceptadoPor']) || n.aceptadoPor == request.auth.token.email)
@@ -426,6 +432,8 @@ service cloud.firestore {
           && (n.estado != 'ACEPTADO' || o.estado == 'ACEPTADO' || o.get('controlado', null) in [null, false, ''] || isSuperAdmin())
           // v21.276: los campos del LEV solo se escriben al aceptar (dentro de la transacción de la bandeja)
           && (!cambia.hasAny(['lev', 'contadoCompleto', 'hijos', 'aceptadoPropio', 'levPor', 'levEn']) || (n.estado == 'ACEPTADO' && o.estado != 'ACEPTADO'))
+          // v21.276: rechazar una caja ya aceptada solo si es legado de v21.273–274 sin LEV (no entró al stock)
+          && (n.estado != 'RECHAZADO' || o.estado in ['REGISTRADO', 'RECONTEO'] || (!('lev' in o) && cambia.hasOnly(['estado', 'rechazadoPor', 'rechazadoEn', 'motivoRechazo'])))
           // ACEPTADO → ETIQUETADO: solo se marca la impresión de una caja que ya entró al stock (tiene LEV); nada más cambia
           && (n.estado != 'ETIQUETADO' || o.estado == 'ETIQUETADO' || (('lev' in o) && cambia.hasOnly(['estado'])));
       }
@@ -463,6 +471,22 @@ service cloud.firestore {
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly(camposBodega())
           && transicion(resource.data.estado, request.resource.data.estado)
           && bodegaOk(request.resource.data, resource.data, request.resource.data.diff(resource.data).affectedKeys()))
+        // v21.276: reconteo por OTRA persona (doble conteo): solo cuando bodega lo pidió (RECONTEO); queda a su nombre en recontadoPor/En.
+        // No cambia producto, bodega ni autor; la vuelve REGISTRADO.
+        || (rolConteo()
+          && resource.data.estado == 'RECONTEO' && request.resource.data.estado == 'REGISTRADO'
+          && resource.data.contadoPor != request.auth.token.email
+          && request.resource.data.recontadoPor == request.auth.token.email
+          && request.resource.data.recontadoEn is string && request.resource.data.recontadoEn == request.resource.data.get('editadoEn', '')
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(camposCaja().concat(['recontadoPor', 'recontadoNombre', 'recontadoEn']))
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['contadoPor', 'contadoNombre', 'folio', 'en', 'bodega', 'bodegaId', 'insumoId', 'nombre', 'nombreNorm', 'nuevo', 'controlado'])
+          && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['servidorEn']) || request.resource.data.servidorEn == request.time)
+          && cajaOk(request.resource.data))
+        // v21.276: el superadmin marca como cuadrada una caja que v21.274 ya sumó (informe «Ingresos LEV de v21.274 a revisar»)
+        || (isSuperAdmin()
+          && ('lev' in resource.data) && !('contadoCompleto' in resource.data) && !('cuadradaPor' in resource.data)
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cuadradaPor', 'cuadradaEn', 'cuadradaNota'])
+          && request.resource.data.cuadradaPor == request.auth.token.email && txt(request.resource.data, 'cuadradaNota', 300))
         // v21.276: legado v21.273–274 sin LEV (reemplaza «agregar lev a ETIQUETADO/RECHAZADO», que dejaba estampar sin stock)
         || (isAdmin()
           && legadoOk(request.resource.data, resource.data, request.resource.data.diff(resource.data).affectedKeys()));

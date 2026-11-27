@@ -128,9 +128,9 @@
     if (ints.length) return { paso: 'estado', estado: 'ABIERTA', que: 'chicas', chN: cerr.length, chQ: cerr.length ? ent(cerr[0].q) : 0, ab: ab.length > 0, nab: ab.length, abq: ab.map(x => ent(x.q)), sue: ent(e.sueltas) };
     return { paso: 'estado', estado: 'ABIERTA', que: 'sueltas', suN: ent(e && e.sueltas) };
   }
-  /** Huella simple (djb2, hex) de insumoId|lote|vence|total|JSON(estructura): el PC la usa para saber si la caja cambió. */
+  /** Huella simple (djb2, hex) de bodega|bodegaId|nombreNorm|insumoId|lote|vence|total|JSON(estructura): el PC la usa para saber si la caja cambió (v21.276: también bodega y nombre). */
   function huella(d) {
-    const x = d || {}, e = x.estructura || {}, txt = [x.insumoId || '', x.lote || '', x.vence || '', ent(x.total), JSON.stringify({ estado: e.estado || '', interiores: (e.interiores || []).map(i => ({ q: ent(i.q), abierta: !!i.abierta })), sueltas: ent(e.sueltas) })].join('|');
+    const x = d || {}, e = x.estructura || {}, txt = [x.bodega || '', x.bodegaId || '', x.nombreNorm || '', x.insumoId || '', x.lote || '', x.vence || '', ent(x.total), JSON.stringify({ estado: e.estado || '', interiores: (e.interiores || []).map(i => ({ q: ent(i.q), abierta: !!i.abierta })), sueltas: ent(e.sueltas) })].join('|');
     let h = 5381; for (let i = 0; i < txt.length; i++) h = ((h << 5) + h + txt.charCodeAt(i)) >>> 0;
     return 'h' + h.toString(16).padStart(8, '0');
   }
@@ -384,10 +384,10 @@
     r.querySelectorAll('[data-lv-ir="p0"]').forEach(b => b.addEventListener('click', () => { try { localStorage.setItem('lev-ayuda-vista', '1'); } catch (e) { /* sin almacenamiento */ } }));   /* vista: solo al cerrarla, no al pintarla */
   }
   function pintarUsado(r, dr) {
-    const d = dr.usado || {}, mio = d.contadoPor && d.contadoPor === usuario(), puede = mio && ['REGISTRADO', 'RECONTEO'].includes(d.estado);
+    const d = dr.usado || {}, mio = d.contadoPor && d.contadoPor === usuario(), puede = (mio && ['REGISTRADO', 'RECONTEO'].includes(d.estado)) || (!mio && d.estado === 'RECONTEO');   /* v21.276: el reconteo lo puede (y para controlados lo debe) hacer otra persona */
     r.innerHTML = `<div class="si-wrap lv">${cab({ folio: dr.folio, bodega: dr.bodega || bodega() }, 'Tag ya usado')}
       <div class="lv-card lv-card--av"><p class="lv-q">Tag ${esc(numTag(dr.folio))} ya es <b>${esc(d.nombre)}</b> · <b>${num(d.total)}</b> u.</p><p class="lv-s">${esc(d.contadoNombre || d.contadoPor || '')} · ${esc(hora(d.en))}${d.bodega ? ' · ' + esc(d.bodega) : ''}${d.estado === 'RECONTEO' ? ' · <b>Bodega pidió recontar</b>' : d.estado && d.estado !== 'REGISTRADO' ? ' · ' + esc(d.estado) : ''}</p></div>
-      ${puede ? '<button type="button" class="lv-btn" data-lv-corregir>Corregir esa caja</button>' : `<p class="lv-s">${mio ? 'Esa caja ya fue revisada por bodega: no se puede corregir aquí.' : 'Solo quien la contó puede corregirla.'}</p>`}
+      ${puede ? `<button type="button" class="lv-btn" data-lv-corregir>${mio ? 'Corregir esa caja' : 'Recontar esa caja (bodega pidió otra persona)'}</button>` : `<p class="lv-s">${mio ? 'Esa caja ya fue revisada por bodega: no se puede corregir aquí.' : 'Solo quien la contó puede corregirla (otra persona solo cuando bodega pide recontar).'}</p>`}
       <button type="button" class="lv-btn lv-btn--sec" data-lv-otro>Escanear otro</button></div>`;
   }
   function pintarP1(r, dr) {
@@ -549,10 +549,12 @@
     if (!dr.editando && cajas().some(c => c.folio === d.folio)) { toast('Tag ya usado', 'Este tag ya está guardado en el teléfono.', 'warning'); return; }
     guardando = true; repintar();
     const previa = cajas().find(c => c.folio === d.folio), antes = dr.orig || (previa && previa.doc) || null;
-    if (dr.editando && antes) { d.en = antes.en || d.en; d.contadoPor = antes.contadoPor || d.contadoPor; }
+    const reconteoAjeno = !!(dr.editando && antes && antes.contadoPor && antes.contadoPor !== u.correo);   /* v21.276: recuenta otra persona (doble conteo) */
+    if (dr.editando && antes) { d.en = antes.en || d.en; d.contadoPor = antes.contadoPor || d.contadoPor; if (reconteoAjeno) d.contadoNombre = antes.contadoNombre || d.contadoNombre; d.huella = huella(d); }
     /* una corrección de una caja que aún no llegó al servidor sigue siendo «crear» con los datos nuevos */
     const entrada = dr.editando && !(previa && previa.estado === 'pend' && previa.op !== 'editar') ? { folio: d.folio, doc: { ...d, editadoEn: new Date().toISOString() }, estado: 'pend', op: 'editar', campos: cambiosDe(antes, d) } : { folio: d.folio, doc: d, estado: 'pend', op: 'crear' };
     if (entrada.op === 'editar' && previa && previa.op === 'editar' && previa.estado === 'pend') entrada.campos = { ...previa.campos, ...entrada.campos };
+    if (entrada.op === 'editar' && reconteoAjeno) { const en = entrada.campos.editadoEn || new Date().toISOString(); entrada.campos.editadoEn = en; entrada.campos.recontadoPor = u.correo; entrada.campos.recontadoNombre = u.nombre || u.correo; entrada.campos.recontadoEn = en; entrada.doc = { ...entrada.doc, recontadoPor: u.correo, recontadoEn: en }; }
     const l = cajas().filter(c => c.folio !== d.folio); l.push(entrada); setCajas(l);
     const pr = escribir(entrada);
     let errGuard = '';
@@ -572,7 +574,7 @@
   async function reintentar(silencio, incluirRevisar) {
     if (reintentando || navigator.onLine === false) return; const u = usuario();
     if (incluirRevisar) { const lsC = cajas(); lsC.forEach(c => { if (c.estado === 'revisar' && c.doc.contadoPor === u) { c.estado = 'pend'; delete c.err; } }); setCajas(lsC); }
-    const pend = cajas().filter(c => c.estado === 'pend' && c.doc.contadoPor === u); if (!pend.length) return; reintentando = true; const f = fsx(); let ok = 0;
+    const pend = cajas().filter(c => c.estado === 'pend' && (c.doc.contadoPor === u || c.doc.recontadoPor === u)); if (!pend.length) return; reintentando = true; const f = fsx(); let ok = 0;
     for (const c of pend) {
       try {
         if (c.op !== 'editar') { const sn = await conTiempo(f.getDoc(f.doc(f.collection(dbx(), COL), c.folio)), 5000); if (sn.metadata && sn.metadata.hasPendingWrites) continue; if (sn.exists()) { const x = sn.data();   /* lo que aún está solo en la copia local no cuenta como enviado */ if (x.contadoPor === u) { marcar(c.folio, 'ok', null, x.estado); ok++; } else marcar(c.folio, 'revisar', 'El tag ya lo contó otra persona'); continue; } }

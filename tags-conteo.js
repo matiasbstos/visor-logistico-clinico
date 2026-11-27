@@ -443,7 +443,12 @@
   }
 
   /** Incorpora al stock de Insumos (y registra Historial_Movimientos en una sola transacción por producto) las cajas etiquetadas sin folio LEV. */
+  /* v21.275 (emergencia, revisión de B.A.): desactivado. Sumaba lo contado encima del saldo del sistema (duplicaba stock
+     de lotes que ya existían, no reclasificaba S/L, no detectaba despachos entre el conteo y el ingreso, y con dos pestañas
+     o un reintento sumaba dos veces). Lo reemplaza la bandeja «Levantamientos por aprobar» probada con esos casos. */
+  const LEV_DESACTIVADO = true;
   async function ingresarStockLevantamiento(conteos) {
+    if (LEV_DESACTIVADO) throw new Error('«Ingresar al stock (LEV)» está desactivado mientras se corrige: podía duplicar stock. Lo contado queda guardado y no se pierde.');
     const grupos = agruparParaIngreso(conteos);
     if (!grupos.length) throw new Error('No hay cajas etiquetadas pendientes de ingresar al stock.');
     const f = fs(), por = usuario();
@@ -761,7 +766,7 @@
         <div class="tg-kpi"><b>${kpi.unidadesTotal.toLocaleString('es-CL')} u.</b><span>Unidades contadas</span><small>en las cajas mostradas</small></div>
       </div>
       ${pendFilas.length ? `<div class="tg-bar-masivo"><span><b>${pendFilas.length} caja${pendFilas.length === 1 ? '' : 's'}</b> recibida${pendFilas.length === 1 ? '' : 's'} del teléfono (${porAceptar} por aceptar · <b>${kpi.etiquetasPendientes} etiqueta${kpi.etiquetasPendientes === 1 ? '' : 's'}</b> por procesar).</span><div class="tg-acc-col"><button type="button" class="btn btn-primary btn-sm" id="tg-imp-pend"><i class="ph-bold ph-printer" aria-hidden="true"></i> Aceptar e imprimir todas (${kpi.etiquetasPendientes} etq.)</button></div></div>` : ''}
-      ${listasIngreso.length ? `<div class="tg-bar-masivo" style="background:#f0fdf4;border-color:#86efac;"><span><b>${listasIngreso.length} caja${listasIngreso.length === 1 ? '' : 's'} etiquetada${listasIngreso.length === 1 ? '' : 's'}</b> listas para ingresar al stock (<b>${gruposIng.length} producto${gruposIng.length === 1 ? '' : 's'}</b> · <b>${unidIng.toLocaleString('es-CL')} u.</b>). Suma lotes iguales y agrega lotes nuevos.</span><button type="button" class="btn btn-primary btn-sm" id="tg-ing-lev"><i class="ph-bold ph-package" aria-hidden="true"></i> Ingresar al stock (LEV)</button></div>` : ''}
+      ${listasIngreso.length ? `<div class="tg-bar-masivo" style="background:#f0fdf4;border-color:#86efac;"><span><b>${listasIngreso.length} caja${listasIngreso.length === 1 ? '' : 's'} etiquetada${listasIngreso.length === 1 ? '' : 's'}</b> listas para ingresar al stock (<b>${gruposIng.length} producto${gruposIng.length === 1 ? '' : 's'}</b> · <b>${unidIng.toLocaleString('es-CL')} u.</b>). Suma lotes iguales y agrega lotes nuevos.</span><button type="button" class="btn btn-primary btn-sm" id="tg-ing-lev"${LEV_DESACTIVADO ? ' disabled title="Desactivado mientras se corrige: podía duplicar stock"' : ''}><i class="ph-bold ph-package" aria-hidden="true"></i> Ingresar al stock (LEV)</button></div>` : ''}
       <div class="sal-barra tg-fil"><select id="tg-fb" class="form-control" aria-label="Bodega"><option value="">Todas las bodegas</option>${bods.map(b => `<option${fil.bodega === b ? ' selected' : ''}>${esc(b)}</option>`).join('')}</select>
         <select id="tg-fe" class="form-control" aria-label="Estado"><option value="">Todos los estados</option>${Object.keys(ESTADOS).map(k => `<option value="${k}"${fil.estado === k ? ' selected' : ''}>${ESTADOS[k]} (${cnt[k] || 0})</option>`).join('')}</select>
         <input id="tg-fq" class="form-control" type="search" placeholder="Buscar N° de tag o producto…" value="${esc(fil.q)}" aria-label="Buscar número o producto">

@@ -1924,3 +1924,13 @@ Caso real del usuario (`Factura 152.pdf`, `MICHIS PUBLICIDAD LIMITADA`, OC `1298
 - **Aceptar e ingresar stock del levantamiento (`tags-conteo.js` + `nomenclaturas.js`):**
   - Acciones explícitas **Aceptar**, **Aceptar y etiquetar (N)**, **Reconteo** y **Rechazar** por tag.
   - Botón **Ingresar al stock (LEV)** (`ingresarStockLevantamiento`, correlativo `LEV-AAAA-NNNNN` registrado en `nomenclaturas.js`): incorpora las cajas `ETIQUETADO` sin `lev` a `Insumos` + `Historial_Movimientos` en una sola `runTransaction` por producto (`origenOC: true`, sumando lotes iguales y agregando lotes nuevos) y estampa `Conteos_Cajas.lev` para impedir dobles ingresos.
+
+### 4.321 «Ingresar al stock (LEV)» desactivado (emergencia, v21.275)
+B.A. probó `ingresarStockLevantamiento` (4.320) con el código real, en simulación, y encontró que suma lo contado **encima** del saldo del sistema:
+- **Lote con saldo:** 100 en el sistema y 100 contados quedan en 200.
+- **Sin reclasificación S/L:** 200 S/L contados como 120 + 80 quedan en 400.
+- **Despachos no detectados:** 100 contados, luego 30 despachados, quedan en 170.
+- **Idempotencia falsa:** con dos pestañas, un doble clic o un reintento suma dos veces; un operador suma en cada clic.
+- **Controles faltantes:** los controlados no piden doble conteo, se ignora la deuda y queda `origenOC: true`.
+
+El botón queda desactivado y la función rechaza la operación. Lo contado no se pierde: sigue en `Conteos_Cajas`. La reemplaza la bandeja «Levantamientos por aprobar» (decisión del usuario, 27-11).
